@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { deleteBlobByPath, isBlobEnabled, putJson, readJsonByPath } from "@/lib/blob-store";
+import { getAppEncryptionSecret } from "@/lib/app-encryption";
 import { readCookieFromRequest } from "@/lib/cookies";
 import { getEnvMetaAuth, type MetaAuthContext } from "@/lib/meta";
 import { decryptString, encryptString } from "@/lib/secure";
@@ -85,8 +86,7 @@ const getMetaOAuthConfig = (origin: string) => {
   };
 };
 
-export const getEncryptionSecret = () =>
-  process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
+export const getEncryptionSecret = () => getAppEncryptionSecret();
 
 const callGraphJson = async <T>(url: URL): Promise<T> => {
   const response = await fetch(url, { cache: "no-store" });
@@ -104,7 +104,9 @@ const getConnectionPath = (id: string) => `auth/meta/connections/${id}.json`;
 const decryptConnectionToken = (connection: MetaOAuthConnection) => {
   const secret = getEncryptionSecret();
   if (!secret) {
-    throw new Error("Missing APP_ENCRYPTION_SECRET or META_APP_SECRET");
+    throw new Error(
+      "Missing APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET in production",
+    );
   }
 
   return decryptString(connection.encryptedAccessToken, secret);
@@ -127,7 +129,9 @@ const saveMetaConnection = async (params: {
 
   const secret = getEncryptionSecret();
   if (!secret) {
-    throw new Error("Missing APP_ENCRYPTION_SECRET or META_APP_SECRET");
+    throw new Error(
+      "Missing APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET in production",
+    );
   }
 
   const now = new Date();

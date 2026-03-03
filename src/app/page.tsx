@@ -1268,7 +1268,7 @@ export default function Home() {
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
                 <p className="text-[11px] text-slate-400">
-                  Stored encrypted at rest. Uses Blob storage when configured, otherwise falls back to an encrypted `httpOnly` cookie. Requires `APP_ENCRYPTION_SECRET`.
+                  Stored encrypted at rest. Uses Blob storage when configured, otherwise falls back to an encrypted `httpOnly` cookie. Uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET`.
                 </p>
               </label>
 

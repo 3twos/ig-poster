@@ -8,6 +8,7 @@ import {
   putJson,
   readJsonByPath,
 } from "@/lib/blob-store";
+import { getAppEncryptionSecret } from "@/lib/app-encryption";
 import { readCookieFromRequest } from "@/lib/cookies";
 import {
   DEFAULT_ANTHROPIC_MODEL,
@@ -67,15 +68,14 @@ const parseConnectionCookie = (cookieValue: string) => {
   return { kind: "blob" as const, id: value };
 };
 
-const getEncryptionSecret = () =>
-  process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
-
 const getConnectionPath = (id: string) => `auth/llm/connections/${id}.json`;
 
 const decodeInlineConnection = (encryptedPayload: string): InlineLlmConnection => {
-  const secret = getEncryptionSecret();
+  const secret = getAppEncryptionSecret();
   if (!secret) {
-    throw new Error("Missing APP_ENCRYPTION_SECRET or META_APP_SECRET");
+    throw new Error(
+      "Missing APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET in production",
+    );
   }
 
   const decrypted = decryptString(encryptedPayload, secret);
@@ -88,9 +88,11 @@ const decodeInlineConnection = (encryptedPayload: string): InlineLlmConnection =
 };
 
 const decryptConnectionApiKey = (connection: LlmConnection) => {
-  const secret = getEncryptionSecret();
+  const secret = getAppEncryptionSecret();
   if (!secret) {
-    throw new Error("Missing APP_ENCRYPTION_SECRET or META_APP_SECRET");
+    throw new Error(
+      "Missing APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET in production",
+    );
   }
 
   return decryptString(connection.encryptedApiKey, secret);
@@ -101,9 +103,11 @@ export const saveLlmConnection = async (input: {
   apiKey: string;
   model?: string;
 }): Promise<SavedLlmConnection> => {
-  const secret = getEncryptionSecret();
+  const secret = getAppEncryptionSecret();
   if (!secret) {
-    throw new Error("APP_ENCRYPTION_SECRET (or META_APP_SECRET) is required.");
+    throw new Error(
+      "APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET is required in production.",
+    );
   }
 
   const now = new Date().toISOString();

@@ -66,7 +66,7 @@ export async function GET(req: Request) {
           const secret = getEncryptionSecret();
           if (!secret) {
             throw new Error(
-              "Missing APP_ENCRYPTION_SECRET or META_APP_SECRET for decrypting OAuth token",
+              "Missing APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET for decrypting OAuth token in production",
             );
           }
 
