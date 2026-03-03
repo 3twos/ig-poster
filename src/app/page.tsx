@@ -758,7 +758,6 @@ export default function Home() {
   const autofillBrandFromWebsite = useCallback(
     async (websiteInput?: string) => {
       const rawWebsite = (websiteInput ?? brand.website).trim();
-      const normalizedKey = rawWebsite.toLowerCase();
       if (!rawWebsite) {
         return;
       }
@@ -788,10 +787,12 @@ export default function Home() {
           throw new Error("No brand fields returned");
         }
 
+        const resolvedWebsite = (json.website || rawWebsite).trim();
+        const normalizedKey = resolvedWebsite.toLowerCase();
         setBrand((current) => ({
           ...current,
           ...json.brand,
-          website: json.website || rawWebsite,
+          website: resolvedWebsite,
         }));
         setLastAutofilledWebsite(normalizedKey);
         setBrandAutofillMessage(
