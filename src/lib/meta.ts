@@ -1,32 +1,11 @@
-import { z } from "zod";
+export {
+  CarouselItemSchema,
+  MetaScheduleRequestSchema,
+  type CarouselItem,
+  type MetaScheduleRequest,
+} from "@/lib/meta-schemas";
 
-export const CarouselItemSchema = z.object({
-  mediaType: z.enum(["image", "video"]),
-  url: z.string().url(),
-});
-
-export const MetaScheduleRequestSchema = z.object({
-  caption: z.string().trim().min(1).max(2200),
-  publishAt: z.string().datetime().optional(),
-  media: z.discriminatedUnion("mode", [
-    z.object({
-      mode: z.literal("image"),
-      imageUrl: z.string().url(),
-    }),
-    z.object({
-      mode: z.literal("reel"),
-      videoUrl: z.string().url(),
-      coverUrl: z.string().url().optional(),
-    }),
-    z.object({
-      mode: z.literal("carousel"),
-      items: z.array(CarouselItemSchema).min(2).max(10),
-    }),
-  ]),
-});
-
-export type MetaScheduleRequest = z.infer<typeof MetaScheduleRequestSchema>;
-export type CarouselItem = z.infer<typeof CarouselItemSchema>;
+import type { CarouselItem, MetaScheduleRequest } from "@/lib/meta-schemas";
 
 export type MetaAuthContext = {
   accessToken: string;
@@ -221,10 +200,14 @@ const publishCarousel = async (
     throw new Error("Carousel posts require at least 2 media items");
   }
 
-  const children = [] as string[];
-  for (const item of limitedItems) {
-    const childId = await createCarouselChild(item, auth);
-    children.push(childId);
+  const concurrency = 3;
+  const children: string[] = [];
+  for (let i = 0; i < limitedItems.length; i += concurrency) {
+    const batch = limitedItems.slice(i, i + concurrency);
+    const ids = await Promise.all(
+      batch.map((item) => createCarouselChild(item, auth)),
+    );
+    children.push(...ids);
   }
 
   const parent = await createMediaContainer(
