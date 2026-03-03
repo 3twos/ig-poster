@@ -894,14 +894,17 @@ export default function Home() {
       const json = (await response.json()) as {
         provider?: LlmProvider;
         model?: string;
+        storage?: "blob" | "cookie";
       };
 
       await loadLlmStatus();
       setLlmApiKeyInput("");
       const resolvedModel = (json.model ?? llmModelInput) || "default model";
       setLlmModelInput(json.model ?? llmModelInput);
+      const storageHint =
+        json.storage === "cookie" ? " (encrypted cookie fallback)" : "";
       setLlmMessage(
-        `LLM provider connected (${(json.provider ?? llmProvider).toUpperCase()} ${resolvedModel}).`,
+        `LLM provider connected (${(json.provider ?? llmProvider).toUpperCase()} ${resolvedModel})${storageHint}.`,
       );
     } catch (connectError) {
       const message =
@@ -1265,7 +1268,7 @@ export default function Home() {
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
                 <p className="text-[11px] text-slate-400">
-                  Stored encrypted server-side with a short session cookie id. Requires `APP_ENCRYPTION_SECRET` and `BLOB_READ_WRITE_TOKEN`.
+                  Stored encrypted at rest. Uses Blob storage when configured, otherwise falls back to an encrypted `httpOnly` cookie. Requires `APP_ENCRYPTION_SECRET`.
                 </p>
               </label>
 
