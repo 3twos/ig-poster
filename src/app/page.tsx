@@ -312,16 +312,14 @@ export default function Home() {
     try {
       const response = await fetch("/api/auth/google/status", { cache: "no-store" });
       if (!response.ok) {
-        throw new Error("Workspace session unavailable");
+        setWorkspaceAuth(null);
+        return;
       }
 
       const json = (await response.json()) as WorkspaceAuthStatus;
       setWorkspaceAuth(json);
     } catch {
       setWorkspaceAuth(null);
-      window.location.href = `/api/auth/google/start?next=${encodeURIComponent(
-        `${window.location.pathname}${window.location.search}`,
-      )}`;
     }
   }, []);
 

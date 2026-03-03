@@ -14,8 +14,6 @@ export async function GET(req: Request) {
     authenticated: true,
     user: {
       email: session.email,
-      name: session.name,
-      picture: session.picture,
       domain: session.domain,
       expiresAt: session.expiresAt,
     },

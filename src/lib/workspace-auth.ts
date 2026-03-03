@@ -8,7 +8,7 @@ export const WORKSPACE_OAUTH_NEXT_COOKIE = "workspace_oauth_next";
 
 const WORKSPACE_SESSION_ISSUER = "ig-poster";
 const WORKSPACE_SESSION_AUDIENCE = "ig-poster-web";
-const WORKSPACE_SESSION_TTL_SECONDS = 60 * 60 * 12;
+export const WORKSPACE_SESSION_TTL_SECONDS = 60 * 60 * 12;
 
 const GOOGLE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/oauth2/v3/certs"),
@@ -21,8 +21,6 @@ const GoogleTokenResponseSchema = z.object({
 const WorkspaceSessionPayloadSchema = z.object({
   sub: z.string().min(1),
   email: z.string().email(),
-  name: z.string().optional(),
-  picture: z.string().optional(),
   hd: z.string().min(1),
   iat: z.number(),
   exp: z.number(),
@@ -31,8 +29,6 @@ const WorkspaceSessionPayloadSchema = z.object({
 export type WorkspaceSession = {
   sub: string;
   email: string;
-  name?: string;
-  picture?: string;
   domain: string;
   issuedAt: string;
   expiresAt: string;
@@ -84,7 +80,7 @@ const getSessionSecret = () => {
 
   if (!secret) {
     throw new Error(
-      "Missing WORKSPACE_AUTH_SECRET (or APP_ENCRYPTION_SECRET fallback)",
+      "Missing WORKSPACE_AUTH_SECRET (or APP_ENCRYPTION_SECRET / META_APP_SECRET fallbacks)",
     );
   }
 
@@ -116,9 +112,6 @@ const toDateString = (epochSeconds: number) =>
 const parseVerifiedGoogleIdentity = (payload: Record<string, unknown>) => {
   const sub = typeof payload.sub === "string" ? payload.sub : "";
   const email = typeof payload.email === "string" ? payload.email : "";
-  const name = typeof payload.name === "string" ? payload.name : undefined;
-  const picture =
-    typeof payload.picture === "string" ? payload.picture : undefined;
   const hd = typeof payload.hd === "string" ? normalizeDomain(payload.hd) : "";
   const emailVerifiedRaw = payload.email_verified;
   const emailVerified =
@@ -137,7 +130,7 @@ const parseVerifiedGoogleIdentity = (payload: Record<string, unknown>) => {
     throw new Error(`Access is restricted to ${requiredDomain}`);
   }
 
-  return { sub, email, name, picture, domain: hd };
+  return { sub, email, domain: hd };
 };
 
 export const buildWorkspaceOAuthState = () => buildRandomToken();
@@ -228,14 +221,10 @@ export const completeWorkspaceOAuth = async (
 export const createWorkspaceSessionToken = async (identity: {
   sub: string;
   email: string;
-  name?: string;
-  picture?: string;
   domain: string;
 }) => {
   return new SignJWT({
     email: identity.email,
-    name: identity.name,
-    picture: identity.picture,
     hd: identity.domain,
   })
     .setProtectedHeader({ alg: "HS256" })
@@ -266,8 +255,6 @@ export const verifyWorkspaceSessionToken = async (
     return {
       sub: parsed.sub,
       email: parsed.email,
-      name: parsed.name,
-      picture: parsed.picture,
       domain: normalizeDomain(parsed.hd),
       issuedAt: toDateString(parsed.iat),
       expiresAt: toDateString(parsed.exp),

@@ -9,6 +9,7 @@ import {
   WORKSPACE_OAUTH_NONCE_COOKIE,
   WORKSPACE_OAUTH_STATE_COOKIE,
   WORKSPACE_SESSION_COOKIE,
+  WORKSPACE_SESSION_TTL_SECONDS,
 } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
@@ -72,7 +73,7 @@ export async function GET(req: Request) {
       sameSite: "lax",
       secure,
       path: "/",
-      maxAge: 60 * 60 * 12,
+      maxAge: WORKSPACE_SESSION_TTL_SECONDS,
     });
 
     clearOAuthCookies(response, secure);
