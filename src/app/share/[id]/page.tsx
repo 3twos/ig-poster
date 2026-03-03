@@ -48,6 +48,40 @@ export default function ShareProjectPage() {
     );
   }, [project]);
 
+  const primaryAssetUrl = useMemo(() => {
+    if (!project) {
+      return undefined;
+    }
+
+    const first = project.assets[0];
+    if (!first) {
+      return undefined;
+    }
+
+    if (first.mediaType === "video") {
+      return first.posterUrl || project.renderedPosterUrl || undefined;
+    }
+
+    return first.url;
+  }, [project]);
+
+  const secondaryAssetUrl = useMemo(() => {
+    if (!project) {
+      return undefined;
+    }
+
+    const second = project.assets[1];
+    if (!second) {
+      return undefined;
+    }
+
+    if (second.mediaType === "video") {
+      return second.posterUrl || undefined;
+    }
+
+    return second.url;
+  }, [project]);
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-10 text-white md:px-8">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -77,8 +111,8 @@ export default function ShareProjectPage() {
                 variant={activeVariant}
                 brandName={project.brand.brandName}
                 aspectRatio={project.post.aspectRatio}
-                primaryImage={project.renderedPosterUrl || project.assets[0]?.url}
-                secondaryImage={project.assets[1]?.url}
+                primaryImage={project.renderedPosterUrl || primaryAssetUrl}
+                secondaryImage={secondaryAssetUrl}
                 logoImage={project.logoUrl || undefined}
                 overlayLayout={project.overlayLayouts[activeVariant.id]}
               />

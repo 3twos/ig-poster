@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  buildPromptBestPracticeContext,
+  isWineBrandSignals,
+} from "@/lib/instagram-playbook";
+
 export const AspectRatioSchema = z.enum(["1:1", "4:5", "9:16"]);
 
 export const BrandInputSchema = z.object({
@@ -23,9 +28,15 @@ export const PostInputSchema = z.object({
   aspectRatio: AspectRatioSchema,
 });
 
+export const MediaTypeSchema = z.enum(["image", "video"]);
+
 export const AssetDescriptorSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1).max(160),
+  mediaType: MediaTypeSchema,
+  durationSec: z.number().min(0.5).max(900).optional(),
+  width: z.number().min(120).max(8000).optional(),
+  height: z.number().min(120).max(8000).optional(),
 });
 
 export const GenerationRequestSchema = z.object({
@@ -42,11 +53,39 @@ const LayoutSchema = z.enum([
   "minimal-logo",
 ]);
 
+export const PostTypeSchema = z.enum(["single-image", "carousel", "reel"]);
+
+const CarouselSlideSchema = z.object({
+  index: z.number().int().min(1).max(10),
+  goal: z.string().trim().min(6).max(120),
+  headline: z.string().trim().min(4).max(90),
+  body: z.string().trim().min(12).max(180),
+  assetHint: z.string().trim().min(3).max(80),
+});
+
+const ReelBeatSchema = z.object({
+  atSec: z.number().min(0).max(180),
+  visual: z.string().trim().min(6).max(140),
+  onScreenText: z.string().trim().min(3).max(120),
+  editAction: z.string().trim().min(3).max(100),
+});
+
+const ReelPlanSchema = z.object({
+  targetDurationSec: z.number().min(6).max(90),
+  hook: z.string().trim().min(8).max(140),
+  coverFrameDirection: z.string().trim().min(8).max(140),
+  audioDirection: z.string().trim().min(8).max(120),
+  editingActions: z.array(z.string().trim().min(4).max(120)).min(4).max(10),
+  beats: z.array(ReelBeatSchema).min(3).max(12),
+  endCardCta: z.string().trim().min(8).max(120),
+});
+
 export type CreativeLayout = z.infer<typeof LayoutSchema>;
 
 export const CreativeVariantSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(3).max(42),
+  postType: PostTypeSchema,
   hook: z.string().trim().min(8).max(140),
   headline: z.string().trim().min(8).max(120),
   supportingText: z.string().trim().min(20).max(260),
@@ -63,10 +102,13 @@ export const CreativeVariantSchema = z.object({
     .min(2)
     .max(4),
   overlayStrength: z.number().min(0.15).max(0.85),
+  assetSequence: z.array(z.string().trim().min(1)).min(1).max(10),
+  carouselSlides: z.array(CarouselSlideSchema).min(3).max(10).optional(),
+  reelPlan: ReelPlanSchema.optional(),
 });
 
 export const GenerationResponseSchema = z.object({
-  strategy: z.string().trim().min(30).max(500),
+  strategy: z.string().trim().min(30).max(800),
   variants: z.array(CreativeVariantSchema).length(3),
 });
 
@@ -144,10 +186,42 @@ const toTag = (value: string): string => {
   return `#${condensed.slice(0, 24) || "Instagram"}`;
 };
 
+const clampSlideCount = (count: number) => Math.max(3, Math.min(count, 8));
+
+const buildCarouselSlides = (count: number, theme: string, audience: string) => {
+  const limit = clampSlideCount(count);
+
+  return Array.from({ length: limit }, (_, index) => ({
+    index: index + 1,
+    goal:
+      index === 0
+        ? "Stop the scroll with a sharp claim"
+        : index === limit - 1
+          ? "Close with a direct CTA"
+          : "Deliver one clear proof point",
+    headline:
+      index === 0
+        ? `${theme} without the fluff`
+        : index === limit - 1
+          ? "Ready to taste the difference?"
+          : `Proof point ${index}`,
+    body:
+      index === 0
+        ? `Start with the strongest insight for ${audience.toLowerCase()}.`
+        : index === limit - 1
+          ? "Save this framework and share it with someone planning their next wine purchase."
+          : "Keep each slide to one idea, one visual, one short sentence.",
+    assetHint: index === 0 ? "Hero bottle/label" : index === limit - 1 ? "Lifestyle close" : "Vineyard detail",
+  }));
+};
+
 export const createFallbackResponse = (
   request: GenerationRequest,
 ): GenerationResponse => {
   const colors = paletteToHex(request.brand.palette);
+  const imageAssets = request.assets.filter((asset) => asset.mediaType === "image");
+  const videoAssets = request.assets.filter((asset) => asset.mediaType === "video");
+
   const tagPool = [
     request.brand.brandName,
     request.post.theme,
@@ -159,7 +233,7 @@ export const createFallbackResponse = (
     "InstagramMarketing",
   ];
 
-  const hashtags = Array.from(new Set(tagPool.map(toTag))).slice(0, 8);
+  const hashtags = Array.from(new Set(tagPool.map(toTag))).slice(0, 10);
 
   const base = {
     supportingText: `${request.post.thought} Built for ${request.post.audience.toLowerCase()} with ${request.brand.brandName}'s core voice.`,
@@ -168,51 +242,131 @@ export const createFallbackResponse = (
     colorHexes: colors.slice(0, 3),
   };
 
+  const singleAsset = imageAssets[0]?.id ?? request.assets[0].id;
+  const carouselSequenceRaw = imageAssets.slice(0, 6).map((asset) => asset.id);
+  const carouselSequence = carouselSequenceRaw.length ? carouselSequenceRaw : [singleAsset];
+
   const variants: GenerationResponse["variants"] = [
     {
       id: "variant-a",
       name: "Impact Hero",
+      postType: "single-image",
       hook: `${request.post.theme}: a sharper way to lead the conversation.`,
       headline: `${request.post.subject} that actually moves people`,
       cta: `Take the next step: ${request.post.objective}`,
       layout: "hero-quote",
       textAlign: "left",
       overlayStrength: 0.58,
+      assetSequence: [singleAsset],
       ...base,
     },
     {
       id: "variant-b",
-      name: "Story Split",
-      hook: `From idea to action in one visual story`,
+      name: imageAssets.length >= 3 ? "Carousel Story" : "Story Split",
+      postType: imageAssets.length >= 3 ? "carousel" : "single-image",
+      hook: "From vineyard to glass in clear steps",
       headline: `${request.post.theme} built on real principles`,
-      cta: `Comment "PLAN" to get the framework`,
+      cta: `Swipe and save for your next purchase`,
       layout: "split-story",
       textAlign: "left",
       overlayStrength: 0.5,
+      assetSequence:
+        imageAssets.length >= 3 ? carouselSequence : [singleAsset],
+      carouselSlides:
+        imageAssets.length >= 3
+          ? buildCarouselSlides(carouselSequence.length, request.post.theme, request.post.audience)
+          : undefined,
       ...base,
     },
     {
       id: "variant-c",
-      name: "Minimal Authority",
-      hook: `Simple design. Strong conviction.`,
+      name: videoAssets.length ? "Reel Momentum" : "Minimal Authority",
+      postType: videoAssets.length ? "reel" : imageAssets.length >= 3 ? "carousel" : "single-image",
+      hook: "Simple design. Strong conviction.",
       headline: `${request.brand.brandName} on ${request.post.theme}`,
       cta: `Save for your next content sprint`,
       layout: "minimal-logo",
       textAlign: "center",
       overlayStrength: 0.42,
+      assetSequence: videoAssets.length
+        ? [videoAssets[0].id, ...imageAssets.slice(0, 2).map((asset) => asset.id)]
+        : imageAssets.length >= 3
+          ? carouselSequence
+          : [singleAsset],
+      reelPlan: videoAssets.length
+        ? {
+            targetDurationSec: 18,
+            hook: `In 18 seconds: why ${request.brand.brandName} wines stand out`,
+            coverFrameDirection: "Use a crisp bottle + vineyard background with high-contrast headline",
+            audioDirection: "Warm cinematic indie track with subtle build",
+            editingActions: [
+              "Start with fastest-motion pour within first 1.2 seconds",
+              "Cut every 1.8-2.4 seconds",
+              "Mix wide vineyard scene, cellar closeup, glass pour macro",
+              "Use bold captions centered in safe area",
+              "End with tasting-room CTA card",
+            ],
+            beats: [
+              {
+                atSec: 0,
+                visual: "Fast bottle uncork + pour",
+                onScreenText: `Why ${request.brand.brandName}?`,
+                editAction: "Hard cut + 105% zoom",
+              },
+              {
+                atSec: 4,
+                visual: "Vineyard row tracking shot",
+                onScreenText: "Estate-grown fruit",
+                editAction: "Speed ramp then stabilize",
+              },
+              {
+                atSec: 8,
+                visual: "Cellar barrel detail",
+                onScreenText: "Precision aging",
+                editAction: "Match cut on circular shapes",
+              },
+              {
+                atSec: 13,
+                visual: "Wine glass swirl and tasting moment",
+                onScreenText: "Balanced and expressive",
+                editAction: "Slow motion at 80% speed",
+              },
+              {
+                atSec: 16,
+                visual: "Brand lockup + CTA card",
+                onScreenText: "Book a tasting",
+                editAction: "Fade in CTA with subtle grain",
+              },
+            ],
+            endCardCta: "Visit profile and book your vineyard tasting",
+          }
+        : imageAssets.length >= 3
+          ? undefined
+          : undefined,
+      carouselSlides:
+        !videoAssets.length && imageAssets.length >= 3
+          ? buildCarouselSlides(carouselSequence.length, request.post.theme, request.post.audience)
+          : undefined,
       ...base,
     },
   ];
 
   return {
     strategy:
-      "These three directions balance scroll-stopping contrast, concise copy blocks, and clear CTA language while preserving your brand voice and visual system.",
+      "These concepts balance discovery reach and conversion: one bold single image for thumb-stop impact, one educational carousel for saves/shares, and one reel-style narrative for high watch-through when video is available.",
     variants,
   };
 };
 
 export const buildGenerationPrompt = (request: GenerationRequest): string => {
-  const assetList = request.assets.map((asset, index) => `${index + 1}. ${asset.name}`);
+  const assetList = request.assets.map(
+    (asset, index) =>
+      `${index + 1}. id=${asset.id}, name=${asset.name}, type=${asset.mediaType}, durationSec=${asset.durationSec ?? "n/a"}, dimensions=${asset.width ?? "?"}x${asset.height ?? "?"}`,
+  );
+
+  const imageCount = request.assets.filter((asset) => asset.mediaType === "image").length;
+  const videoCount = request.assets.filter((asset) => asset.mediaType === "video").length;
+  const wineBrand = isWineBrandSignals(request.brand, request.post);
 
   return `Generate 3 Instagram post creative variants as strict JSON.
 
@@ -233,22 +387,30 @@ Post brief:
 - Objective: ${request.post.objective}
 - Audience: ${request.post.audience}
 - Mood: ${request.post.mood}
-- Format: ${request.post.aspectRatio}
+- Preferred canvas: ${request.post.aspectRatio}
 
-Available images (${request.assets.length}):
+Available assets (${request.assets.length}; images=${imageCount}, videos=${videoCount}):
 ${assetList.join("\n")}
 Has logo available: ${request.hasLogo ? "yes" : "no"}
 
+${buildPromptBestPracticeContext(wineBrand)}
+
 Output constraints:
 - Return JSON object with keys: strategy, variants.
-- strategy: one concise rationale string.
+- strategy: concise rationale focused on reach + conversion.
 - variants: exactly 3 objects.
-- each variant fields: id, name, hook, headline, supportingText, cta, caption, hashtags, layout, textAlign, colorHexes, overlayStrength.
+- each variant fields: id, name, postType, hook, headline, supportingText, cta, caption, hashtags, layout, textAlign, colorHexes, overlayStrength, assetSequence, carouselSlides, reelPlan.
+- postType must be one of single-image, carousel, reel.
 - layout must be one of hero-quote, split-story, magazine, minimal-logo.
 - textAlign must be left or center.
 - colorHexes must be 2-4 valid hex colors.
-- hashtags 5-12 items with # prefix.
-- Make each variant materially different and conversion-focused.
+- hashtags must be 5-12 items with # prefix.
+- assetSequence: asset ids only, 1-10 items.
+- If postType=carousel, include carouselSlides with 3-10 slides and each slide must include index, goal, headline, body, assetHint.
+- If postType=reel, include reelPlan with targetDurationSec, hook, coverFrameDirection, audioDirection, editingActions (4-10), beats (3-12), endCardCta.
+- If videoCount > 0, at least one variant must be postType=reel.
+- If imageCount >= 3, at least one variant must be postType=carousel.
+- For wine/alcohol brands: avoid unsafe or non-compliant alcohol messaging.
 - Avoid generic language and avoid emojis.
 - Output JSON only.`;
 };

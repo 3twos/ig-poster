@@ -22,8 +22,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing file in form-data." }, { status: 400 });
     }
 
-    if (file.size > 15 * 1024 * 1024) {
-      return NextResponse.json({ error: "File too large. Max 15MB." }, { status: 413 });
+    if (file.size > 120 * 1024 * 1024) {
+      return NextResponse.json({ error: "File too large. Max 120MB." }, { status: 413 });
     }
 
     const pathname = buildBlobPath(folder, file.name);

@@ -3,15 +3,19 @@ import { z } from "zod";
 
 import { deleteBlob, isBlobEnabled, listBlobs } from "@/lib/blob-store";
 import { getMetaConnection } from "@/lib/meta-auth";
-import { getEnvMetaAuth, publishToInstagramNow } from "@/lib/meta";
+import {
+  getEnvMetaAuth,
+  MetaScheduleRequestSchema,
+  publishInstagramContent,
+} from "@/lib/meta";
 import { decryptString } from "@/lib/secure";
 
 export const runtime = "nodejs";
 
 const ScheduledJobSchema = z.object({
   id: z.string(),
-  imageUrl: z.string().url(),
   caption: z.string().min(1).max(2200),
+  media: MetaScheduleRequestSchema.shape.media,
   publishAt: z.string().datetime(),
   createdAt: z.string().datetime(),
   authSource: z.enum(["oauth", "env"]),
@@ -61,8 +65,7 @@ export async function GET(req: Request) {
       }
 
       try {
-        let auth =
-          parsed.data.authSource === "env" ? getEnvMetaAuth() : null;
+        let auth = parsed.data.authSource === "env" ? getEnvMetaAuth() : null;
 
         if (parsed.data.authSource === "oauth") {
           if (!parsed.data.connectionId) {
@@ -94,10 +97,13 @@ export async function GET(req: Request) {
           );
         }
 
-        await publishToInstagramNow({
-          imageUrl: parsed.data.imageUrl,
-          caption: parsed.data.caption,
-        }, auth);
+        await publishInstagramContent(
+          {
+            ...parsed.data.media,
+            caption: parsed.data.caption,
+          },
+          auth,
+        );
         await deleteBlob(blob.url);
         published += 1;
       } catch (error) {

@@ -14,7 +14,7 @@ SOTA Instagram poster app built for production with:
 Input:
 - Brand kit (values, principles, visual system, voice, story, palette, logo notes)
 - Post brief (theme, subject, thought, objective, audience, mood)
-- Post image set + logo
+- Mixed media asset set (images + short video) + logo
 
 Output:
 - 3 high-impact creative variants
@@ -26,6 +26,7 @@ Output:
 - Shareable project URL
 - Publish now or schedule to Instagram
 - Connect/disconnect Instagram via Meta OAuth
+- Format-aware planning: single image, carousel, and reel edit blueprint
 
 ## Implemented SOTA Steps
 
@@ -40,7 +41,7 @@ Output:
 - Save overlay positions per concept and include in shared snapshots
 
 3. One-click Meta publish integration + scheduler
-- Publish immediately via Meta Graph API
+- Publish immediately via Meta Graph API (image, carousel, reel)
 - Optional future schedule stored in Blob
 - Vercel Cron endpoint (`/api/cron/publish`) executes due jobs every 15 minutes
 
@@ -96,6 +97,11 @@ Notes:
 - `GET /api/auth/meta/callback`: OAuth callback
 - `GET /api/auth/meta/status`: Current auth source/status
 - `POST /api/auth/meta/disconnect`: Disconnect OAuth session
+
+## Research Notes
+
+Comprehensive research notes for Instagram growth mechanics + vineyard/wine compliance live here:
+- `docs/instagram-playbook-2026-03-03.md`
 
 ## GitHub + Vercel CI/CD
 

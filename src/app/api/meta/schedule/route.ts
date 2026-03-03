@@ -5,14 +5,14 @@ import { z } from "zod";
 
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
-import { MetaScheduleRequestSchema, publishToInstagramNow } from "@/lib/meta";
+import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
 
 export const runtime = "nodejs";
 
 const ScheduledJobSchema = z.object({
   id: z.string(),
-  imageUrl: z.string().url(),
   caption: z.string().min(1).max(2200),
+  media: MetaScheduleRequestSchema.shape.media,
   publishAt: z.string().datetime(),
   createdAt: z.string().datetime(),
   authSource: z.enum(["oauth", "env"]),
@@ -46,8 +46,8 @@ export async function POST(req: Request) {
       const id = randomUUID().replace(/-/g, "").slice(0, 18);
       const job = ScheduledJobSchema.parse({
         id,
-        imageUrl: payload.imageUrl,
         caption: payload.caption,
+        media: payload.media,
         publishAt: new Date(publishAt).toISOString(),
         createdAt: new Date().toISOString(),
         authSource: resolvedAuth.source,
@@ -63,15 +63,20 @@ export async function POST(req: Request) {
       });
     }
 
-    const publish = await publishToInstagramNow({
-      imageUrl: payload.imageUrl,
-      caption: payload.caption,
-    }, resolvedAuth.auth);
+    const publish = await publishInstagramContent(
+      {
+        ...payload.media,
+        caption: payload.caption,
+      },
+      resolvedAuth.auth,
+    );
 
     return NextResponse.json({
       status: "published",
+      mode: publish.mode,
       publishId: publish.publishId,
       creationId: publish.creationId,
+      children: "children" in publish ? publish.children : undefined,
     });
   } catch (error) {
     return NextResponse.json(

@@ -5,7 +5,9 @@ import { toPng } from "html-to-image";
 import {
   Copy,
   Download,
+  Film,
   ImagePlus,
+  Images,
   LayoutTemplate,
   Link2,
   LoaderCircle,
@@ -36,13 +38,19 @@ import {
 import { cn, slugify } from "@/lib/utils";
 
 type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
+type AssetMediaType = "image" | "video";
 
 type LocalAsset = {
   id: string;
   name: string;
+  mediaType: AssetMediaType;
   previewUrl: string;
+  posterUrl?: string;
   storageUrl?: string;
   status: UploadStatus;
+  durationSec?: number;
+  width?: number;
+  height?: number;
   error?: string;
 };
 
@@ -145,6 +153,85 @@ const statusChip = (status: UploadStatus) => {
   return "border-white/20 bg-white/5 text-slate-200";
 };
 
+const mediaTypeFromFile = (file: File): AssetMediaType =>
+  file.type.startsWith("video/") ? "video" : "image";
+
+const formatDuration = (durationSec: number) => {
+  const total = Math.round(durationSec);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+
+  if (mins === 0) {
+    return `${secs}s`;
+  }
+
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+};
+
+const extractVideoMetadata = async (objectUrl: string) => {
+  return new Promise<{
+    durationSec: number;
+    width: number;
+    height: number;
+    posterUrl: string;
+  }>((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.src = objectUrl;
+
+    const cleanup = () => {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+
+    video.onloadedmetadata = () => {
+      const targetTime = Math.min(0.5, Math.max(video.duration / 4, 0.1));
+
+      const capture = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext("2d");
+
+          if (!ctx) {
+            throw new Error("Canvas context unavailable");
+          }
+
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const posterUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+          resolve({
+            durationSec: Number(video.duration.toFixed(2)),
+            width: video.videoWidth,
+            height: video.videoHeight,
+            posterUrl,
+          });
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error("Video metadata parsing failed"));
+        } finally {
+          cleanup();
+        }
+      };
+
+      video.currentTime = targetTime;
+      video.onseeked = capture;
+      video.onerror = () => {
+        cleanup();
+        reject(new Error("Video metadata parsing failed"));
+      };
+    };
+
+    video.onerror = () => {
+      cleanup();
+      reject(new Error("Could not load uploaded video"));
+    };
+  });
+};
+
 export default function Home() {
   const [brand, setBrand] = useState<BrandState>(INITIAL_BRAND);
   const [post, setPost] = useState<PostState>(INITIAL_POST);
@@ -175,6 +262,15 @@ export default function Home() {
   });
 
   const posterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return () => {
+      assets.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
+      if (logo) {
+        URL.revokeObjectURL(logo.previewUrl);
+      }
+    };
+  }, [assets, logo]);
 
   const loadAuthStatus = useCallback(async () => {
     setIsAuthLoading(true);
@@ -246,8 +342,42 @@ export default function Home() {
     );
   }, [activeVariant, overlayLayouts]);
 
-  const heroImage = assets[0]?.previewUrl;
-  const secondaryImage = assets[1]?.previewUrl;
+  const assetMap = useMemo(() => {
+    return new Map(assets.map((asset) => [asset.id, asset]));
+  }, [assets]);
+
+  const orderedVariantAssets = useMemo(() => {
+    if (!activeVariant) {
+      return assets;
+    }
+
+    const ordered = activeVariant.assetSequence
+      .map((assetId) => assetMap.get(assetId))
+      .filter((asset): asset is LocalAsset => Boolean(asset));
+
+    if (!ordered.length) {
+      return assets;
+    }
+
+    const used = new Set(ordered.map((asset) => asset.id));
+    const rest = assets.filter((asset) => !used.has(asset.id));
+    return [...ordered, ...rest];
+  }, [activeVariant, assetMap, assets]);
+
+  const getDisplayVisual = useCallback((asset?: LocalAsset) => {
+    if (!asset) {
+      return undefined;
+    }
+
+    if (asset.mediaType === "video") {
+      return asset.posterUrl || undefined;
+    }
+
+    return asset.previewUrl;
+  }, []);
+
+  const primaryVisual = getDisplayVisual(orderedVariantAssets[0]);
+  const secondaryVisual = getDisplayVisual(orderedVariantAssets[1]);
 
   const uploadFileToStorage = async (file: File, folder: string) => {
     const formData = new FormData();
@@ -272,7 +402,7 @@ export default function Home() {
   };
 
   const handleAssetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
+    const files = Array.from(event.target.files ?? []).slice(0, 20);
     event.target.value = "";
 
     if (!files.length) {
@@ -285,6 +415,7 @@ export default function Home() {
     const staged = files.map((file, index) => ({
       id: `${Date.now()}-${index}-${file.name}`,
       name: file.name,
+      mediaType: mediaTypeFromFile(file),
       previewUrl: URL.createObjectURL(file),
       status: "uploading" as const,
     }));
@@ -300,8 +431,39 @@ export default function Home() {
       files.map(async (file, index) => {
         const itemId = staged[index].id;
 
+        if (staged[index].mediaType === "video") {
+          try {
+            const meta = await extractVideoMetadata(staged[index].previewUrl);
+            setAssets((current) =>
+              current.map((asset) =>
+                asset.id === itemId
+                  ? {
+                      ...asset,
+                      durationSec: meta.durationSec,
+                      width: meta.width,
+                      height: meta.height,
+                      posterUrl: meta.posterUrl,
+                    }
+                  : asset,
+              ),
+            );
+          } catch {
+            setAssets((current) =>
+              current.map((asset) =>
+                asset.id === itemId
+                  ? {
+                      ...asset,
+                      error: "Could not parse video metadata",
+                    }
+                  : asset,
+              ),
+            );
+          }
+        }
+
         try {
-          const url = await uploadFileToStorage(file, "assets");
+          const folder = staged[index].mediaType === "video" ? "videos" : "assets";
+          const url = await uploadFileToStorage(file, folder);
           setAssets((current) =>
             current.map((asset) =>
               asset.id === itemId
@@ -349,6 +511,7 @@ export default function Home() {
     const nextLogo: LocalAsset = {
       id: `${Date.now()}-${file.name}`,
       name: file.name,
+      mediaType: "image",
       previewUrl: URL.createObjectURL(file),
       status: "uploading",
     };
@@ -404,7 +567,14 @@ export default function Home() {
         body: JSON.stringify({
           brand,
           post,
-          assets: assets.map((asset) => ({ id: asset.id, name: asset.name })),
+          assets: assets.map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            mediaType: asset.mediaType,
+            durationSec: asset.durationSec,
+            width: asset.width,
+            height: asset.height,
+          })),
           hasLogo: Boolean(logo),
         }),
       });
@@ -507,6 +677,9 @@ export default function Home() {
             .map((asset) => ({
               id: asset.id,
               name: asset.name,
+              mediaType: asset.mediaType,
+              durationSec: asset.durationSec,
+              posterUrl: asset.posterUrl,
               url: asset.storageUrl,
             })),
           logoUrl: logo?.storageUrl,
@@ -567,6 +740,52 @@ export default function Home() {
     }
   };
 
+  const buildPublishPayload = async (variant: CreativeVariant) => {
+    const sequenced = variant.assetSequence
+      .map((assetId) => assetMap.get(assetId))
+      .filter((asset): asset is LocalAsset => Boolean(asset));
+
+    if (variant.postType === "reel") {
+      const reelAsset =
+        sequenced.find((asset) => asset.mediaType === "video" && asset.storageUrl) ??
+        assets.find((asset) => asset.mediaType === "video" && asset.storageUrl);
+
+      if (!reelAsset?.storageUrl) {
+        throw new Error("Reel publishing requires at least one uploaded video asset.");
+      }
+
+      return {
+        mode: "reel" as const,
+        videoUrl: reelAsset.storageUrl,
+      };
+    }
+
+    if (variant.postType === "carousel") {
+      const items = sequenced
+        .filter((asset) => Boolean(asset.storageUrl))
+        .slice(0, 10)
+        .map((asset) => ({
+          mediaType: asset.mediaType,
+          url: asset.storageUrl!,
+        }));
+
+      if (items.length < 2) {
+        throw new Error("Carousel publishing needs at least 2 uploaded media assets.");
+      }
+
+      return {
+        mode: "carousel" as const,
+        items,
+      };
+    }
+
+    const imageUrl = await uploadRenderedPoster();
+    return {
+      mode: "image" as const,
+      imageUrl,
+    };
+  };
+
   const publishToInstagram = async (event: FormEvent) => {
     event.preventDefault();
 
@@ -584,15 +803,15 @@ export default function Home() {
     setIsPublishing(true);
 
     try {
-      const imageUrl = await uploadRenderedPoster();
+      const media = await buildPublishPayload(activeVariant);
       const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
 
       const response = await fetch("/api/meta/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageUrl,
           caption,
+          media,
           publishAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
         }),
       });
@@ -603,15 +822,20 @@ export default function Home() {
 
       const json = (await response.json()) as {
         status?: string;
+        mode?: string;
         publishAt?: string;
       };
 
       if (json.status === "scheduled") {
         setPublishMessage(
-          `Scheduled for ${new Date(json.publishAt ?? scheduleAt).toLocaleString()}`,
+          `Scheduled ${json.mode ? `${json.mode} ` : ""}post for ${new Date(
+            json.publishAt ?? scheduleAt,
+          ).toLocaleString()}`,
         );
       } else {
-        setPublishMessage("Published to Instagram successfully.");
+        setPublishMessage(
+          `${json.mode ? `${json.mode} ` : ""}published to Instagram successfully.`,
+        );
       }
     } catch (publishError) {
       setError(
@@ -639,14 +863,22 @@ export default function Home() {
             : "border-white/15 bg-slate-900/30 hover:border-white/30",
         )}
       >
-        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
-          {variant.name}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+            {variant.name}
+          </p>
+          <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-200">
+            {variant.postType}
+          </span>
+        </div>
         <p className="mt-2 text-sm font-medium text-white">{variant.headline}</p>
-        <p className="mt-1 text-xs text-slate-300">{variant.layout}</p>
+        <p className="mt-1 text-xs text-slate-300">{variant.layout} · {variant.assetSequence.length} asset(s)</p>
       </button>
     );
   };
+
+  const imageCount = assets.filter((asset) => asset.mediaType === "image").length;
+  const videoCount = assets.filter((asset) => asset.mediaType === "video").length;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-8 text-white md:px-8 md:py-10">
@@ -657,12 +889,15 @@ export default function Home() {
             SOTA IG Poster Engine
           </div>
           <h1 className="mt-4 max-w-3xl text-3xl leading-tight font-semibold tracking-tight md:text-5xl">
-            Generate brand-consistent, high-impact Instagram posts from your brief and image set.
+            Generate brand-consistent, high-impact Instagram single posts, carousels, and reels.
           </h1>
           <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-300 md:text-base">
-            Includes persistent media storage, shareable project links, drag/resize
-            canvas editing, and Meta publish scheduling.
+            Upload mixed assets (images + video), get strategy-backed creative variants, and publish format-aware content via Instagram API.
           </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-200">
+            <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{imageCount} image assets</span>
+            <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{videoCount} video assets</span>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
@@ -896,11 +1131,11 @@ export default function Home() {
                 <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
                   <span className="inline-flex items-center gap-2">
                     <ImagePlus className="h-4 w-4 text-orange-300" />
-                    Upload Post Images (1-20)
+                    Upload Post Assets (Images + Video)
                   </span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     multiple
                     className="hidden"
                     onChange={(event) => {
@@ -930,14 +1165,15 @@ export default function Home() {
                   <span
                     key={asset.id}
                     className={cn(
-                      "rounded-full border px-3 py-1 text-[11px] font-medium",
+                      "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-medium",
                       statusChip(asset.status),
                     )}
                   >
+                    {asset.mediaType === "video" ? <Film className="h-3 w-3" /> : <Images className="h-3 w-3" />}
                     {asset.name}
+                    {asset.mediaType === "video" && asset.durationSec ? ` (${formatDuration(asset.durationSec)})` : ""}
                     {asset.status === "uploading" ? " (syncing)" : ""}
                     {asset.status === "local" ? " (local only)" : ""}
-                    {asset.status === "failed" ? " (failed)" : ""}
                   </span>
                 ))}
                 {logo ? (
@@ -949,7 +1185,6 @@ export default function Home() {
                   >
                     Logo: {logo.name}
                     {logo.status === "uploading" ? " (syncing)" : ""}
-                    {logo.status === "local" ? " (local only)" : ""}
                   </span>
                 ) : null}
               </div>
@@ -1001,8 +1236,8 @@ export default function Home() {
                     variant={activeVariant}
                     brandName={brand.brandName}
                     aspectRatio={post.aspectRatio}
-                    primaryImage={heroImage}
-                    secondaryImage={secondaryImage}
+                    primaryImage={primaryVisual}
+                    secondaryImage={secondaryVisual}
                     logoImage={logo?.previewUrl}
                     editorMode={editorMode}
                     overlayLayout={activeOverlayLayout}
@@ -1020,7 +1255,7 @@ export default function Home() {
                 </motion.div>
               ) : (
                 <div className="flex aspect-[4/5] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300">
-                  Upload images and generate concepts to preview your poster.
+                  Upload assets and generate concepts to preview your post.
                 </div>
               )}
             </div>
@@ -1052,6 +1287,48 @@ export default function Home() {
 
                 {activeVariant ? (
                   <>
+                    {activeVariant.postType === "carousel" && activeVariant.carouselSlides ? (
+                      <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">Carousel Slide Plan</p>
+                        <div className="mt-3 space-y-2">
+                          {activeVariant.carouselSlides.map((slide) => (
+                            <div key={`${activeVariant.id}-slide-${slide.index}`} className="rounded-xl border border-white/10 bg-white/5 p-2.5">
+                              <p className="text-[11px] font-semibold text-orange-200">Slide {slide.index}: {slide.goal}</p>
+                              <p className="mt-1 text-sm font-medium text-slate-100">{slide.headline}</p>
+                              <p className="mt-1 text-xs text-slate-300">{slide.body}</p>
+                              <p className="mt-1 text-[11px] text-slate-400">Asset hint: {slide.assetHint}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeVariant.postType === "reel" && activeVariant.reelPlan ? (
+                      <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">Reel Edit Blueprint</p>
+                        <p className="mt-2 text-sm text-slate-200">Hook: {activeVariant.reelPlan.hook}</p>
+                        <p className="mt-1 text-xs text-slate-300">Target duration: {Math.round(activeVariant.reelPlan.targetDurationSec)}s</p>
+                        <p className="mt-1 text-xs text-slate-300">Cover frame: {activeVariant.reelPlan.coverFrameDirection}</p>
+                        <p className="mt-1 text-xs text-slate-300">Audio: {activeVariant.reelPlan.audioDirection}</p>
+                        <div className="mt-3 space-y-1.5">
+                          {activeVariant.reelPlan.editingActions.map((action, index) => (
+                            <p key={`${activeVariant.id}-edit-${index}`} className="text-xs text-slate-200">• {action}</p>
+                          ))}
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {activeVariant.reelPlan.beats.map((beat, index) => (
+                            <div key={`${activeVariant.id}-beat-${index}`} className="rounded-xl border border-white/10 bg-white/5 p-2.5">
+                              <p className="text-[11px] font-semibold text-orange-200">{beat.atSec.toFixed(1)}s</p>
+                              <p className="mt-1 text-xs text-slate-100">{beat.visual}</p>
+                              <p className="mt-1 text-xs text-slate-300">On-screen: {beat.onScreenText}</p>
+                              <p className="mt-1 text-[11px] text-slate-400">Edit: {beat.editAction}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-3 text-xs font-semibold text-emerald-200">End card CTA: {activeVariant.reelPlan.endCardCta}</p>
+                      </div>
+                    ) : null}
+
                     <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
