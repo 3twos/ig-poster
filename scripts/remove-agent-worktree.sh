@@ -14,13 +14,14 @@ if [[ ! -d "$WORKTREE_PATH" ]]; then
   exit 1
 fi
 
+REPO_ROOT="$(git -C "$WORKTREE_PATH" rev-parse --show-toplevel)"
 BRANCH="$(git -C "$WORKTREE_PATH" branch --show-current)"
 
-git worktree remove "$WORKTREE_PATH"
+git -C "$REPO_ROOT" worktree remove "$WORKTREE_PATH"
 
 if [[ -n "$BRANCH" ]]; then
-  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-    git branch -D "$BRANCH"
+  if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    git -C "$REPO_ROOT" branch -D "$BRANCH"
   fi
 fi
 
