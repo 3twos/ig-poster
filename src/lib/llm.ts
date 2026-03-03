@@ -17,25 +17,6 @@ export type ResolvedLlmAuth = {
 const toErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unexpected provider validation failure";
 
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number) => {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(new Error(`Validation timed out after ${Math.round(timeoutMs / 1000)}s`));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  }
-};
-
 const selectFallbackModel = (
   availableModels: string[],
   preferredModel: string,
@@ -56,17 +37,17 @@ export const validateLlmCredentials = async (params: {
   provider: LlmProvider;
   apiKey: string;
   model: string;
-}) => {
+}): Promise<string> => {
   if (params.provider === "anthropic") {
     const client = new Anthropic({ apiKey: params.apiKey });
     const timeoutMs = 12_000;
 
     try {
-      await withTimeout(client.models.retrieve(params.model), timeoutMs);
+      await client.models.retrieve(params.model, undefined, { timeout: timeoutMs });
       return params.model;
     } catch {
       try {
-        const page = await withTimeout(client.models.list(), timeoutMs);
+        const page = await client.models.list(undefined, { timeout: timeoutMs });
         const available = page.data.map((model) => model.id).filter(Boolean);
         if (!available.length) {
           throw new Error("No Anthropic models are available for this key.");
@@ -87,11 +68,11 @@ export const validateLlmCredentials = async (params: {
   const timeoutMs = 12_000;
 
   try {
-    await withTimeout(client.models.retrieve(params.model), timeoutMs);
+    await client.models.retrieve(params.model, { timeout: timeoutMs });
     return params.model;
   } catch {
     try {
-      const page = await withTimeout(client.models.list(), timeoutMs);
+      const page = await client.models.list({ timeout: timeoutMs });
       const available = page.data.map((model) => model.id).filter(Boolean);
       if (!available.length) {
         throw new Error("No OpenAI models are available for this key.");

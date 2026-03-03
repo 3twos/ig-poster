@@ -860,7 +860,10 @@ export default function Home() {
   const connectLlmProvider = async () => {
     const apiKey = llmApiKeyInput.trim();
     if (!apiKey) {
-      setLlmError("Enter an API key to connect an LLM provider.");
+      const message = "Enter an API key to connect an LLM provider.";
+      setLlmMessage(null);
+      setLlmError(message);
+      setError(message);
       return;
     }
 
