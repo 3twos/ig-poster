@@ -30,6 +30,25 @@ const normalizeHost = (value: string | undefined) => {
     const parsed = new URL(
       trimmed.includes("://") ? trimmed : `https://${trimmed}`,
     );
+
+    // Accept only plain http(s) hosts (optional scheme) to avoid
+    // interpreting malformed URL env vars as redirect targets.
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return null;
+    }
+
+    if (parsed.username || parsed.password || parsed.port) {
+      return null;
+    }
+
+    if (
+      (parsed.pathname && parsed.pathname !== "/") ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return null;
+    }
+
     return parsed.hostname.toLowerCase();
   } catch {
     return null;
@@ -53,25 +72,26 @@ const getCanonicalHost = () => {
   return null;
 };
 
+const RUNTIME_DEPLOYMENT_HOST = normalizeHost(process.env.VERCEL_URL);
+const CANONICAL_HOST = getCanonicalHost();
+
 const buildCanonicalRedirect = (req: NextRequest) => {
-  const runtimeDeploymentHost = normalizeHost(process.env.VERCEL_URL);
-  if (!runtimeDeploymentHost) {
+  if (!RUNTIME_DEPLOYMENT_HOST) {
     return null;
   }
 
   const requestHost = req.nextUrl.hostname.toLowerCase();
-  if (requestHost !== runtimeDeploymentHost) {
+  if (requestHost !== RUNTIME_DEPLOYMENT_HOST) {
     return null;
   }
 
-  const canonicalHost = getCanonicalHost();
-  if (!canonicalHost || canonicalHost === requestHost) {
+  if (!CANONICAL_HOST || CANONICAL_HOST === requestHost) {
     return null;
   }
 
   const redirectUrl = req.nextUrl.clone();
   redirectUrl.protocol = "https:";
-  redirectUrl.hostname = canonicalHost;
+  redirectUrl.hostname = CANONICAL_HOST;
   redirectUrl.port = "";
 
   return NextResponse.redirect(redirectUrl, 307);
