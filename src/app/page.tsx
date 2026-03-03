@@ -56,6 +56,7 @@ type LocalAsset = {
 
 type BrandState = {
   brandName: string;
+  website: string;
   values: string;
   principles: string;
   story: string;
@@ -91,6 +92,7 @@ type InstagramAuthStatus = {
 
 const INITIAL_BRAND: BrandState = {
   brandName: "Nexa Labs",
+  website: "",
   values: "Radical clarity, measurable impact, craft quality, customer empathy",
   principles:
     "No fluff. Show proof. Build trust with transparent language and intentional design.",
@@ -881,20 +883,14 @@ export default function Home() {
   const videoCount = assets.filter((asset) => asset.mediaType === "video").length;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-8 text-white md:px-8 md:py-10">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-6 text-white md:px-8 md:py-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 rounded-3xl border border-white/15 bg-white/5 p-6 backdrop-blur-xl md:p-8">
-          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold tracking-[0.18em] text-orange-200 uppercase">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
             <Sparkles className="h-4 w-4" />
-            SOTA IG Poster Engine
+            IG Poster Engine
           </div>
-          <h1 className="mt-4 max-w-3xl text-3xl leading-tight font-semibold tracking-tight md:text-5xl">
-            Generate brand-consistent, high-impact Instagram single posts, carousels, and reels.
-          </h1>
-          <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-300 md:text-base">
-            Upload mixed assets (images + video), get strategy-backed creative variants, and publish format-aware content via Instagram API.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-200">
+          <div className="flex flex-wrap gap-2 text-xs text-slate-200">
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{imageCount} image assets</span>
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{videoCount} video assets</span>
           </div>
@@ -920,6 +916,23 @@ export default function Home() {
                     }
                     className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                   />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-medium text-slate-200">Website (optional)</span>
+                  <input
+                    value={brand.website}
+                    placeholder="example.com or https://example.com"
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        website: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    If provided, the generator will pull public style cues (colors, typography, messaging tone).
+                  </p>
                 </label>
                 <label className="space-y-1 md:col-span-2">
                   <span className="text-xs font-medium text-slate-200">Values</span>

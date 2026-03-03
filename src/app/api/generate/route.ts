@@ -7,6 +7,7 @@ import {
   buildGenerationPrompt,
   createFallbackResponse,
 } from "@/lib/creative";
+import { buildWebsiteStyleContext } from "@/lib/website-style";
 
 export async function POST(req: Request) {
   try {
@@ -19,6 +20,7 @@ export async function POST(req: Request) {
     }
 
     try {
+      const websiteStyleContext = await buildWebsiteStyleContext(request.brand.website);
       const client = new OpenAI({ apiKey });
       const completion = await client.chat.completions.create({
         model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
@@ -32,7 +34,7 @@ export async function POST(req: Request) {
           },
           {
             role: "user",
-            content: buildGenerationPrompt(request),
+            content: buildGenerationPrompt(request, { websiteStyleContext: websiteStyleContext ?? undefined }),
           },
         ],
       });
