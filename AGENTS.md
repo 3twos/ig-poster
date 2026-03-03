@@ -4,26 +4,31 @@
 
 Use this flow for every non-trivial change:
 
-1. Create a branch with prefix `codex/`.
-2. Implement changes, run local validation (`lint`, `build`, relevant tests).
-3. Commit with clear message and push branch.
-4. Open a PR with:
+1. Create a dedicated git worktree for the task (never work in a shared worktree).
+   - Example: `git worktree add ../ig-poster-<task> -b codex/<task>`
+2. In that worktree, create/use a branch with prefix `codex/`.
+3. Run a pre-flight isolation check before editing:
+   - `git status --short`
+   - If there are unexpected tracked/untracked files, stop and ask the user before proceeding.
+4. Implement changes, run local validation (`lint`, `build`, relevant tests).
+5. Commit with clear message and push branch.
+6. Open a PR with:
    - concise summary of what changed
    - validation evidence
    - any known risks or follow-ups
-5. Request Copilot review on the PR.
-6. Wait for Copilot review to complete before taking next steps.
-7. Process review comments:
+7. Request Copilot review on the PR.
+8. Wait for Copilot review to complete before taking next steps.
+9. Process review comments:
    - address each actionable comment with code changes, tests, or explicit rationale
    - reply on each comment with resolution details
    - push follow-up commits
-8. Re-run validation after fixes.
-9. Post a final PR update summarizing:
+10. Re-run validation after fixes.
+11. Post a final PR update summarizing:
    - what was changed after review
    - current status of all review comments
    - latest validation results
-10. Wait for explicit user approval before merging.
-11. Do not merge until user says to merge.
+12. Wait for explicit user approval before merging.
+13. Do not merge until user says to merge.
 
 ## Merge Gate (Mandatory)
 

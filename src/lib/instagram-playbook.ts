@@ -1,5 +1,6 @@
 type BrandInputLike = {
   brandName: string;
+  website?: string;
   values: string;
   story: string;
   voice: string;
@@ -44,6 +45,7 @@ export const isWineBrandSignals = (
 ) => {
   const combined = [
     brand.brandName,
+    brand.website ?? "",
     brand.values,
     brand.story,
     brand.voice,

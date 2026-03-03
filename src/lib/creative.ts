@@ -9,6 +9,7 @@ export const AspectRatioSchema = z.enum(["1:1", "4:5", "9:16"]);
 
 export const BrandInputSchema = z.object({
   brandName: z.string().trim().min(2).max(80),
+  website: z.string().trim().max(240).optional().default(""),
   values: z.string().trim().min(10).max(1200),
   principles: z.string().trim().min(10).max(1200),
   story: z.string().trim().min(10).max(1800),
@@ -358,7 +359,12 @@ export const createFallbackResponse = (
   };
 };
 
-export const buildGenerationPrompt = (request: GenerationRequest): string => {
+export const buildGenerationPrompt = (
+  request: GenerationRequest,
+  options?: {
+    websiteStyleContext?: string;
+  },
+): string => {
   const assetList = request.assets.map(
     (asset, index) =>
       `${index + 1}. id=${asset.id}, name=${asset.name}, type=${asset.mediaType}, durationSec=${asset.durationSec ?? "n/a"}, dimensions=${asset.width ?? "?"}x${asset.height ?? "?"}`,
@@ -372,6 +378,7 @@ export const buildGenerationPrompt = (request: GenerationRequest): string => {
 
 Brand:
 - Name: ${request.brand.brandName}
+- Website: ${request.brand.website || "Not provided"}
 - Values: ${request.brand.values}
 - Principles: ${request.brand.principles}
 - Story: ${request.brand.story}
@@ -379,6 +386,7 @@ Brand:
 - Visual direction: ${request.brand.visualDirection}
 - Palette notes: ${request.brand.palette}
 - Logo guidance: ${request.brand.logoNotes || "No extra logo guidance"}
+${options?.websiteStyleContext ? `\nWebsite-derived style cues:\n${options.websiteStyleContext}` : ""}
 
 Post brief:
 - Theme: ${request.post.theme}
