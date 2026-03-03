@@ -16,6 +16,67 @@ const PUBLIC_PATH_PREFIXES = [
 
 const PUBLIC_EXACT_PATHS = ["/favicon.ico"];
 
+const normalizeHost = (value: string | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(
+      trimmed.includes("://") ? trimmed : `https://${trimmed}`,
+    );
+    return parsed.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+const getCanonicalHost = () => {
+  if (process.env.VERCEL_ENV === "production") {
+    return normalizeHost(
+      process.env.WORKSPACE_AUTH_PRODUCTION_HOST ??
+        process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    );
+  }
+
+  if (process.env.VERCEL_ENV === "preview") {
+    return normalizeHost(
+      process.env.WORKSPACE_AUTH_PREVIEW_HOST ?? process.env.VERCEL_BRANCH_URL,
+    );
+  }
+
+  return null;
+};
+
+const buildCanonicalRedirect = (req: NextRequest) => {
+  const runtimeDeploymentHost = normalizeHost(process.env.VERCEL_URL);
+  if (!runtimeDeploymentHost) {
+    return null;
+  }
+
+  const requestHost = req.nextUrl.hostname.toLowerCase();
+  if (requestHost !== runtimeDeploymentHost) {
+    return null;
+  }
+
+  const canonicalHost = getCanonicalHost();
+  if (!canonicalHost || canonicalHost === requestHost) {
+    return null;
+  }
+
+  const redirectUrl = req.nextUrl.clone();
+  redirectUrl.protocol = "https:";
+  redirectUrl.hostname = canonicalHost;
+  redirectUrl.port = "";
+
+  return NextResponse.redirect(redirectUrl, 307);
+};
+
 const hasPublicFileExtension = (pathname: string) =>
   /\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|map)$/i.test(pathname);
 
@@ -47,6 +108,11 @@ const buildUnauthorizedResponse = (req: NextRequest) => {
 };
 
 export async function proxy(req: NextRequest) {
+  const canonicalRedirect = buildCanonicalRedirect(req);
+  if (canonicalRedirect) {
+    return canonicalRedirect;
+  }
+
   if (isPublicPath(req.nextUrl.pathname)) {
     return NextResponse.next();
   }
