@@ -1,65 +1,1067 @@
-import Image from "next/image";
+"use client";
+
+import { motion } from "framer-motion";
+import { toPng } from "html-to-image";
+import {
+  Copy,
+  Download,
+  ImagePlus,
+  LayoutTemplate,
+  Link2,
+  LoaderCircle,
+  Palette,
+  Send,
+  Sparkles,
+  WandSparkles,
+} from "lucide-react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
+
+import { PosterPreview } from "@/components/poster-preview";
+import {
+  type AspectRatio,
+  createDefaultOverlayLayout,
+  type CreativeVariant,
+  GenerationResponseSchema,
+  type GenerationResponse,
+  type OverlayLayout,
+} from "@/lib/creative";
+import { cn, slugify } from "@/lib/utils";
+
+type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
+
+type LocalAsset = {
+  id: string;
+  name: string;
+  previewUrl: string;
+  storageUrl?: string;
+  status: UploadStatus;
+  error?: string;
+};
+
+type BrandState = {
+  brandName: string;
+  values: string;
+  principles: string;
+  story: string;
+  voice: string;
+  visualDirection: string;
+  palette: string;
+  logoNotes: string;
+};
+
+type PostState = {
+  theme: string;
+  subject: string;
+  thought: string;
+  objective: string;
+  audience: string;
+  mood: string;
+  aspectRatio: AspectRatio;
+};
+
+const INITIAL_BRAND: BrandState = {
+  brandName: "Nexa Labs",
+  values: "Radical clarity, measurable impact, craft quality, customer empathy",
+  principles:
+    "No fluff. Show proof. Build trust with transparent language and intentional design.",
+  story:
+    "Nexa Labs helps founders transform messy growth into repeatable systems through design, AI, and strategic execution.",
+  voice: "Confident, direct, data-informed, warm but never corporate",
+  visualDirection:
+    "Bold editorial layouts, high contrast, cinematic shadows, kinetic angles, premium texture",
+  palette: "#0F172A, #F97316, #F8FAFC, #22C55E",
+  logoNotes: "Keep logo visible but subtle, preferably top-left chip",
+};
+
+const INITIAL_POST: PostState = {
+  theme: "Category authority",
+  subject: "How high-growth teams design trust",
+  thought:
+    "Trust is not a slogan. It is the result of repeated proof moments that users can feel in every interaction.",
+  objective: "Drive profile visits and inbound strategy calls",
+  audience: "Startup founders and growth leads",
+  mood: "High-energy and premium",
+  aspectRatio: "4:5",
+};
+
+const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
+  { value: "1:1", label: "Square (1:1)" },
+  { value: "4:5", label: "Feed Max (4:5)" },
+  { value: "9:16", label: "Story/Reel (9:16)" },
+];
+
+const parseApiError = async (response: Response) => {
+  try {
+    const json = await response.json();
+    if (typeof json?.detail === "string") {
+      return json.detail;
+    }
+
+    if (typeof json?.error === "string") {
+      return json.error;
+    }
+
+    return `Request failed (${response.status})`;
+  } catch {
+    return `Request failed (${response.status})`;
+  }
+};
+
+const statusChip = (status: UploadStatus) => {
+  if (status === "uploaded") {
+    return "border-emerald-300/40 bg-emerald-400/10 text-emerald-200";
+  }
+
+  if (status === "uploading") {
+    return "border-blue-300/40 bg-blue-400/10 text-blue-200";
+  }
+
+  if (status === "failed") {
+    return "border-red-300/40 bg-red-400/10 text-red-200";
+  }
+
+  return "border-white/20 bg-white/5 text-slate-200";
+};
 
 export default function Home() {
+  const [brand, setBrand] = useState<BrandState>(INITIAL_BRAND);
+  const [post, setPost] = useState<PostState>(INITIAL_POST);
+  const [assets, setAssets] = useState<LocalAsset[]>([]);
+  const [logo, setLogo] = useState<LocalAsset | null>(null);
+  const [result, setResult] = useState<GenerationResponse | null>(null);
+  const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
+  const [overlayLayouts, setOverlayLayouts] = useState<Record<string, OverlayLayout>>({});
+  const [editorMode, setEditorMode] = useState(false);
+
+  const [isUploadingAssets, setIsUploadingAssets] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "done">("idle");
+  const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
+  const [scheduleAt, setScheduleAt] = useState("");
+
+  const posterRef = useRef<HTMLDivElement>(null);
+
+  const activeVariant = useMemo(() => {
+    if (!result?.variants.length) {
+      return null;
+    }
+
+    return (
+      result.variants.find((variant) => variant.id === activeVariantId) ??
+      result.variants[0]
+    );
+  }, [activeVariantId, result]);
+
+  const activeOverlayLayout = useMemo(() => {
+    if (!activeVariant) {
+      return undefined;
+    }
+
+    return (
+      overlayLayouts[activeVariant.id] ?? createDefaultOverlayLayout(activeVariant.layout)
+    );
+  }, [activeVariant, overlayLayouts]);
+
+  const heroImage = assets[0]?.previewUrl;
+  const secondaryImage = assets[1]?.previewUrl;
+
+  const uploadFileToStorage = async (file: File, folder: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", folder);
+
+    const response = await fetch("/api/assets/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(await parseApiError(response));
+    }
+
+    const json = (await response.json()) as { url?: string };
+    if (!json.url) {
+      throw new Error("Storage did not return a URL");
+    }
+
+    return json.url;
+  };
+
+  const handleAssetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (!files.length) {
+      return;
+    }
+
+    setError(null);
+    setPublishMessage(null);
+
+    const staged = files.map((file, index) => ({
+      id: `${Date.now()}-${index}-${file.name}`,
+      name: file.name,
+      previewUrl: URL.createObjectURL(file),
+      status: "uploading" as const,
+    }));
+
+    setAssets((current) => {
+      current.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
+      return staged;
+    });
+
+    setIsUploadingAssets(true);
+
+    await Promise.allSettled(
+      files.map(async (file, index) => {
+        const itemId = staged[index].id;
+
+        try {
+          const url = await uploadFileToStorage(file, "assets");
+          setAssets((current) =>
+            current.map((asset) =>
+              asset.id === itemId
+                ? {
+                    ...asset,
+                    status: "uploaded",
+                    storageUrl: url,
+                  }
+                : asset,
+            ),
+          );
+        } catch (uploadError) {
+          setAssets((current) =>
+            current.map((asset) =>
+              asset.id === itemId
+                ? {
+                    ...asset,
+                    status: "local",
+                    error:
+                      uploadError instanceof Error
+                        ? uploadError.message
+                        : "Upload failed",
+                  }
+                : asset,
+            ),
+          );
+        }
+      }),
+    );
+
+    setIsUploadingAssets(false);
+  };
+
+  const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setError(null);
+    setPublishMessage(null);
+
+    const nextLogo: LocalAsset = {
+      id: `${Date.now()}-${file.name}`,
+      name: file.name,
+      previewUrl: URL.createObjectURL(file),
+      status: "uploading",
+    };
+
+    setLogo((current) => {
+      if (current) {
+        URL.revokeObjectURL(current.previewUrl);
+      }
+
+      return nextLogo;
+    });
+
+    setIsUploadingLogo(true);
+
+    try {
+      const url = await uploadFileToStorage(file, "logos");
+      setLogo((current) =>
+        current
+          ? {
+              ...current,
+              status: "uploaded",
+              storageUrl: url,
+            }
+          : null,
+      );
+    } catch (uploadError) {
+      setLogo((current) =>
+        current
+          ? {
+              ...current,
+              status: "local",
+              error:
+                uploadError instanceof Error
+                  ? uploadError.message
+                  : "Upload failed",
+            }
+          : null,
+      );
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const generate = async () => {
+    setError(null);
+    setPublishMessage(null);
+    setIsGenerating(true);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brand,
+          post,
+          assets: assets.map((asset) => ({ id: asset.id, name: asset.name })),
+          hasLogo: Boolean(logo),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const parsed = GenerationResponseSchema.parse(await response.json());
+      setResult(parsed);
+      setActiveVariantId(parsed.variants[0]?.id ?? null);
+      setOverlayLayouts(
+        Object.fromEntries(
+          parsed.variants.map((variant) => [
+            variant.id,
+            createDefaultOverlayLayout(variant.layout),
+          ]),
+        ),
+      );
+      setShareUrl(null);
+    } catch (generationError) {
+      setError(
+        generationError instanceof Error
+          ? generationError.message
+          : "Unexpected generation issue.",
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const renderPosterToDataUrl = async () => {
+    if (!posterRef.current || !activeVariant) {
+      throw new Error("No poster selected");
+    }
+
+    return toPng(posterRef.current, {
+      cacheBust: true,
+      pixelRatio: 3,
+    });
+  };
+
+  const uploadRenderedPoster = async () => {
+    const dataUrl = await renderPosterToDataUrl();
+    const imageResponse = await fetch(dataUrl);
+    const blob = await imageResponse.blob();
+
+    const fileName = `${slugify(brand.brandName)}-${slugify(post.theme)}-${Date.now()}.png`;
+    const file = new File([blob], fileName, { type: "image/png" });
+
+    return uploadFileToStorage(file, "renders");
+  };
+
+  const exportPoster = async () => {
+    if (!activeVariant) {
+      return;
+    }
+
+    const dataUrl = await renderPosterToDataUrl();
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = `${slugify(brand.brandName)}-${slugify(post.theme)}.png`;
+    link.click();
+  };
+
+  const copyCaption = async () => {
+    if (!activeVariant) {
+      return;
+    }
+
+    const payload = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopyState("done");
+      window.setTimeout(() => setCopyState("idle"), 1400);
+    } catch {
+      setCopyState("idle");
+    }
+  };
+
+  const createShareLink = async () => {
+    if (!result || !activeVariant) {
+      return;
+    }
+
+    setError(null);
+    setShareUrl(null);
+    setIsSharing(true);
+
+    try {
+      const posterUrl = await uploadRenderedPoster();
+      const response = await fetch("/api/projects/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brand,
+          post,
+          assets: assets
+            .filter((asset) => Boolean(asset.storageUrl))
+            .map((asset) => ({
+              id: asset.id,
+              name: asset.name,
+              url: asset.storageUrl,
+            })),
+          logoUrl: logo?.storageUrl,
+          result,
+          activeVariantId: activeVariant.id,
+          overlayLayouts,
+          renderedPosterUrl: posterUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const json = (await response.json()) as { shareUrl?: string };
+      if (!json.shareUrl) {
+        throw new Error("No share link returned");
+      }
+
+      setShareUrl(json.shareUrl);
+      try {
+        await navigator.clipboard.writeText(json.shareUrl);
+        setShareCopyState("done");
+        window.setTimeout(() => setShareCopyState("idle"), 1400);
+      } catch {
+        setShareCopyState("idle");
+      }
+    } catch (shareError) {
+      setError(shareError instanceof Error ? shareError.message : "Could not create share link");
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const publishToInstagram = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!activeVariant) {
+      return;
+    }
+
+    setError(null);
+    setPublishMessage(null);
+    setIsPublishing(true);
+
+    try {
+      const imageUrl = await uploadRenderedPoster();
+      const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
+
+      const response = await fetch("/api/meta/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl,
+          caption,
+          publishAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const json = (await response.json()) as {
+        status?: string;
+        publishAt?: string;
+      };
+
+      if (json.status === "scheduled") {
+        setPublishMessage(
+          `Scheduled for ${new Date(json.publishAt ?? scheduleAt).toLocaleString()}`,
+        );
+      } else {
+        setPublishMessage("Published to Instagram successfully.");
+      }
+    } catch (publishError) {
+      setError(
+        publishError instanceof Error
+          ? publishError.message
+          : "Instagram publish failed",
+      );
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const renderVariantTile = (variant: CreativeVariant) => {
+    const isActive = variant.id === activeVariant?.id;
+
+    return (
+      <button
+        key={variant.id}
+        type="button"
+        onClick={() => setActiveVariantId(variant.id)}
+        className={cn(
+          "w-full rounded-2xl border p-4 text-left transition-all duration-200",
+          isActive
+            ? "border-orange-400 bg-orange-500/10 shadow-[0_12px_40px_-24px_rgba(251,146,60,0.95)]"
+            : "border-white/15 bg-slate-900/30 hover:border-white/30",
+        )}
+      >
+        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+          {variant.name}
+        </p>
+        <p className="mt-2 text-sm font-medium text-white">{variant.headline}</p>
+        <p className="mt-1 text-xs text-slate-300">{variant.layout}</p>
+      </button>
+    );
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-8 text-white md:px-8 md:py-10">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 rounded-3xl border border-white/15 bg-white/5 p-6 backdrop-blur-xl md:p-8">
+          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold tracking-[0.18em] text-orange-200 uppercase">
+            <Sparkles className="h-4 w-4" />
+            SOTA IG Poster Engine
+          </div>
+          <h1 className="mt-4 max-w-3xl text-3xl leading-tight font-semibold tracking-tight md:text-5xl">
+            Generate brand-consistent, high-impact Instagram posts from your brief and image set.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-300 md:text-base">
+            Includes persistent media storage, shareable project links, drag/resize
+            canvas editing, and Meta publish scheduling.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
+          <section className="space-y-6">
+            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+                <Palette className="h-4 w-4 text-orange-300" />
+                Brand Kit
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-medium text-slate-200">Brand Name</span>
+                  <input
+                    value={brand.brandName}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        brandName: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-medium text-slate-200">Values</span>
+                  <textarea
+                    value={brand.values}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        values: event.target.value,
+                      }))
+                    }
+                    rows={2}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Principles</span>
+                  <textarea
+                    value={brand.principles}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        principles: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Story</span>
+                  <textarea
+                    value={brand.story}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        story: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Voice</span>
+                  <textarea
+                    value={brand.voice}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        voice: event.target.value,
+                      }))
+                    }
+                    rows={2}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Visual Direction</span>
+                  <textarea
+                    value={brand.visualDirection}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        visualDirection: event.target.value,
+                      }))
+                    }
+                    rows={2}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Palette (hex list)</span>
+                  <input
+                    value={brand.palette}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        palette: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-medium text-slate-200">Logo Notes</span>
+                  <input
+                    value={brand.logoNotes}
+                    onChange={(event) =>
+                      setBrand((current) => ({
+                        ...current,
+                        logoNotes: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+                <WandSparkles className="h-4 w-4 text-orange-300" />
+                Post Brief + Assets
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Theme</span>
+                  <input
+                    value={post.theme}
+                    onChange={(event) =>
+                      setPost((current) => ({
+                        ...current,
+                        theme: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Subject</span>
+                  <input
+                    value={post.subject}
+                    onChange={(event) =>
+                      setPost((current) => ({
+                        ...current,
+                        subject: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-medium text-slate-200">Core Thought</span>
+                  <textarea
+                    value={post.thought}
+                    onChange={(event) =>
+                      setPost((current) => ({
+                        ...current,
+                        thought: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Objective</span>
+                  <input
+                    value={post.objective}
+                    onChange={(event) =>
+                      setPost((current) => ({
+                        ...current,
+                        objective: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Audience</span>
+                  <input
+                    value={post.audience}
+                    onChange={(event) =>
+                      setPost((current) => ({
+                        ...current,
+                        audience: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Mood</span>
+                  <input
+                    value={post.mood}
+                    onChange={(event) =>
+                      setPost((current) => ({
+                        ...current,
+                        mood: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Aspect Ratio</span>
+                  <select
+                    value={post.aspectRatio}
+                    onChange={(event) =>
+                      setPost((current) => ({
+                        ...current,
+                        aspectRatio: event.target.value as AspectRatio,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  >
+                    {RATIO_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
+                  <span className="inline-flex items-center gap-2">
+                    <ImagePlus className="h-4 w-4 text-orange-300" />
+                    Upload Post Images (1-20)
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => {
+                      void handleAssetUpload(event);
+                    }}
+                  />
+                </label>
+
+                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
+                  <span className="inline-flex items-center gap-2">
+                    <ImagePlus className="h-4 w-4 text-orange-300" />
+                    Upload Logo
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      void handleLogoUpload(event);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {assets.map((asset) => (
+                  <span
+                    key={asset.id}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-[11px] font-medium",
+                      statusChip(asset.status),
+                    )}
+                  >
+                    {asset.name}
+                    {asset.status === "uploading" ? " (syncing)" : ""}
+                    {asset.status === "local" ? " (local only)" : ""}
+                    {asset.status === "failed" ? " (failed)" : ""}
+                  </span>
+                ))}
+                {logo ? (
+                  <span
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-[11px] font-medium",
+                      statusChip(logo.status),
+                    )}
+                  >
+                    Logo: {logo.name}
+                    {logo.status === "uploading" ? " (syncing)" : ""}
+                    {logo.status === "local" ? " (local only)" : ""}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={generate}
+                  disabled={
+                    isGenerating ||
+                    assets.length === 0 ||
+                    isUploadingAssets ||
+                    isUploadingLogo
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isGenerating ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  {isGenerating ? "Generating..." : "Generate SOTA Concepts"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={exportPoster}
+                  disabled={!activeVariant}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                  Export PNG
+                </button>
+
+                {isUploadingAssets || isUploadingLogo ? (
+                  <p className="text-xs text-blue-200">Uploading assets to persistent storage...</p>
+                ) : null}
+                {error ? <p className="text-xs font-medium text-red-300">{error}</p> : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-5 lg:sticky lg:top-6 lg:h-fit">
+            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5">
+              {activeVariant ? (
+                <motion.div key={activeVariant.id} initial={{ opacity: 0.2 }} animate={{ opacity: 1 }}>
+                  <PosterPreview
+                    ref={posterRef}
+                    variant={activeVariant}
+                    brandName={brand.brandName}
+                    aspectRatio={post.aspectRatio}
+                    primaryImage={heroImage}
+                    secondaryImage={secondaryImage}
+                    logoImage={logo?.previewUrl}
+                    editorMode={editorMode}
+                    overlayLayout={activeOverlayLayout}
+                    onOverlayLayoutChange={(layout) => {
+                      if (!activeVariant) {
+                        return;
+                      }
+
+                      setOverlayLayouts((current) => ({
+                        ...current,
+                        [activeVariant.id]: layout,
+                      }));
+                    }}
+                  />
+                </motion.div>
+              ) : (
+                <div className="flex aspect-[4/5] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300">
+                  Upload images and generate concepts to preview your poster.
+                </div>
+              )}
+            </div>
+
+            {result ? (
+              <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold tracking-[0.2em] text-orange-200 uppercase">
+                    Strategy
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode((value) => !value)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold uppercase transition",
+                      editorMode
+                        ? "border-orange-300/50 bg-orange-500/15 text-orange-100"
+                        : "border-white/30 bg-white/5 text-slate-200 hover:bg-white/10",
+                    )}
+                  >
+                    <LayoutTemplate className="h-3.5 w-3.5" />
+                    {editorMode ? "Editor On" : "Editor Off"}
+                  </button>
+                </div>
+
+                <p className="text-sm leading-relaxed text-slate-200">{result.strategy}</p>
+
+                <div className="mt-4 grid gap-2">{result.variants.map(renderVariantTile)}</div>
+
+                {activeVariant ? (
+                  <>
+                    <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+                          Caption Bundle
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void copyCaption();
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-xs text-white transition hover:bg-white/10"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          {copyState === "done" ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-200">{activeVariant.caption}</p>
+                      <p className="mt-3 text-xs text-orange-200">{activeVariant.hashtags.join(" ")}</p>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                      <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+                        Share + Publish
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void createShareLink();
+                          }}
+                          disabled={isSharing}
+                          className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isSharing ? (
+                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Link2 className="h-3.5 w-3.5" />
+                          )}
+                          Create Share Link
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!activeVariant}
+                          onClick={() => {
+                            if (!activeVariant) {
+                              return;
+                            }
+
+                            setOverlayLayouts((current) => ({
+                              ...current,
+                              [activeVariant.id]: createDefaultOverlayLayout(
+                                activeVariant.layout,
+                              ),
+                            }));
+                          }}
+                          className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <LayoutTemplate className="h-3.5 w-3.5" />
+                          Reset Text Layout
+                        </button>
+                      </div>
+
+                      {shareUrl ? (
+                        <div className="mt-3 rounded-xl border border-emerald-300/35 bg-emerald-400/10 p-3 text-xs text-emerald-100">
+                          <p className="font-semibold">Share link ready:</p>
+                          <p className="mt-1 break-all">{shareUrl}</p>
+                          <p className="mt-1">{shareCopyState === "done" ? "Copied to clipboard" : "Copied automatically when created"}</p>
+                        </div>
+                      ) : null}
+
+                      <form onSubmit={publishToInstagram} className="mt-4 grid gap-2">
+                        <label className="space-y-1">
+                          <span className="text-[11px] font-medium text-slate-300">
+                            Schedule (optional)
+                          </span>
+                          <input
+                            type="datetime-local"
+                            value={scheduleAt}
+                            onChange={(event) => setScheduleAt(event.target.value)}
+                            className="w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
+                          />
+                        </label>
+
+                        <button
+                          type="submit"
+                          disabled={isPublishing}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isPublishing ? (
+                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          {scheduleAt ? "Schedule Instagram Publish" : "Publish to Instagram"}
+                        </button>
+                      </form>
+
+                      {publishMessage ? (
+                        <p className="mt-3 rounded-xl border border-emerald-300/35 bg-emerald-400/10 p-2 text-xs text-emerald-100">
+                          {publishMessage}
+                        </p>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }

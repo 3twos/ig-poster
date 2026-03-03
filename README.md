@@ -1,36 +1,110 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IG Poster Engine
 
-## Getting Started
+SOTA Instagram poster app built for production with:
+- Next.js 16 App Router
+- TypeScript
+- Tailwind CSS v4
+- OpenAI structured generation
+- Vercel Blob storage
+- Meta Graph API publishing
+- GitHub Actions + Vercel deployment workflow
 
-First, run the development server:
+## What It Does
+
+Input:
+- Brand kit (values, principles, visual system, voice, story, palette, logo notes)
+- Post brief (theme, subject, thought, objective, audience, mood)
+- Post image set + logo
+
+Output:
+- 3 high-impact creative variants
+- Strategy rationale
+- Caption + hashtag bundle
+- Live poster preview
+- Draggable/resizable text canvas editor
+- PNG export
+- Shareable project URL
+- Publish now or schedule to Instagram
+
+## Implemented SOTA Steps
+
+1. Persistent media storage and share links
+- Uploads images/logos/renders to Vercel Blob
+- Saves project snapshots in Blob
+- Generates share links at `/share/:id`
+
+2. Editable drag/resize overlay canvas
+- Toggle editor mode in the right panel
+- Move and resize hook/headline/body/cta text blocks
+- Save overlay positions per concept and include in shared snapshots
+
+3. One-click Meta publish integration + scheduler
+- Publish immediately via Meta Graph API
+- Optional future schedule stored in Blob
+- Vercel Cron endpoint (`/api/cron/publish`) executes due jobs every 15 minutes
+
+## Local Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local` from `.env.example`:
 
-## Learn More
+```bash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+BLOB_READ_WRITE_TOKEN=
+INSTAGRAM_ACCESS_TOKEN=
+INSTAGRAM_BUSINESS_ID=
+META_GRAPH_VERSION=v22.0
+CRON_SECRET=
+```
 
-To learn more about Next.js, take a look at the following resources:
+Notes:
+- Without `OPENAI_API_KEY`, generation falls back to deterministic local concepts.
+- Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
+- Meta publish requires a valid IG Business account token and ID.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API Endpoints
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `POST /api/generate`: Generate 3 creative variants
+- `POST /api/assets/upload`: Upload image/logo/render to Blob
+- `POST /api/projects/save`: Save shareable project snapshot
+- `GET /api/projects/:id`: Load shared project snapshot
+- `POST /api/meta/schedule`: Publish now or schedule Instagram post
+- `GET /api/cron/publish`: Cron executor for due scheduled posts
 
-## Deploy on Vercel
+## GitHub + Vercel CI/CD
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### GitHub CI (quality gates)
+- Workflow: `.github/workflows/ci.yml`
+- Runs lint + build on PRs and pushes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Vercel deployment workflow
+- Workflow: `.github/workflows/vercel.yml`
+- PRs deploy Preview
+- `main` pushes deploy Production
+
+Required GitHub repository secrets:
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+## Vercel Cron
+
+Cron is configured in `vercel.json`:
+- `*/15 * * * *` -> `/api/cron/publish`
+
+Set `CRON_SECRET` in Vercel env; Vercel sends it as `Authorization: Bearer <CRON_SECRET>`.
+
+## Repo Bootstrap (already applied for this project)
+
+```bash
+gh repo create 3twos/ig-poster --source=. --remote=origin --public --push
+```
