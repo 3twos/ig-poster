@@ -247,6 +247,7 @@ export default function Home() {
   const [isUploadingAssets, setIsUploadingAssets] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isAutofillingBrand, setIsAutofillingBrand] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
@@ -255,6 +256,8 @@ export default function Home() {
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
+  const [brandAutofillMessage, setBrandAutofillMessage] = useState<string | null>(null);
+  const [lastAutofilledWebsite, setLastAutofilledWebsite] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -264,15 +267,25 @@ export default function Home() {
   });
 
   const posterRef = useRef<HTMLDivElement>(null);
+  const assetCleanupRef = useRef<LocalAsset[]>([]);
+  const logoCleanupRef = useRef<LocalAsset | null>(null);
+
+  useEffect(() => {
+    assetCleanupRef.current = assets;
+  }, [assets]);
+
+  useEffect(() => {
+    logoCleanupRef.current = logo;
+  }, [logo]);
 
   useEffect(() => {
     return () => {
-      assets.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
-      if (logo) {
-        URL.revokeObjectURL(logo.previewUrl);
+      assetCleanupRef.current.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
+      if (logoCleanupRef.current) {
+        URL.revokeObjectURL(logoCleanupRef.current.previewUrl);
       }
     };
-  }, [assets, logo]);
+  }, []);
 
   const loadAuthStatus = useCallback(async () => {
     setIsAuthLoading(true);
@@ -742,6 +755,63 @@ export default function Home() {
     }
   };
 
+  const autofillBrandFromWebsite = useCallback(
+    async (websiteInput?: string) => {
+      const rawWebsite = (websiteInput ?? brand.website).trim();
+      const normalizedKey = rawWebsite.toLowerCase();
+      if (!rawWebsite) {
+        return;
+      }
+
+      setError(null);
+      setBrandAutofillMessage(null);
+      setIsAutofillingBrand(true);
+
+      try {
+        const response = await fetch("/api/brand/autofill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ website: rawWebsite }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await parseApiError(response));
+        }
+
+        const json = (await response.json()) as {
+          source?: "model" | "heuristic";
+          website?: string;
+          brand?: Partial<BrandState>;
+        };
+
+        if (!json.brand) {
+          throw new Error("No brand fields returned");
+        }
+
+        setBrand((current) => ({
+          ...current,
+          ...json.brand,
+          website: json.website || rawWebsite,
+        }));
+        setLastAutofilledWebsite(normalizedKey);
+        setBrandAutofillMessage(
+          json.source === "model"
+            ? "Brand fields autofilled from website style + messaging."
+            : "Brand fields autofilled using website metadata heuristics.",
+        );
+      } catch (autofillError) {
+        setError(
+          autofillError instanceof Error
+            ? autofillError.message
+            : "Could not autofill brand fields from website",
+        );
+      } finally {
+        setIsAutofillingBrand(false);
+      }
+    },
+    [brand.website],
+  );
+
   const buildPublishPayload = async (variant: CreativeVariant) => {
     const sequenced = variant.assetSequence
       .map((assetId) => assetMap.get(assetId))
@@ -922,17 +992,50 @@ export default function Home() {
                   <input
                     value={brand.website}
                     placeholder="example.com or https://example.com"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextWebsite = event.target.value;
+                      if (nextWebsite.trim().toLowerCase() !== lastAutofilledWebsite) {
+                        setBrandAutofillMessage(null);
+                      }
+
                       setBrand((current) => ({
                         ...current,
-                        website: event.target.value,
-                      }))
-                    }
+                        website: nextWebsite,
+                      }));
+                    }}
+                    onBlur={(event) => {
+                      const nextWebsite = event.target.value.trim().toLowerCase();
+                      if (!nextWebsite || nextWebsite === lastAutofilledWebsite || isAutofillingBrand) {
+                        return;
+                      }
+
+                      void autofillBrandFromWebsite(event.target.value);
+                    }}
                     className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                   />
-                  <p className="text-[11px] text-slate-400">
-                    If provided, the generator will pull public style cues (colors, typography, messaging tone).
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] text-slate-400">
+                      Providing a website can autofill brand fields and improve style alignment.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void autofillBrandFromWebsite();
+                      }}
+                      disabled={!brand.website.trim() || isAutofillingBrand}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isAutofillingBrand ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      )}
+                      {isAutofillingBrand ? "Filling..." : "Autofill Brand Fields"}
+                    </button>
+                  </div>
+                  {brandAutofillMessage ? (
+                    <p className="text-[11px] text-emerald-200">{brandAutofillMessage}</p>
+                  ) : null}
                 </label>
                 <label className="space-y-1 md:col-span-2">
                   <span className="text-xs font-medium text-slate-200">Values</span>

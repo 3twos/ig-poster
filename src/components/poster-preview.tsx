@@ -28,7 +28,13 @@ const ASPECT_MAP: Record<AspectRatio, string> = {
   "9:16": "9 / 16",
 };
 
-const renderOverlayBlock = (variant: CreativeVariant, brandName: string) => {
+const renderOverlayBlock = (
+  variant: CreativeVariant,
+  brandName: string,
+  options?: {
+    hasLogo?: boolean;
+  },
+) => {
   const alignClass =
     variant.textAlign === "center"
       ? "items-center text-center"
@@ -76,9 +82,13 @@ const renderOverlayBlock = (variant: CreativeVariant, brandName: string) => {
     return (
       <div className="absolute inset-0 flex flex-col justify-between p-5">
         <div className="flex items-start justify-between gap-4">
-          <span className="rounded-full bg-black/35 px-3 py-1 text-[10px] font-semibold tracking-[0.2em] text-white uppercase backdrop-blur-sm">
-            {brandName}
-          </span>
+          {!options?.hasLogo ? (
+            <span className="rounded-full bg-black/35 px-3 py-1 text-[10px] font-semibold tracking-[0.2em] text-white uppercase backdrop-blur-sm">
+              {brandName}
+            </span>
+          ) : (
+            <span />
+          )}
           <span className="rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold tracking-[0.2em] text-black uppercase">
             {variant.name}
           </span>
@@ -320,10 +330,10 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
             frame={frameSize}
           />
         ) : (
-          renderOverlayBlock(variant, brandName)
+          renderOverlayBlock(variant, brandName, { hasLogo: Boolean(logoImage) })
         )}
 
-        <div className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] text-slate-900 uppercase">
+        <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] text-slate-900 uppercase">
           {logoImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -331,8 +341,9 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
               alt="Brand logo"
               className="h-4 w-4 rounded-full object-cover"
             />
-          ) : null}
-          {brandName}
+          ) : (
+            brandName
+          )}
         </div>
       </div>
     );
