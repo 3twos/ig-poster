@@ -4,7 +4,7 @@ SOTA Instagram poster app built for production with:
 - Next.js 16 App Router
 - TypeScript
 - Tailwind CSS v4
-- OpenAI structured generation
+- Provider-agnostic structured generation (OpenAI + Anthropic)
 - Vercel Blob storage
 - Meta Graph API publishing + OAuth connect
 - Google Workspace login gate (internal app)
@@ -21,6 +21,7 @@ Output:
 - 3 high-impact creative variants
 - Strategy rationale
 - Caption + hashtag bundle
+- Prompt controls (system addendum + campaign instructions)
 - Live poster preview
 - Draggable/resizable text canvas editor
 - PNG export
@@ -52,7 +53,13 @@ Output:
 - `GET /api/auth/meta/status` returns active connection status
 - `POST /api/auth/meta/disconnect` clears session connection
 
-5. Google Workspace authentication gate
+5. Intelligent IG Poster LLM architecture
+- User can connect OpenAI or Anthropic subscription key (BYOK)
+- BYOK stores encrypted provider keys server-side in Blob; browser only keeps a short connection-id cookie
+- Env fallback still supported (`OPENAI_*` or `ANTHROPIC_*`)
+- Generation uses explicit system prompt + customizable prompt addendum/instructions
+
+6. Google Workspace authentication gate
 - Requires Google Workspace sign-in before loading pages or non-exempt APIs
 - Restricts access to one Workspace domain (`GOOGLE_WORKSPACE_DOMAIN`)
 - Adds sign-out/session status endpoints for browser session control
@@ -73,6 +80,8 @@ Create `.env.local` from `.env.example`:
 ```bash
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
 GOOGLE_WORKSPACE_DOMAIN=3twos.com
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
@@ -90,11 +99,12 @@ CRON_SECRET=
 ```
 
 Notes:
-- Without `OPENAI_API_KEY`, generation falls back to deterministic local concepts.
+- Without a connected provider key (or env fallback key), generation falls back to deterministic local concepts.
+- `POST /api/auth/llm/connect` requires `APP_ENCRYPTION_SECRET` (or `META_APP_SECRET`) and `BLOB_READ_WRITE_TOKEN` to store encrypted BYOK credentials.
 - `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
 - `GOOGLE_OAUTH_REDIRECT_URI` is optional (defaults to `<origin>/api/auth/google/callback`).
-- Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
-- For OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
+- Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling and BYOK connection storage are unavailable.
+- For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
 - `APP_ENCRYPTION_SECRET` is required in production to encrypt OAuth tokens at rest.
 - `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` remain supported as env fallback credentials.
 
@@ -106,6 +116,9 @@ Notes:
 - `GET /api/projects/:id`: Load shared project snapshot
 - `POST /api/meta/schedule`: Publish now or schedule Instagram post
 - `GET /api/cron/publish`: Cron executor for due scheduled posts
+- `GET /api/auth/llm/status`: Current LLM provider source/status
+- `POST /api/auth/llm/connect`: Connect OpenAI/Anthropic key
+- `POST /api/auth/llm/disconnect`: Disconnect saved LLM key
 - `GET /api/auth/google/start`: Begin Google Workspace OAuth
 - `GET /api/auth/google/callback`: Google Workspace OAuth callback
 - `GET /api/auth/google/status`: Read current Workspace session
@@ -119,6 +132,7 @@ Notes:
 
 Comprehensive research notes for Instagram growth mechanics + vineyard/wine compliance live here:
 - `docs/instagram-playbook-2026-03-03.md`
+- `docs/intelligent-ig-poster-competitive-research-2026-03-03.md`
 
 ## GitHub + Vercel CI/CD
 

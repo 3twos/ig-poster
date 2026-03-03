@@ -1,6 +1,10 @@
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
 import { z } from "zod";
 
+import { readCookieFromRequest } from "@/lib/cookies";
+
+export { readCookieFromRequest } from "@/lib/cookies";
+
 export const WORKSPACE_SESSION_COOKIE = "workspace_session";
 export const WORKSPACE_OAUTH_STATE_COOKIE = "workspace_oauth_state";
 export const WORKSPACE_OAUTH_NONCE_COOKIE = "workspace_oauth_nonce";
@@ -87,23 +91,6 @@ const getSessionSecret = () => {
   return new TextEncoder().encode(secret);
 };
 
-const readCookieFromHeader = (cookieHeader: string | null, key: string) => {
-  if (!cookieHeader) {
-    return "";
-  }
-
-  const match = cookieHeader
-    .split(";")
-    .map((chunk) => chunk.trim())
-    .find((chunk) => chunk.startsWith(`${key}=`));
-
-  if (!match) {
-    return "";
-  }
-
-  return decodeURIComponent(match.slice(key.length + 1));
-};
-
 const buildRandomToken = () => crypto.randomUUID().replace(/-/g, "");
 
 const toDateString = (epochSeconds: number) =>
@@ -164,9 +151,6 @@ export const createWorkspaceOAuthStartUrl = (
 
   return oauthUrl;
 };
-
-export const readCookieFromRequest = (req: Request, key: string) =>
-  readCookieFromHeader(req.headers.get("cookie"), key);
 
 export const completeWorkspaceOAuth = async (
   req: Request,

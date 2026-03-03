@@ -3,11 +3,13 @@
 import { motion } from "framer-motion";
 import { toPng } from "html-to-image";
 import {
+  BrainCircuit,
   Copy,
   Download,
   Film,
   ImagePlus,
   Images,
+  KeyRound,
   LayoutTemplate,
   Link2,
   LoaderCircle,
@@ -31,10 +33,15 @@ import {
   type AspectRatio,
   createDefaultOverlayLayout,
   type CreativeVariant,
+  DEFAULT_GENERATION_SYSTEM_PROMPT,
   GenerationResponseSchema,
   type GenerationResponse,
   type OverlayLayout,
 } from "@/lib/creative";
+import {
+  PROVIDER_DEFAULT_MODELS,
+  type LlmProvider,
+} from "@/lib/llm-constants";
 import { cn, slugify } from "@/lib/utils";
 
 type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
@@ -88,6 +95,19 @@ type InstagramAuthStatus = {
     tokenExpiresAt?: string;
   };
   detail?: string;
+};
+
+type LlmAuthStatus = {
+  connected: boolean;
+  source: "connection" | "env" | null;
+  provider?: LlmProvider;
+  model?: string;
+  detail?: string;
+};
+
+type PromptConfigState = {
+  systemPrompt: string;
+  customInstructions: string;
 };
 
 type WorkspaceAuthStatus = {
@@ -276,6 +296,21 @@ export default function Home() {
     connected: false,
     source: null,
   });
+  const [promptConfig, setPromptConfig] = useState<PromptConfigState>({
+    systemPrompt: "",
+    customInstructions: "",
+  });
+  const [isLlmAuthLoading, setIsLlmAuthLoading] = useState(true);
+  const [isLlmConnecting, setIsLlmConnecting] = useState(false);
+  const [isLlmDisconnecting, setIsLlmDisconnecting] = useState(false);
+  const [llmMessage, setLlmMessage] = useState<string | null>(null);
+  const [llmAuthStatus, setLlmAuthStatus] = useState<LlmAuthStatus>({
+    connected: false,
+    source: null,
+  });
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
+  const [llmApiKeyInput, setLlmApiKeyInput] = useState("");
+  const [llmModelInput, setLlmModelInput] = useState(PROVIDER_DEFAULT_MODELS.openai);
   const [workspaceAuth, setWorkspaceAuth] = useState<WorkspaceAuthStatus | null>(
     null,
   );
@@ -323,6 +358,29 @@ export default function Home() {
     }
   }, []);
 
+  const loadLlmStatus = useCallback(async () => {
+    setIsLlmAuthLoading(true);
+    try {
+      const response = await fetch("/api/auth/llm/status", { cache: "no-store" });
+      const json = (await response.json()) as LlmAuthStatus;
+      setLlmAuthStatus({
+        connected: Boolean(json.connected),
+        source: json.source ?? null,
+        provider: json.provider,
+        model: json.model,
+        detail: json.detail,
+      });
+    } catch {
+      setLlmAuthStatus({
+        connected: false,
+        source: null,
+        detail: "Could not load LLM provider status.",
+      });
+    } finally {
+      setIsLlmAuthLoading(false);
+    }
+  }, []);
+
   const loadWorkspaceStatus = useCallback(async () => {
     try {
       const response = await fetch("/api/auth/google/status", { cache: "no-store" });
@@ -340,6 +398,7 @@ export default function Home() {
 
   useEffect(() => {
     void loadAuthStatus();
+    void loadLlmStatus();
     void loadWorkspaceStatus();
 
     const params = new URLSearchParams(window.location.search);
@@ -364,7 +423,18 @@ export default function Home() {
         next ? `${window.location.pathname}?${next}` : window.location.pathname,
       );
     }
-  }, [loadAuthStatus, loadWorkspaceStatus]);
+  }, [loadAuthStatus, loadLlmStatus, loadWorkspaceStatus]);
+
+  useEffect(() => {
+    if (!llmAuthStatus.provider) {
+      return;
+    }
+
+    setLlmProvider(llmAuthStatus.provider);
+    setLlmModelInput(
+      llmAuthStatus.model || PROVIDER_DEFAULT_MODELS[llmAuthStatus.provider],
+    );
+  }, [llmAuthStatus.model, llmAuthStatus.provider]);
 
   const activeVariant = useMemo(() => {
     if (!result?.variants.length) {
@@ -621,6 +691,7 @@ export default function Home() {
             height: asset.height,
           })),
           hasLogo: Boolean(logo),
+          promptConfig,
         }),
       });
 
@@ -782,6 +853,79 @@ export default function Home() {
       );
     } finally {
       setIsDisconnecting(false);
+    }
+  };
+
+  const connectLlmProvider = async () => {
+    const apiKey = llmApiKeyInput.trim();
+    if (!apiKey) {
+      setError("Enter an API key to connect an LLM provider.");
+      return;
+    }
+
+    setError(null);
+    setLlmMessage(null);
+    setIsLlmConnecting(true);
+
+    try {
+      const response = await fetch("/api/auth/llm/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: llmProvider,
+          apiKey,
+          model: llmModelInput.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      await loadLlmStatus();
+      setLlmApiKeyInput("");
+      setLlmMessage("LLM provider connected. Generation now uses your subscription key.");
+    } catch (connectError) {
+      setError(
+        connectError instanceof Error
+          ? connectError.message
+          : "Could not connect LLM provider",
+      );
+    } finally {
+      setIsLlmConnecting(false);
+    }
+  };
+
+  const disconnectLlmProvider = async () => {
+    if (llmAuthStatus.source !== "connection") {
+      return;
+    }
+
+    setError(null);
+    setLlmMessage(null);
+    setIsLlmDisconnecting(true);
+
+    try {
+      const response = await fetch("/api/auth/llm/disconnect", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      await loadLlmStatus();
+      setLlmMessage(
+        "Disconnected saved LLM key. Environment credentials remain available if configured.",
+      );
+    } catch (disconnectError) {
+      setError(
+        disconnectError instanceof Error
+          ? disconnectError.message
+          : "Could not disconnect LLM provider",
+      );
+    } finally {
+      setIsLlmDisconnecting(false);
     }
   };
 
@@ -1030,6 +1174,116 @@ export default function Home() {
           <section className="space-y-6">
             <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
               <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+                <BrainCircuit className="h-4 w-4 text-orange-300" />
+                Intelligent IG Poster (LLM)
+              </div>
+
+              <div className="rounded-xl border border-white/15 bg-black/20 p-3 text-xs text-slate-200">
+                {isLlmAuthLoading ? (
+                  <p>Checking provider status...</p>
+                ) : llmAuthStatus.connected ? (
+                  <p>
+                    Connected via <span className="font-semibold uppercase">{llmAuthStatus.source}</span>:
+                    {" "}
+                    <span className="font-semibold uppercase">{llmAuthStatus.provider}</span>
+                    {" "}
+                    ({llmAuthStatus.model})
+                  </p>
+                ) : (
+                  <p>{llmAuthStatus.detail || "No provider connected yet."}</p>
+                )}
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Provider</span>
+                  <select
+                    value={llmProvider}
+                    onChange={(event) => {
+                      const nextProvider = event.target.value as LlmProvider;
+                      const currentDefault = PROVIDER_DEFAULT_MODELS[llmProvider];
+                      const shouldReplaceModel =
+                        !llmModelInput.trim() || llmModelInput === currentDefault;
+                      setLlmProvider(nextProvider);
+                      if (shouldReplaceModel) {
+                        setLlmModelInput(PROVIDER_DEFAULT_MODELS[nextProvider]);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-slate-200">Model (optional)</span>
+                  <input
+                    value={llmModelInput}
+                    onChange={(event) => setLlmModelInput(event.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-3 block space-y-1">
+                <span className="text-xs font-medium text-slate-200">API Key</span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={llmApiKeyInput}
+                  onChange={(event) => setLlmApiKeyInput(event.target.value)}
+                  placeholder={
+                    llmProvider === "anthropic"
+                      ? "sk-ant-..."
+                      : "sk-..."
+                  }
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Stored encrypted server-side with a short session cookie id. Requires `APP_ENCRYPTION_SECRET` and `BLOB_READ_WRITE_TOKEN`.
+                </p>
+              </label>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void connectLlmProvider();
+                  }}
+                  disabled={isLlmConnecting || isLlmDisconnecting || !llmApiKeyInput.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isLlmConnecting ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <KeyRound className="h-3.5 w-3.5" />
+                  )}
+                  {isLlmConnecting ? "Connecting..." : "Connect Provider"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    void disconnectLlmProvider();
+                  }}
+                  disabled={isLlmDisconnecting || llmAuthStatus.source !== "connection"}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isLlmDisconnecting ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : null}
+                  Disconnect Saved Key
+                </button>
+              </div>
+
+              {llmMessage ? (
+                <p className="mt-3 text-xs text-emerald-200">{llmMessage}</p>
+              ) : null}
+            </div>
+
+            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
                 <Palette className="h-4 w-4 text-orange-300" />
                 Brand Kit
               </div>
@@ -1200,6 +1454,68 @@ export default function Home() {
               <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
                 <WandSparkles className="h-4 w-4 text-orange-300" />
                 Post Brief + Assets
+              </div>
+
+              <div className="mb-4 rounded-2xl border border-white/15 bg-black/20 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold tracking-[0.16em] text-slate-200 uppercase">
+                    Prompt Controls
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPromptConfig({
+                        systemPrompt: "",
+                        customInstructions: "",
+                      })
+                    }
+                    className="rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10"
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="space-y-1">
+                    <span className="text-[11px] font-medium text-slate-300">
+                      System Prompt Addendum (optional)
+                    </span>
+                    <textarea
+                      value={promptConfig.systemPrompt}
+                      onChange={(event) =>
+                        setPromptConfig((current) => ({
+                          ...current,
+                          systemPrompt: event.target.value,
+                        }))
+                      }
+                      rows={3}
+                      placeholder="Add global behavior rules, voice guardrails, or hard constraints."
+                      className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-[11px] font-medium text-slate-300">
+                      Campaign Instructions (optional)
+                    </span>
+                    <textarea
+                      value={promptConfig.customInstructions}
+                      onChange={(event) =>
+                        setPromptConfig((current) => ({
+                          ...current,
+                          customInstructions: event.target.value,
+                        }))
+                      }
+                      rows={3}
+                      placeholder="Example: prioritize educational carousel angle for saves and shares."
+                      className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
+                    />
+                  </label>
+                </div>
+
+                <p className="mt-2 text-[11px] text-slate-400">
+                  The default system prompt remains active automatically: {DEFAULT_GENERATION_SYSTEM_PROMPT}
+                </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">

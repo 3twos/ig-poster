@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { z } from "zod";
 
+import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
+import { generateStructuredJson } from "@/lib/llm";
 import { buildWebsiteStyleContext } from "@/lib/website-style";
 
 const AutofillRequestSchema = z.object({
@@ -136,27 +137,21 @@ const buildFallbackAutofill = (parsed: ParsedWebsiteContext) => {
   });
 };
 
-const buildModelAutofill = async (parsed: ParsedWebsiteContext) => {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+const buildModelAutofill = async (
+  parsed: ParsedWebsiteContext,
+  req: Request,
+) => {
+  const llmAuth = await resolveLlmAuthFromRequest(req);
+  if (!llmAuth) {
     return null;
   }
 
   try {
-    const client = new OpenAI({ apiKey });
-    const completion = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
-      temperature: 0.4,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You generate concise brand-kit fields from website metadata. Return only valid JSON with the requested keys.",
-        },
-        {
-          role: "user",
-          content: `Create brand field values using these website cues:
+    const generated = await generateStructuredJson<unknown>({
+      auth: llmAuth,
+      systemPrompt:
+        "You build precise brand-kit fields from website signals. Return strict JSON only with the required keys.",
+      userPrompt: `Create brand field values using these website cues:
 - Website URL: ${parsed.websiteUrl || "unknown"}
 - Site name: ${parsed.siteName || "unknown"}
 - Page title: ${parsed.pageTitle || "unknown"}
@@ -174,16 +169,10 @@ Constraints:
 - palette should be a comma-separated hex list when possible.
 - logoNotes must explicitly mention logo precedence over text overlays.
 - No markdown.`,
-        },
-      ],
+      temperature: 0.4,
+      maxTokens: 1400,
     });
-
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      return null;
-    }
-
-    return AutofillBrandSchema.parse(JSON.parse(content));
+    return AutofillBrandSchema.parse(generated);
   } catch {
     return null;
   }
@@ -207,7 +196,7 @@ export async function POST(request: Request) {
 
     const parsed = parseWebsiteContext(styleContext);
     const fallback = buildFallbackAutofill(parsed);
-    const model = await buildModelAutofill(parsed);
+    const model = await buildModelAutofill(parsed, request);
 
     return NextResponse.json({
       source: model ? "model" : "heuristic",

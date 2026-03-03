@@ -3,8 +3,11 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { deleteBlobByPath, isBlobEnabled, putJson, readJsonByPath } from "@/lib/blob-store";
+import { readCookieFromRequest } from "@/lib/cookies";
 import { getEnvMetaAuth, type MetaAuthContext } from "@/lib/meta";
 import { decryptString, encryptString } from "@/lib/secure";
+
+export { readCookieFromRequest } from "@/lib/cookies";
 
 export const META_OAUTH_STATE_COOKIE = "meta_oauth_state";
 export const META_CONNECTION_COOKIE = "ig_connection";
@@ -84,23 +87,6 @@ const getMetaOAuthConfig = (origin: string) => {
 
 const getEncryptionSecret = () =>
   process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
-
-const readCookieFromHeader = (cookieHeader: string | null, key: string) => {
-  if (!cookieHeader) {
-    return "";
-  }
-
-  const match = cookieHeader
-    .split(";")
-    .map((chunk) => chunk.trim())
-    .find((chunk) => chunk.startsWith(`${key}=`));
-
-  if (!match) {
-    return "";
-  }
-
-  return decodeURIComponent(match.slice(key.length + 1));
-};
 
 const callGraphJson = async <T>(url: URL): Promise<T> => {
   const response = await fetch(url, { cache: "no-store" });
@@ -215,9 +201,6 @@ export const createMetaOAuthStartUrl = (origin: string, state: string) => {
 };
 
 export const buildOAuthState = () => randomUUID().replace(/-/g, "");
-
-export const readCookieFromRequest = (req: Request, key: string) =>
-  readCookieFromHeader(req.headers.get("cookie"), key);
 
 export const completeMetaOAuth = async (req: Request, code: string) => {
   const origin = new URL(req.url).origin;
