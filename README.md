@@ -6,7 +6,7 @@ SOTA Instagram poster app built for production with:
 - Tailwind CSS v4
 - OpenAI structured generation
 - Vercel Blob storage
-- Meta Graph API publishing
+- Meta Graph API publishing + OAuth connect
 - GitHub Actions + Vercel deployment workflow
 
 ## What It Does
@@ -25,6 +25,7 @@ Output:
 - PNG export
 - Shareable project URL
 - Publish now or schedule to Instagram
+- Connect/disconnect Instagram via Meta OAuth
 
 ## Implemented SOTA Steps
 
@@ -42,6 +43,12 @@ Output:
 - Publish immediately via Meta Graph API
 - Optional future schedule stored in Blob
 - Vercel Cron endpoint (`/api/cron/publish`) executes due jobs every 15 minutes
+
+4. Meta OAuth account connect
+- `GET /api/auth/meta/start` starts OAuth with Facebook/Instagram
+- `GET /api/auth/meta/callback` completes token exchange and stores encrypted connection
+- `GET /api/auth/meta/status` returns active connection status
+- `POST /api/auth/meta/disconnect` clears session connection
 
 ## Local Development
 
@@ -62,6 +69,10 @@ OPENAI_MODEL=gpt-4.1-mini
 BLOB_READ_WRITE_TOKEN=
 INSTAGRAM_ACCESS_TOKEN=
 INSTAGRAM_BUSINESS_ID=
+META_APP_ID=
+META_APP_SECRET=
+META_REDIRECT_URI=
+APP_ENCRYPTION_SECRET=
 META_GRAPH_VERSION=v22.0
 CRON_SECRET=
 ```
@@ -69,7 +80,9 @@ CRON_SECRET=
 Notes:
 - Without `OPENAI_API_KEY`, generation falls back to deterministic local concepts.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
-- Meta publish requires a valid IG Business account token and ID.
+- For OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
+- `APP_ENCRYPTION_SECRET` is required in production to encrypt OAuth tokens at rest.
+- `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` remain supported as env fallback credentials.
 
 ## API Endpoints
 
@@ -79,6 +92,10 @@ Notes:
 - `GET /api/projects/:id`: Load shared project snapshot
 - `POST /api/meta/schedule`: Publish now or schedule Instagram post
 - `GET /api/cron/publish`: Cron executor for due scheduled posts
+- `GET /api/auth/meta/start`: Begin Meta OAuth
+- `GET /api/auth/meta/callback`: OAuth callback
+- `GET /api/auth/meta/status`: Current auth source/status
+- `POST /api/auth/meta/disconnect`: Disconnect OAuth session
 
 ## GitHub + Vercel CI/CD
 

@@ -8,7 +8,13 @@ export const MetaScheduleRequestSchema = z.object({
 
 export type MetaScheduleRequest = z.infer<typeof MetaScheduleRequestSchema>;
 
-const getMetaConfig = () => {
+export type MetaAuthContext = {
+  accessToken: string;
+  instagramUserId: string;
+  graphVersion: string;
+};
+
+export const getEnvMetaAuth = (): MetaAuthContext | null => {
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
   const instagramUserId = process.env.INSTAGRAM_BUSINESS_ID;
   const graphVersion = process.env.META_GRAPH_VERSION ?? "v22.0";
@@ -27,8 +33,12 @@ type GraphResponse = {
   };
 };
 
-const callGraph = async (path: string, body: URLSearchParams) => {
-  const config = getMetaConfig();
+const callGraph = async (
+  path: string,
+  body: URLSearchParams,
+  auth?: MetaAuthContext,
+) => {
+  const config = auth ?? getEnvMetaAuth();
   if (!config) {
     throw new Error("Missing INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_BUSINESS_ID");
   }
@@ -55,13 +65,14 @@ const callGraph = async (path: string, body: URLSearchParams) => {
 export const publishToInstagramNow = async (payload: {
   imageUrl: string;
   caption: string;
-}) => {
+}, auth?: MetaAuthContext) => {
   const createMedia = await callGraph(
     "media",
     new URLSearchParams({
       image_url: payload.imageUrl,
       caption: payload.caption,
     }),
+    auth,
   );
 
   if (!createMedia.id) {
@@ -73,6 +84,7 @@ export const publishToInstagramNow = async (payload: {
     new URLSearchParams({
       creation_id: createMedia.id,
     }),
+    auth,
   );
 
   return {

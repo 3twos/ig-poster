@@ -44,3 +44,14 @@ export const listBlobs = async (prefix: string, limit = 100): Promise<ListBlobRe
 };
 
 export const deleteBlob = async (url: string) => del(url);
+
+export const deleteBlobByPath = async (pathname: string) => {
+  const { blobs } = await list({ prefix: pathname, limit: 1 });
+  const blob = blobs.find((item) => item.pathname === pathname) ?? blobs[0];
+  if (!blob) {
+    return false;
+  }
+
+  await del(blob.url);
+  return true;
+};

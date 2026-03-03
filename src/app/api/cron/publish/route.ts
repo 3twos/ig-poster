@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { deleteBlob, isBlobEnabled, listBlobs } from "@/lib/blob-store";
-import { publishToInstagramNow } from "@/lib/meta";
+import { getMetaConnection } from "@/lib/meta-auth";
+import { getEnvMetaAuth, publishToInstagramNow } from "@/lib/meta";
+import { decryptString } from "@/lib/secure";
 
 export const runtime = "nodejs";
 
@@ -12,7 +14,12 @@ const ScheduledJobSchema = z.object({
   caption: z.string().min(1).max(2200),
   publishAt: z.string().datetime(),
   createdAt: z.string().datetime(),
+  authSource: z.enum(["oauth", "env"]),
+  connectionId: z.string().optional(),
 });
+
+const getEncryptionSecret = () =>
+  process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
 
 export async function GET(req: Request) {
   try {
@@ -54,10 +61,43 @@ export async function GET(req: Request) {
       }
 
       try {
+        let auth =
+          parsed.data.authSource === "env" ? getEnvMetaAuth() : null;
+
+        if (parsed.data.authSource === "oauth") {
+          if (!parsed.data.connectionId) {
+            throw new Error("Missing OAuth connectionId");
+          }
+
+          const connection = await getMetaConnection(parsed.data.connectionId);
+          if (!connection) {
+            throw new Error("OAuth connection no longer exists");
+          }
+
+          const secret = getEncryptionSecret();
+          if (!secret) {
+            throw new Error(
+              "Missing APP_ENCRYPTION_SECRET or META_APP_SECRET for decrypting OAuth token",
+            );
+          }
+
+          auth = {
+            accessToken: decryptString(connection.encryptedAccessToken, secret),
+            instagramUserId: connection.instagramUserId,
+            graphVersion: connection.graphVersion,
+          };
+        }
+
+        if (!auth) {
+          throw new Error(
+            "No publishing credentials available. Configure OAuth or env credentials.",
+          );
+        }
+
         await publishToInstagramNow({
           imageUrl: parsed.data.imageUrl,
           caption: parsed.data.caption,
-        });
+        }, auth);
         await deleteBlob(blob.url);
         published += 1;
       } catch (error) {

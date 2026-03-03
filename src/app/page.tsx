@@ -15,6 +15,8 @@ import {
   WandSparkles,
 } from "lucide-react";
 import {
+  useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -63,6 +65,20 @@ type PostState = {
   audience: string;
   mood: string;
   aspectRatio: AspectRatio;
+};
+
+type InstagramAuthStatus = {
+  connected: boolean;
+  source: "oauth" | "env" | null;
+  account?: {
+    connectionId?: string;
+    instagramUserId: string;
+    instagramUsername?: string;
+    instagramName?: string;
+    pageName?: string;
+    tokenExpiresAt?: string;
+  };
+  detail?: string;
 };
 
 const INITIAL_BRAND: BrandState = {
@@ -151,8 +167,63 @@ export default function Home() {
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
   const [scheduleAt, setScheduleAt] = useState("");
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [authStatus, setAuthStatus] = useState<InstagramAuthStatus>({
+    connected: false,
+    source: null,
+  });
 
   const posterRef = useRef<HTMLDivElement>(null);
+
+  const loadAuthStatus = useCallback(async () => {
+    setIsAuthLoading(true);
+    try {
+      const response = await fetch("/api/auth/meta/status", { cache: "no-store" });
+      const json = (await response.json()) as InstagramAuthStatus;
+      setAuthStatus({
+        connected: Boolean(json.connected),
+        source: json.source ?? null,
+        account: json.account,
+        detail: json.detail,
+      });
+    } catch {
+      setAuthStatus({
+        connected: false,
+        source: null,
+        detail: "Could not load Instagram auth status.",
+      });
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAuthStatus();
+
+    const params = new URLSearchParams(window.location.search);
+    const auth = params.get("auth");
+    const detail = params.get("detail");
+
+    if (auth === "connected") {
+      setPublishMessage("Instagram account connected.");
+    }
+
+    if (auth === "error" && detail) {
+      setError(detail);
+    }
+
+    if (auth) {
+      params.delete("auth");
+      params.delete("detail");
+      const next = params.toString();
+      window.history.replaceState(
+        {},
+        "",
+        next ? `${window.location.pathname}?${next}` : window.location.pathname,
+      );
+    }
+  }, [loadAuthStatus]);
 
   const activeVariant = useMemo(() => {
     if (!result?.variants.length) {
@@ -470,10 +541,41 @@ export default function Home() {
     }
   };
 
+  const disconnectInstagram = async () => {
+    setError(null);
+    setPublishMessage(null);
+    setIsDisconnecting(true);
+
+    try {
+      const response = await fetch("/api/auth/meta/disconnect", {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      await loadAuthStatus();
+      setPublishMessage("Instagram OAuth disconnected.");
+    } catch (disconnectError) {
+      setError(
+        disconnectError instanceof Error
+          ? disconnectError.message
+          : "Could not disconnect Instagram OAuth",
+      );
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
   const publishToInstagram = async (event: FormEvent) => {
     event.preventDefault();
 
     if (!activeVariant) {
+      return;
+    }
+
+    if (!authStatus.connected) {
+      setError("Connect an Instagram account via OAuth (or set env credentials) before publishing.");
       return;
     }
 
@@ -974,6 +1076,70 @@ export default function Home() {
                       <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
                         Share + Publish
                       </p>
+
+                      <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-3 text-xs text-slate-200">
+                        <p className="font-semibold text-slate-100">Instagram Account</p>
+
+                        {isAuthLoading ? (
+                          <p className="mt-1 text-slate-300">Checking connection...</p>
+                        ) : null}
+
+                        {!isAuthLoading && authStatus.connected ? (
+                          <div className="mt-1 space-y-1">
+                            <p>
+                              Connected via <span className="font-semibold uppercase">{authStatus.source}</span>
+                              {authStatus.account?.instagramUsername
+                                ? ` as @${authStatus.account.instagramUsername}`
+                                : ""}
+                              {authStatus.account?.pageName
+                                ? ` (${authStatus.account.pageName})`
+                                : ""}
+                            </p>
+                            {authStatus.account?.tokenExpiresAt ? (
+                              <p className="text-slate-300">
+                                Token expiry: {new Date(authStatus.account.tokenExpiresAt).toLocaleString()}
+                              </p>
+                            ) : null}
+
+                            {authStatus.source === "oauth" ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void disconnectInstagram();
+                                }}
+                                disabled={isDisconnecting}
+                                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isDisconnecting ? (
+                                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                                ) : null}
+                                Disconnect OAuth
+                              </button>
+                            ) : (
+                              <a
+                                href="/api/auth/meta/start"
+                                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10"
+                              >
+                                Reconnect with OAuth
+                              </a>
+                            )}
+                          </div>
+                        ) : null}
+
+                        {!isAuthLoading && !authStatus.connected ? (
+                          <div className="mt-2">
+                            <p className="text-slate-300">
+                              Connect your brand account to publish directly from this app.
+                            </p>
+                            <a
+                              href="/api/auth/meta/start"
+                              className="mt-2 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"
+                            >
+                              Connect with Meta OAuth
+                            </a>
+                          </div>
+                        ) : null}
+                      </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
