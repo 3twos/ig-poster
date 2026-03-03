@@ -1,10 +1,15 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 const HTTP_PROTOCOL_RE = /^https?:\/\//i;
-const META_TAG_RE = /<meta\b[^>]*>/gi;
 const TITLE_RE = /<title[^>]*>([\s\S]*?)<\/title>/i;
 const HEX_COLOR_RE = /#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})\b/g;
-const FONT_FAMILY_RE = /font-family\s*:\s*([^;}{]+);/gi;
-const GOOGLE_FAMILY_RE = /[?&]family=([^&"']+)/gi;
 const MAX_HTML_CHARS = 180_000;
+const MAX_HTML_BYTES = 1_000_000;
+const MAX_REDIRECT_HOPS = 3;
+const REQUEST_TIMEOUT_MS = 4_500;
+
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
 
 const GENERIC_FONTS = new Set([
   "serif",
@@ -90,6 +95,19 @@ const unique = (values: string[], limit: number) => {
   return out;
 };
 
+const sanitizeUrlForNotes = (value: string) => {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    return url.toString();
+  } catch {
+    return value;
+  }
+};
+
 const normalizeWebsiteUrl = (website: string) => {
   const trimmed = website.trim();
   if (!trimmed) {
@@ -104,35 +122,38 @@ const normalizeWebsiteUrl = (website: string) => {
       return null;
     }
 
+    // Keep fetch target constrained to origin + path to avoid leaking sensitive query material.
     url.hash = "";
+    url.username = "";
+    url.password = "";
+    url.search = "";
     return url.toString();
   } catch {
     return null;
   }
 };
 
-const isPrivateHostname = (hostname: string) => {
-  const host = hostname.trim().toLowerCase();
-
-  if (!host) {
-    return true;
+const parseIpv4 = (value: string): number[] | null => {
+  const match = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!match) {
+    return null;
   }
 
-  if (host === "localhost" || host.endsWith(".local")) {
-    return true;
+  const octets = match.slice(1).map((part) => Number(part));
+  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return null;
   }
 
-  if (host === "::1") {
-    return true;
-  }
+  return octets;
+};
 
-  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!ipv4) {
+const isPrivateIpv4 = (value: string) => {
+  const octets = parseIpv4(value);
+  if (!octets) {
     return false;
   }
 
-  const octets = ipv4.slice(1).map((part) => Number(part));
-  if (octets.some((octet) => octet > 255)) {
+  if (octets[0] === 0) {
     return true;
   }
 
@@ -156,12 +177,106 @@ const isPrivateHostname = (hostname: string) => {
     return true;
   }
 
+  if (octets[0] >= 224) {
+    return true;
+  }
+
   return false;
+};
+
+const isPrivateIpv6 = (value: string) => {
+  const lower = value.toLowerCase().split("%")[0];
+
+  if (lower === "::" || lower === "::1") {
+    return true;
+  }
+
+  if (lower.startsWith("fc") || lower.startsWith("fd")) {
+    return true;
+  }
+
+  if (
+    lower.startsWith("fe8") ||
+    lower.startsWith("fe9") ||
+    lower.startsWith("fea") ||
+    lower.startsWith("feb")
+  ) {
+    return true;
+  }
+
+  if (
+    lower.startsWith("fec") ||
+    lower.startsWith("fed") ||
+    lower.startsWith("fee") ||
+    lower.startsWith("fef")
+  ) {
+    return true;
+  }
+
+  if (lower.startsWith("::ffff:")) {
+    const mapped = lower.slice("::ffff:".length);
+    return isPrivateIpv4(mapped);
+  }
+
+  return false;
+};
+
+const isPrivateAddress = (value: string) => {
+  const version = isIP(value);
+  if (version === 4) {
+    return isPrivateIpv4(value);
+  }
+
+  if (version === 6) {
+    return isPrivateIpv6(value);
+  }
+
+  return false;
+};
+
+const isHostBlockedByName = (hostname: string) => {
+  const host = hostname.trim().toLowerCase();
+  if (!host) {
+    return true;
+  }
+
+  if (host === "localhost" || host.endsWith(".local")) {
+    return true;
+  }
+
+  return false;
+};
+
+const isPublicHost = async (hostname: string) => {
+  const host = hostname.trim().toLowerCase();
+  if (!host || isHostBlockedByName(host)) {
+    return false;
+  }
+
+  if (isPrivateAddress(host)) {
+    return false;
+  }
+
+  try {
+    const records = await lookup(host, {
+      all: true,
+      verbatim: true,
+    });
+
+    if (!records.length) {
+      return false;
+    }
+
+    return records.every((record) => !isPrivateAddress(record.address));
+  } catch {
+    return false;
+  }
 };
 
 const extractMetaMap = (html: string) => {
   const map = new Map<string, string>();
-  let match: RegExpExecArray | null = META_TAG_RE.exec(html);
+  const metaTagRe = /<meta\b[^>]*>/gi;
+  let match: RegExpExecArray | null = metaTagRe.exec(html);
 
   while (match) {
     const attrs = parseAttributes(match[0]);
@@ -172,7 +287,7 @@ const extractMetaMap = (html: string) => {
       map.set(name, content);
     }
 
-    match = META_TAG_RE.exec(html);
+    match = metaTagRe.exec(html);
   }
 
   return map;
@@ -196,7 +311,8 @@ const cleanFontFamily = (value: string) =>
 
 const extractFontFamilies = (html: string) => {
   const families: string[] = [];
-  let fontMatch: RegExpExecArray | null = FONT_FAMILY_RE.exec(html);
+  const fontFamilyRe = /font-family\s*:\s*([^;}{]+);/gi;
+  let fontMatch: RegExpExecArray | null = fontFamilyRe.exec(html);
 
   while (fontMatch) {
     const declaration = fontMatch[1];
@@ -214,10 +330,11 @@ const extractFontFamilies = (html: string) => {
       families.push(cleaned);
     }
 
-    fontMatch = FONT_FAMILY_RE.exec(html);
+    fontMatch = fontFamilyRe.exec(html);
   }
 
-  let googleMatch: RegExpExecArray | null = GOOGLE_FAMILY_RE.exec(html);
+  const googleFamilyRe = /[?&]family=([^&"']+)/gi;
+  let googleMatch: RegExpExecArray | null = googleFamilyRe.exec(html);
   while (googleMatch) {
     const decoded = decodeURIComponent(googleMatch[1]).replace(/\+/g, " ");
     const candidates = decoded.split("|");
@@ -234,10 +351,77 @@ const extractFontFamilies = (html: string) => {
       families.push(familyName);
     }
 
-    googleMatch = GOOGLE_FAMILY_RE.exec(html);
+    googleMatch = googleFamilyRe.exec(html);
   }
 
   return unique(families, 5);
+};
+
+const readTextUpToLimit = async (response: Response, maxChars: number) => {
+  if (!response.body) {
+    return "";
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+
+  while (text.length < maxChars) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    text += decoder.decode(value, { stream: true });
+    if (text.length >= maxChars) {
+      text = text.slice(0, maxChars);
+      break;
+    }
+  }
+
+  text += decoder.decode();
+  return text.slice(0, maxChars);
+};
+
+const fetchHtmlWithSafeRedirects = async (startUrl: string) => {
+  let current = new URL(startUrl);
+
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    if (!(await isPublicHost(current.hostname))) {
+      throw new Error("Unsafe host");
+    }
+
+    const response = await fetch(current.toString(), {
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        "User-Agent": "ig-poster-style-bot/1.0",
+      },
+    });
+
+    if (!REDIRECT_CODES.has(response.status)) {
+      return {
+        response,
+        finalUrl: current.toString(),
+      };
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      return {
+        response,
+        finalUrl: current.toString(),
+      };
+    }
+
+    current = new URL(location, current);
+    if (!["http:", "https:"].includes(current.protocol)) {
+      throw new Error("Unsupported redirect protocol");
+    }
+  }
+
+  throw new Error("Too many redirects");
 };
 
 export const buildWebsiteStyleContext = async (website: string) => {
@@ -246,28 +430,11 @@ export const buildWebsiteStyleContext = async (website: string) => {
     return null;
   }
 
-  const parsedUrl = new URL(normalized);
-  const notes: string[] = [`- Website URL: ${normalized}`];
-
-  if (isPrivateHostname(parsedUrl.hostname)) {
-    notes.push(
-      "- Style extraction note: local/private addresses are skipped for safety.",
-    );
-    return notes.join("\n");
-  }
+  const notes: string[] = [`- Website URL: ${sanitizeUrlForNotes(normalized)}`];
 
   try {
-    const response = await fetch(normalized, {
-      cache: "no-store",
-      redirect: "follow",
-      signal: AbortSignal.timeout(4500),
-      headers: {
-        "User-Agent": "ig-poster-style-bot/1.0",
-      },
-    });
-
-    const resolvedUrl = response.url || normalized;
-    notes[0] = `- Website URL: ${resolvedUrl}`;
+    const { response, finalUrl } = await fetchHtmlWithSafeRedirects(normalized);
+    notes[0] = `- Website URL: ${sanitizeUrlForNotes(finalUrl)}`;
 
     if (!response.ok) {
       notes.push(`- Style extraction note: website returned HTTP ${response.status}.`);
@@ -280,7 +447,13 @@ export const buildWebsiteStyleContext = async (website: string) => {
       return notes.join("\n");
     }
 
-    const html = (await response.text()).slice(0, MAX_HTML_CHARS);
+    const contentLength = Number(response.headers.get("content-length") ?? "");
+    if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) {
+      notes.push("- Style extraction note: website HTML is too large to process safely.");
+      return notes.join("\n");
+    }
+
+    const html = await readTextUpToLimit(response, MAX_HTML_CHARS);
     const metaMap = extractMetaMap(html);
 
     const titleMatch = TITLE_RE.exec(html);

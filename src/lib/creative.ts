@@ -373,6 +373,9 @@ export const buildGenerationPrompt = (
   const imageCount = request.assets.filter((asset) => asset.mediaType === "image").length;
   const videoCount = request.assets.filter((asset) => asset.mediaType === "video").length;
   const wineBrand = isWineBrandSignals(request.brand, request.post);
+  const websiteStyleBlock = options?.websiteStyleContext
+    ? `Website-derived style cues:\n${options.websiteStyleContext}\n`
+    : "";
 
   return `Generate 3 Instagram post creative variants as strict JSON.
 
@@ -386,7 +389,7 @@ Brand:
 - Visual direction: ${request.brand.visualDirection}
 - Palette notes: ${request.brand.palette}
 - Logo guidance: ${request.brand.logoNotes || "No extra logo guidance"}
-${options?.websiteStyleContext ? `\nWebsite-derived style cues:\n${options.websiteStyleContext}` : ""}
+${websiteStyleBlock}
 
 Post brief:
 - Theme: ${request.post.theme}
