@@ -7,6 +7,7 @@ SOTA Instagram poster app built for production with:
 - OpenAI structured generation
 - Vercel Blob storage
 - Meta Graph API publishing + OAuth connect
+- Google Workspace login gate (internal app)
 - GitHub Actions + Vercel deployment workflow
 
 ## What It Does
@@ -51,6 +52,11 @@ Output:
 - `GET /api/auth/meta/status` returns active connection status
 - `POST /api/auth/meta/disconnect` clears session connection
 
+5. Google Workspace authentication gate
+- Requires Google Workspace sign-in before loading pages or non-exempt APIs
+- Restricts access to one Workspace domain (`GOOGLE_WORKSPACE_DOMAIN`)
+- Adds sign-out/session status endpoints for browser session control
+
 ## Local Development
 
 ```bash
@@ -67,6 +73,11 @@ Create `.env.local` from `.env.example`:
 ```bash
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
+GOOGLE_WORKSPACE_DOMAIN=3twos.com
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=
+WORKSPACE_AUTH_SECRET=
 BLOB_READ_WRITE_TOKEN=
 INSTAGRAM_ACCESS_TOKEN=
 INSTAGRAM_BUSINESS_ID=
@@ -80,6 +91,8 @@ CRON_SECRET=
 
 Notes:
 - Without `OPENAI_API_KEY`, generation falls back to deterministic local concepts.
+- `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
+- `GOOGLE_OAUTH_REDIRECT_URI` is optional (defaults to `<origin>/api/auth/google/callback`).
 - Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
 - For OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
 - `APP_ENCRYPTION_SECRET` is required in production to encrypt OAuth tokens at rest.
@@ -93,6 +106,10 @@ Notes:
 - `GET /api/projects/:id`: Load shared project snapshot
 - `POST /api/meta/schedule`: Publish now or schedule Instagram post
 - `GET /api/cron/publish`: Cron executor for due scheduled posts
+- `GET /api/auth/google/start`: Begin Google Workspace OAuth
+- `GET /api/auth/google/callback`: Google Workspace OAuth callback
+- `GET /api/auth/google/status`: Read current Workspace session
+- `POST /api/auth/google/logout`: Clear Workspace session
 - `GET /api/auth/meta/start`: Begin Meta OAuth
 - `GET /api/auth/meta/callback`: OAuth callback
 - `GET /api/auth/meta/status`: Current auth source/status

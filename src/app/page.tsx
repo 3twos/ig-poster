@@ -89,6 +89,16 @@ type InstagramAuthStatus = {
   detail?: string;
 };
 
+type WorkspaceAuthStatus = {
+  authenticated: boolean;
+  user?: {
+    email: string;
+    name?: string;
+    domain: string;
+    expiresAt: string;
+  };
+};
+
 const INITIAL_BRAND: BrandState = {
   brandName: "Nexa Labs",
   values: "Radical clarity, measurable impact, craft quality, customer empathy",
@@ -256,10 +266,14 @@ export default function Home() {
   const [scheduleAt, setScheduleAt] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isSigningOutWorkspace, setIsSigningOutWorkspace] = useState(false);
   const [authStatus, setAuthStatus] = useState<InstagramAuthStatus>({
     connected: false,
     source: null,
   });
+  const [workspaceAuth, setWorkspaceAuth] = useState<WorkspaceAuthStatus | null>(
+    null,
+  );
 
   const posterRef = useRef<HTMLDivElement>(null);
 
@@ -294,8 +308,26 @@ export default function Home() {
     }
   }, []);
 
+  const loadWorkspaceStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/google/status", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Workspace session unavailable");
+      }
+
+      const json = (await response.json()) as WorkspaceAuthStatus;
+      setWorkspaceAuth(json);
+    } catch {
+      setWorkspaceAuth(null);
+      window.location.href = `/api/auth/google/start?next=${encodeURIComponent(
+        `${window.location.pathname}${window.location.search}`,
+      )}`;
+    }
+  }, []);
+
   useEffect(() => {
     void loadAuthStatus();
+    void loadWorkspaceStatus();
 
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
@@ -319,7 +351,7 @@ export default function Home() {
         next ? `${window.location.pathname}?${next}` : window.location.pathname,
       );
     }
-  }, [loadAuthStatus]);
+  }, [loadAuthStatus, loadWorkspaceStatus]);
 
   const activeVariant = useMemo(() => {
     if (!result?.variants.length) {
@@ -740,6 +772,17 @@ export default function Home() {
     }
   };
 
+  const signOutWorkspace = async () => {
+    setIsSigningOutWorkspace(true);
+    try {
+      await fetch("/api/auth/google/logout", {
+        method: "POST",
+      });
+    } finally {
+      window.location.href = "/api/auth/google/start";
+    }
+  };
+
   const buildPublishPayload = async (variant: CreativeVariant) => {
     const sequenced = variant.assetSequence
       .map((assetId) => assetMap.get(assetId))
@@ -894,9 +937,27 @@ export default function Home() {
           <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-300 md:text-base">
             Upload mixed assets (images + video), get strategy-backed creative variants, and publish format-aware content via Instagram API.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-200">
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-200">
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{imageCount} image assets</span>
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{videoCount} video assets</span>
+            {workspaceAuth?.authenticated ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1">
+                <span>{workspaceAuth.user?.email ?? "Workspace user"}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void signOutWorkspace();
+                  }}
+                  disabled={isSigningOutWorkspace}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/25 px-2 py-0.5 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSigningOutWorkspace ? (
+                    <LoaderCircle className="h-3 w-3 animate-spin" />
+                  ) : null}
+                  Sign out
+                </button>
+              </span>
+            ) : null}
           </div>
         </div>
 
