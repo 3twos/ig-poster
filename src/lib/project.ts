@@ -7,6 +7,8 @@ import {
   PostInputSchema,
 } from "@/lib/creative";
 
+export { ScheduledJobSchema, type ScheduledJob } from "@/lib/meta-schemas";
+
 export const StoredAssetSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(160),

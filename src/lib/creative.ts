@@ -352,9 +352,7 @@ export const createFallbackResponse = (
             ],
             endCardCta: "Visit profile and book your vineyard tasting",
           }
-        : imageAssets.length >= 3
-          ? undefined
-          : undefined,
+        : undefined,
       carouselSlides:
         !videoAssets.length && imageAssets.length >= 3
           ? buildCarouselSlides(carouselSequence.length, request.post.theme, request.post.audience)

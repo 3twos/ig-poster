@@ -85,7 +85,7 @@ const getMetaOAuthConfig = (origin: string) => {
   };
 };
 
-const getEncryptionSecret = () =>
+export const getEncryptionSecret = () =>
   process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
 
 const callGraphJson = async <T>(url: URL): Promise<T> => {
