@@ -45,6 +45,16 @@ export const GenerationRequestSchema = z.object({
   post: PostInputSchema,
   assets: z.array(AssetDescriptorSchema).min(1).max(20),
   hasLogo: z.boolean(),
+  promptConfig: z
+    .object({
+      systemPrompt: z.string().trim().max(8000).optional().default(""),
+      customInstructions: z.string().trim().max(8000).optional().default(""),
+    })
+    .optional()
+    .default({
+      systemPrompt: "",
+      customInstructions: "",
+    }),
 });
 
 const LayoutSchema = z.enum([
@@ -130,6 +140,7 @@ export const OverlayLayoutSchema = z.object({
 
 export type AspectRatio = z.infer<typeof AspectRatioSchema>;
 export type GenerationRequest = z.infer<typeof GenerationRequestSchema>;
+export type PromptConfig = NonNullable<GenerationRequest["promptConfig"]>;
 export type CreativeVariant = z.infer<typeof CreativeVariantSchema>;
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 export type OverlayLayout = z.infer<typeof OverlayLayoutSchema>;
@@ -359,7 +370,19 @@ export const createFallbackResponse = (
   };
 };
 
-export const buildGenerationPrompt = (
+export const DEFAULT_GENERATION_SYSTEM_PROMPT =
+  "You are Intelligent IG Poster, a world-class Instagram creative strategist and direct-response copywriter. Think strategically, respect brand constraints, and return valid JSON only (no markdown, no commentary).";
+
+export const buildGenerationSystemPrompt = (promptConfig?: PromptConfig): string => {
+  const customSystem = (promptConfig?.systemPrompt || "").trim();
+  if (!customSystem) {
+    return DEFAULT_GENERATION_SYSTEM_PROMPT;
+  }
+
+  return `${DEFAULT_GENERATION_SYSTEM_PROMPT}\n\nAdditional system directives:\n${customSystem}`;
+};
+
+export const buildGenerationUserPrompt = (
   request: GenerationRequest,
   options?: {
     websiteStyleContext?: string;
@@ -375,6 +398,9 @@ export const buildGenerationPrompt = (
   const wineBrand = isWineBrandSignals(request.brand, request.post);
   const websiteStyleBlock = options?.websiteStyleContext
     ? `Website-derived style cues:\n${options.websiteStyleContext}\n`
+    : "";
+  const customInstructionBlock = request.promptConfig?.customInstructions?.trim()
+    ? `Custom user instructions:\n${request.promptConfig.customInstructions.trim()}\n`
     : "";
 
   return `Generate 3 Instagram post creative variants as strict JSON.
@@ -405,6 +431,7 @@ ${assetList.join("\n")}
 Has logo available: ${request.hasLogo ? "yes" : "no"}
 
 ${buildPromptBestPracticeContext(wineBrand)}
+${customInstructionBlock}
 
 Output constraints:
 - Return JSON object with keys: strategy, variants.
