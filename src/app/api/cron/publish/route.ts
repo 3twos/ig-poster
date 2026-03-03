@@ -6,7 +6,7 @@ import {
   getEnvMetaAuth,
   publishInstagramContent,
 } from "@/lib/meta";
-import { ScheduledJobSchema } from "@/lib/project";
+import { ScheduledJobSchema } from "@/lib/meta-schemas";
 import { decryptString } from "@/lib/secure";
 
 export const runtime = "nodejs";

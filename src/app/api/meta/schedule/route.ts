@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
-import { ScheduledJobSchema } from "@/lib/project";
+import { ScheduledJobSchema } from "@/lib/meta-schemas";
 
 export const runtime = "nodejs";
 
