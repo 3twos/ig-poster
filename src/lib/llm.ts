@@ -1,11 +1,11 @@
+import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { z } from "zod";
 
-export const LlmProviderSchema = z.enum(["openai", "anthropic"]);
-export type LlmProvider = z.infer<typeof LlmProviderSchema>;
-
-export const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+import {
+  DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_OPENAI_MODEL,
+  type LlmProvider,
+} from "@/lib/llm-constants";
 
 export type ResolvedLlmAuth = {
   source: "connection" | "env";
@@ -19,6 +19,7 @@ type StructuredGenerationOptions = {
   systemPrompt: string;
   userPrompt: string;
   temperature: number;
+  maxTokens?: number;
 };
 
 const unwrapMarkdownJson = (value: string) =>
@@ -62,34 +63,31 @@ const generateWithOpenAI = async (options: StructuredGenerationOptions) => {
   return content;
 };
 
+const clampAnthropicTemperature = (temperature: number) =>
+  Math.max(0, Math.min(1, temperature));
+
+const resolveAnthropicMaxTokens = (value?: number) => {
+  const fallback = 8192;
+  const next = Number.isFinite(value) ? Math.round(value as number) : fallback;
+  return Math.max(256, next);
+};
+
 const generateWithAnthropic = async (options: StructuredGenerationOptions) => {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": options.auth.apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: options.auth.model || DEFAULT_ANTHROPIC_MODEL,
-      max_tokens: 2400,
-      temperature: options.temperature,
-      system: options.systemPrompt,
-      messages: [{ role: "user", content: options.userPrompt }],
-    }),
-    cache: "no-store",
+  const client = new Anthropic({ apiKey: options.auth.apiKey });
+  const message = await client.messages.create({
+    model: options.auth.model || DEFAULT_ANTHROPIC_MODEL,
+    max_tokens: resolveAnthropicMaxTokens(options.maxTokens),
+    temperature: clampAnthropicTemperature(options.temperature),
+    system: options.systemPrompt,
+    messages: [{ role: "user", content: options.userPrompt }],
   });
 
-  const json = (await response.json()) as {
-    content?: Array<{ type?: string; text?: string }>;
-    error?: { message?: string };
-  };
+  const text = message.content
+    .filter((part): part is Anthropic.TextBlock => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
 
-  if (!response.ok || json.error) {
-    throw new Error(json.error?.message ?? `Anthropic request failed (${response.status})`);
-  }
-
-  const text = json.content?.find((part) => part.type === "text")?.text;
   if (!text) {
     throw new Error("Anthropic response was empty");
   }

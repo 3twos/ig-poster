@@ -1,97 +1,133 @@
+import { randomUUID } from "node:crypto";
+
 import { z } from "zod";
 
-import { decryptString, encryptString } from "@/lib/secure";
+import {
+  deleteBlobByPath,
+  isBlobEnabled,
+  putJson,
+  readJsonByPath,
+} from "@/lib/blob-store";
+import { readCookieFromRequest } from "@/lib/cookies";
 import {
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_OPENAI_MODEL,
   LlmProviderSchema,
-  type ResolvedLlmAuth,
-} from "@/lib/llm";
+} from "@/lib/llm-constants";
+import { type ResolvedLlmAuth } from "@/lib/llm";
+import { decryptString, encryptString } from "@/lib/secure";
 
 export const LLM_CONNECTION_COOKIE = "ig_llm_connection";
 
-const LlmConnectionSchema = z.object({
+export const LlmConnectionSchema = z.object({
+  id: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
   provider: LlmProviderSchema,
   model: z.string().trim().min(1).max(120),
-  apiKey: z.string().trim().min(8).max(400),
-  updatedAt: z.string().datetime(),
+  encryptedApiKey: z.string().min(12),
 });
 
-export type LlmConnectionPayload = z.infer<typeof LlmConnectionSchema>;
+export type LlmConnection = z.infer<typeof LlmConnectionSchema>;
 
 const getEncryptionSecret = () =>
   process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
 
-const readCookieFromHeader = (cookieHeader: string | null, key: string) => {
-  if (!cookieHeader) {
-    return "";
+const getConnectionPath = (id: string) => `auth/llm/connections/${id}.json`;
+
+const decryptConnectionApiKey = (connection: LlmConnection) => {
+  const secret = getEncryptionSecret();
+  if (!secret) {
+    throw new Error("Missing APP_ENCRYPTION_SECRET or META_APP_SECRET");
   }
 
-  const match = cookieHeader
-    .split(";")
-    .map((chunk) => chunk.trim())
-    .find((chunk) => chunk.startsWith(`${key}=`));
-
-  if (!match) {
-    return "";
-  }
-
-  return decodeURIComponent(match.slice(key.length + 1));
+  return decryptString(connection.encryptedApiKey, secret);
 };
 
-export const readCookieFromRequest = (req: Request, key: string) =>
-  readCookieFromHeader(req.headers.get("cookie"), key);
-
-export const buildEncryptedLlmConnection = (input: {
+export const saveLlmConnection = async (input: {
   provider: "openai" | "anthropic";
   apiKey: string;
   model?: string;
 }) => {
-  const secret = getEncryptionSecret();
-  if (!secret) {
-    throw new Error("APP_ENCRYPTION_SECRET is required to store connected LLM keys.");
+  if (!isBlobEnabled()) {
+    throw new Error("BLOB_READ_WRITE_TOKEN is required to store connected LLM keys.");
   }
 
-  const payload = LlmConnectionSchema.parse({
+  const secret = getEncryptionSecret();
+  if (!secret) {
+    throw new Error("APP_ENCRYPTION_SECRET (or META_APP_SECRET) is required.");
+  }
+
+  const now = new Date().toISOString();
+  const id = randomUUID().replace(/-/g, "").slice(0, 20);
+  const model =
+    (input.model || "").trim() ||
+    (input.provider === "anthropic"
+      ? DEFAULT_ANTHROPIC_MODEL
+      : DEFAULT_OPENAI_MODEL);
+
+  const record = LlmConnectionSchema.parse({
+    id,
+    createdAt: now,
+    updatedAt: now,
     provider: input.provider,
-    model:
-      (input.model || "").trim() ||
-      (input.provider === "anthropic" ? DEFAULT_ANTHROPIC_MODEL : DEFAULT_OPENAI_MODEL),
-    apiKey: input.apiKey.trim(),
-    updatedAt: new Date().toISOString(),
+    model,
+    encryptedApiKey: encryptString(input.apiKey.trim(), secret),
   });
 
-  return encryptString(JSON.stringify(payload), secret);
+  await putJson(getConnectionPath(record.id), record);
+  return record;
 };
 
-export const readLlmConnectionFromRequest = (req: Request): LlmConnectionPayload | null => {
-  const encrypted = readCookieFromRequest(req, LLM_CONNECTION_COOKIE);
-  if (!encrypted) {
+export const getLlmConnection = async (id: string) => {
+  if (!isBlobEnabled()) {
     return null;
   }
 
-  const secret = getEncryptionSecret();
-  if (!secret) {
+  const record = await readJsonByPath<unknown>(getConnectionPath(id));
+  if (!record) {
     return null;
   }
 
-  try {
-    const json = decryptString(encrypted, secret);
-    return LlmConnectionSchema.parse(JSON.parse(json));
-  } catch {
-    return null;
-  }
+  const parsed = LlmConnectionSchema.safeParse(record);
+  return parsed.success ? parsed.data : null;
 };
 
-export const resolveLlmAuthFromRequest = (req: Request): ResolvedLlmAuth | null => {
-  const connection = readLlmConnectionFromRequest(req);
-  if (connection) {
-    return {
-      source: "connection",
-      provider: connection.provider,
-      model: connection.model,
-      apiKey: connection.apiKey,
-    };
+export const deleteLlmConnection = async (id: string) => {
+  if (!isBlobEnabled()) {
+    return false;
+  }
+
+  return deleteBlobByPath(getConnectionPath(id));
+};
+
+export const readLlmConnectionFromRequest = async (req: Request) => {
+  const connectionId = readCookieFromRequest(req, LLM_CONNECTION_COOKIE);
+  if (!connectionId || !isBlobEnabled()) {
+    return null;
+  }
+
+  return getLlmConnection(connectionId);
+};
+
+export const resolveLlmAuthFromRequest = async (
+  req: Request,
+): Promise<ResolvedLlmAuth | null> => {
+  const connectionId = readCookieFromRequest(req, LLM_CONNECTION_COOKIE);
+  if (connectionId && isBlobEnabled()) {
+    try {
+      const connection = await getLlmConnection(connectionId);
+      if (connection) {
+        return {
+          source: "connection",
+          provider: connection.provider,
+          model: connection.model,
+          apiKey: decryptConnectionApiKey(connection),
+        };
+      }
+    } catch {
+      // Fall through to env credentials if connection record is stale/invalid.
+    }
   }
 
   const openaiKey = process.env.OPENAI_API_KEY?.trim();

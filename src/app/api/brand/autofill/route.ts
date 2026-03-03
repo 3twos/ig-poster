@@ -141,7 +141,7 @@ const buildModelAutofill = async (
   parsed: ParsedWebsiteContext,
   req: Request,
 ) => {
-  const llmAuth = resolveLlmAuthFromRequest(req);
+  const llmAuth = await resolveLlmAuthFromRequest(req);
   if (!llmAuth) {
     return null;
   }
@@ -170,6 +170,7 @@ Constraints:
 - logoNotes must explicitly mention logo precedence over text overlays.
 - No markdown.`,
       temperature: 0.4,
+      maxTokens: 1400,
     });
     return AutofillBrandSchema.parse(generated);
   } catch {

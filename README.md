@@ -7,6 +7,7 @@ SOTA Instagram poster app built for production with:
 - Provider-agnostic structured generation (OpenAI + Anthropic)
 - Vercel Blob storage
 - Meta Graph API publishing + OAuth connect
+- Google Workspace login gate (internal app)
 - GitHub Actions + Vercel deployment workflow
 
 ## What It Does
@@ -54,9 +55,14 @@ Output:
 
 5. Intelligent IG Poster LLM architecture
 - User can connect OpenAI or Anthropic subscription key (BYOK)
-- Secure encrypted cookie storage for LLM key/session
+- BYOK stores encrypted provider keys server-side in Blob; browser only keeps a short connection-id cookie
 - Env fallback still supported (`OPENAI_*` or `ANTHROPIC_*`)
 - Generation uses explicit system prompt + customizable prompt addendum/instructions
+
+6. Google Workspace authentication gate
+- Requires Google Workspace sign-in before loading pages or non-exempt APIs
+- Restricts access to one Workspace domain (`GOOGLE_WORKSPACE_DOMAIN`)
+- Adds sign-out/session status endpoints for browser session control
 
 ## Local Development
 
@@ -76,6 +82,11 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
+GOOGLE_WORKSPACE_DOMAIN=3twos.com
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=
+WORKSPACE_AUTH_SECRET=
 BLOB_READ_WRITE_TOKEN=
 INSTAGRAM_ACCESS_TOKEN=
 INSTAGRAM_BUSINESS_ID=
@@ -89,9 +100,11 @@ CRON_SECRET=
 
 Notes:
 - Without a connected provider key (or env fallback key), generation falls back to deterministic local concepts.
-- `POST /api/auth/llm/connect` requires `APP_ENCRYPTION_SECRET` (or `META_APP_SECRET`) to encrypt BYOK API keys in cookies.
-- Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
-- For OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
+- `POST /api/auth/llm/connect` requires `APP_ENCRYPTION_SECRET` (or `META_APP_SECRET`) and `BLOB_READ_WRITE_TOKEN` to store encrypted BYOK credentials.
+- `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
+- `GOOGLE_OAUTH_REDIRECT_URI` is optional (defaults to `<origin>/api/auth/google/callback`).
+- Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling and BYOK connection storage are unavailable.
+- For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
 - `APP_ENCRYPTION_SECRET` is required in production to encrypt OAuth tokens at rest.
 - `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` remain supported as env fallback credentials.
 
@@ -106,6 +119,10 @@ Notes:
 - `GET /api/auth/llm/status`: Current LLM provider source/status
 - `POST /api/auth/llm/connect`: Connect OpenAI/Anthropic key
 - `POST /api/auth/llm/disconnect`: Disconnect saved LLM key
+- `GET /api/auth/google/start`: Begin Google Workspace OAuth
+- `GET /api/auth/google/callback`: Google Workspace OAuth callback
+- `GET /api/auth/google/status`: Read current Workspace session
+- `POST /api/auth/google/logout`: Clear Workspace session
 - `GET /api/auth/meta/start`: Begin Meta OAuth
 - `GET /api/auth/meta/callback`: OAuth callback
 - `GET /api/auth/meta/status`: Current auth source/status

@@ -5,7 +5,7 @@ import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const resolved = resolveLlmAuthFromRequest(req);
+  const resolved = await resolveLlmAuthFromRequest(req);
   if (!resolved) {
     return NextResponse.json({
       connected: false,

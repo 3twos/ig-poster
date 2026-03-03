@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { buildEncryptedLlmConnection, LLM_CONNECTION_COOKIE } from "@/lib/llm-auth";
+import { LLM_CONNECTION_COOKIE, saveLlmConnection } from "@/lib/llm-auth";
 import {
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_OPENAI_MODEL,
   LlmProviderSchema,
-} from "@/lib/llm";
+} from "@/lib/llm-constants";
 
 export const runtime = "nodejs";
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   try {
     const payload = ConnectLlmSchema.parse(await req.json());
     const model = payload.model || defaultModelFor(payload.provider);
-    const encrypted = buildEncryptedLlmConnection({
+    const connection = await saveLlmConnection({
       provider: payload.provider,
       apiKey: payload.apiKey,
       model,
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       model,
     });
 
-    response.cookies.set(LLM_CONNECTION_COOKIE, encodeURIComponent(encrypted), {
+    response.cookies.set(LLM_CONNECTION_COOKIE, connection.id, {
       httpOnly: true,
       sameSite: "lax",
       secure: new URL(req.url).protocol === "https:",

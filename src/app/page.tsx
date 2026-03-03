@@ -38,6 +38,10 @@ import {
   type GenerationResponse,
   type OverlayLayout,
 } from "@/lib/creative";
+import {
+  PROVIDER_DEFAULT_MODELS,
+  type LlmProvider,
+} from "@/lib/llm-constants";
 import { cn, slugify } from "@/lib/utils";
 
 type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
@@ -93,8 +97,6 @@ type InstagramAuthStatus = {
   detail?: string;
 };
 
-type LlmProvider = "openai" | "anthropic";
-
 type LlmAuthStatus = {
   connected: boolean;
   source: "connection" | "env" | null;
@@ -106,6 +108,16 @@ type LlmAuthStatus = {
 type PromptConfigState = {
   systemPrompt: string;
   customInstructions: string;
+};
+
+type WorkspaceAuthStatus = {
+  authenticated: boolean;
+  user?: {
+    email: string;
+    name?: string;
+    domain: string;
+    expiresAt: string;
+  };
 };
 
 const INITIAL_BRAND: BrandState = {
@@ -139,11 +151,6 @@ const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
   { value: "4:5", label: "Feed Max (4:5)" },
   { value: "9:16", label: "Story/Reel (9:16)" },
 ];
-
-const PROVIDER_DEFAULT_MODELS: Record<LlmProvider, string> = {
-  openai: "gpt-4.1-mini",
-  anthropic: "claude-sonnet-4-20250514",
-};
 
 const parseApiError = async (response: Response) => {
   try {
@@ -284,6 +291,7 @@ export default function Home() {
   const [scheduleAt, setScheduleAt] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isSigningOutWorkspace, setIsSigningOutWorkspace] = useState(false);
   const [authStatus, setAuthStatus] = useState<InstagramAuthStatus>({
     connected: false,
     source: null,
@@ -303,6 +311,9 @@ export default function Home() {
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
   const [llmApiKeyInput, setLlmApiKeyInput] = useState("");
   const [llmModelInput, setLlmModelInput] = useState(PROVIDER_DEFAULT_MODELS.openai);
+  const [workspaceAuth, setWorkspaceAuth] = useState<WorkspaceAuthStatus | null>(
+    null,
+  );
 
   const posterRef = useRef<HTMLDivElement>(null);
   const assetCleanupRef = useRef<LocalAsset[]>([]);
@@ -370,9 +381,25 @@ export default function Home() {
     }
   }, []);
 
+  const loadWorkspaceStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/google/status", { cache: "no-store" });
+      if (!response.ok) {
+        setWorkspaceAuth(null);
+        return;
+      }
+
+      const json = (await response.json()) as WorkspaceAuthStatus;
+      setWorkspaceAuth(json);
+    } catch {
+      setWorkspaceAuth(null);
+    }
+  }, []);
+
   useEffect(() => {
     void loadAuthStatus();
     void loadLlmStatus();
+    void loadWorkspaceStatus();
 
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
@@ -396,7 +423,7 @@ export default function Home() {
         next ? `${window.location.pathname}?${next}` : window.location.pathname,
       );
     }
-  }, [loadAuthStatus, loadLlmStatus]);
+  }, [loadAuthStatus, loadLlmStatus, loadWorkspaceStatus]);
 
   useEffect(() => {
     if (!llmAuthStatus.provider) {
@@ -870,6 +897,10 @@ export default function Home() {
   };
 
   const disconnectLlmProvider = async () => {
+    if (llmAuthStatus.source !== "connection") {
+      return;
+    }
+
     setError(null);
     setLlmMessage(null);
     setIsLlmDisconnecting(true);
@@ -884,7 +915,9 @@ export default function Home() {
       }
 
       await loadLlmStatus();
-      setLlmMessage("Disconnected saved LLM key. Environment credentials remain available if configured.");
+      setLlmMessage(
+        "Disconnected saved LLM key. Environment credentials remain available if configured.",
+      );
     } catch (disconnectError) {
       setError(
         disconnectError instanceof Error
@@ -893,6 +926,17 @@ export default function Home() {
       );
     } finally {
       setIsLlmDisconnecting(false);
+    }
+  };
+
+  const signOutWorkspace = async () => {
+    setIsSigningOutWorkspace(true);
+    try {
+      await fetch("/api/auth/google/logout", {
+        method: "POST",
+      });
+    } finally {
+      window.location.href = "/api/auth/google/start";
     }
   };
 
@@ -1105,6 +1149,24 @@ export default function Home() {
           <div className="flex flex-wrap gap-2 text-xs text-slate-200">
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{imageCount} image assets</span>
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{videoCount} video assets</span>
+            {workspaceAuth?.authenticated ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1">
+                <span>{workspaceAuth.user?.email ?? "Workspace user"}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void signOutWorkspace();
+                  }}
+                  disabled={isSigningOutWorkspace}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/25 px-2 py-0.5 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSigningOutWorkspace ? (
+                    <LoaderCircle className="h-3 w-3 animate-spin" />
+                  ) : null}
+                  Sign out
+                </button>
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -1179,7 +1241,7 @@ export default function Home() {
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
                 <p className="text-[11px] text-slate-400">
-                  Stored in an encrypted, httpOnly cookie. Requires `APP_ENCRYPTION_SECRET`.
+                  Stored encrypted server-side with a short session cookie id. Requires `APP_ENCRYPTION_SECRET` and `BLOB_READ_WRITE_TOKEN`.
                 </p>
               </label>
 
@@ -1205,7 +1267,7 @@ export default function Home() {
                   onClick={() => {
                     void disconnectLlmProvider();
                   }}
-                  disabled={isLlmDisconnecting}
+                  disabled={isLlmDisconnecting || llmAuthStatus.source !== "connection"}
                   className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isLlmDisconnecting ? (

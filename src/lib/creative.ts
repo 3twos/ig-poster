@@ -47,8 +47,8 @@ export const GenerationRequestSchema = z.object({
   hasLogo: z.boolean(),
   promptConfig: z
     .object({
-      systemPrompt: z.string().trim().max(8000).optional().default(""),
-      customInstructions: z.string().trim().max(8000).optional().default(""),
+      systemPrompt: z.string().trim().max(2000).optional().default(""),
+      customInstructions: z.string().trim().max(4000).optional().default(""),
     })
     .optional()
     .default({

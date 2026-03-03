@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   try {
     const json = await req.json();
     const request = GenerationRequestSchema.parse(json);
-    const llmAuth = resolveLlmAuthFromRequest(req);
+    const llmAuth = await resolveLlmAuthFromRequest(req);
 
     if (!llmAuth) {
       return NextResponse.json(createFallbackResponse(request));
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
           websiteStyleContext: websiteStyleContext ?? undefined,
         }),
         temperature: 0.9,
+        maxTokens: 8192,
       });
 
       const parsed = GenerationResponseSchema.parse(generated);
