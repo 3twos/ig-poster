@@ -86,6 +86,8 @@ GOOGLE_WORKSPACE_DOMAIN=3twos.com
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=
+WORKSPACE_AUTH_PRODUCTION_HOST=
+WORKSPACE_AUTH_PREVIEW_HOST=
 WORKSPACE_AUTH_SECRET=
 BLOB_READ_WRITE_TOKEN=
 INSTAGRAM_ACCESS_TOKEN=
@@ -103,6 +105,8 @@ Notes:
 - `POST /api/auth/llm/connect` requires `APP_ENCRYPTION_SECRET` (or `META_APP_SECRET`) and `BLOB_READ_WRITE_TOKEN` to store encrypted BYOK credentials.
 - `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
 - `GOOGLE_OAUTH_REDIRECT_URI` is optional (defaults to `<origin>/api/auth/google/callback`).
+- `WORKSPACE_AUTH_PRODUCTION_HOST` is optional and lets middleware redirect raw production deployment URLs to your stable production alias before auth.
+- `WORKSPACE_AUTH_PREVIEW_HOST` is optional and lets middleware redirect raw preview deployment URLs to a stable preview alias before auth.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling and BYOK connection storage are unavailable.
 - For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
 - `APP_ENCRYPTION_SECRET` is required in production to encrypt OAuth tokens at rest.

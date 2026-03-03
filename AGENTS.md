@@ -42,3 +42,10 @@ Use this flow for every non-trivial change:
 - If a comment is incorrect, respond with a short technical justification.
 - Do not ignore unresolved threads.
 - Ensure PR has no unresolved critical comments before asking for merge approval.
+
+## PR Body Safety (Mandatory)
+
+- Do not use inline markdown strings with `gh pr create --body "..."` or `gh pr comment --body "..."` when text includes backticks or shell-sensitive characters.
+- Always write PR markdown into a file and use `--body-file` (for create/edit/comments) to avoid shell interpolation and command substitution.
+- After creating or editing a PR body, verify it with `gh pr view <number> --json body --jq .body`.
+- If formatting is corrupted, immediately fix it with `gh pr edit <number> --body-file <file>` and post a corrected follow-up comment if needed.
