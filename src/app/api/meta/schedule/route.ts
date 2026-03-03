@@ -1,23 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
+import { ScheduledJobSchema } from "@/lib/project";
 
 export const runtime = "nodejs";
-
-const ScheduledJobSchema = z.object({
-  id: z.string(),
-  caption: z.string().min(1).max(2200),
-  media: MetaScheduleRequestSchema.shape.media,
-  publishAt: z.string().datetime(),
-  createdAt: z.string().datetime(),
-  authSource: z.enum(["oauth", "env"]),
-  connectionId: z.string().optional(),
-});
 
 export async function POST(req: Request) {
   try {

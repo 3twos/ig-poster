@@ -1,29 +1,15 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
 import { deleteBlob, isBlobEnabled, listBlobs } from "@/lib/blob-store";
-import { getMetaConnection } from "@/lib/meta-auth";
+import { getEncryptionSecret, getMetaConnection } from "@/lib/meta-auth";
 import {
   getEnvMetaAuth,
-  MetaScheduleRequestSchema,
   publishInstagramContent,
 } from "@/lib/meta";
+import { ScheduledJobSchema } from "@/lib/project";
 import { decryptString } from "@/lib/secure";
 
 export const runtime = "nodejs";
-
-const ScheduledJobSchema = z.object({
-  id: z.string(),
-  caption: z.string().min(1).max(2200),
-  media: MetaScheduleRequestSchema.shape.media,
-  publishAt: z.string().datetime(),
-  createdAt: z.string().datetime(),
-  authSource: z.enum(["oauth", "env"]),
-  connectionId: z.string().optional(),
-});
-
-const getEncryptionSecret = () =>
-  process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
 
 export async function GET(req: Request) {
   try {

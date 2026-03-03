@@ -221,11 +221,9 @@ const publishCarousel = async (
     throw new Error("Carousel posts require at least 2 media items");
   }
 
-  const children = [] as string[];
-  for (const item of limitedItems) {
-    const childId = await createCarouselChild(item, auth);
-    children.push(childId);
-  }
+  const children = await Promise.all(
+    limitedItems.map((item) => createCarouselChild(item, auth)),
+  );
 
   const parent = await createMediaContainer(
     new URLSearchParams({
