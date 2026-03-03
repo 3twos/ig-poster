@@ -304,6 +304,7 @@ export default function Home() {
   const [isLlmConnecting, setIsLlmConnecting] = useState(false);
   const [isLlmDisconnecting, setIsLlmDisconnecting] = useState(false);
   const [llmMessage, setLlmMessage] = useState<string | null>(null);
+  const [llmError, setLlmError] = useState<string | null>(null);
   const [llmAuthStatus, setLlmAuthStatus] = useState<LlmAuthStatus>({
     connected: false,
     source: null,
@@ -859,18 +860,26 @@ export default function Home() {
   const connectLlmProvider = async () => {
     const apiKey = llmApiKeyInput.trim();
     if (!apiKey) {
-      setError("Enter an API key to connect an LLM provider.");
+      const message = "Enter an API key to connect an LLM provider.";
+      setLlmMessage(null);
+      setLlmError(message);
+      setError(message);
       return;
     }
 
     setError(null);
     setLlmMessage(null);
+    setLlmError(null);
     setIsLlmConnecting(true);
+
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => abortController.abort(), 20_000);
 
     try {
       const response = await fetch("/api/auth/llm/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
         body: JSON.stringify({
           provider: llmProvider,
           apiKey,
@@ -882,16 +891,29 @@ export default function Home() {
         throw new Error(await parseApiError(response));
       }
 
+      const json = (await response.json()) as {
+        provider?: LlmProvider;
+        model?: string;
+      };
+
       await loadLlmStatus();
       setLlmApiKeyInput("");
-      setLlmMessage("LLM provider connected. Generation now uses your subscription key.");
-    } catch (connectError) {
-      setError(
-        connectError instanceof Error
-          ? connectError.message
-          : "Could not connect LLM provider",
+      const resolvedModel = (json.model ?? llmModelInput) || "default model";
+      setLlmModelInput(json.model ?? llmModelInput);
+      setLlmMessage(
+        `LLM provider connected (${(json.provider ?? llmProvider).toUpperCase()} ${resolvedModel}).`,
       );
+    } catch (connectError) {
+      const message =
+        connectError instanceof Error && connectError.name === "AbortError"
+          ? "LLM connection timed out. Check your key/model and try again."
+          : connectError instanceof Error
+            ? connectError.message
+            : "Could not connect LLM provider";
+      setLlmError(message);
+      setError(message);
     } finally {
+      window.clearTimeout(timeoutId);
       setIsLlmConnecting(false);
     }
   };
@@ -903,6 +925,7 @@ export default function Home() {
 
     setError(null);
     setLlmMessage(null);
+    setLlmError(null);
     setIsLlmDisconnecting(true);
 
     try {
@@ -919,11 +942,12 @@ export default function Home() {
         "Disconnected saved LLM key. Environment credentials remain available if configured.",
       );
     } catch (disconnectError) {
-      setError(
+      const message =
         disconnectError instanceof Error
           ? disconnectError.message
-          : "Could not disconnect LLM provider",
-      );
+          : "Could not disconnect LLM provider";
+      setLlmError(message);
+      setError(message);
     } finally {
       setIsLlmDisconnecting(false);
     }
@@ -1279,6 +1303,9 @@ export default function Home() {
 
               {llmMessage ? (
                 <p className="mt-3 text-xs text-emerald-200">{llmMessage}</p>
+              ) : null}
+              {llmError ? (
+                <p className="mt-2 text-xs text-red-300">{llmError}</p>
               ) : null}
             </div>
 

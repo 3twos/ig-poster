@@ -14,19 +14,75 @@ export type ResolvedLlmAuth = {
   apiKey: string;
 };
 
+const toErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Unexpected provider validation failure";
+
+const selectFallbackModel = (
+  availableModels: string[],
+  preferredModel: string,
+  defaultModel: string,
+) => {
+  if (availableModels.includes(preferredModel)) {
+    return preferredModel;
+  }
+
+  if (availableModels.includes(defaultModel)) {
+    return defaultModel;
+  }
+
+  return availableModels[0] || preferredModel;
+};
+
 export const validateLlmCredentials = async (params: {
   provider: LlmProvider;
   apiKey: string;
   model: string;
-}) => {
+}): Promise<string> => {
   if (params.provider === "anthropic") {
     const client = new Anthropic({ apiKey: params.apiKey });
-    await client.models.retrieve(params.model);
-    return;
+    const timeoutMs = 12_000;
+
+    try {
+      await client.models.retrieve(params.model, undefined, { timeout: timeoutMs });
+      return params.model;
+    } catch {
+      try {
+        const page = await client.models.list(undefined, { timeout: timeoutMs });
+        const available = page.data.map((model) => model.id).filter(Boolean);
+        if (!available.length) {
+          throw new Error("No Anthropic models are available for this key.");
+        }
+
+        return selectFallbackModel(
+          available,
+          params.model,
+          DEFAULT_ANTHROPIC_MODEL,
+        );
+      } catch (fallbackError) {
+        throw new Error(`Anthropic credential validation failed: ${toErrorMessage(fallbackError)}`);
+      }
+    }
   }
 
   const client = new OpenAI({ apiKey: params.apiKey });
-  await client.models.retrieve(params.model);
+  const timeoutMs = 12_000;
+
+  try {
+    await client.models.retrieve(params.model, { timeout: timeoutMs });
+    return params.model;
+  } catch {
+    try {
+      const page = await client.models.list({ timeout: timeoutMs });
+      const available = page.data.map((model) => model.id).filter(Boolean);
+      if (!available.length) {
+        throw new Error("No OpenAI models are available for this key.");
+      }
+
+      return selectFallbackModel(available, params.model, DEFAULT_OPENAI_MODEL);
+    } catch (fallbackError) {
+      throw new Error(`OpenAI credential validation failed: ${toErrorMessage(fallbackError)}`);
+    }
+  }
 };
 
 type StructuredGenerationOptions = {
