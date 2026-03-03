@@ -56,6 +56,7 @@ type LocalAsset = {
 
 type BrandState = {
   brandName: string;
+  website: string;
   values: string;
   principles: string;
   story: string;
@@ -101,6 +102,7 @@ type WorkspaceAuthStatus = {
 
 const INITIAL_BRAND: BrandState = {
   brandName: "Nexa Labs",
+  website: "",
   values: "Radical clarity, measurable impact, craft quality, customer empathy",
   principles:
     "No fluff. Show proof. Build trust with transparent language and intentional design.",
@@ -255,6 +257,7 @@ export default function Home() {
   const [isUploadingAssets, setIsUploadingAssets] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isAutofillingBrand, setIsAutofillingBrand] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
@@ -263,6 +266,8 @@ export default function Home() {
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
+  const [brandAutofillMessage, setBrandAutofillMessage] = useState<string | null>(null);
+  const [lastAutofilledWebsite, setLastAutofilledWebsite] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -276,15 +281,25 @@ export default function Home() {
   );
 
   const posterRef = useRef<HTMLDivElement>(null);
+  const assetCleanupRef = useRef<LocalAsset[]>([]);
+  const logoCleanupRef = useRef<LocalAsset | null>(null);
+
+  useEffect(() => {
+    assetCleanupRef.current = assets;
+  }, [assets]);
+
+  useEffect(() => {
+    logoCleanupRef.current = logo;
+  }, [logo]);
 
   useEffect(() => {
     return () => {
-      assets.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
-      if (logo) {
-        URL.revokeObjectURL(logo.previewUrl);
+      assetCleanupRef.current.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
+      if (logoCleanupRef.current) {
+        URL.revokeObjectURL(logoCleanupRef.current.previewUrl);
       }
     };
-  }, [assets, logo]);
+  }, []);
 
   const loadAuthStatus = useCallback(async () => {
     setIsAuthLoading(true);
@@ -781,6 +796,64 @@ export default function Home() {
     }
   };
 
+  const autofillBrandFromWebsite = useCallback(
+    async (websiteInput?: string) => {
+      const rawWebsite = (websiteInput ?? brand.website).trim();
+      if (!rawWebsite) {
+        return;
+      }
+
+      setError(null);
+      setBrandAutofillMessage(null);
+      setIsAutofillingBrand(true);
+
+      try {
+        const response = await fetch("/api/brand/autofill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ website: rawWebsite }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await parseApiError(response));
+        }
+
+        const json = (await response.json()) as {
+          source?: "model" | "heuristic";
+          website?: string;
+          brand?: Partial<BrandState>;
+        };
+
+        if (!json.brand) {
+          throw new Error("No brand fields returned");
+        }
+
+        const resolvedWebsite = (json.website || rawWebsite).trim();
+        const normalizedKey = resolvedWebsite.toLowerCase();
+        setBrand((current) => ({
+          ...current,
+          ...json.brand,
+          website: resolvedWebsite,
+        }));
+        setLastAutofilledWebsite(normalizedKey);
+        setBrandAutofillMessage(
+          json.source === "model"
+            ? "Brand fields autofilled from website style + messaging."
+            : "Brand fields autofilled using website metadata heuristics.",
+        );
+      } catch (autofillError) {
+        setError(
+          autofillError instanceof Error
+            ? autofillError.message
+            : "Could not autofill brand fields from website",
+        );
+      } finally {
+        setIsAutofillingBrand(false);
+      }
+    },
+    [brand.website],
+  );
+
   const buildPublishPayload = async (variant: CreativeVariant) => {
     const sequenced = variant.assetSequence
       .map((assetId) => assetMap.get(assetId))
@@ -922,20 +995,14 @@ export default function Home() {
   const videoCount = assets.filter((asset) => asset.mediaType === "video").length;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-8 text-white md:px-8 md:py-10">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-6 text-white md:px-8 md:py-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 rounded-3xl border border-white/15 bg-white/5 p-6 backdrop-blur-xl md:p-8">
-          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold tracking-[0.18em] text-orange-200 uppercase">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
             <Sparkles className="h-4 w-4" />
-            SOTA IG Poster Engine
+            IG Poster Engine
           </div>
-          <h1 className="mt-4 max-w-3xl text-3xl leading-tight font-semibold tracking-tight md:text-5xl">
-            Generate brand-consistent, high-impact Instagram single posts, carousels, and reels.
-          </h1>
-          <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-300 md:text-base">
-            Upload mixed assets (images + video), get strategy-backed creative variants, and publish format-aware content via Instagram API.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-200">
+          <div className="flex flex-wrap gap-2 text-xs text-slate-200">
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{imageCount} image assets</span>
             <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{videoCount} video assets</span>
             {workspaceAuth?.authenticated ? (
@@ -979,6 +1046,56 @@ export default function Home() {
                     }
                     className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                   />
+                </label>
+                <label className="space-y-1 md:col-span-2">
+                  <span className="text-xs font-medium text-slate-200">Website (optional)</span>
+                  <input
+                    value={brand.website}
+                    placeholder="example.com or https://example.com"
+                    onChange={(event) => {
+                      const nextWebsite = event.target.value;
+                      if (nextWebsite.trim().toLowerCase() !== lastAutofilledWebsite) {
+                        setBrandAutofillMessage(null);
+                      }
+
+                      setBrand((current) => ({
+                        ...current,
+                        website: nextWebsite,
+                      }));
+                    }}
+                    onBlur={(event) => {
+                      const nextWebsite = event.target.value.trim().toLowerCase();
+                      if (!nextWebsite || nextWebsite === lastAutofilledWebsite || isAutofillingBrand) {
+                        return;
+                      }
+
+                      void autofillBrandFromWebsite(event.target.value);
+                    }}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] text-slate-400">
+                      Providing a website can autofill brand fields and improve style alignment.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void autofillBrandFromWebsite();
+                      }}
+                      disabled={!brand.website.trim() || isAutofillingBrand}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isAutofillingBrand ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      )}
+                      {isAutofillingBrand ? "Filling..." : "Autofill Brand Fields"}
+                    </button>
+                  </div>
+                  {brandAutofillMessage ? (
+                    <p className="text-[11px] text-emerald-200">{brandAutofillMessage}</p>
+                  ) : null}
                 </label>
                 <label className="space-y-1 md:col-span-2">
                   <span className="text-xs font-medium text-slate-200">Values</span>
