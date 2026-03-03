@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   try {
     const payload = ConnectLlmSchema.parse(await req.json());
     const model = payload.model || defaultModelFor(payload.provider);
-    await validateLlmCredentials({
+    const validatedModel = await validateLlmCredentials({
       provider: payload.provider,
       apiKey: payload.apiKey,
       model,
@@ -32,14 +32,14 @@ export async function POST(req: Request) {
     const connection = await saveLlmConnection({
       provider: payload.provider,
       apiKey: payload.apiKey,
-      model,
+      model: validatedModel,
     });
 
     const response = NextResponse.json({
       connected: true,
       source: "connection",
       provider: payload.provider,
-      model,
+      model: validatedModel,
     });
 
     response.cookies.set(LLM_CONNECTION_COOKIE, connection.id, {
