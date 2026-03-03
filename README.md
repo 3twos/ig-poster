@@ -113,6 +113,19 @@ Required GitHub repository secrets:
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
 
+Quick setup with `gh`:
+
+```bash
+# 1) create a Vercel token in Vercel dashboard (Account -> Tokens)
+gh secret set VERCEL_TOKEN --repo 3twos/ig-poster --body "<your_vercel_token>"
+
+# 2) get IDs from Vercel project settings (or .vercel/project.json after `vercel link`)
+gh secret set VERCEL_ORG_ID --repo 3twos/ig-poster --body "<your_org_id>"
+gh secret set VERCEL_PROJECT_ID --repo 3twos/ig-poster --body "<your_project_id>"
+```
+
+After these are set, pushes to `main` auto-deploy production and PRs auto-deploy preview.
+
 ## Vercel Cron
 
 Cron is configured in `vercel.json`:
