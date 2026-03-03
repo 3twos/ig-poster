@@ -4,16 +4,17 @@ import { twMerge } from "tailwind-merge";
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
 
 export const hexToRgba = (hex: string, alpha: number) => {
+  const a = Math.max(0, Math.min(1, alpha));
   const normalized = hex.replace("#", "");
   if (normalized.length !== 6) {
-    return `rgba(15,23,42,${alpha})`;
+    return `rgba(15,23,42,${a})`;
   }
 
   const bigint = Number.parseInt(normalized, 16);
   const r = (bigint >> 16) & 255;
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 };
 
 export const slugify = (value: string) =>

@@ -11,8 +11,6 @@ import { readCookieFromRequest } from "@/lib/cookies";
 import { getEnvMetaAuth, type MetaAuthContext } from "@/lib/meta";
 import { decryptString, encryptString } from "@/lib/secure";
 
-export { readCookieFromRequest } from "@/lib/cookies";
-
 export const META_OAUTH_STATE_COOKIE = "meta_oauth_state";
 export const META_CONNECTION_COOKIE = "ig_connection";
 
@@ -93,7 +91,12 @@ export const getEncryptionSecret = () => getAppEncryptionSecret();
 
 const callGraphJson = async <T>(url: URL): Promise<T> => {
   const response = await fetch(url, { cache: "no-store" });
-  const json = (await response.json()) as { error?: { message?: string } } & T;
+  let json: { error?: { message?: string } } & T;
+  try {
+    json = (await response.json()) as { error?: { message?: string } } & T;
+  } catch {
+    throw new Error(`Meta API returned non-JSON response (${response.status})`);
+  }
 
   if (!response.ok || json.error) {
     throw new Error(json.error?.message ?? "Meta API request failed");
@@ -236,8 +239,11 @@ export const completeMetaOAuth = async (req: Request, code: string) => {
 
     accessToken = longToken.access_token;
     expiresIn = longToken.expires_in;
-  } catch {
-    // Fall back to short-lived token when long-lived exchange is unavailable.
+  } catch (error) {
+    console.warn(
+      "[meta-auth] Long-lived token exchange failed, using short-lived token:",
+      error instanceof Error ? error.message : error,
+    );
   }
 
   const pagesUrl = new URL(
@@ -302,8 +308,11 @@ export const resolveMetaAuthFromRequest = async (
           },
         };
       }
-    } catch {
-      // Fallback to env credentials when OAuth cookie is stale or undecryptable.
+    } catch (error) {
+      console.warn(
+        "[meta-auth] Failed to resolve OAuth credentials, falling back to env:",
+        error instanceof Error ? error.message : error,
+      );
     }
   }
 

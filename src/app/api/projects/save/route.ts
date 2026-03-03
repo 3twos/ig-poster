@@ -34,13 +34,10 @@ export async function POST(req: Request) {
       id,
       shareUrl: `${origin}/share/${id}`,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      {
-        error: "Could not save project",
-        detail: error instanceof Error ? error.message : "Unexpected error",
-      },
-      { status: 400 },
+      { error: "Could not save project" },
+      { status: 500 },
     );
   }
 }

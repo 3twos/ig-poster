@@ -192,10 +192,14 @@ const paletteToHex = (palette: string): string[] => {
 
 const toTag = (value: string): string => {
   const condensed = value
-    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .replace(/[^a-zA-Z0-9_\s]/g, "")
     .trim()
     .replace(/\s+/g, "");
-  return `#${condensed.slice(0, 24) || "Instagram"}`;
+  const tag = condensed.slice(0, 24);
+  if (tag.length < 2) {
+    return "#Instagram";
+  }
+  return `#${tag}`;
 };
 
 const clampSlideCount = (count: number) => Math.max(3, Math.min(count, 8));
@@ -215,15 +219,15 @@ const buildCarouselSlides = (count: number, theme: string, audience: string) => 
       index === 0
         ? `${theme} without the fluff`
         : index === limit - 1
-          ? "Ready to taste the difference?"
+          ? "Ready to take the next step?"
           : `Proof point ${index}`,
     body:
       index === 0
         ? `Start with the strongest insight for ${audience.toLowerCase()}.`
         : index === limit - 1
-          ? "Save this framework and share it with someone planning their next wine purchase."
+          ? "Save this framework and share it with someone who needs it."
           : "Keep each slide to one idea, one visual, one short sentence.",
-    assetHint: index === 0 ? "Hero bottle/label" : index === limit - 1 ? "Lifestyle close" : "Vineyard detail",
+    assetHint: index === 0 ? "Hero product shot" : index === limit - 1 ? "Lifestyle close" : "Detail or context shot",
   }));
 };
 
@@ -276,7 +280,7 @@ export const createFallbackResponse = (
       id: "variant-b",
       name: imageAssets.length >= 3 ? "Carousel Story" : "Story Split",
       postType: imageAssets.length >= 3 ? "carousel" : "single-image",
-      hook: "From vineyard to glass in clear steps",
+      hook: "From concept to result in clear steps",
       headline: `${request.post.theme} built on real principles`,
       cta: `Swipe and save for your next purchase`,
       layout: "split-story",
@@ -308,49 +312,49 @@ export const createFallbackResponse = (
       reelPlan: videoAssets.length
         ? {
             targetDurationSec: 18,
-            hook: `In 18 seconds: why ${request.brand.brandName} wines stand out`,
-            coverFrameDirection: "Use a crisp bottle + vineyard background with high-contrast headline",
+            hook: `In 18 seconds: why ${request.brand.brandName} stands out`,
+            coverFrameDirection: "Use a hero product shot with high-contrast headline overlay",
             audioDirection: "Warm cinematic indie track with subtle build",
             editingActions: [
-              "Start with fastest-motion pour within first 1.2 seconds",
+              "Start with fastest-motion hero shot within first 1.2 seconds",
               "Cut every 1.8-2.4 seconds",
-              "Mix wide vineyard scene, cellar closeup, glass pour macro",
+              "Mix wide establishing shot, detail closeup, action macro",
               "Use bold captions centered in safe area",
-              "End with tasting-room CTA card",
+              "End with branded CTA card",
             ],
             beats: [
               {
                 atSec: 0,
-                visual: "Fast bottle uncork + pour",
+                visual: "Fast product hero reveal",
                 onScreenText: `Why ${request.brand.brandName}?`,
                 editAction: "Hard cut + 105% zoom",
               },
               {
                 atSec: 4,
-                visual: "Vineyard row tracking shot",
-                onScreenText: "Estate-grown fruit",
+                visual: "Wide context or environment shot",
+                onScreenText: "Built on real principles",
                 editAction: "Speed ramp then stabilize",
               },
               {
                 atSec: 8,
-                visual: "Cellar barrel detail",
-                onScreenText: "Precision aging",
-                editAction: "Match cut on circular shapes",
+                visual: "Detail or process closeup",
+                onScreenText: "Precision at every step",
+                editAction: "Match cut on shapes",
               },
               {
                 atSec: 13,
-                visual: "Wine glass swirl and tasting moment",
-                onScreenText: "Balanced and expressive",
+                visual: "Product in use or lifestyle moment",
+                onScreenText: "Designed for impact",
                 editAction: "Slow motion at 80% speed",
               },
               {
                 atSec: 16,
                 visual: "Brand lockup + CTA card",
-                onScreenText: "Book a tasting",
+                onScreenText: "Take the next step",
                 editAction: "Fade in CTA with subtle grain",
               },
             ],
-            endCardCta: "Visit profile and book your vineyard tasting",
+            endCardCta: "Visit profile to learn more and get started",
           }
         : undefined,
       carouselSlides:

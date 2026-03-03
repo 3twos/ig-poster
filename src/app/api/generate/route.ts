@@ -38,22 +38,10 @@ export async function POST(req: Request) {
     } catch {
       return NextResponse.json(createFallbackResponse(request));
     }
-  } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json(
-        {
-          error: "Could not generate creative direction",
-          detail: error.message,
-        },
-        { status: 400 },
-      );
-    }
-
+  } catch {
     return NextResponse.json(
-      {
-        error: "Unexpected failure",
-      },
-      { status: 500 },
+      { error: "Could not generate creative direction" },
+      { status: 400 },
     );
   }
 }

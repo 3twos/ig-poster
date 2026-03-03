@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import {
   completeWorkspaceOAuth,
   createWorkspaceSessionToken,
-  readCookieFromRequest,
   sanitizeNextPath,
   WORKSPACE_OAUTH_NEXT_COOKIE,
   WORKSPACE_OAUTH_NONCE_COOKIE,
@@ -11,6 +10,7 @@ import {
   WORKSPACE_SESSION_COOKIE,
   WORKSPACE_SESSION_TTL_SECONDS,
 } from "@/lib/workspace-auth";
+import { readCookieFromRequest } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 

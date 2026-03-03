@@ -96,11 +96,23 @@ export default function ShareProjectPage() {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-white/15 bg-slate-900/50 p-5 text-sm text-slate-200">Loading...</div>
+          <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-slate-900/50 p-5 text-sm text-slate-200">
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Loading project...
+          </div>
         ) : null}
 
         {error ? (
           <div className="rounded-2xl border border-red-300/40 bg-red-500/10 p-5 text-sm text-red-200">{error}</div>
+        ) : null}
+
+        {project && !activeVariant && !loading ? (
+          <div className="rounded-2xl border border-white/15 bg-slate-900/50 p-5 text-sm text-slate-200">
+            This project has no variants to display.
+          </div>
         ) : null}
 
         {project && activeVariant ? (

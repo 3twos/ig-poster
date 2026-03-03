@@ -6,7 +6,18 @@ import { generateStructuredJson } from "@/lib/llm";
 import { buildWebsiteStyleContext } from "@/lib/website-style";
 
 const AutofillRequestSchema = z.object({
-  website: z.string().trim().min(3).max(240),
+  website: z.string().trim().min(3).max(240).refine(
+    (val) => {
+      try {
+        const url = val.startsWith("http") ? val : `https://${val}`;
+        new URL(url);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Provide a valid website URL" },
+  ),
 });
 
 const AutofillBrandSchema = z.object({
@@ -203,22 +214,10 @@ export async function POST(request: Request) {
       website: parsed.websiteUrl || payload.website,
       brand: model ?? fallback,
     });
-  } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json(
-        {
-          error: "Could not autofill brand fields from website",
-          detail: error.message,
-        },
-        { status: 400 },
-      );
-    }
-
+  } catch {
     return NextResponse.json(
-      {
-        error: "Unexpected failure",
-      },
-      { status: 500 },
+      { error: "Could not autofill brand fields from website" },
+      { status: 400 },
     );
   }
 }

@@ -5,6 +5,22 @@ const KEY_BYTES = 32;
 const getKey = (secret: string) =>
   createHash("sha256").update(secret).digest().subarray(0, KEY_BYTES);
 
+/**
+ * Shared encryption secret resolver. Throws when no secret is configured.
+ * All modules should use this instead of inlining their own fallback chains.
+ */
+export const getEncryptionSecret = (): string => {
+  const secret =
+    process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET;
+  if (!secret) {
+    throw new Error(
+      "Missing APP_ENCRYPTION_SECRET (or META_APP_SECRET fallback). " +
+        "Set one of these environment variables to enable credential encryption.",
+    );
+  }
+  return secret;
+};
+
 export const encryptString = (value: string, secret: string) => {
   const iv = randomBytes(12);
   const key = getKey(secret);

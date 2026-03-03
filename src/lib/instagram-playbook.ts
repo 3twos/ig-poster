@@ -37,7 +37,7 @@ export const VINEYARD_MARKETING_GUARDRAILS = [
 ] as const;
 
 const WINE_TERMS =
-  /wine|winery|vineyard|vine|grape|pinot|cabernet|sauvignon|rose\b|sommelier|cellar|merlot|chardonnay/i;
+  /\bwine\b|\bwinery\b|\bvineyard\b|\bvines?\b|\bgrape\b|\bpinot\b|\bcabernet\b|\bsauvignon\b|\bros[eé]\b|\bsommelier\b|\bcellar\b|\bmerlot\b|\bchardonnay\b/i;
 
 export const isWineBrandSignals = (
   brand: BrandInputLike,

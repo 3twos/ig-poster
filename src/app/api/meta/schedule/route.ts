@@ -69,12 +69,14 @@ export async function POST(req: Request) {
       children: "children" in publish ? publish.children : undefined,
     });
   } catch (error) {
+    const isClientError = error instanceof Error &&
+      (error.message.includes("requires") || error.message.includes("not connected"));
     return NextResponse.json(
       {
         error: "Could not publish to Instagram",
         detail: error instanceof Error ? error.message : "Unexpected error",
       },
-      { status: 400 },
+      { status: isClientError ? 400 : 502 },
     );
   }
 }
