@@ -139,6 +139,20 @@ Cron is configured in `vercel.json`:
 
 Set `CRON_SECRET` in Vercel env; Vercel sends it as `Authorization: Bearer <CRON_SECRET>`.
 
+## Parallel Agent Workflow
+
+Use git worktrees so multiple agents can run in parallel without branch collisions:
+
+```bash
+# create isolated branch + worktree
+./scripts/new-agent-worktree.sh <agent-name> main
+
+# remove when finished
+./scripts/remove-agent-worktree.sh <worktree-path>
+```
+
+Branch naming uses `codex/<agent>-<timestamp>` to keep PRs traceable.
+
 ## Repo Bootstrap (already applied for this project)
 
 ```bash
