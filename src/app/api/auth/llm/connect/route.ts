@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { LLM_CONNECTION_COOKIE, saveLlmConnection } from "@/lib/llm-auth";
+import { validateLlmCredentials } from "@/lib/llm";
 import {
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_OPENAI_MODEL,
@@ -23,6 +24,11 @@ export async function POST(req: Request) {
   try {
     const payload = ConnectLlmSchema.parse(await req.json());
     const model = payload.model || defaultModelFor(payload.provider);
+    await validateLlmCredentials({
+      provider: payload.provider,
+      apiKey: payload.apiKey,
+      model,
+    });
     const connection = await saveLlmConnection({
       provider: payload.provider,
       apiKey: payload.apiKey,

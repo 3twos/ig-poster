@@ -14,6 +14,21 @@ export type ResolvedLlmAuth = {
   apiKey: string;
 };
 
+export const validateLlmCredentials = async (params: {
+  provider: LlmProvider;
+  apiKey: string;
+  model: string;
+}) => {
+  if (params.provider === "anthropic") {
+    const client = new Anthropic({ apiKey: params.apiKey });
+    await client.models.retrieve(params.model);
+    return;
+  }
+
+  const client = new OpenAI({ apiKey: params.apiKey });
+  await client.models.retrieve(params.model);
+};
+
 type StructuredGenerationOptions = {
   auth: ResolvedLlmAuth;
   systemPrompt: string;
