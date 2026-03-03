@@ -40,9 +40,10 @@ export async function POST(req: Request) {
       source: "connection",
       provider: payload.provider,
       model: validatedModel,
+      storage: connection.storage,
     });
 
-    response.cookies.set(LLM_CONNECTION_COOKIE, connection.id, {
+    response.cookies.set(LLM_CONNECTION_COOKIE, connection.cookieValue, {
       httpOnly: true,
       sameSite: "lax",
       secure: new URL(req.url).protocol === "https:",
