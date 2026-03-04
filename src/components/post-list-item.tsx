@@ -59,7 +59,12 @@ export function PostListItem({
       role="button"
       tabIndex={0}
       onClick={onSelect}
-      onKeyDown={(e) => e.key === "Enter" && onSelect()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={cn(
         "group relative flex cursor-pointer items-start gap-2 rounded-xl px-3 py-2.5 transition",
         isActive

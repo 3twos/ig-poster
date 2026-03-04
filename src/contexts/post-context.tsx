@@ -56,10 +56,13 @@ export function usePostContext() {
 
 export function PostProvider({ children }: { children: ReactNode }) {
   const [posts, setPosts] = useState<PostSummary[]>([]);
-  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [activePost, dispatch] = useReducer(postReducer, null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { saveStatus, saveNow, markSaved } = useAutoSave(activePost);
+  const refreshPostsRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const { saveStatus, saveNow, markSaved } = useAutoSave(activePost, {
+    onSaved: () => void refreshPostsRef.current?.(),
+  });
 
   // Stable refs for callbacks that need latest values without re-creating
   const saveNowRef = useRef(saveNow);
@@ -73,6 +76,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
   });
 
   const refreshPosts = useCallback(async () => {
+    setIsLoadingPosts(true);
     try {
       const res = await fetch("/api/posts", { cache: "no-store" });
       if (!res.ok) return;
@@ -80,16 +84,22 @@ export function PostProvider({ children }: { children: ReactNode }) {
       setPosts(json.posts ?? []);
     } catch {
       // Silently fail — sidebar will show empty
+    } finally {
+      setIsLoadingPosts(false);
     }
   }, []);
 
+  useEffect(() => {
+    refreshPostsRef.current = refreshPosts;
+  }, [refreshPosts]);
+
   // Load posts on mount
-  const initPromiseRef = useRef<Promise<void> | null>(null);
-  if (initPromiseRef.current === null) {
-    initPromiseRef.current = refreshPosts().finally(() =>
-      setIsLoadingPosts(false),
-    );
-  }
+  const didInitRef = useRef(false);
+  useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    void refreshPosts();
+  }, [refreshPosts]);
 
   const selectPost = useCallback(
     async (id: string) => {
@@ -100,7 +110,8 @@ export function PostProvider({ children }: { children: ReactNode }) {
         if (!res.ok) return;
         const row = await res.json();
         dispatch({ type: "LOAD_POST", row });
-        markSavedRef.current();
+        // markSaved is called in a separate effect that fires after LOAD_POST
+        // updates the draft, ensuring the snapshot matches the loaded state
 
         const url = new URL(window.location.href);
         url.searchParams.set("post", id);
@@ -136,11 +147,15 @@ export function PostProvider({ children }: { children: ReactNode }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ brand, promptConfig, logoUrl }),
     });
+    if (!res.ok) {
+      throw new Error("Failed to create post");
+    }
     const json = await res.json();
     const id = json.id as string;
 
     dispatch({ type: "LOAD_POST", row: json.post });
-    markSavedRef.current();
+    // markSaved is called in a separate effect that fires after LOAD_POST
+    // updates the draft, ensuring the snapshot matches the loaded state
 
     const url = new URL(window.location.href);
     url.searchParams.set("post", id);
@@ -156,7 +171,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       await refreshPosts();
 
       if (activePostIdRef.current === id) {
-        dispatch({ type: "SET_DRAFT", draft: null as unknown as PostDraft });
+        dispatch({ type: "SET_DRAFT", draft: null });
         const url = new URL(window.location.href);
         url.searchParams.delete("post");
         window.history.replaceState({}, "", url.toString());
@@ -171,7 +186,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       await refreshPosts();
 
       if (activePostIdRef.current === id) {
-        dispatch({ type: "SET_DRAFT", draft: null as unknown as PostDraft });
+        dispatch({ type: "SET_DRAFT", draft: null });
         const url = new URL(window.location.href);
         url.searchParams.delete("post");
         window.history.replaceState({}, "", url.toString());
@@ -179,6 +194,16 @@ export function PostProvider({ children }: { children: ReactNode }) {
     },
     [refreshPosts],
   );
+
+  // Mark as saved whenever a new post is loaded (syncs auto-save snapshot)
+  const prevPostIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentId = activePost?.id ?? null;
+    if (currentId && currentId !== prevPostIdRef.current) {
+      markSaved();
+    }
+    prevPostIdRef.current = currentId;
+  }, [activePost?.id, markSaved]);
 
   // Load post from URL on mount (one-time)
   const didLoadUrlRef = useRef(false);
@@ -192,12 +217,23 @@ export function PostProvider({ children }: { children: ReactNode }) {
     }
   }, [selectPost]);
 
-  // beforeunload — flush save
+  // beforeunload — flush save using keepalive fetch (survives page close)
+  const draftRef = useRef(activePost);
+  useEffect(() => {
+    draftRef.current = activePost;
+  });
   useEffect(() => {
     const handler = () => {
-      if (activePostIdRef.current) {
-        void saveNowRef.current();
-      }
+      const d = draftRef.current;
+      if (!d) return;
+      const { activeSlideIndex: _, ...rest } = d;
+      const body = JSON.stringify(rest);
+      fetch(`/api/posts/${d.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      });
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);

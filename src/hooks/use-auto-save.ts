@@ -6,15 +6,20 @@ export type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 
 /** Strips transient fields before comparing / sending to API */
 function serializeDraft(draft: PostDraft): string {
-  const { activeSlideIndex: _unused, ...rest } = draft;
+  const { activeSlideIndex: _, ...rest } = draft;
   return JSON.stringify(rest);
 }
 
-export function useAutoSave(draft: PostDraft | null) {
+export function useAutoSave(
+  draft: PostDraft | null,
+  options?: { onSaved?: () => void },
+) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const lastSavedRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const onSavedRef = useRef(options?.onSaved);
+  onSavedRef.current = options?.onSaved;
 
   // Mark saved (called externally after load)
   const markSaved = useCallback(() => {
@@ -58,6 +63,7 @@ export function useAutoSave(draft: PostDraft | null) {
       if (res.ok) {
         lastSavedRef.current = serialized;
         setSaveStatus("saved");
+        onSavedRef.current?.();
       } else {
         setSaveStatus("error");
       }
@@ -77,7 +83,12 @@ export function useAutoSave(draft: PostDraft | null) {
     if (!draft) return;
 
     const serialized = serializeDraft(draft);
-    if (serialized === lastSavedRef.current) return;
+    if (serialized === lastSavedRef.current) {
+      // Draft reverted to saved state (e.g. undo) — clear pending timer
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setSaveStatus("saved");
+      return;
+    }
 
     setSaveStatus("unsaved");
 

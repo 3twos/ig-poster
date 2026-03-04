@@ -81,21 +81,23 @@ export async function PUT(req: Request, ctx: Ctx) {
     if (body.shareProjectId !== undefined)
       update.shareProjectId = body.shareProjectId;
 
-    // Merge JSONB fields
+    // Merge JSONB fields — guard against null incoming values
     if (body.brand !== undefined)
-      update.brand = { ...(existing.brand ?? {}), ...body.brand };
+      update.brand = body.brand
+        ? { ...(existing.brand ?? {}), ...body.brand }
+        : body.brand;
     if (body.brief !== undefined)
-      update.brief = { ...(existing.brief ?? {}), ...body.brief };
+      update.brief = body.brief
+        ? { ...(existing.brief ?? {}), ...body.brief }
+        : body.brief;
     if (body.promptConfig !== undefined)
-      update.promptConfig = {
-        ...(existing.promptConfig ?? {}),
-        ...body.promptConfig,
-      };
+      update.promptConfig = body.promptConfig
+        ? { ...(existing.promptConfig ?? {}), ...body.promptConfig }
+        : body.promptConfig;
     if (body.overlayLayouts !== undefined)
-      update.overlayLayouts = {
-        ...(existing.overlayLayouts ?? {}),
-        ...body.overlayLayouts,
-      };
+      update.overlayLayouts = body.overlayLayouts
+        ? { ...(existing.overlayLayouts ?? {}), ...body.overlayLayouts }
+        : body.overlayLayouts;
 
     // Overwrite array fields
     if (body.assets !== undefined) update.assets = body.assets;
