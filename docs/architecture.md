@@ -26,6 +26,7 @@ flowchart LR
 ## Runtime and Layers
 
 - App framework: Next.js App Router (Node runtime for server routes that need Node APIs).
+- Next.js 16 auth gate entrypoint uses `src/proxy.ts` (Proxy file convention), which is executed as middleware.
 - UI layer:
   - `src/app/page.tsx` is the primary interactive editor.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
@@ -83,7 +84,7 @@ Why this shape:
 
 ### Workspace Access Gate
 
-- `src/proxy.ts` enforces login for non-public routes.
+- `src/proxy.ts` (Next.js 16 Proxy entrypoint) enforces login for non-public routes.
 - Sessions are signed JWTs in `workspace_session` cookie.
 - OAuth flow:
   - start: `/api/auth/google/start`

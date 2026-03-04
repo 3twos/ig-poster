@@ -21,23 +21,23 @@ Open `http://localhost:3000`.
 
 ## Environment Setup
 
-## Required for login (minimum usable app)
+### Required for login (minimum usable app)
 
 - `GOOGLE_WORKSPACE_DOMAIN`
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `WORKSPACE_AUTH_SECRET` (or `APP_ENCRYPTION_SECRET`)
 
-## Recommended for generation quality
+### Recommended for generation quality
 
 - `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY`
 - Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`
 
-## Required for upload/share/scheduling features
+### Required for upload/share/scheduling features
 
 - `BLOB_READ_WRITE_TOKEN`
 
-## Required for Instagram publish flow
+### Required for Instagram publish flow
 
 - OAuth path:
   - `META_APP_ID`
@@ -47,7 +47,7 @@ Open `http://localhost:3000`.
   - `INSTAGRAM_ACCESS_TOKEN`
   - `INSTAGRAM_BUSINESS_ID`
 
-## Required for scheduled publish execution
+### Required for scheduled publish execution
 
 - `CRON_SECRET`
 
@@ -72,7 +72,7 @@ Run these before opening or updating a PR.
 - `src/lib/meta.ts`: Meta Graph publishing primitives.
 - `src/lib/meta-auth.ts`: Meta OAuth flow and credential resolution.
 - `src/lib/workspace-auth.ts`: Google Workspace OAuth + session tokens.
-- `src/proxy.ts`: global auth gate and canonical host redirect logic.
+- `src/proxy.ts`: Next.js 16 Proxy entrypoint for auth gate and canonical host redirect logic.
 
 ## Day-to-Day Dev Workflow
 

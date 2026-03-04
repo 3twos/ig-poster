@@ -12,14 +12,14 @@
 - Generates exactly 3 creative variants per request, including strategy rationale, caption, hashtags, and format-aware plans (single image, carousel, reel).
 - Accepts mixed media assets (images + short videos), with automatic video metadata extraction for better planning.
 - Supports drag-and-resize text overlay editing on the poster canvas, then PNG export.
-- Creates shareable project snapshots at `/share/<id>` with persisted project state.
+- Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed queue.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
 
 ## Key Features
 
-- Workspace login gate for all private pages and APIs.
+- Workspace login gate for all private pages and APIs; `/share/<id>` remains a public, read-only link.
 - Provider-agnostic LLM generation pipeline with strict schema validation.
 - Deterministic fallback generation when no LLM credentials are available or generation fails.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
@@ -28,19 +28,19 @@
 ## Primary User Scenarios
 
 1. Create a new post concept from a brief
-- Upload assets and logo, fill brand/post inputs, generate variants, pick one, and export.
+   - Upload assets and logo, fill brand/post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
-- Compare 3 variant angles (single image / carousel / reel), copy caption bundles, and iterate prompts.
+   - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, and iterate prompts.
 
 3. Collaborate asynchronously
-- Save a project snapshot and send a share link so teammates can review the selected concept.
+   - Save a project snapshot and send a share link so teammates can review the selected concept.
 
 4. Publish immediately
-- Connect Instagram via OAuth (or env credentials), then publish selected concept directly.
+   - Connect Instagram via OAuth (or env credentials), then publish selected concept directly.
 
 5. Schedule approved content
-- Set a future publish time and let the cron worker publish when due.
+   - Set a future publish time and let the cron worker publish when due.
 
 ## Scope Boundaries
 
