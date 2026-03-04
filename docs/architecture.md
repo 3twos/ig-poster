@@ -28,7 +28,10 @@ flowchart LR
 - App framework: Next.js App Router (Node runtime for server routes that need Node APIs).
 - Next.js 16 auth gate entrypoint uses `src/proxy.ts` (Proxy file convention), which is executed as middleware.
 - UI layer:
-  - `src/app/page.tsx` is the primary interactive editor.
+  - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity) using `react-resizable-panels`.
+  - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-section.tsx`, `agent-activity-panel.tsx`.
+  - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
+  - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders and edits overlay layouts.
 - API layer:
@@ -47,11 +50,14 @@ flowchart LR
 
 1. Client submits brand/post/assets to `POST /api/generate`.
 2. Request is validated with `GenerationRequestSchema`.
-3. Server resolves LLM auth from connected credential or env fallback.
+3. Server resolves all available LLM connections via `resolveAllLlmAuthFromRequest`, which merges BYOK connections with environment-configured models into a `ResolvedLlmAuthList`.
 4. Server optionally extracts website style context (`buildWebsiteStyleContext`).
-5. Structured JSON generation runs through provider adapter.
+5. Based on the user's selected `MultiModelMode`:
+   - **Fallback**: `generateWithFallback` tries each model in priority order; the first successful response is used.
+   - **Parallel**: all models are queried simultaneously, and results are merged and ranked.
+   LLM thinking/reasoning tokens are forwarded to the client as `llm-thinking` SSE events.
 6. Response is validated with `GenerationResponseSchema`.
-7. On auth/provider failure, fallback response generator returns deterministic variants.
+7. If all models fail, fallback response generator returns deterministic variants.
 
 Why this shape:
 - Schema-first contracts reduce malformed LLM output risk.
@@ -99,13 +105,18 @@ Why this shape:
 - Fallback path: env credentials (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ID`).
 - Runtime resolver returns a uniform `MetaAuthContext` to publishing code.
 
-### LLM Auth
+### LLM Auth (Multi-Model)
 
-- Preferred path: connected BYOK via `/api/auth/llm/connect`.
+- Users can connect multiple BYOK credentials via `/api/auth/llm/connect`, each identified by a unique `connectionId`.
+- Model priority order and execution mode (Fallback or Parallel) are saved via `PUT /api/auth/llm/reorder`.
+- The disconnect endpoint (`/api/auth/llm/disconnect`) accepts a `connectionId` to remove a specific model.
+- The status endpoint (`/api/auth/llm/status`) returns a multi-model response (`LlmMultiAuthStatus`) containing `connections[]`, `mode`, and ordering info.
 - Stored encrypted:
-  - Blob-backed record when Blob is enabled.
+  - Blob-backed records (via `listCredentialRecords`) when Blob is enabled.
   - Encrypted cookie payload fallback when Blob is not enabled.
-- Fallback path: env credentials (`OPENAI_*` or `ANTHROPIC_*`).
+- Environment-configured models (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) auto-appear in the resolved model list alongside BYOK connections.
+- Key types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
+- Key functions: `resolveAllLlmAuthFromRequest` (merges all sources into a prioritized list), `generateWithFallback` (tries models in order), `listCredentialRecords` (enumerates stored connections).
 
 ## Storage Model
 
@@ -134,7 +145,7 @@ Why this shape:
 
 ## Reliability and Failure Handling
 
-- Generation: provider errors degrade to deterministic fallback output.
+- Generation: in Fallback mode, provider errors cascade to the next model in priority order before degrading to deterministic fallback output. In Parallel mode, partial model failures are tolerated as long as at least one model succeeds.
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
 - Scheduling: successful jobs are deleted; failed jobs remain for retry/inspection.
 - Blob-dependent features return clear 503 errors when storage is not configured.

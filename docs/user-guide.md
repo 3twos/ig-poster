@@ -14,41 +14,55 @@
 1. Sign in
    - Open the app and complete Google Workspace login.
 
-2. (Optional but recommended) Connect an LLM provider
-   - In the "Intelligent IG Poster (LLM)" panel, select `openai` or `anthropic`.
-   - Enter API key and model, then connect.
-   - If you skip this, generation uses deterministic fallback concepts.
+2. (Optional but recommended) Connect one or more LLM providers
+   - On the Settings page, add an OpenAI or Anthropic connection by entering an API key and model.
+   - You can connect multiple providers/models simultaneously. They appear in a prioritized list that you can drag to reorder.
+   - Choose an execution mode:
+     - **Fallback** -- models are tried in priority order; the first successful response wins.
+     - **Parallel** -- all models are queried simultaneously and results are merged and ranked.
+   - Models configured via environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) auto-appear in the list.
+   - If you skip this and no env keys are set, generation uses deterministic fallback concepts.
 
-3. Fill brand and post details
+3. Navigate the 3-column layout
+   - Left panel: posts list — browse, select, archive, or delete posts.
+   - Center panel: post brief, asset manager, preview, strategy, and publish sections.
+   - Right panel: agent activity — real-time generation progress and LLM reasoning.
+   - Panels are resizable by dragging the handles and collapsible via edge buttons.
+
+4. Fill brand and post details
    - Brand fields: name, values, principles, story, voice, visual direction, palette, logo notes.
    - Post fields: theme, subject, thought, objective, audience, mood, aspect ratio.
+   - The post subject field is used as the post title in the sidebar list.
 
-4. (Optional) Autofill brand from website
+5. (Optional) Autofill brand from website
    - Enter website URL and use autofill to populate brand fields from website cues.
 
-5. Upload assets and logo
+6. Upload assets and logo
    - Upload images and/or videos (up to 20 assets).
+   - Reorder assets by dragging in the asset manager; each item shows a thumbnail, file size, and media type.
+   - Remove individual assets with the X button.
    - Upload a logo if needed for final poster composition.
 
-6. Generate creative variants
+7. Generate creative variants
    - Click generate to create 3 variants with:
      - strategy
      - hook/headline/body/CTA
      - caption + hashtags
      - post type and media sequencing
+   - During generation, the right panel streams LLM reasoning tokens in real time. Expand "Show reasoning" to see the model's thought process.
 
-7. Pick and edit a variant
+8. Pick and edit a variant
    - Select a variant tile to preview.
    - Enable editor mode to drag/resize text overlay blocks.
 
-8. Export or copy content
+9. Export or copy content
    - Export poster as PNG.
    - Copy caption + hashtags to clipboard.
 
-9. Share project
+10. Share project
    - Create a share link to persist project state and open it later at `/share/<id>`.
 
-10. Publish or schedule to Instagram
+11. Publish or schedule to Instagram
    - Connect Instagram via Meta OAuth (if not already connected).
    - Publish now, or set a future date/time to schedule.
 
@@ -63,7 +77,9 @@
 ## Managing Connections
 
 - LLM:
-  - Connect/disconnect from the LLM auth panel.
+  - Connect one or more providers from the Settings page. Each connection gets a unique `connectionId`.
+  - Drag to reorder models by priority; choose Fallback or Parallel execution mode.
+  - Disconnect a specific model by its `connectionId`.
   - Stored encrypted (Blob when available, encrypted cookie fallback otherwise).
 - Instagram:
   - Connect/disconnect in the Instagram publish section.

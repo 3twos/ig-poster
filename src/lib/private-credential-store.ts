@@ -107,6 +107,28 @@ export const readCredentialRecord = async <T>(
   return rows[0]?.payload ?? null;
 };
 
+export const listCredentialRecords = async <T>(
+  namespace: CredentialNamespace,
+): Promise<Array<{ credentialId: string; payload: T }>> => {
+  const sql = createSqlClient();
+  if (!sql) {
+    return [];
+  }
+
+  await ensureTableReady(sql);
+  const rows = (await sql`
+    SELECT credential_id, payload
+    FROM ig_poster_private_credentials
+    WHERE namespace = ${namespace}
+    ORDER BY created_at ASC
+  `) as Array<{ credential_id: string; payload: T }>;
+
+  return rows.map((row) => ({
+    credentialId: row.credential_id,
+    payload: row.payload,
+  }));
+};
+
 export const deleteCredentialRecord = async (
   namespace: CredentialNamespace,
   credentialId: string,

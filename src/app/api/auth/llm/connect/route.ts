@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiErrorResponse } from "@/lib/api-error";
-import { LLM_CONNECTION_COOKIE, saveLlmConnection } from "@/lib/llm-auth";
+import {
+  buildMultiConnectionCookieValue,
+  LLM_CONNECTION_COOKIE,
+  saveLlmConnection,
+} from "@/lib/llm-auth";
 import { validateLlmCredentials } from "@/lib/llm";
 import {
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_OPENAI_MODEL,
   LlmProviderSchema,
 } from "@/lib/llm-constants";
+import { readCookieFromRequest } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 
@@ -36,15 +41,23 @@ export async function POST(req: Request) {
       model: validatedModel,
     });
 
+    // Build updated cookie value (appends to existing connections)
+    const existingCookie = readCookieFromRequest(req, LLM_CONNECTION_COOKIE);
+    const newCookieValue = buildMultiConnectionCookieValue(
+      existingCookie,
+      connection,
+    );
+
     const response = NextResponse.json({
       connected: true,
       source: "connection",
       provider: payload.provider,
       model: validatedModel,
       storage: connection.storage,
+      connectionId: connection.connectionId,
     });
 
-    response.cookies.set(LLM_CONNECTION_COOKIE, connection.cookieValue, {
+    response.cookies.set(LLM_CONNECTION_COOKIE, newCookieValue, {
       httpOnly: true,
       sameSite: "lax",
       secure: new URL(req.url).protocol === "https:",
