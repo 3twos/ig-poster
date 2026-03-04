@@ -47,6 +47,7 @@ Use this flow for every non-trivial change:
 
 - Never self-merge without explicit user approval.
 - All review conversations must be resolved before merging. No PR may be merged with open/unresolved threads.
+- The PR must have no merge conflicts. If the PR shows as CONFLICTING, rebase or merge the base branch to resolve conflicts before requesting merge approval.
 - If approval is missing, stop and ask for merge approval.
 - After approval, merge PR with a non-interactive command.
 
