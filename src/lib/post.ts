@@ -38,11 +38,8 @@ function deriveThumbnail(row: PostRow): string | undefined {
   if (row.renderedPosterUrl) return row.renderedPosterUrl;
   const assets = row.assets ?? [];
   if (assets.length > 0) {
-    const first = assets[0] as Record<string, unknown>;
-    return (
-      (first.posterUrl as string | undefined) ??
-      (first.url as string | undefined)
-    );
+    const first = assets[0];
+    return first.posterUrl ?? first.url;
   }
   return undefined;
 }

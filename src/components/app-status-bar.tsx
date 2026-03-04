@@ -15,6 +15,7 @@ function formatDateTime(date: Date): string {
 }
 
 let cachedTime = "";
+let intervalId: ReturnType<typeof setInterval> | undefined;
 const listeners = new Set<() => void>();
 
 if (typeof window !== "undefined") {
@@ -23,7 +24,8 @@ if (typeof window !== "undefined") {
     listeners.forEach((l) => l());
   };
   tick();
-  setInterval(tick, 60_000);
+  if (intervalId !== undefined) clearInterval(intervalId);
+  intervalId = setInterval(tick, 60_000);
 }
 
 function subscribe(cb: () => void) {

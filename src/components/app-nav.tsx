@@ -1,6 +1,6 @@
 "use client";
 
-import { Command, LoaderCircle, Menu, Sparkles } from "lucide-react";
+import { Command, EllipsisVertical, LoaderCircle, PanelLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -70,7 +70,7 @@ export function AppNav() {
           className="text-slate-300 hover:text-white lg:hidden"
           aria-label="Toggle post list"
         >
-          <Menu className="h-5 w-5" />
+          <PanelLeft className="h-5 w-5" />
         </Button>
 
         <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
@@ -110,7 +110,7 @@ export function AppNav() {
               className="text-slate-300 hover:text-white"
               aria-label="Open navigation menu"
             >
-              <Menu className="h-5 w-5" />
+              <EllipsisVertical className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[180px]">
