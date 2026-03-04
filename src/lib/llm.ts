@@ -117,9 +117,17 @@ const parseJsonObject = <T>(value: string): T => {
 
 const generateWithOpenAI = async (options: StructuredGenerationOptions) => {
   const client = new OpenAI({ apiKey: options.auth.apiKey });
+  const model = options.auth.model || DEFAULT_OPENAI_MODEL;
+
+  console.log(
+    `[llm] OpenAI request: model=${model}, ` +
+      `systemLen=${options.systemPrompt.length}, userLen=${options.userPrompt.length}`,
+  );
+  const t0 = Date.now();
+
   const completion = await client.chat.completions.create(
     {
-      model: options.auth.model || DEFAULT_OPENAI_MODEL,
+      model,
       temperature: options.temperature,
       response_format: { type: "json_object" },
       messages: [
@@ -128,6 +136,12 @@ const generateWithOpenAI = async (options: StructuredGenerationOptions) => {
       ],
     },
     { signal: options.signal },
+  );
+
+  const elapsed = Date.now() - t0;
+  console.log(
+    `[llm] OpenAI response: ${elapsed}ms, ` +
+      `usage=${JSON.stringify(completion.usage)}`,
   );
 
   const content = completion.choices[0]?.message?.content;
@@ -147,17 +161,35 @@ const resolveAnthropicMaxTokens = (value?: number) => {
   return Math.max(256, next);
 };
 
+const ANTHROPIC_REQUEST_TIMEOUT_MS = 45_000;
+
 const generateWithAnthropic = async (options: StructuredGenerationOptions) => {
   const client = new Anthropic({ apiKey: options.auth.apiKey });
+  const maxTokens = resolveAnthropicMaxTokens(options.maxTokens);
+  const model = options.auth.model || DEFAULT_ANTHROPIC_MODEL;
+
+  console.log(
+    `[llm] Anthropic request: model=${model}, maxTokens=${maxTokens}, ` +
+      `systemLen=${options.systemPrompt.length}, userLen=${options.userPrompt.length}`,
+  );
+  const t0 = Date.now();
+
   const message = await client.messages.create(
     {
-      model: options.auth.model || DEFAULT_ANTHROPIC_MODEL,
-      max_tokens: resolveAnthropicMaxTokens(options.maxTokens),
+      model,
+      max_tokens: maxTokens,
       temperature: clampAnthropicTemperature(options.temperature),
       system: options.systemPrompt,
       messages: [{ role: "user", content: options.userPrompt }],
     },
-    { signal: options.signal },
+    { signal: options.signal, timeout: ANTHROPIC_REQUEST_TIMEOUT_MS },
+  );
+
+  const elapsed = Date.now() - t0;
+  console.log(
+    `[llm] Anthropic response: ${elapsed}ms, ` +
+      `inputTokens=${message.usage.input_tokens}, outputTokens=${message.usage.output_tokens}, ` +
+      `stopReason=${message.stop_reason}`,
   );
 
   const text = message.content
