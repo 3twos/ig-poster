@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { deleteBlob, isBlobEnabled, listBlobs } from "@/lib/blob-store";
-import { getEncryptionSecret, getMetaConnection } from "@/lib/meta-auth";
+import { requireAppEncryptionSecret } from "@/lib/app-encryption";
+import { getMetaConnection } from "@/lib/meta-auth";
 import {
   getEnvMetaAuth,
   publishInstagramContent,
@@ -63,12 +64,7 @@ export async function GET(req: Request) {
             throw new Error("OAuth connection no longer exists");
           }
 
-          const secret = getEncryptionSecret();
-          if (!secret) {
-            throw new Error(
-              "Missing APP_ENCRYPTION_SECRET or META_APP_SECRET for decrypting OAuth token",
-            );
-          }
+          const secret = requireAppEncryptionSecret("decrypting OAuth token");
 
           auth = {
             accessToken: decryptString(connection.encryptedAccessToken, secret),

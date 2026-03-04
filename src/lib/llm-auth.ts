@@ -8,6 +8,7 @@ import {
   putJson,
   readJsonByPath,
 } from "@/lib/blob-store";
+import { requireAppEncryptionSecret } from "@/lib/app-encryption";
 import { readCookieFromRequest } from "@/lib/cookies";
 import {
   DEFAULT_ANTHROPIC_MODEL,
@@ -67,16 +68,10 @@ const parseConnectionCookie = (cookieValue: string) => {
   return { kind: "blob" as const, id: value };
 };
 
-const getEncryptionSecret = () =>
-  process.env.APP_ENCRYPTION_SECRET || process.env.META_APP_SECRET || "";
-
 const getConnectionPath = (id: string) => `auth/llm/connections/${id}.json`;
 
 const decodeInlineConnection = (encryptedPayload: string): InlineLlmConnection => {
-  const secret = getEncryptionSecret();
-  if (!secret) {
-    throw new Error("Missing APP_ENCRYPTION_SECRET or META_APP_SECRET");
-  }
+  const secret = requireAppEncryptionSecret();
 
   const decrypted = decryptString(encryptedPayload, secret);
   const parsed = InlineLlmConnectionSchema.safeParse(JSON.parse(decrypted));
@@ -88,10 +83,7 @@ const decodeInlineConnection = (encryptedPayload: string): InlineLlmConnection =
 };
 
 const decryptConnectionApiKey = (connection: LlmConnection) => {
-  const secret = getEncryptionSecret();
-  if (!secret) {
-    throw new Error("Missing APP_ENCRYPTION_SECRET or META_APP_SECRET");
-  }
+  const secret = requireAppEncryptionSecret();
 
   return decryptString(connection.encryptedApiKey, secret);
 };
@@ -101,10 +93,7 @@ export const saveLlmConnection = async (input: {
   apiKey: string;
   model?: string;
 }): Promise<SavedLlmConnection> => {
-  const secret = getEncryptionSecret();
-  if (!secret) {
-    throw new Error("APP_ENCRYPTION_SECRET (or META_APP_SECRET) is required.");
-  }
+  const secret = requireAppEncryptionSecret();
 
   const now = new Date().toISOString();
   const id = randomUUID().replace(/-/g, "").slice(0, 20);
