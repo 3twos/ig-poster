@@ -7,6 +7,7 @@ import {
   type LlmProvider,
   type MultiModelMode,
 } from "@/lib/llm-constants";
+import { toErrorMessage } from "@/lib/utils";
 
 export type ResolvedLlmAuth = {
   id: string;
@@ -20,9 +21,6 @@ export type ResolvedLlmAuthList = {
   mode: MultiModelMode;
   connections: ResolvedLlmAuth[];
 };
-
-const toErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Unexpected provider validation failure";
 
 const selectFallbackModel = (
   availableModels: string[],

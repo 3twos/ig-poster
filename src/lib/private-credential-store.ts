@@ -6,13 +6,13 @@ type SqlClient = ReturnType<typeof neon>;
 
 const getDatabaseUrl = () => process.env.DATABASE_URL?.trim() || "";
 
-const createSqlClient = (): SqlClient | null => {
-  const url = getDatabaseUrl();
-  if (!url) {
-    return null;
-  }
+let cachedSqlClient: SqlClient | null | undefined;
 
-  return neon(url);
+const createSqlClient = (): SqlClient | null => {
+  if (cachedSqlClient !== undefined) return cachedSqlClient;
+  const url = getDatabaseUrl();
+  cachedSqlClient = url ? neon(url) : null;
+  return cachedSqlClient;
 };
 
 let initializePromise: Promise<void> | null = null;

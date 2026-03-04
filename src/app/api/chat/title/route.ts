@@ -4,6 +4,11 @@ import { ChatTitleRequestSchema } from "@/lib/chat-types";
 import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
 import { generateWithFallback } from "@/lib/llm";
 
+const truncateTitle = (text: string, maxLen = 50) => {
+  const trimmed = text.slice(0, maxLen).trim();
+  return text.length > maxLen ? `${trimmed}...` : trimmed;
+};
+
 export async function POST(req: Request) {
   try {
     const json = await req.json();
@@ -12,8 +17,7 @@ export async function POST(req: Request) {
     const authList = await resolveAllLlmAuthFromRequest(req);
 
     if (authList.connections.length === 0) {
-      const title = firstMessage.slice(0, 50).trim() + (firstMessage.length > 50 ? "..." : "");
-      return NextResponse.json({ title });
+      return NextResponse.json({ title: truncateTitle(firstMessage) });
     }
 
     try {
@@ -32,12 +36,11 @@ export async function POST(req: Request) {
       const title =
         typeof result?.title === "string" && result.title.trim()
           ? result.title.trim().slice(0, 80)
-          : firstMessage.slice(0, 50).trim();
+          : truncateTitle(firstMessage);
 
       return NextResponse.json({ title });
     } catch {
-      const title = firstMessage.slice(0, 50).trim() + (firstMessage.length > 50 ? "..." : "");
-      return NextResponse.json({ title });
+      return NextResponse.json({ title: truncateTitle(firstMessage) });
     }
   } catch {
     return NextResponse.json(

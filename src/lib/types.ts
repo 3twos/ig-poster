@@ -1,5 +1,5 @@
 import type { AspectRatio } from "@/lib/creative";
-import type { LlmProvider } from "@/lib/llm-constants";
+import type { LlmProvider, MultiModelMode } from "@/lib/llm-constants";
 
 export type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
 export type AssetMediaType = "image" | "video";
@@ -75,7 +75,7 @@ export type LlmConnectionStatus = {
 
 export type LlmMultiAuthStatus = {
   connections: LlmConnectionStatus[];
-  mode: "fallback" | "parallel";
+  mode: MultiModelMode;
   connected: boolean;
   // Legacy compat fields (from first connection)
   source?: "connection" | "env" | null;

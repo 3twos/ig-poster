@@ -6,15 +6,12 @@ import type { ChatStreamEvent } from "@/lib/chat-types";
 import { streamChatCompletion, toChatSseEvent } from "@/lib/chat-stream";
 import { buildChatSystemPrompt } from "@/lib/chat-system-prompt";
 import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
+import { getUserSettingsPath, type UserSettings } from "@/lib/user-settings";
+import { isAbortError } from "@/lib/utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { readJsonByPath } from "@/lib/blob-store";
-import { getUserSettingsPath, type UserSettings } from "@/lib/user-settings";
 
 export const maxDuration = 120;
-
-const isAbortError = (error: unknown) =>
-  error instanceof Error &&
-  (error.name === "AbortError" || error.message.toLowerCase().includes("abort"));
 
 export async function POST(req: Request) {
   try {

@@ -209,17 +209,10 @@ export function useChat(options: UseChatOptions) {
 
       if (accumulated) {
         dispatch({ type: "FINALIZE_STREAMING", content: accumulated, tokenCount });
-        // Call onStreamComplete with updated messages (current + new assistant msg)
-        const assistantMsg: ChatMessage = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          role: "assistant",
-          content: accumulated,
-          createdAt: new Date().toISOString(),
-          tokenCount,
-        };
-        // Use messagesRef to get the latest messages (includes the user message already dispatched)
-        const updatedMessages = [...messagesRef.current, assistantMsg];
-        optionsRef.current.onStreamComplete?.(updatedMessages);
+        // After dispatch, messagesRef includes the new assistant message from the reducer.
+        // Yield to let React process the dispatch before reading the ref.
+        await Promise.resolve();
+        optionsRef.current.onStreamComplete?.(messagesRef.current);
       } else {
         dispatch({ type: "RESET_STATUS" });
       }
