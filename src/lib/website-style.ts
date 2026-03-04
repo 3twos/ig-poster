@@ -8,6 +8,7 @@ const MAX_HTML_CHARS = 180_000;
 const MAX_HTML_BYTES = 1_000_000;
 const MAX_REDIRECT_HOPS = 3;
 const REQUEST_TIMEOUT_MS = 4_500;
+const MAX_BODY_TEXT_CHARS = 3_000;
 
 const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
 
@@ -357,6 +358,27 @@ const extractFontFamilies = (html: string) => {
   return unique(families, 5);
 };
 
+export type WebsiteStyleResult = {
+  notes: string;
+  bodyText: string;
+};
+
+const extractBodyText = (html: string): string => {
+  let text = html;
+  text = text.replace(/<script[\s\S]*?<\/script>/gi, " ");
+  text = text.replace(/<style[\s\S]*?<\/style>/gi, " ");
+  text = text.replace(/<noscript[\s\S]*?<\/noscript>/gi, " ");
+  text = text.replace(/<svg[\s\S]*?<\/svg>/gi, " ");
+  text = text.replace(/<iframe[\s\S]*?<\/iframe>/gi, " ");
+  text = text.replace(/<nav[\s\S]*?<\/nav>/gi, " ");
+  text = text.replace(/<header[\s\S]*?<\/header>/gi, " ");
+  text = text.replace(/<footer[\s\S]*?<\/footer>/gi, " ");
+  text = text.replace(/<[^>]+>/g, " ");
+  text = decodeBasicEntities(text);
+  text = cleanWhitespace(text);
+  return text.slice(0, MAX_BODY_TEXT_CHARS);
+};
+
 const readTextUpToLimit = async (response: Response, maxChars: number) => {
   if (!response.body) {
     return "";
@@ -424,13 +446,16 @@ const fetchHtmlWithSafeRedirects = async (startUrl: string) => {
   throw new Error("Too many redirects");
 };
 
-export const buildWebsiteStyleContext = async (website: string) => {
+export const buildWebsiteStyleContext = async (
+  website: string,
+): Promise<WebsiteStyleResult | null> => {
   const normalized = normalizeWebsiteUrl(website);
   if (!normalized) {
     return null;
   }
 
   const notes: string[] = [`- Website URL: ${sanitizeUrlForNotes(normalized)}`];
+  let bodyText = "";
 
   try {
     const { response, finalUrl } = await fetchHtmlWithSafeRedirects(normalized);
@@ -438,22 +463,23 @@ export const buildWebsiteStyleContext = async (website: string) => {
 
     if (!response.ok) {
       notes.push(`- Style extraction note: website returned HTTP ${response.status}.`);
-      return notes.join("\n");
+      return { notes: notes.join("\n"), bodyText };
     }
 
     const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
     if (!contentType.includes("text/html")) {
       notes.push("- Style extraction note: website is not an HTML page.");
-      return notes.join("\n");
+      return { notes: notes.join("\n"), bodyText };
     }
 
     const contentLength = Number(response.headers.get("content-length") ?? "");
     if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) {
       notes.push("- Style extraction note: website HTML is too large to process safely.");
-      return notes.join("\n");
+      return { notes: notes.join("\n"), bodyText };
     }
 
     const html = await readTextUpToLimit(response, MAX_HTML_CHARS);
+    bodyText = extractBodyText(html);
     const metaMap = extractMetaMap(html);
 
     const titleMatch = TITLE_RE.exec(html);
@@ -501,5 +527,123 @@ export const buildWebsiteStyleContext = async (website: string) => {
     notes.push("- Style extraction note: website metadata could not be fetched.");
   }
 
-  return notes.join("\n");
+  return { notes: notes.join("\n"), bodyText };
+};
+
+const MAX_MULTI_PAGE_BODY_CHARS = 5_000;
+
+const ABOUT_PATH_CANDIDATES = ["/about", "/about-us", "/our-story", "/story"];
+
+const extractInternalPaths = (html: string, baseUrl: URL): string[] => {
+  const linkRe = /<a\b[^>]*>/gi;
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null = linkRe.exec(html);
+
+  while (match) {
+    const attrs = parseAttributes(match[0]);
+    const href = attrs.href ?? "";
+    if (href && !href.startsWith("#") && !href.startsWith("mailto:") && !href.startsWith("tel:")) {
+      try {
+        const resolved = new URL(href, baseUrl);
+        if (resolved.hostname === baseUrl.hostname && resolved.pathname !== "/" && !seen.has(resolved.pathname)) {
+          seen.add(resolved.pathname);
+          paths.push(resolved.pathname);
+        }
+      } catch {
+        // skip invalid URLs
+      }
+    }
+    match = linkRe.exec(html);
+  }
+
+  return paths;
+};
+
+const findAboutPath = (discoveredPaths: string[]): string | null => {
+  const lower = discoveredPaths.map((p) => ({ original: p, lower: p.toLowerCase() }));
+
+  for (const candidate of ABOUT_PATH_CANDIDATES) {
+    const found = lower.find((p) => p.lower === candidate || p.lower === `${candidate}/`);
+    if (found) {
+      return found.original;
+    }
+  }
+
+  const fuzzy = lower.find((p) => p.lower.includes("about") || p.lower.includes("story"));
+  return fuzzy?.original ?? null;
+};
+
+const findProductPath = (discoveredPaths: string[]): string | null => {
+  const lower = discoveredPaths.map((p) => ({ original: p, lower: p.toLowerCase() }));
+  const keywords = ["product", "service", "wine", "shop", "collection", "menu", "offer"];
+
+  for (const keyword of keywords) {
+    const found = lower.find((p) => p.lower.includes(keyword));
+    if (found) {
+      return found.original;
+    }
+  }
+
+  return null;
+};
+
+export const buildMultiPageStyleContext = async (
+  website: string,
+): Promise<WebsiteStyleResult | null> => {
+  const normalized = normalizeWebsiteUrl(website);
+  if (!normalized) {
+    return null;
+  }
+
+  const homepageResult = await buildWebsiteStyleContext(website);
+  if (!homepageResult) {
+    return null;
+  }
+
+  const bodyTexts: string[] = [`[Homepage]\n${homepageResult.bodyText}`];
+
+  // Discover internal links from the homepage HTML to find about/product pages
+  try {
+    const { response, finalUrl } = await fetchHtmlWithSafeRedirects(normalized);
+    const resolvedBase = new URL(finalUrl);
+    if (response.ok) {
+      const html = await readTextUpToLimit(response, MAX_HTML_CHARS);
+      const discoveredPaths = extractInternalPaths(html, resolvedBase);
+
+      const secondaryPaths: string[] = [];
+      const aboutPath = findAboutPath(discoveredPaths);
+      if (aboutPath) {
+        secondaryPaths.push(aboutPath);
+      }
+      const productPath = findProductPath(discoveredPaths);
+      if (productPath && productPath !== aboutPath) {
+        secondaryPaths.push(productPath);
+      }
+
+      if (secondaryPaths.length > 0) {
+        const secondaryResults = await Promise.allSettled(
+          secondaryPaths.map((path) => {
+            const pageUrl = new URL(path, resolvedBase).toString();
+            return buildWebsiteStyleContext(pageUrl);
+          }),
+        );
+
+        for (let i = 0; i < secondaryResults.length; i++) {
+          const settled = secondaryResults[i];
+          if (settled.status === "fulfilled" && settled.value && settled.value.bodyText.length > 50) {
+            const label = secondaryPaths[i] ?? `Page ${i + 2}`;
+            bodyTexts.push(`[${label}]\n${settled.value.bodyText}`);
+          }
+        }
+      }
+    }
+  } catch {
+    // Secondary page discovery failed, use homepage only
+  }
+
+  return {
+    notes: homepageResult.notes,
+    bodyText: bodyTexts.join("\n\n").slice(0, MAX_MULTI_PAGE_BODY_CHARS),
+  };
 };
