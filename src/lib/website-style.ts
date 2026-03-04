@@ -596,7 +596,6 @@ export const buildMultiPageStyleContext = async (
     return null;
   }
 
-  const baseUrl = new URL(normalized);
   const homepageResult = await buildWebsiteStyleContext(website);
   if (!homepageResult) {
     return null;
@@ -606,10 +605,11 @@ export const buildMultiPageStyleContext = async (
 
   // Discover internal links from the homepage HTML to find about/product pages
   try {
-    const { response } = await fetchHtmlWithSafeRedirects(normalized);
+    const { response, finalUrl } = await fetchHtmlWithSafeRedirects(normalized);
+    const resolvedBase = new URL(finalUrl);
     if (response.ok) {
       const html = await readTextUpToLimit(response, MAX_HTML_CHARS);
-      const discoveredPaths = extractInternalPaths(html, baseUrl);
+      const discoveredPaths = extractInternalPaths(html, resolvedBase);
 
       const secondaryPaths: string[] = [];
       const aboutPath = findAboutPath(discoveredPaths);
@@ -624,7 +624,7 @@ export const buildMultiPageStyleContext = async (
       if (secondaryPaths.length > 0) {
         const secondaryResults = await Promise.allSettled(
           secondaryPaths.map((path) => {
-            const pageUrl = new URL(path, baseUrl).toString();
+            const pageUrl = new URL(path, resolvedBase).toString();
             return buildWebsiteStyleContext(pageUrl);
           }),
         );

@@ -687,6 +687,10 @@ export default function Home() {
       }
 
       const json = await response.json();
+      if (json.source !== "model") {
+        throw new Error("Refinement could not be applied. Try a different instruction.");
+      }
+
       const refined = json.variant;
       setResult((current) => {
         if (!current) {

@@ -52,10 +52,14 @@ Output JSON only.`,
         variant: { ...refined, id: variant.id },
       });
     } catch {
-      return NextResponse.json({
-        source: "unchanged",
-        variant,
-      });
+      return NextResponse.json(
+        {
+          error: "Failed to refine variant",
+          source: "error",
+          variant,
+        },
+        { status: 502 },
+      );
     }
   } catch (error) {
     const status = error instanceof z.ZodError ? 400 : 500;

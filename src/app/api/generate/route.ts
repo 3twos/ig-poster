@@ -50,6 +50,16 @@ export async function POST(req: Request) {
 
           // Try cached brand memory first, fall back to live scrape
           let websiteResult: WebsiteStyleResult | null = null;
+          const normalizeHostname = (rawUrl: string | null | undefined): string | null => {
+            if (!rawUrl) return null;
+            try {
+              const urlStr = rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `https://${rawUrl}`;
+              const hostname = new URL(urlStr).hostname.toLowerCase();
+              return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+            } catch {
+              return null;
+            }
+          };
           try {
             const session = await readWorkspaceSessionFromRequest(req);
             if (session) {
@@ -57,8 +67,9 @@ export async function POST(req: Request) {
                 getUserSettingsPath(session.email),
               );
               const mem = settings?.brandMemory;
-              const reqUrl = (request.brand.website || "").toLowerCase();
-              if (mem?.bodyText && mem.websiteUrl && reqUrl && mem.websiteUrl.toLowerCase().includes(reqUrl.replace(/^https?:\/\//, "").split("/")[0])) {
+              const reqHost = normalizeHostname(request.brand.website || "");
+              const memHost = normalizeHostname(mem?.websiteUrl);
+              if (mem?.bodyText && memHost && reqHost && memHost === reqHost) {
                 websiteResult = { notes: mem.notes || "", bodyText: mem.bodyText };
                 send({ type: "status", message: "Using cached website context..." });
               }
