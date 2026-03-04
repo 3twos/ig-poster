@@ -68,13 +68,13 @@ export async function POST(req: Request) {
 
     if (!llmAuth) {
       return NextResponse.json(createFallbackResponse(request));
-    }
+  }
 
-    const generationAbortController = new AbortController();
-    const stream = new ReadableStream({
+  const generationAbortController = new AbortController();
+  let abortReason: "client" | "timeout" | "transport" | null = null;
+  const stream = new ReadableStream({
       async start(controller) {
         let streamClosed = false;
-        let abortReason: "client" | "timeout" | "transport" | null = null;
         const encoder = new TextEncoder();
         const closeStream = () => {
           if (streamClosed) {
@@ -89,7 +89,10 @@ export async function POST(req: Request) {
           }
         };
         const send = (event: GenerationRunEvent) => {
-          if (streamClosed || generationAbortController.signal.aborted) {
+          if (
+            streamClosed ||
+            (generationAbortController.signal.aborted && abortReason !== "timeout")
+          ) {
             return;
           }
 
@@ -381,7 +384,7 @@ export async function POST(req: Request) {
         } catch (generationError) {
           const aborted =
             isAbortError(generationError) || generationAbortController.signal.aborted;
-          if (aborted && abortReason === "client") {
+          if (aborted && (abortReason === "client" || abortReason === null)) {
             if (activeStepId) {
               failStep(
                 activeStepId,
@@ -404,7 +407,7 @@ export async function POST(req: Request) {
               activeStepId,
               `${activeStepTitle ?? "Active step"} timed out after ${
                 GENERATION_SOFT_TIMEOUT_MS / 1000
-              }s without a model response.`,
+              }s before generation completed.`,
             );
           } else if (activeStepId) {
             failStep(
@@ -418,7 +421,7 @@ export async function POST(req: Request) {
             "Build deterministic fallback",
             "finalization",
             abortReason === "timeout"
-              ? `Model call timed out after ${
+              ? `Generation timed out after ${
                   GENERATION_SOFT_TIMEOUT_MS / 1000
                 }s; recovering with deterministic concepts.`
               : "Recovering with local deterministic concepts.",
@@ -446,7 +449,10 @@ export async function POST(req: Request) {
         }
       },
       cancel() {
-        generationAbortController.abort();
+        if (!generationAbortController.signal.aborted) {
+          abortReason = "client";
+          generationAbortController.abort();
+        }
       },
     });
 
