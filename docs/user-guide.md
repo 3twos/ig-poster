@@ -80,7 +80,7 @@
   - Connect one or more providers from the Settings page. Each connection gets a unique `connectionId`.
   - Drag to reorder models by priority; choose Fallback or Parallel execution mode.
   - Disconnect a specific model by its `connectionId`.
-  - Stored encrypted (Blob when available, encrypted cookie fallback otherwise).
+  - Stored in the private credential store when `DATABASE_URL` is configured; otherwise stored in an encrypted cookie tied to your browser session.
 - Instagram:
   - Connect/disconnect in the Instagram publish section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in Blob.

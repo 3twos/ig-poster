@@ -11,7 +11,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -127,7 +127,7 @@ export default function SettingsPage() {
     dragItemRef.current = index;
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = (e: DragEvent, index: number) => {
     e.preventDefault();
     dragOverItemRef.current = index;
   };
@@ -366,6 +366,7 @@ export default function SettingsPage() {
                         type="button"
                         disabled={index === 0}
                         onClick={() => moveConnection(index, index - 1)}
+                        aria-label="Move model up"
                         className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"
                       >
                         <ArrowUp className="h-3 w-3" />
@@ -374,6 +375,7 @@ export default function SettingsPage() {
                         type="button"
                         disabled={index === connections.length - 1}
                         onClick={() => moveConnection(index, index + 1)}
+                        aria-label="Move model down"
                         className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"
                       >
                         <ArrowDown className="h-3 w-3" />
@@ -389,6 +391,7 @@ export default function SettingsPage() {
                       disabled={disconnectingId === conn.id}
                       className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
                       title="Disconnect"
+                      aria-label="Disconnect model"
                     >
                       {disconnectingId === conn.id ? (
                         <LoaderCircle className="h-3.5 w-3.5 animate-spin" />

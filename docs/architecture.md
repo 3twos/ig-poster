@@ -112,8 +112,8 @@ Why this shape:
 - The disconnect endpoint (`/api/auth/llm/disconnect`) accepts a `connectionId` to remove a specific model.
 - The status endpoint (`/api/auth/llm/status`) returns a multi-model response (`LlmMultiAuthStatus`) containing `connections[]`, `mode`, and ordering info.
 - Stored encrypted:
-  - Blob-backed records (via `listCredentialRecords`) when Blob is enabled.
-  - Encrypted cookie payload fallback when Blob is not enabled.
+  - DB-backed records (via `listCredentialRecords`) when `DATABASE_URL` is configured.
+  - Encrypted cookie payload fallback when the database is not available.
 - Environment-configured models (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) auto-appear in the resolved model list alongside BYOK connections.
 - Key types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
 - Key functions: `resolveAllLlmAuthFromRequest` (merges all sources into a prioritized list), `generateWithFallback` (tries models in order), `listCredentialRecords` (enumerates stored connections).

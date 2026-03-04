@@ -251,7 +251,9 @@ export const buildMultiConnectionCookieValue = (
   }
   // If existing was inline, it gets replaced by the DB-based multi array
 
-  const newIds = [...existingIds, newConnection.connectionId];
+  const MAX_COOKIE_CONNECTIONS = 10;
+  const deduped = [...new Set([...existingIds, newConnection.connectionId])];
+  const newIds = deduped.slice(-MAX_COOKIE_CONNECTIONS);
   return JSON.stringify(newIds);
 };
 
@@ -375,9 +377,9 @@ const resolveEnvConnections = (): ResolvedLlmAuth[] => {
 };
 
 /**
- * Deduplicate connections: if a BYOK connection exists for the same
- * provider, the env connection for that provider is kept but placed
- * after the BYOK connection (the user's explicit key takes priority).
+ * Deduplicate connections by their unique source:id pair.
+ * Preserves the first occurrence of each connection, maintaining
+ * the caller's insertion order (BYOK before env).
  */
 const deduplicateConnections = (
   connections: ResolvedLlmAuth[],
