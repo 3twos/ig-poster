@@ -175,6 +175,7 @@ export type GenerationRequest = z.infer<typeof GenerationRequestSchema>;
 export type PromptConfig = NonNullable<GenerationRequest["promptConfig"]>;
 export type CreativeVariant = z.infer<typeof CreativeVariantSchema>;
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
+export type InternalGenerationResponse = z.infer<typeof InternalGenerationResponseSchema>;
 export type OverlayLayout = z.infer<typeof OverlayLayoutSchema>;
 export type PublishOutcome = z.infer<typeof PublishOutcomeSchema>;
 
@@ -402,6 +403,98 @@ export const createFallbackResponse = (
     strategy:
       "These concepts balance discovery reach and conversion: one bold single image for thumb-stop impact, one educational carousel for saves/shares, and one reel-style narrative for high watch-through when video is available.",
     variants,
+  };
+};
+
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const ensureUniqueVariantIds = (variants: CreativeVariant[]): CreativeVariant[] => {
+  const seen = new Set<string>();
+
+  return variants.map((variant) => {
+    const baseId = variant.id.trim() || "variant";
+    if (!seen.has(baseId)) {
+      seen.add(baseId);
+      return variant;
+    }
+
+    let suffix = 2;
+    let nextId = `${baseId}-${suffix}`;
+    while (seen.has(nextId)) {
+      suffix += 1;
+      nextId = `${baseId}-${suffix}`;
+    }
+    seen.add(nextId);
+    return { ...variant, id: nextId };
+  });
+};
+
+export type InternalGenerationRecovery = {
+  droppedInvalidVariants: number;
+  usedFallbackVariants: number;
+  truncatedVariants: number;
+  strategyFallbackUsed: boolean;
+};
+
+export const coerceInternalGenerationResponse = (
+  payload: unknown,
+  request: GenerationRequest,
+): {
+  response: InternalGenerationResponse;
+  recovery: InternalGenerationRecovery;
+} => {
+  const strict = InternalGenerationResponseSchema.safeParse(payload);
+  if (strict.success) {
+    return {
+      response: strict.data,
+      recovery: {
+        droppedInvalidVariants: 0,
+        usedFallbackVariants: 0,
+        truncatedVariants: 0,
+        strategyFallbackUsed: false,
+      },
+    };
+  }
+
+  const fallback = createFallbackResponse(request);
+  const payloadRecord = isObjectRecord(payload) ? payload : {};
+  const rawVariants = Array.isArray(payloadRecord.variants)
+    ? payloadRecord.variants
+    : [];
+
+  const validVariants = rawVariants.flatMap((variant) => {
+    const parsed = CreativeVariantSchema.safeParse(variant);
+    return parsed.success ? [parsed.data] : [];
+  });
+
+  const droppedInvalidVariants = rawVariants.length - validVariants.length;
+  const truncatedVariants =
+    validVariants.length > 8 ? validVariants.length - 8 : 0;
+  const trimmedVariants = ensureUniqueVariantIds(validVariants).slice(0, 8);
+  const targetCount = Math.max(3, Math.min(8, trimmedVariants.length));
+  const merged = ensureUniqueVariantIds([...trimmedVariants, ...fallback.variants]);
+  const variants = merged.slice(0, targetCount);
+  const usedFallbackVariants = Math.max(0, variants.length - trimmedVariants.length);
+
+  const strategyCandidate =
+    typeof payloadRecord.strategy === "string"
+      ? payloadRecord.strategy.trim()
+      : "";
+  const strategy =
+    strategyCandidate.length >= 30 && strategyCandidate.length <= 800
+      ? strategyCandidate
+      : fallback.strategy;
+  const strategyFallbackUsed = strategy !== strategyCandidate;
+
+  return {
+    response: InternalGenerationResponseSchema.parse({ strategy, variants }),
+    recovery: {
+      droppedInvalidVariants,
+      usedFallbackVariants,
+      truncatedVariants,
+      strategyFallbackUsed,
+    },
   };
 };
 
@@ -699,11 +792,16 @@ Output constraints:
 - postType must be one of single-image, carousel, reel.
 - layout must be one of hero-quote, split-story, magazine, minimal-logo.
 - textAlign must be left or center.
+- hook and headline must each be at least 8 characters.
+- supportingText must be at least 20 characters.
+- cta must be at least 5 characters.
+- caption must be at least 40 characters.
 - colorHexes must be 2-4 valid hex colors.
-- hashtags must be 5-12 items with # prefix.
+- hashtags must be 5-12 items and each must match ^#[a-zA-Z0-9_]{2,30}$ (letters, numbers, underscore only).
 - assetSequence: asset ids only, 1-10 items.
 - If postType=carousel, include carouselSlides with 3-10 slides and each slide must include index, goal, headline, body, assetHint.
 - If postType=reel, include reelPlan with targetDurationSec, hook, coverFrameDirection, audioDirection, editingActions (4-10), beats (3-12), endCardCta.
+- reelPlan.beats must be an array of objects with keys: atSec (number), visual (string), onScreenText (string), editAction (string). Never return numeric arrays for beats.
 - If videoCount > 0, at least one variant must be postType=reel.
 - If imageCount >= 3, at least one variant must be postType=carousel.
 - For wine/alcohol brands: avoid unsafe or non-compliant alcohol messaging.

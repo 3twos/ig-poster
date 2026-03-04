@@ -6,9 +6,9 @@ import { z } from "zod";
 
 import { listBlobs, readJsonByPath } from "@/lib/blob-store";
 import {
+  coerceInternalGenerationResponse,
   GenerationRequestSchema,
   GenerationResponseSchema,
-  InternalGenerationResponseSchema,
   PublishOutcomeSchema,
   buildGenerationSystemPrompt,
   buildGenerationUserPrompt,
@@ -38,6 +38,7 @@ import {
 } from "@/lib/generation-events";
 
 export const maxDuration = 60;
+const GENERATION_SOFT_TIMEOUT_MS = 50_000;
 
 const toErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unexpected generation issue";
@@ -52,6 +53,13 @@ const createAbortError = () => {
   return error;
 };
 
+const isMiniModel = (model: string) => model.toLowerCase().includes("mini");
+const resolveGenerationTemperature = (model: string) =>
+  isMiniModel(model) ? 0.45 : 0.7;
+const resolveCandidateCount = (model: string) => (isMiniModel(model) ? 4 : 6);
+const resolveGenerationMaxTokens = (model: string) =>
+  isMiniModel(model) ? 9_000 : 12_000;
+
 export async function POST(req: Request) {
   try {
     const json = await req.json();
@@ -60,10 +68,11 @@ export async function POST(req: Request) {
 
     if (!llmAuth) {
       return NextResponse.json(createFallbackResponse(request));
-    }
+  }
 
-    const generationAbortController = new AbortController();
-    const stream = new ReadableStream({
+  const generationAbortController = new AbortController();
+  let abortReason: "client" | "timeout" | "transport" | null = null;
+  const stream = new ReadableStream({
       async start(controller) {
         let streamClosed = false;
         const encoder = new TextEncoder();
@@ -80,7 +89,10 @@ export async function POST(req: Request) {
           }
         };
         const send = (event: GenerationRunEvent) => {
-          if (streamClosed || generationAbortController.signal.aborted) {
+          if (
+            streamClosed ||
+            (generationAbortController.signal.aborted && abortReason !== "timeout")
+          ) {
             return;
           }
 
@@ -88,14 +100,30 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(toSseEvent(event)));
           } catch {
             streamClosed = true;
-            generationAbortController.abort();
+            if (!generationAbortController.signal.aborted) {
+              abortReason = "transport";
+              generationAbortController.abort();
+            }
           }
         };
         const runId = crypto.randomUUID();
         let activeStepId: string | null = null;
         let activeStepTitle: string | null = null;
-        const abortFromRequest = () => generationAbortController.abort();
+        const abortFromRequest = () => {
+          if (!generationAbortController.signal.aborted) {
+            abortReason = "client";
+            generationAbortController.abort();
+          }
+        };
         req.signal.addEventListener("abort", abortFromRequest, { once: true });
+        const timeoutId = setTimeout(() => {
+          if (generationAbortController.signal.aborted) {
+            return;
+          }
+
+          abortReason = "timeout";
+          generationAbortController.abort();
+        }, GENERATION_SOFT_TIMEOUT_MS);
 
         const throwIfAborted = () => {
           if (generationAbortController.signal.aborted) {
@@ -255,6 +283,7 @@ export async function POST(req: Request) {
             "execution",
             `Calling ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
           );
+          const candidateCount = resolveCandidateCount(llmAuth.model);
           const heartbeatId = setInterval(() => {
             if (generationAbortController.signal.aborted) {
               return;
@@ -270,11 +299,11 @@ export async function POST(req: Request) {
             userPrompt: buildGenerationUserPrompt(request, {
               websiteStyleContext: websiteResult?.notes,
               websiteBodyText: websiteResult?.bodyText,
-              candidateCount: 6,
+              candidateCount,
               performanceContext: performanceContext || undefined,
             }),
-            temperature: 0.9,
-            maxTokens: 12000,
+            temperature: resolveGenerationTemperature(llmAuth.model),
+            maxTokens: resolveGenerationMaxTokens(llmAuth.model),
             signal: generationAbortController.signal,
           }).finally(() => {
             clearInterval(heartbeatId);
@@ -291,7 +320,8 @@ export async function POST(req: Request) {
             "validation",
             "Applying schema checks and scoring candidates.",
           );
-          const internalParsed = InternalGenerationResponseSchema.parse(generated);
+          const { response: internalParsed, recovery } =
+            coerceInternalGenerationResponse(generated, request);
 
           let topVariants: CreativeVariant[];
           try {
@@ -306,13 +336,35 @@ export async function POST(req: Request) {
             topVariants = selectTopVariants(internalParsed.variants, 3);
           }
 
+          const recoveryNotes: string[] = [];
+          if (recovery.droppedInvalidVariants > 0) {
+            recoveryNotes.push(
+              `dropped ${recovery.droppedInvalidVariants} invalid variant(s)`,
+            );
+          }
+          if (recovery.truncatedVariants > 0) {
+            recoveryNotes.push(
+              `trimmed ${recovery.truncatedVariants} extra variant(s)`,
+            );
+          }
+          if (recovery.usedFallbackVariants > 0) {
+            recoveryNotes.push(
+              `filled ${recovery.usedFallbackVariants} slot(s) with deterministic fallback`,
+            );
+          }
+          if (recovery.strategyFallbackUsed) {
+            recoveryNotes.push("replaced invalid strategy text");
+          }
+
           const parsed = GenerationResponseSchema.parse({
             strategy: internalParsed.strategy,
             variants: topVariants,
           });
           completeStep(
             "select-variants",
-            "Structured output validated and ranked.",
+            recoveryNotes.length
+              ? `Structured output validated with auto-repair (${recoveryNotes.join("; ")}).`
+              : "Structured output validated and ranked.",
           );
 
           startStep(
@@ -330,7 +382,9 @@ export async function POST(req: Request) {
             fallbackUsed: false,
           });
         } catch (generationError) {
-          if (isAbortError(generationError) || generationAbortController.signal.aborted) {
+          const aborted =
+            isAbortError(generationError) || generationAbortController.signal.aborted;
+          if (aborted && (abortReason === "client" || abortReason === null)) {
             if (activeStepId) {
               failStep(
                 activeStepId,
@@ -344,7 +398,18 @@ export async function POST(req: Request) {
             return;
           }
 
-          if (activeStepId) {
+          if (aborted && abortReason === "transport") {
+            return;
+          }
+
+          if (activeStepId && abortReason === "timeout") {
+            failStep(
+              activeStepId,
+              `${activeStepTitle ?? "Active step"} timed out after ${
+                GENERATION_SOFT_TIMEOUT_MS / 1000
+              }s before generation completed.`,
+            );
+          } else if (activeStepId) {
             failStep(
               activeStepId,
               `${activeStepTitle ?? "Active step"} failed: ${toErrorMessage(generationError)}`,
@@ -355,26 +420,39 @@ export async function POST(req: Request) {
             "fallback-response",
             "Build deterministic fallback",
             "finalization",
-            "Recovering with local deterministic concepts.",
+            abortReason === "timeout"
+              ? `Generation timed out after ${
+                  GENERATION_SOFT_TIMEOUT_MS / 1000
+                }s; recovering with deterministic concepts.`
+              : "Recovering with local deterministic concepts.",
           );
           const fallback = createFallbackResponse(request);
           completeStep(
             "fallback-response",
-            "Fallback concepts prepared successfully.",
+            abortReason === "timeout"
+              ? "Fallback concepts prepared after provider timeout."
+              : "Fallback concepts prepared successfully.",
           );
           send({
             type: "run-complete",
             result: fallback,
-            summary: "Model response failed, fallback concepts were used.",
+            summary:
+              abortReason === "timeout"
+                ? "Provider timeout reached; fallback concepts were used."
+                : "Model response failed, fallback concepts were used.",
             fallbackUsed: true,
           });
         } finally {
+          clearTimeout(timeoutId);
           req.signal.removeEventListener("abort", abortFromRequest);
           closeStream();
         }
       },
       cancel() {
-        generationAbortController.abort();
+        if (!generationAbortController.signal.aborted) {
+          abortReason = "client";
+          generationAbortController.abort();
+        }
       },
     });
 
