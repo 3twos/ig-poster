@@ -26,8 +26,11 @@
 3. Navigate the 3-column layout
    - Left panel: posts list — browse, select, archive, or delete posts.
    - Center panel: post brief, asset manager, preview, strategy, and publish sections.
-   - Right panel: agent activity — real-time generation progress and LLM reasoning.
+   - Right panel: switch between **Agent** and **Chat** tabs.
+     - Agent tab: real-time generation progress and LLM reasoning.
+     - Chat tab: AI assistant for brainstorming, captions, and creative direction.
    - Panels are resizable by dragging the handles and collapsible via edge buttons.
+   - On mobile, Agent Activity and Chat are available as slide-out drawers via buttons below the main content.
 
 4. Fill brand and post details
    - Brand fields: name, values, principles, story, voice, visual direction, palette, logo notes.
@@ -66,6 +69,13 @@
    - Connect Instagram via Meta OAuth (if not already connected).
    - Publish now, or set a future date/time to schedule.
 
+12. Use the AI Chat assistant
+   - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
+   - Ask questions about content strategy, caption ideas, hashtag suggestions, or creative direction.
+   - Conversations are saved automatically; switch between them via the dropdown in the chat header.
+   - Start a new conversation with the "+" button.
+   - The chat uses the same LLM connections configured in Settings.
+
 ## Publishing Behavior
 
 - `single-image` variant publishes a rendered poster image.
@@ -81,6 +91,7 @@
   - Drag to reorder models by priority; choose Fallback or Parallel execution mode.
   - Disconnect a specific model by its `connectionId`.
   - Stored in the private credential store when `DATABASE_URL` is configured; otherwise stored in an encrypted cookie tied to your browser session.
+  - Connected LLM providers are used by both generation and the AI chat assistant.
 - Instagram:
   - Connect/disconnect in the Instagram publish section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in Blob.

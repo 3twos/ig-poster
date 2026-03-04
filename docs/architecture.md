@@ -16,6 +16,7 @@ flowchart LR
   API --> CREATIVE["Creative + Prompt Pipeline (`src/lib/creative.ts`)"]
   API --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
   API --> META["Meta Publisher (`src/lib/meta.ts`)"]
+  API --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
   API --> BLOB["Vercel Blob Storage"]
   CRON["Vercel Cron (`/api/cron/publish`)"] --> BLOB
   CRON --> META
@@ -28,9 +29,11 @@ flowchart LR
 - App framework: Next.js App Router (Node runtime for server routes that need Node APIs).
 - Next.js 16 auth gate entrypoint uses `src/proxy.ts` (Proxy file convention), which is executed as middleware.
 - UI layer:
-  - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity) using `react-resizable-panels`.
+  - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity or chat) using `react-resizable-panels`. The right panel has Agent/Chat tab switching.
   - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-section.tsx`, `agent-activity-panel.tsx`.
+  - `src/components/chat/` contains the chat module: `chat-panel.tsx` (embeddable right-panel version), `chat-container.tsx` (full standalone with sidebar), message rendering, markdown, code blocks, and input components.
   - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
+  - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders and edits overlay layouts.
@@ -86,6 +89,18 @@ Why this shape:
 - Separates interactive request latency from scheduled execution.
 - Keeps scheduling stateless beyond durable queue records in Blob.
 
+### 4) Chat Conversations
+
+1. Client sends a message to `POST /api/chat` with conversation history and model config.
+2. Server streams the response as SSE events (`token`, `done`, `error`, `heartbeat`) using the same LLM auth resolution as generation.
+3. Conversation CRUD is handled by `/api/chat/conversations` (list/create) and `/api/chat/conversations/[id]` (get/update/delete).
+4. `POST /api/chat/title` auto-generates a short title for new conversations.
+5. Conversations are persisted to Blob at `chat/<ownerHash>/conversations/<id>.json` with a summary index at `chat/<ownerHash>/index.json` for fast sidebar listing.
+
+Why this shape:
+- Client-sends-history pattern keeps the streaming API stateless and avoids blob read latency on every message.
+- Summary index blob prevents N+1 fetches when listing conversations.
+
 ## Authentication and Authorization Model
 
 ### Workspace Access Gate
@@ -125,6 +140,8 @@ Why this shape:
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`
   - shared projects: `projects/<id>.json`
   - schedule queue: `schedules/<publishAt>-<id>.json`
+  - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
+  - chat index: `chat/<ownerHash>/index.json`
   - OAuth/LLM connection records: `auth/...`
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 
