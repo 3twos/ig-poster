@@ -91,6 +91,7 @@ type StructuredGenerationOptions = {
   userPrompt: string;
   temperature: number;
   maxTokens?: number;
+  signal?: AbortSignal;
 };
 
 const unwrapMarkdownJson = (value: string) =>
@@ -116,15 +117,18 @@ const parseJsonObject = <T>(value: string): T => {
 
 const generateWithOpenAI = async (options: StructuredGenerationOptions) => {
   const client = new OpenAI({ apiKey: options.auth.apiKey });
-  const completion = await client.chat.completions.create({
-    model: options.auth.model || DEFAULT_OPENAI_MODEL,
-    temperature: options.temperature,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: options.systemPrompt },
-      { role: "user", content: options.userPrompt },
-    ],
-  });
+  const completion = await client.chat.completions.create(
+    {
+      model: options.auth.model || DEFAULT_OPENAI_MODEL,
+      temperature: options.temperature,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: options.systemPrompt },
+        { role: "user", content: options.userPrompt },
+      ],
+    },
+    { signal: options.signal },
+  );
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {
@@ -145,13 +149,16 @@ const resolveAnthropicMaxTokens = (value?: number) => {
 
 const generateWithAnthropic = async (options: StructuredGenerationOptions) => {
   const client = new Anthropic({ apiKey: options.auth.apiKey });
-  const message = await client.messages.create({
-    model: options.auth.model || DEFAULT_ANTHROPIC_MODEL,
-    max_tokens: resolveAnthropicMaxTokens(options.maxTokens),
-    temperature: clampAnthropicTemperature(options.temperature),
-    system: options.systemPrompt,
-    messages: [{ role: "user", content: options.userPrompt }],
-  });
+  const message = await client.messages.create(
+    {
+      model: options.auth.model || DEFAULT_ANTHROPIC_MODEL,
+      max_tokens: resolveAnthropicMaxTokens(options.maxTokens),
+      temperature: clampAnthropicTemperature(options.temperature),
+      system: options.systemPrompt,
+      messages: [{ role: "user", content: options.userPrompt }],
+    },
+    { signal: options.signal },
+  );
 
   const text = message.content
     .filter((part): part is Anthropic.TextBlock => part.type === "text")

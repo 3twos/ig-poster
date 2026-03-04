@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { isBlobEnabled, putJson, readJsonByPath } from "@/lib/blob-store";
 import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
 import { generateStructuredJson } from "@/lib/llm";
-import { buildWebsiteStyleContext } from "@/lib/website-style";
+import {
+  getUserSettingsPath,
+  type UserSettings,
+} from "@/lib/user-settings";
+import { buildMultiPageStyleContext } from "@/lib/website-style";
+import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 const AutofillRequestSchema = z.object({
   website: z.string().trim().min(3).max(240).refine(
@@ -150,12 +156,17 @@ const buildFallbackAutofill = (parsed: ParsedWebsiteContext) => {
 
 const buildModelAutofill = async (
   parsed: ParsedWebsiteContext,
+  bodyText: string,
   req: Request,
 ) => {
   const llmAuth = await resolveLlmAuthFromRequest(req);
   if (!llmAuth) {
     return null;
   }
+
+  const bodyTextBlock = bodyText
+    ? `\nWebsite body content (use to extract brand voice, values, story, and positioning):\n${bodyText}\n`
+    : "";
 
   try {
     const generated = await generateStructuredJson<unknown>({
@@ -170,13 +181,13 @@ const buildModelAutofill = async (
 - Theme color: ${parsed.themeColor || "unknown"}
 - Color accents: ${parsed.colorAccents.join(", ") || "unknown"}
 - Fonts: ${parsed.fonts.join(", ") || "unknown"}
-
+${bodyTextBlock}
 Return JSON with keys:
 brandName, values, principles, story, voice, visualDirection, palette, logoNotes.
 
 Constraints:
 - Keep brandName <= 80 chars.
-- values/principles/story/voice/visualDirection must be specific and not generic placeholders.
+- values/principles/story/voice/visualDirection must be specific to this brand, derived from the website content. Not generic placeholders.
 - palette should be a comma-separated hex list when possible.
 - logoNotes must explicitly mention logo precedence over text overlays.
 - No markdown.`,
@@ -193,9 +204,9 @@ export async function POST(request: Request) {
   try {
     const json = await request.json();
     const payload = AutofillRequestSchema.parse(json);
-    const styleContext = await buildWebsiteStyleContext(payload.website);
+    const styleResult = await buildMultiPageStyleContext(payload.website);
 
-    if (!styleContext) {
+    if (!styleResult) {
       return NextResponse.json(
         {
           error: "Invalid website URL",
@@ -205,9 +216,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const parsed = parseWebsiteContext(styleContext);
+    const parsed = parseWebsiteContext(styleResult.notes);
     const fallback = buildFallbackAutofill(parsed);
-    const model = await buildModelAutofill(parsed, request);
+    const model = await buildModelAutofill(parsed, styleResult.bodyText, request);
+
+    // Persist brand memory for faster future generations
+    if (isBlobEnabled()) {
+      try {
+        const session = await readWorkspaceSessionFromRequest(request);
+        if (session) {
+          const path = getUserSettingsPath(session.email);
+          const existing = await readJsonByPath<UserSettings>(path);
+          await putJson(path, {
+            ...existing,
+            email: session.email,
+            updatedAt: new Date().toISOString(),
+            brandMemory: {
+              websiteUrl: parsed.websiteUrl || payload.website,
+              bodyText: styleResult.bodyText,
+              notes: styleResult.notes,
+              fetchedAt: new Date().toISOString(),
+            },
+          });
+        }
+      } catch {
+        // Brand memory persistence is best-effort
+      }
+    }
 
     return NextResponse.json({
       source: model ? "model" : "heuristic",

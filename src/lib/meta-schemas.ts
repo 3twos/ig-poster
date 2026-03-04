@@ -1,8 +1,20 @@
 import { z } from "zod";
 
+import { PostTypeSchema } from "@/lib/creative";
+
 export const CarouselItemSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   url: z.string().url(),
+});
+
+export const OutcomeContextSchema = z.object({
+  variantName: z.string(),
+  postType: PostTypeSchema,
+  caption: z.string(),
+  hook: z.string(),
+  hashtags: z.array(z.string()),
+  brandName: z.string(),
+  score: z.number().optional(),
 });
 
 export const MetaScheduleRequestSchema = z.object({
@@ -23,6 +35,7 @@ export const MetaScheduleRequestSchema = z.object({
       items: z.array(CarouselItemSchema).min(2).max(10),
     }),
   ]),
+  outcomeContext: OutcomeContextSchema.optional(),
 });
 
 export const ScheduledJobSchema = z.object({
@@ -33,6 +46,7 @@ export const ScheduledJobSchema = z.object({
   createdAt: z.string().datetime(),
   authSource: z.enum(["oauth", "env"]),
   connectionId: z.string().optional(),
+  outcomeContext: OutcomeContextSchema.optional(),
 });
 
 export type MetaScheduleRequest = z.infer<typeof MetaScheduleRequestSchema>;

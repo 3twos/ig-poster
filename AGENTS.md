@@ -30,9 +30,24 @@ Use this flow for every non-trivial change:
 12. Wait for explicit user approval before merging.
 13. Do not merge until user says to merge.
 
+## Documentation Maintenance (Mandatory)
+
+- Treat these files as required living docs that must stay accurate on every PR:
+  - `docs/overview.md`
+  - `docs/user-guide.md`
+  - `docs/architecture.md`
+  - `docs/dev-getting-started.md`
+- For every PR, review these docs for impact and update them when product behavior, UX flow, architecture, or developer workflow changes.
+- Before asking for merge approval, include a doc-impact note in the PR update:
+  - list which of the four docs were updated, or
+  - explicitly state why no updates were required.
+- Do not request merge approval while any of the above docs are stale relative to the code in the PR.
+
 ## Merge Gate (Mandatory)
 
 - Never self-merge without explicit user approval.
+- All review conversations must be resolved before merging. No PR may be merged with open/unresolved threads.
+- The PR must have no merge conflicts. If the PR shows as CONFLICTING, rebase or merge the base branch to resolve conflicts before requesting merge approval.
 - If approval is missing, stop and ask for merge approval.
 - After approval, merge PR with a non-interactive command.
 
@@ -41,6 +56,8 @@ Use this flow for every non-trivial change:
 - Treat Copilot review comments as required inputs, not optional suggestions.
 - If a comment is incorrect, respond with a short technical justification.
 - Do not ignore unresolved threads.
+- All review conversations must be resolved before a PR can be merged. This is a hard gate — no exceptions.
+- After pushing fixes, reply on each resolved comment thread and mark it resolved.
 - Ensure PR has no unresolved critical comments before asking for merge approval.
 
 ## PR Body Safety (Mandatory)

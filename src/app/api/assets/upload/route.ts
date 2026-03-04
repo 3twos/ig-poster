@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 
+import { apiErrorResponse } from "@/lib/api-error";
 import { buildBlobPath, isBlobEnabled } from "@/lib/blob-store";
 
 export const runtime = "nodejs";
@@ -61,12 +62,6 @@ export async function POST(req: Request) {
       size: file.size,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Failed to upload file",
-        detail: error instanceof Error ? error.message : "Unexpected error",
-      },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, { fallback: "Failed to upload file" });
   }
 }

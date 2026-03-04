@@ -16,6 +16,8 @@ const PUBLIC_PATH_PREFIXES = [
 
 const PUBLIC_EXACT_PATHS = ["/favicon.ico"];
 
+const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
+
 const normalizeHost = (value: string | undefined) => {
   if (!value) {
     return null;
@@ -131,6 +133,31 @@ export async function proxy(req: NextRequest) {
   const canonicalRedirect = buildCanonicalRedirect(req);
   if (canonicalRedirect) {
     return canonicalRedirect;
+  }
+
+  // CSRF defense: verify Origin matches host for mutating API requests
+  if (
+    req.nextUrl.pathname.startsWith("/api/") &&
+    MUTATING_METHODS.has(req.method)
+  ) {
+    const origin = req.headers.get("origin");
+    const host = req.headers.get("host");
+    if (origin && host) {
+      try {
+        const originHost = new URL(origin).host;
+        if (originHost !== host) {
+          return NextResponse.json(
+            { error: "CSRF origin mismatch" },
+            { status: 403 },
+          );
+        }
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid origin header" },
+          { status: 403 },
+        );
+      }
+    }
   }
 
   if (isPublicPath(req.nextUrl.pathname)) {
