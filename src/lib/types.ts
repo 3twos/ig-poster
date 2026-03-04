@@ -63,6 +63,26 @@ export type LlmAuthStatus = {
   detail?: string;
 };
 
+export type LlmConnectionStatus = {
+  id: string;
+  source: "connection" | "env";
+  provider: LlmProvider;
+  model: string;
+  connected: boolean;
+  removable: boolean;
+  detail?: string;
+};
+
+export type LlmMultiAuthStatus = {
+  connections: LlmConnectionStatus[];
+  mode: "fallback" | "parallel";
+  connected: boolean;
+  // Legacy compat fields (from first connection)
+  source?: "connection" | "env" | null;
+  provider?: LlmProvider;
+  model?: string;
+};
+
 export type PromptConfigState = {
   systemPrompt: string;
   customInstructions: string;

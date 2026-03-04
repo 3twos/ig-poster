@@ -10,3 +10,6 @@ export const PROVIDER_DEFAULT_MODELS: Record<LlmProvider, string> = {
   openai: DEFAULT_OPENAI_MODEL,
   anthropic: DEFAULT_ANTHROPIC_MODEL,
 };
+
+export const MultiModelModeSchema = z.enum(["fallback", "parallel"]);
+export type MultiModelMode = z.infer<typeof MultiModelModeSchema>;

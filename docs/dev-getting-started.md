@@ -30,7 +30,7 @@ Open `http://localhost:3000`.
 
 ### Recommended for generation quality
 
-- `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` -- models configured via these env vars auto-appear in the multi-model list alongside any BYOK connections.
 - Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`
 
 ### Required for upload/share/scheduling features
@@ -75,8 +75,8 @@ Run these before opening or updating a PR.
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, and publishing.
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
-- `src/lib/llm.ts`: provider adapters, structured JSON generation, and streaming with thinking token callbacks.
-- `src/lib/llm-auth.ts`: LLM credential persistence/resolution.
+- `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
+- `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
 - `src/lib/meta.ts`: Meta Graph publishing primitives.
 - `src/lib/meta-auth.ts`: Meta OAuth flow and credential resolution.
 - `src/lib/workspace-auth.ts`: Google Workspace OAuth + session tokens.
@@ -111,6 +111,9 @@ Run these before opening or updating a PR.
 
 - LLM connect fails:
   - Key/model validation failed against provider API; check provider/model pairing.
+
+- Model ordering not persisting:
+  - Verify `PUT /api/auth/llm/reorder` is called with the desired `connectionOrder` and `mode` (`"fallback"` or `"parallel"`). The user-settings `aiConfig` stores these fields.
 
 - Meta publish fails:
   - Verify OAuth connection, Instagram business account linkage, or env fallback credentials.

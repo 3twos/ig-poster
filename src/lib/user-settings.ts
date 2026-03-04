@@ -2,6 +2,8 @@ import { createHash } from "crypto";
 
 import { z } from "zod";
 
+import { MultiModelModeSchema } from "@/lib/llm-constants";
+
 export const UserSettingsSchema = z.object({
   email: z.string().email(),
   updatedAt: z.string().datetime(),
@@ -22,6 +24,8 @@ export const UserSettingsSchema = z.object({
     .object({
       provider: z.enum(["openai", "anthropic"]).optional(),
       model: z.string().optional(),
+      mode: MultiModelModeSchema.optional(),
+      connectionOrder: z.array(z.string()).optional(),
     })
     .optional(),
   promptConfig: z

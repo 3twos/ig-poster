@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { isBlobEnabled, putJson, readJsonByPath } from "@/lib/blob-store";
-import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
-import { generateStructuredJson } from "@/lib/llm";
+import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
+import { generateWithFallback } from "@/lib/llm";
 import {
   getUserSettingsPath,
   type UserSettings,
@@ -159,8 +159,8 @@ const buildModelAutofill = async (
   bodyText: string,
   req: Request,
 ) => {
-  const llmAuth = await resolveLlmAuthFromRequest(req);
-  if (!llmAuth) {
+  const authList = await resolveAllLlmAuthFromRequest(req);
+  if (authList.connections.length === 0) {
     return null;
   }
 
@@ -169,11 +169,13 @@ const buildModelAutofill = async (
     : "";
 
   try {
-    const generated = await generateStructuredJson<unknown>({
-      auth: llmAuth,
-      systemPrompt:
-        "You build precise brand-kit fields from website signals. Return strict JSON only with the required keys.",
-      userPrompt: `Create brand field values using these website cues:
+    const { result: generated } = await generateWithFallback<unknown>(
+      authList.connections,
+      (auth) => ({
+        auth,
+        systemPrompt:
+          "You build precise brand-kit fields from website signals. Return strict JSON only with the required keys.",
+        userPrompt: `Create brand field values using these website cues:
 - Website URL: ${parsed.websiteUrl || "unknown"}
 - Site name: ${parsed.siteName || "unknown"}
 - Page title: ${parsed.pageTitle || "unknown"}
@@ -191,9 +193,10 @@ Constraints:
 - palette should be a comma-separated hex list when possible.
 - logoNotes must explicitly mention logo precedence over text overlays.
 - No markdown.`,
-      temperature: 0.4,
-      maxTokens: 1400,
-    });
+        temperature: 0.4,
+        maxTokens: 1400,
+      }),
+    );
     return AutofillBrandSchema.parse(generated);
   } catch {
     return null;

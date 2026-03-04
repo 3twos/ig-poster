@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { BrandInputSchema, CreativeVariantSchema } from "@/lib/creative";
-import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
-import { generateStructuredJson } from "@/lib/llm";
+import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
+import { generateWithFallback } from "@/lib/llm";
 
 const RefineRequestSchema = z.object({
   variant: CreativeVariantSchema,
@@ -16,9 +16,9 @@ export async function POST(req: Request) {
   try {
     const json = await req.json();
     const { variant, instruction, brand } = RefineRequestSchema.parse(json);
-    const llmAuth = await resolveLlmAuthFromRequest(req);
+    const authList = await resolveAllLlmAuthFromRequest(req);
 
-    if (!llmAuth) {
+    if (authList.connections.length === 0) {
       return NextResponse.json(
         { error: "No LLM provider configured" },
         { status: 503 },
@@ -26,11 +26,13 @@ export async function POST(req: Request) {
     }
 
     try {
-      const generated = await generateStructuredJson<unknown>({
-        auth: llmAuth,
-        systemPrompt:
-          "You refine Instagram creative variants. Apply the user's refinement instruction while preserving the variant's structure, postType, layout, and asset sequence. Return strict JSON only.",
-        userPrompt: `Refine this Instagram creative variant according to the instruction below.
+      const { result: generated } = await generateWithFallback<unknown>(
+        authList.connections,
+        (auth) => ({
+          auth,
+          systemPrompt:
+            "You refine Instagram creative variants. Apply the user's refinement instruction while preserving the variant's structure, postType, layout, and asset sequence. Return strict JSON only.",
+          userPrompt: `Refine this Instagram creative variant according to the instruction below.
 
 Current variant:
 ${JSON.stringify(variant, null, 2)}
@@ -42,9 +44,10 @@ Refinement instruction: "${instruction}"
 
 Return the refined variant as a single JSON object with the exact same schema. Only change what the instruction asks for. Keep all other fields unchanged unless they must change for consistency.
 Output JSON only.`,
-        temperature: 0.5,
-        maxTokens: 2000,
-      });
+          temperature: 0.5,
+          maxTokens: 2000,
+        }),
+      );
 
       const refined = CreativeVariantSchema.parse(generated);
       return NextResponse.json({

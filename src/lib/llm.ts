@@ -5,13 +5,20 @@ import {
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_OPENAI_MODEL,
   type LlmProvider,
+  type MultiModelMode,
 } from "@/lib/llm-constants";
 
 export type ResolvedLlmAuth = {
+  id: string;
   source: "connection" | "env";
   provider: LlmProvider;
   model: string;
   apiKey: string;
+};
+
+export type ResolvedLlmAuthList = {
+  mode: MultiModelMode;
+  connections: ResolvedLlmAuth[];
 };
 
 const toErrorMessage = (error: unknown) =>
@@ -336,4 +343,30 @@ export const streamStructuredJsonWithCallback = async <T>(
       : await streamWithOpenAI(options);
 
   return parseJsonObject<T>(raw);
+};
+
+/**
+ * Try generating structured JSON with each connection in order.
+ * Returns the first successful result. Throws the last error if all fail.
+ */
+export const generateWithFallback = async <T>(
+  connections: ResolvedLlmAuth[],
+  buildOptions: (auth: ResolvedLlmAuth) => StructuredGenerationOptions,
+): Promise<{ result: T; usedAuth: ResolvedLlmAuth }> => {
+  let lastError: Error | null = null;
+
+  for (const auth of connections) {
+    try {
+      const result = await generateStructuredJson<T>(buildOptions(auth));
+      return { result, usedAuth: auth };
+    } catch (error) {
+      lastError =
+        error instanceof Error ? error : new Error(String(error));
+      console.warn(
+        `[llm-fallback] ${auth.provider}/${auth.model} failed: ${lastError.message}`,
+      );
+    }
+  }
+
+  throw lastError ?? new Error("No LLM connections available");
 };

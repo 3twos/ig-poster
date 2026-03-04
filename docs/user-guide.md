@@ -14,10 +14,14 @@
 1. Sign in
    - Open the app and complete Google Workspace login.
 
-2. (Optional but recommended) Connect an LLM provider
-   - In the "Intelligent IG Poster (LLM)" panel, select `openai` or `anthropic`.
-   - Enter API key and model, then connect.
-   - If you skip this, generation uses deterministic fallback concepts.
+2. (Optional but recommended) Connect one or more LLM providers
+   - On the Settings page, add an OpenAI or Anthropic connection by entering an API key and model.
+   - You can connect multiple providers/models simultaneously. They appear in a prioritized list that you can drag to reorder.
+   - Choose an execution mode:
+     - **Fallback** -- models are tried in priority order; the first successful response wins.
+     - **Parallel** -- all models are queried simultaneously and results are merged and ranked.
+   - Models configured via environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) auto-appear in the list.
+   - If you skip this and no env keys are set, generation uses deterministic fallback concepts.
 
 3. Navigate the 3-column layout
    - Left panel: posts list — browse, select, archive, or delete posts.
@@ -73,8 +77,10 @@
 ## Managing Connections
 
 - LLM:
-  - Connect/disconnect from the LLM auth panel.
-  - Stored encrypted (Blob when available, encrypted cookie fallback otherwise).
+  - Connect one or more providers from the Settings page. Each connection gets a unique `connectionId`.
+  - Drag to reorder models by priority; choose Fallback or Parallel execution mode.
+  - Disconnect a specific model by its `connectionId`.
+  - Stored in the private credential store when `DATABASE_URL` is configured; otherwise stored in an encrypted cookie tied to your browser session.
 - Instagram:
   - Connect/disconnect in the Instagram publish section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in Blob.

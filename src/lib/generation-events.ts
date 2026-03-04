@@ -37,6 +37,7 @@ export type GenerationRunEvent =
       type: "llm-thinking";
       stepId: string;
       text: string;
+      detail?: string;
     }
   | {
       type: "run-complete";
