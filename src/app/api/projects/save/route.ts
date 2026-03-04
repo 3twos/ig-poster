@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { SavedProjectPayloadSchema, SavedProjectSchema } from "@/lib/project";
@@ -34,10 +35,11 @@ export async function POST(req: Request) {
       id,
       shareUrl: `${origin}/share/${id}`,
     });
-  } catch {
+  } catch (error) {
+    const status = error instanceof z.ZodError || error instanceof SyntaxError ? 400 : 500;
     return NextResponse.json(
       { error: "Could not save project" },
-      { status: 500 },
+      { status },
     );
   }
 }

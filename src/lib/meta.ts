@@ -101,8 +101,10 @@ const publishContainer = (creationId: string, auth: MetaAuthContext) =>
   );
 
 const waitForContainerReady = async (creationId: string, auth: MetaAuthContext) => {
-  const maxAttempts = 20;
+  const maxAttempts = 10;
   const baseDelay = 3000;
+  const maxTotalMs = 60_000;
+  const start = Date.now();
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const status = await callGraphGet(creationId, auth, ["status_code", "status"]);
@@ -116,7 +118,10 @@ const waitForContainerReady = async (creationId: string, auth: MetaAuthContext) 
       throw new Error(`Container ${creationId} failed with status ${code}`);
     }
 
-    const delay = Math.min(baseDelay * Math.pow(1.3, attempt), 15000);
+    const delay = Math.min(baseDelay * Math.pow(1.3, attempt), 10000);
+    if (Date.now() - start + delay > maxTotalMs) {
+      throw new Error(`Container ${creationId} did not finish processing within ${maxTotalMs / 1000}s`);
+    }
     await sleep(delay);
   }
 
