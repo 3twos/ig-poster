@@ -16,12 +16,15 @@ Use this flow for every non-trivial change:
    - concise summary of what changed
    - validation evidence
    - any known risks or follow-ups
-7. Request Copilot review on the PR.
+7. Copilot review is automatically requested when the PR is created (do not manually request it).
 8. Wait for Copilot review to complete before taking next steps.
    - Copilot review may take around 5 minutes; wait and re-check before re-triggering.
+   - Copilot often finds important bugs; do not skip this wait.
 9. Process review comments:
    - address each actionable comment with code changes, tests, or explicit rationale
    - reply on each comment with resolution details
+   - resolve all conversations (PRs are merge-blocked until conversations are resolved)
+   - resolve all merge conflicts before asking for merge approval
    - push follow-up commits
 10. Re-run validation after fixes.
 11. Post a final PR update summarizing:

@@ -83,6 +83,7 @@ Run these before opening or updating a PR.
 5. Run `npm run lint` and `npm run build`.
 6. Update docs when behavior/architecture/dev workflow changes.
 7. Commit, push, and open PR.
+8. Wait for automatic Copilot review, address all comments, resolve all conversations, and clear merge conflicts before asking for merge approval.
 
 ## Common Implementation Notes
 
