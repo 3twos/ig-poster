@@ -38,6 +38,7 @@ import {
 } from "@/lib/generation-events";
 
 export const maxDuration = 60;
+const GENERATION_SOFT_TIMEOUT_MS = 50_000;
 
 const toErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unexpected generation issue";
@@ -66,6 +67,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         let streamClosed = false;
+        let abortReason: "client" | "timeout" | "transport" | null = null;
         const encoder = new TextEncoder();
         const closeStream = () => {
           if (streamClosed) {
@@ -88,14 +90,30 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(toSseEvent(event)));
           } catch {
             streamClosed = true;
-            generationAbortController.abort();
+            if (!generationAbortController.signal.aborted) {
+              abortReason = "transport";
+              generationAbortController.abort();
+            }
           }
         };
         const runId = crypto.randomUUID();
         let activeStepId: string | null = null;
         let activeStepTitle: string | null = null;
-        const abortFromRequest = () => generationAbortController.abort();
+        const abortFromRequest = () => {
+          if (!generationAbortController.signal.aborted) {
+            abortReason = "client";
+            generationAbortController.abort();
+          }
+        };
         req.signal.addEventListener("abort", abortFromRequest, { once: true });
+        const timeoutId = setTimeout(() => {
+          if (generationAbortController.signal.aborted) {
+            return;
+          }
+
+          abortReason = "timeout";
+          generationAbortController.abort();
+        }, GENERATION_SOFT_TIMEOUT_MS);
 
         const throwIfAborted = () => {
           if (generationAbortController.signal.aborted) {
@@ -330,7 +348,9 @@ export async function POST(req: Request) {
             fallbackUsed: false,
           });
         } catch (generationError) {
-          if (isAbortError(generationError) || generationAbortController.signal.aborted) {
+          const aborted =
+            isAbortError(generationError) || generationAbortController.signal.aborted;
+          if (aborted && abortReason === "client") {
             if (activeStepId) {
               failStep(
                 activeStepId,
@@ -344,7 +364,18 @@ export async function POST(req: Request) {
             return;
           }
 
-          if (activeStepId) {
+          if (aborted && abortReason === "transport") {
+            return;
+          }
+
+          if (activeStepId && abortReason === "timeout") {
+            failStep(
+              activeStepId,
+              `${activeStepTitle ?? "Active step"} timed out after ${
+                GENERATION_SOFT_TIMEOUT_MS / 1000
+              }s without a model response.`,
+            );
+          } else if (activeStepId) {
             failStep(
               activeStepId,
               `${activeStepTitle ?? "Active step"} failed: ${toErrorMessage(generationError)}`,
@@ -355,20 +386,30 @@ export async function POST(req: Request) {
             "fallback-response",
             "Build deterministic fallback",
             "finalization",
-            "Recovering with local deterministic concepts.",
+            abortReason === "timeout"
+              ? `Model call timed out after ${
+                  GENERATION_SOFT_TIMEOUT_MS / 1000
+                }s; recovering with deterministic concepts.`
+              : "Recovering with local deterministic concepts.",
           );
           const fallback = createFallbackResponse(request);
           completeStep(
             "fallback-response",
-            "Fallback concepts prepared successfully.",
+            abortReason === "timeout"
+              ? "Fallback concepts prepared after provider timeout."
+              : "Fallback concepts prepared successfully.",
           );
           send({
             type: "run-complete",
             result: fallback,
-            summary: "Model response failed, fallback concepts were used.",
+            summary:
+              abortReason === "timeout"
+                ? "Provider timeout reached; fallback concepts were used."
+                : "Model response failed, fallback concepts were used.",
             fallbackUsed: true,
           });
         } finally {
+          clearTimeout(timeoutId);
           req.signal.removeEventListener("abort", abortFromRequest);
           closeStream();
         }
