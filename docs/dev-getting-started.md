@@ -78,10 +78,12 @@ Run these before opening or updating a PR.
 
 1. Create an isolated worktree + `codex/*` branch.
 2. Run pre-flight `git status --short`.
-3. Implement changes.
-4. Run `npm run lint` and `npm run build`.
-5. Update docs when behavior/architecture/dev workflow changes.
-6. Commit, push, and open PR.
+3. Use `AGENTS.md` command permissions: common read/search/web commands are pre-approved, and write/update commands must stay inside the active repo/worktree.
+4. Implement changes.
+5. Run `npm run lint` and `npm run build`.
+6. Update docs when behavior/architecture/dev workflow changes.
+7. Commit, push, and open PR.
+8. Wait for automatic Copilot review, address all comments, resolve all conversations, and clear merge conflicts before asking for merge approval.
 
 ## Common Implementation Notes
 
