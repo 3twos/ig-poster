@@ -99,6 +99,8 @@ export default function Home() {
   });
   const [hasBrand, setHasBrand] = useState<boolean | null>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [refineInstruction, setRefineInstruction] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
 
   const posterRef = useRef<HTMLDivElement>(null);
   const assetCleanupRef = useRef<LocalAsset[]>([]);
@@ -658,6 +660,53 @@ export default function Home() {
       window.setTimeout(() => setCopyState("idle"), 1400);
     } catch {
       setCopyState("idle");
+    }
+  };
+
+  const refineVariant = async () => {
+    if (!activeVariant || !refineInstruction.trim()) {
+      return;
+    }
+
+    setIsRefining(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/generate/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variant: activeVariant,
+          instruction: refineInstruction.trim(),
+          brand,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const json = await response.json();
+      const refined = json.variant;
+      setResult((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          variants: current.variants.map((v) =>
+            v.id === activeVariant.id ? { ...refined, id: activeVariant.id } : v,
+          ),
+        };
+      });
+      setRefineInstruction("");
+    } catch (refineError) {
+      setError(
+        refineError instanceof Error ? refineError.message : "Refinement failed",
+      );
+    } finally {
+      setIsRefining(false);
     }
   };
 
@@ -1356,6 +1405,42 @@ export default function Home() {
                     <p className="mt-3 text-xs text-orange-200">
                       {activeVariant.hashtags.join(" ")}
                     </p>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                    <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+                      Refine This Variant
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={refineInstruction}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                          setRefineInstruction(e.target.value)
+                        }
+                        placeholder="e.g. shorter caption, more premium tone, stronger hook..."
+                        className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:border-orange-300"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            void refineVariant();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void refineVariant();
+                        }}
+                        disabled={isRefining || !refineInstruction.trim()}
+                        className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isRefining ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <WandSparkles className="h-3.5 w-3.5" />
+                        )}
+                        {isRefining ? "Refining..." : "Refine"}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
