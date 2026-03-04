@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, MoreHorizontal, Trash2 } from "lucide-react";
+import { Archive, ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -83,20 +83,34 @@ export function PostListItem({
           aria-label={`Select post: ${post.title || "Untitled Post"}`}
         />
 
-        {/* Status dot */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span
-              className={cn(
-                "relative z-10 mt-1.5 h-2 w-2 shrink-0 rounded-full",
-                STATUS_DOT[post.status] ?? "bg-slate-400",
-              )}
+        {/* Thumbnail */}
+        <div className="relative z-10 h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white/10">
+          {post.thumbnail ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={post.thumbnail}
+              alt=""
+              className="h-full w-full object-cover"
             />
-          </TooltipTrigger>
-          <TooltipContent side="right" className="capitalize">
-            {post.status}
-          </TooltipContent>
-        </Tooltip>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <ImageIcon className="h-4 w-4 text-slate-500" />
+            </div>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(
+                  "absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full ring-1 ring-slate-900",
+                  STATUS_DOT[post.status] ?? "bg-slate-400",
+                )}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="capitalize">
+              {post.status}
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
         {/* Content */}
         <div className="relative z-10 min-w-0 flex-1">

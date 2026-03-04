@@ -6,9 +6,15 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { usePostContext } from "@/contexts/post-context";
 import type { WorkspaceAuthStatus } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/", label: "Create" },
@@ -54,46 +60,23 @@ export function AppNav() {
   };
 
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
-      <div className="flex items-center gap-4">
+    <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
+      <div className="flex items-center gap-3">
+        {/* Mobile sidebar toggle (post list drawer) */}
         <Button
           variant="ghost"
           size="icon-sm"
           onClick={toggleSidebar}
           className="text-slate-300 hover:text-white lg:hidden"
-          aria-label="Toggle navigation menu"
+          aria-label="Toggle post list"
         >
           <Menu className="h-5 w-5" />
         </Button>
+
         <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
           <Sparkles className="h-4 w-4" />
           IG Poster
         </div>
-
-        <nav aria-label="Main navigation" className="flex gap-1">
-          {NAV_LINKS.map((link) => {
-            const isActive =
-              link.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(link.href);
-
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={isActive ? "page" : undefined}
-                className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
-                  isActive
-                    ? "bg-orange-400/15 text-orange-200"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white",
-                )}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
       </div>
 
       <div className="flex items-center gap-2">
@@ -112,24 +95,60 @@ export function AppNav() {
           <span>K</span>
         </Button>
 
-        {workspaceAuth?.authenticated ? (
-          <span className="inline-flex items-center gap-2 text-xs text-slate-200">
-            <span>{workspaceAuth.user?.email ?? "Workspace user"}</span>
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => {
-                void signOut();
-              }}
-              disabled={isSigningOut}
-            >
-              {isSigningOut ? (
-                <LoaderCircle className="h-3 w-3 animate-spin" />
-              ) : null}
-              Sign out
-            </Button>
+        {workspaceAuth?.authenticated && (
+          <span className="text-xs text-slate-200">
+            {workspaceAuth.user?.email ?? "Workspace user"}
           </span>
-        ) : null}
+        )}
+
+        {/* Hamburger menu for navigation + sign out */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-slate-300 hover:text-white"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[180px]">
+            {NAV_LINKS.map((link) => {
+              const isActive =
+                link.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(link.href);
+
+              return (
+                <DropdownMenuItem key={link.href} asChild>
+                  <Link
+                    href={link.href}
+                    className={isActive ? "font-semibold text-orange-200" : ""}
+                  >
+                    {link.label}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+            {workspaceAuth?.authenticated && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    void signOut();
+                  }}
+                  disabled={isSigningOut}
+                >
+                  {isSigningOut && (
+                    <LoaderCircle className="h-3 w-3 animate-spin" />
+                  )}
+                  Sign out
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
