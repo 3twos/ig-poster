@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { apiErrorResponse } from "@/lib/api-error";
 import {
   deleteMetaConnection,
+  getStoredMetaConnectionIdFromCookie,
   META_CONNECTION_COOKIE,
 } from "@/lib/meta-auth";
 import { readCookieFromRequest } from "@/lib/cookies";
@@ -11,7 +12,9 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const connectionId = readCookieFromRequest(req, META_CONNECTION_COOKIE);
+    const connectionId = getStoredMetaConnectionIdFromCookie(
+      readCookieFromRequest(req, META_CONNECTION_COOKIE),
+    );
 
     if (connectionId) {
       await deleteMetaConnection(connectionId);

@@ -37,7 +37,9 @@ export async function POST(req: Request) {
       }
 
       if (resolvedAuth.source === "oauth" && !resolvedAuth.account.connectionId) {
-        throw new MetaScheduleClientError("OAuth connection is missing a persistent connection id.");
+        throw new MetaScheduleClientError(
+          "OAuth scheduling requires private persistent credential storage. Configure DATABASE_URL and reconnect Meta OAuth.",
+        );
       }
 
       const id = randomUUID().replace(/-/g, "").slice(0, 18);

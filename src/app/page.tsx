@@ -1565,6 +1565,177 @@ export default function Home() {
     }
   };
 
+  const connectLlmProvider = async () => {
+    const apiKey = llmApiKeyInput.trim();
+    if (!apiKey) {
+      const message = "Enter an API key to connect an LLM provider.";
+      setLlmMessage(null);
+      setLlmError(message);
+      setError(message);
+      return;
+    }
+
+    setError(null);
+    setLlmMessage(null);
+    setLlmError(null);
+    setIsLlmConnecting(true);
+
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => abortController.abort(), 20_000);
+
+    try {
+      const response = await fetch("/api/auth/llm/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          provider: llmProvider,
+          apiKey,
+          model: llmModelInput.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const json = (await response.json()) as {
+        provider?: LlmProvider;
+        model?: string;
+        storage?: "database" | "cookie";
+      };
+
+      await loadLlmStatus();
+      const resolvedModel = (json.model ?? llmModelInput) || "default model";
+      setLlmModelInput(json.model ?? llmModelInput);
+      const storageHint =
+        json.storage === "cookie"
+          ? " (encrypted cookie fallback)"
+          : json.storage === "database"
+            ? " (private database storage)"
+            : "";
+      setLlmMessage(
+        `LLM provider connected (${(json.provider ?? llmProvider).toUpperCase()} ${resolvedModel})${storageHint}.`,
+      );
+    } catch (connectError) {
+      const message =
+        connectError instanceof Error && connectError.name === "AbortError"
+          ? "LLM connection timed out. Check your key/model and try again."
+          : connectError instanceof Error
+            ? connectError.message
+            : "Could not connect LLM provider";
+      setLlmError(message);
+      setError(message);
+    } finally {
+      window.clearTimeout(timeoutId);
+      setIsLlmConnecting(false);
+      setLlmApiKeyInput("");
+    }
+  };
+
+  const disconnectLlmProvider = async () => {
+    if (llmAuthStatus.source !== "connection") {
+      return;
+    }
+
+    setError(null);
+    setLlmMessage(null);
+    setLlmError(null);
+    setIsLlmDisconnecting(true);
+
+    try {
+      const response = await fetch("/api/auth/llm/disconnect", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      await loadLlmStatus();
+      setLlmMessage(
+        "Disconnected saved LLM key. Environment credentials remain available if configured.",
+      );
+    } catch (disconnectError) {
+      const message =
+        disconnectError instanceof Error
+          ? disconnectError.message
+          : "Could not disconnect LLM provider";
+      setLlmError(message);
+      setError(message);
+    } finally {
+      setIsLlmDisconnecting(false);
+    }
+  };
+
+  const signOutWorkspace = async () => {
+    setIsSigningOutWorkspace(true);
+    try {
+      await fetch("/api/auth/google/logout", {
+        method: "POST",
+      });
+    } finally {
+      window.location.href = "/api/auth/google/start";
+    }
+  };
+
+  const autofillBrandFromWebsite = useCallback(
+    async (websiteInput?: string) => {
+      const rawWebsite = (websiteInput ?? brand.website).trim();
+      if (!rawWebsite) {
+        return;
+      }
+
+      setError(null);
+      setBrandAutofillMessage(null);
+      setIsAutofillingBrand(true);
+
+      try {
+        const response = await fetch("/api/brand/autofill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ website: rawWebsite }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await parseApiError(response));
+        }
+
+        const json = (await response.json()) as {
+          source?: "model" | "heuristic";
+          website?: string;
+          brand?: Partial<BrandState>;
+        };
+
+        if (!json.brand) {
+          throw new Error("No brand fields returned");
+        }
+
+        const resolvedWebsite = (json.website || rawWebsite).trim();
+        const normalizedKey = resolvedWebsite.toLowerCase();
+        setBrand((current) => ({
+          ...current,
+          ...json.brand,
+          website: resolvedWebsite,
+        }));
+        setLastAutofilledWebsite(normalizedKey);
+        setBrandAutofillMessage(
+          json.source === "model"
+            ? "Brand fields autofilled from website style + messaging."
+            : "Brand fields autofilled using website metadata heuristics.",
+        );
+      } catch (autofillError) {
+        setError(
+          autofillError instanceof Error
+            ? autofillError.message
+            : "Could not autofill brand fields from website",
+        );
+      } finally {
+        setIsAutofillingBrand(false);
+      }
+    },
+    [brand.website],
+  );
   const buildPublishPayload = async (variant: CreativeVariant) => {
     const sequenced = variant.assetSequence
       .map((assetId) => assetMap.get(assetId))
