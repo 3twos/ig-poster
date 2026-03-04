@@ -76,7 +76,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "REMOVE_AFTER": {
       const idx = state.messages.findIndex((m) => m.id === action.id);
-      return { ...state, messages: idx >= 0 ? state.messages.slice(0, idx) : state.messages };
+      return { ...state, messages: idx >= 0 ? state.messages.slice(0, idx + 1) : state.messages };
     }
     case "CLEAR_MESSAGES":
       return { ...initialState };
@@ -88,22 +88,27 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 }
 
 // ---------------------------------------------------------------------------
-// SSE parser
+// SSE parser — only parses complete lines, returns unconsumed remainder
 // ---------------------------------------------------------------------------
 
-function parseSseEvents(text: string): Array<{ type: string; content?: string; detail?: string; tokenCount?: number }> {
-  const events: Array<{ type: string; content?: string; detail?: string; tokenCount?: number }> = [];
+type SseEvent = { type: string; content?: string; detail?: string; tokenCount?: number };
+
+function parseSseEvents(text: string): { events: SseEvent[]; remainder: string } {
+  const events: SseEvent[] = [];
   const lines = text.split("\n");
+  // The last element may be an incomplete line — keep it as remainder
+  const remainder = lines.pop() ?? "";
+
   for (const line of lines) {
     if (line.startsWith("data: ")) {
       try {
         events.push(JSON.parse(line.slice(6)));
       } catch {
-        // skip malformed
+        // skip malformed complete lines
       }
     }
   }
-  return events;
+  return { events, remainder };
 }
 
 // ---------------------------------------------------------------------------
@@ -122,120 +127,19 @@ export function useChat(options: UseChatOptions) {
   const abortRef = useRef<AbortController | null>(null);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  // Keep a ref to current messages so streamChat can read the latest state
+  const messagesRef = useRef(state.messages);
+  messagesRef.current = state.messages;
 
-  const send = useCallback(async (content: string) => {
-    const userMsg: ChatMessage = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      role: "user",
-      content,
-      createdAt: new Date().toISOString(),
-    };
-
-    dispatch({ type: "ADD_USER_MESSAGE", message: userMsg });
+  /**
+   * Shared streaming logic used by both `send` and `regenerate`.
+   * Handles fetch, SSE parsing, dispatch, abort, and onStreamComplete callback.
+   */
+  const streamChat = useCallback(async (
+    message: string,
+    history: Array<{ role: string; content: string }>,
+  ) => {
     dispatch({ type: "START_STREAMING" });
-
-    const history = [...state.messages, userMsg].map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    let accumulated = "";
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId: optionsRef.current.conversationId ?? "temp",
-          message: content,
-          model: optionsRef.current.model,
-          temperature: optionsRef.current.temperature,
-          history: history.slice(0, -1),
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => null);
-        const detail = errBody?.error ?? `Request failed (${res.status})`;
-        dispatch({ type: "STREAM_ERROR", error: detail });
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) {
-        dispatch({ type: "STREAM_ERROR", error: "No response stream" });
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let tokenCount: number | undefined;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const events = parseSseEvents(buffer);
-        buffer = "";
-
-        for (const event of events) {
-          if (event.type === "token" && event.content) {
-            accumulated += event.content;
-            dispatch({ type: "APPEND_STREAMING", content: event.content });
-          } else if (event.type === "done") {
-            tokenCount = event.tokenCount;
-          } else if (event.type === "error") {
-            dispatch({ type: "STREAM_ERROR", error: event.detail ?? "Stream error" });
-            return;
-          }
-        }
-      }
-
-      if (accumulated) {
-        dispatch({ type: "FINALIZE_STREAMING", content: accumulated, tokenCount });
-      } else {
-        dispatch({ type: "RESET_STATUS" });
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        if (accumulated) {
-          dispatch({ type: "FINALIZE_STREAMING", content: accumulated });
-        } else {
-          dispatch({ type: "RESET_STATUS" });
-        }
-      } else {
-        dispatch({ type: "STREAM_ERROR", error: "Connection failed" });
-      }
-    } finally {
-      abortRef.current = null;
-    }
-  }, [state.messages]);
-
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-  }, []);
-
-  const regenerate = useCallback(async () => {
-    const lastUserIdx = [...state.messages].reverse().findIndex((m) => m.role === "user");
-    if (lastUserIdx === -1) return;
-    const idx = state.messages.length - 1 - lastUserIdx;
-    const lastUserMsg = state.messages[idx];
-    const messagesBeforeUser = state.messages.slice(0, idx);
-
-    dispatch({ type: "LOAD_MESSAGES", messages: [...messagesBeforeUser, lastUserMsg] });
-
-    // Re-send using the send function logic inline
-    dispatch({ type: "START_STREAMING" });
-
-    const history = [...messagesBeforeUser, lastUserMsg].map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -247,10 +151,10 @@ export function useChat(options: UseChatOptions) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId: optionsRef.current.conversationId ?? "temp",
-          message: lastUserMsg.content,
+          message,
           model: optionsRef.current.model,
           temperature: optionsRef.current.temperature,
-          history: history.slice(0, -1),
+          history,
         }),
         signal: controller.signal,
       });
@@ -271,12 +175,7 @@ export function useChat(options: UseChatOptions) {
       let buffer = "";
       let tokenCount: number | undefined;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = parseSseEvents(buffer);
-        buffer = "";
+      const processEvents = (events: SseEvent[]): boolean => {
         for (const event of events) {
           if (event.type === "token" && event.content) {
             accumulated += event.content;
@@ -285,13 +184,42 @@ export function useChat(options: UseChatOptions) {
             tokenCount = event.tokenCount;
           } else if (event.type === "error") {
             dispatch({ type: "STREAM_ERROR", error: event.detail ?? "Stream error" });
-            return;
+            return false; // signal early exit
           }
         }
+        return true;
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          // Process any remaining buffered data
+          if (buffer) {
+            const { events } = parseSseEvents(buffer + "\n");
+            if (!processEvents(events)) return;
+          }
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const { events, remainder } = parseSseEvents(buffer);
+        buffer = remainder;
+        if (!processEvents(events)) return;
       }
 
       if (accumulated) {
         dispatch({ type: "FINALIZE_STREAMING", content: accumulated, tokenCount });
+        // Call onStreamComplete with updated messages (current + new assistant msg)
+        const assistantMsg: ChatMessage = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          role: "assistant",
+          content: accumulated,
+          createdAt: new Date().toISOString(),
+          tokenCount,
+        };
+        // Use messagesRef to get the latest messages (includes the user message already dispatched)
+        const updatedMessages = [...messagesRef.current, assistantMsg];
+        optionsRef.current.onStreamComplete?.(updatedMessages);
       } else {
         dispatch({ type: "RESET_STATUS" });
       }
@@ -308,12 +236,51 @@ export function useChat(options: UseChatOptions) {
     } finally {
       abortRef.current = null;
     }
-  }, [state.messages]);
+  }, []);
+
+  const send = useCallback(async (content: string) => {
+    const userMsg: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      role: "user",
+      content,
+      createdAt: new Date().toISOString(),
+    };
+
+    dispatch({ type: "ADD_USER_MESSAGE", message: userMsg });
+
+    const history = state.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    await streamChat(content, history);
+  }, [state.messages, streamChat]);
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  const regenerate = useCallback(async () => {
+    const lastUserIdx = [...state.messages].reverse().findIndex((m) => m.role === "user");
+    if (lastUserIdx === -1) return;
+    const idx = state.messages.length - 1 - lastUserIdx;
+    const lastUserMsg = state.messages[idx];
+    const messagesBeforeUser = state.messages.slice(0, idx);
+
+    dispatch({ type: "LOAD_MESSAGES", messages: [...messagesBeforeUser, lastUserMsg] });
+
+    const history = messagesBeforeUser.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    await streamChat(lastUserMsg.content, history);
+  }, [state.messages, streamChat]);
 
   const editMessage = useCallback(async (id: string, content: string) => {
-    dispatch({ type: "REMOVE_AFTER", id });
+    // Edit first, then remove messages after — so the edited message is kept
     dispatch({ type: "EDIT_MESSAGE", id, content });
-    // After editing, we don't auto-resend — the user can click send
+    dispatch({ type: "REMOVE_AFTER", id });
   }, []);
 
   const deleteMessage = useCallback((id: string) => {
