@@ -4,6 +4,7 @@ import {
   buildPromptBestPracticeContext,
   isWineBrandSignals,
 } from "@/lib/instagram-playbook";
+import { generateStructuredJson, type ResolvedLlmAuth } from "@/lib/llm";
 
 export const AspectRatioSchema = z.enum(["1:1", "4:5", "9:16"]);
 
@@ -116,6 +117,8 @@ export const CreativeVariantSchema = z.object({
   assetSequence: z.array(z.string().trim().min(1)).min(1).max(10),
   carouselSlides: z.array(CarouselSlideSchema).min(3).max(10).optional(),
   reelPlan: ReelPlanSchema.optional(),
+  score: z.number().min(1).max(10).optional(),
+  scoreRationale: z.string().max(300).optional(),
 });
 
 export const GenerationResponseSchema = z.object({
@@ -143,12 +146,37 @@ export const OverlayLayoutSchema = z.object({
   cta: OverlayBlockSchema,
 });
 
+export const PublishOutcomeInsightsSchema = z.object({
+  impressions: z.number(),
+  reach: z.number(),
+  likes: z.number(),
+  comments: z.number(),
+  saves: z.number(),
+  shares: z.number(),
+  fetchedAt: z.string().datetime(),
+});
+
+export const PublishOutcomeSchema = z.object({
+  id: z.string(),
+  publishedAt: z.string().datetime(),
+  publishId: z.string(),
+  postType: PostTypeSchema,
+  caption: z.string(),
+  hook: z.string(),
+  hashtags: z.array(z.string()),
+  variantName: z.string(),
+  brandName: z.string(),
+  score: z.number().optional(),
+  insights: PublishOutcomeInsightsSchema.optional(),
+});
+
 export type AspectRatio = z.infer<typeof AspectRatioSchema>;
 export type GenerationRequest = z.infer<typeof GenerationRequestSchema>;
 export type PromptConfig = NonNullable<GenerationRequest["promptConfig"]>;
 export type CreativeVariant = z.infer<typeof CreativeVariantSchema>;
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 export type OverlayLayout = z.infer<typeof OverlayLayoutSchema>;
+export type PublishOutcome = z.infer<typeof PublishOutcomeSchema>;
 
 const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
   "hero-quote": {
@@ -462,12 +490,145 @@ export const selectTopVariants = (
   return selected.slice(0, targetCount);
 };
 
+const VariantScoreSchema = z.object({
+  id: z.string(),
+  score: z.number().min(1).max(10),
+  rationale: z.string().max(300),
+});
+
+const VariantScoresResponseSchema = z.object({
+  scores: z.array(VariantScoreSchema),
+});
+
+type VariantScore = z.infer<typeof VariantScoreSchema>;
+
+export const scoreVariantsWithLlm = async (
+  auth: ResolvedLlmAuth,
+  variants: CreativeVariant[],
+  brand: { brandName: string; voice: string },
+  post: { theme: string; audience: string; objective: string },
+): Promise<VariantScore[]> => {
+  const variantSummaries = variants.map((v) => ({
+    id: v.id,
+    name: v.name,
+    postType: v.postType,
+    hook: v.hook,
+    caption: v.caption,
+    cta: v.cta,
+    hashtags: v.hashtags,
+  }));
+
+  const result = await generateStructuredJson<unknown>({
+    auth,
+    systemPrompt:
+      "You are an Instagram content quality judge. Score each variant on a 1-10 scale. Evaluate hook strength, caption quality, CTA effectiveness, brand voice alignment, and engagement potential. Return strict JSON only.",
+    userPrompt: `Score these Instagram creative variants for the brand "${brand.brandName}" (voice: ${brand.voice}).
+
+Post context: Theme="${post.theme}", Audience="${post.audience}", Objective="${post.objective}"
+
+Variants:
+${JSON.stringify(variantSummaries, null, 2)}
+
+Return JSON: { "scores": [{ "id": "<variant id>", "score": <1-10>, "rationale": "<1-2 sentence explanation>" }] }
+Score each variant. Output JSON only.`,
+    temperature: 0.3,
+    maxTokens: 2000,
+  });
+
+  const parsed = VariantScoresResponseSchema.parse(result);
+  return parsed.scores;
+};
+
+export const selectTopVariantsWithScores = (
+  variants: CreativeVariant[],
+  scores: VariantScore[],
+  targetCount = 3,
+): CreativeVariant[] => {
+  const scoreMap = new Map(scores.map((s) => [s.id, s]));
+
+  // Attach scores to variants
+  const withScores = variants.map((v) => {
+    const s = scoreMap.get(v.id);
+    return {
+      variant: { ...v, score: s?.score, scoreRationale: s?.rationale },
+      score: s?.score ?? 0,
+    };
+  });
+
+  withScores.sort((a, b) => b.score - a.score);
+
+  if (withScores.length <= targetCount) {
+    return withScores.map((w) => w.variant);
+  }
+
+  // Ensure postType diversity
+  const selected: CreativeVariant[] = [];
+  const selectedIds = new Set<string>();
+  const typeGroups = new Map<string, typeof withScores>();
+
+  for (const item of withScores) {
+    const type = item.variant.postType;
+    if (!typeGroups.has(type)) {
+      typeGroups.set(type, []);
+    }
+    typeGroups.get(type)!.push(item);
+  }
+
+  for (const [, items] of typeGroups) {
+    if (selected.length < targetCount && items.length > 0) {
+      selected.push(items[0].variant);
+      selectedIds.add(items[0].variant.id);
+    }
+  }
+
+  for (const item of withScores) {
+    if (selected.length >= targetCount) {
+      break;
+    }
+    if (!selectedIds.has(item.variant.id)) {
+      selected.push(item.variant);
+      selectedIds.add(item.variant.id);
+    }
+  }
+
+  return selected.slice(0, targetCount);
+};
+
+export const buildPerformanceContext = (outcomes: PublishOutcome[]): string => {
+  const withInsights = outcomes
+    .filter((o) => o.insights && o.insights.reach > 0)
+    .map((o) => {
+      const i = o.insights!;
+      const engagementRate =
+        i.reach > 0
+          ? ((i.likes + i.comments + i.saves + i.shares) / i.reach) * 100
+          : 0;
+      return { outcome: o, engagementRate };
+    })
+    .sort((a, b) => b.engagementRate - a.engagementRate);
+
+  if (withInsights.length === 0) {
+    return "";
+  }
+
+  const top = withInsights.slice(0, 5);
+  const bullets = top.map((item) => {
+    const o = item.outcome;
+    const i = o.insights!;
+    const saveRate = i.reach > 0 ? ((i.saves / i.reach) * 100).toFixed(1) : "0";
+    return `- Hook: "${o.hook.slice(0, 60)}", PostType: ${o.postType}, Engagement: ${item.engagementRate.toFixed(1)}%, Saves: ${saveRate}%`;
+  });
+
+  return `Performance insights from your recent posts (learn from what works):\n${bullets.join("\n")}`;
+};
+
 export const buildGenerationUserPrompt = (
   request: GenerationRequest,
   options?: {
     websiteStyleContext?: string;
     websiteBodyText?: string;
     candidateCount?: number;
+    performanceContext?: string;
   },
 ): string => {
   const assetList = request.assets.map(
@@ -483,6 +644,9 @@ export const buildGenerationUserPrompt = (
     : "";
   const websiteBodyBlock = options?.websiteBodyText
     ? `Website body content (use for brand voice and messaging context):\n${options.websiteBodyText}\n`
+    : "";
+  const performanceBlock = options?.performanceContext
+    ? `${options.performanceContext}\n`
     : "";
   const customInstructionBlock = request.promptConfig?.customInstructions?.trim()
     ? `Custom user instructions:\n${request.promptConfig.customInstructions.trim()}\n`
@@ -502,7 +666,7 @@ Brand:
 - Visual direction: ${request.brand.visualDirection}
 - Palette notes: ${request.brand.palette}
 - Logo guidance: ${request.brand.logoNotes || "No extra logo guidance"}
-${websiteStyleBlock}${websiteBodyBlock}
+${websiteStyleBlock}${websiteBodyBlock}${performanceBlock}
 Post brief:
 - Theme: ${request.post.theme}
 - Subject: ${request.post.subject}

@@ -62,6 +62,14 @@ import {
 } from "@/lib/generation-events";
 import { cn, slugify } from "@/lib/utils";
 
+const REFINE_PRESETS = [
+  { label: "Shorter caption", instruction: "Make the caption significantly shorter and punchier while keeping the core message" },
+  { label: "Stronger hook", instruction: "Rewrite the hook to be more attention-grabbing with a bold claim, number, or provocative question" },
+  { label: "Premium tone", instruction: "Elevate the language to feel more premium, sophisticated, and aspirational without being pretentious" },
+  { label: "More saveable", instruction: "Restructure the caption as a value-packed list or framework that followers will want to save for reference" },
+  { label: "More shareable", instruction: "Rewrite to be more relatable and tag-worthy so followers will share it with friends" },
+];
+
 type AgentStepStatus = "pending" | "active" | "completed" | "error" | "cancelled";
 type AgentRunStatus = "idle" | "running" | "success" | "error" | "cancelled";
 type AgentVerbosity = "minimal" | "standard" | "verbose";
@@ -1420,8 +1428,9 @@ export default function Home() {
     }
   };
 
-  const refineVariant = async () => {
-    if (!activeVariant || !refineInstruction.trim()) {
+  const refineVariant = async (directInstruction?: string) => {
+    const instruction = directInstruction ?? refineInstruction.trim();
+    if (!activeVariant || !instruction) {
       return;
     }
 
@@ -1434,7 +1443,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           variant: activeVariant,
-          instruction: refineInstruction.trim(),
+          instruction,
           brand,
         }),
       });
@@ -1644,6 +1653,15 @@ export default function Home() {
           publishAt: scheduleAt
             ? new Date(scheduleAt).toISOString()
             : undefined,
+          outcomeContext: {
+            variantName: activeVariant.name,
+            postType: activeVariant.postType,
+            caption: activeVariant.caption,
+            hook: activeVariant.hook,
+            hashtags: activeVariant.hashtags,
+            brandName: brand.brandName,
+            score: activeVariant.score,
+          },
         }),
       });
 
@@ -1695,9 +1713,16 @@ export default function Home() {
         )}
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
-            {variant.name}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+              {variant.name}
+            </p>
+            {variant.score != null && (
+              <span className="rounded-full bg-orange-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-orange-300">
+                {variant.score.toFixed(1)}
+              </span>
+            )}
+          </div>
           <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-200">
             {variant.postType}
           </span>
@@ -2253,6 +2278,12 @@ export default function Home() {
 
               {activeVariant ? (
                 <>
+                  {activeVariant.scoreRationale ? (
+                    <p className="mt-3 text-xs italic leading-relaxed text-slate-400">
+                      {activeVariant.scoreRationale}
+                    </p>
+                  ) : null}
+
                   {activeVariant.postType === "carousel" &&
                   activeVariant.carouselSlides ? (
                     <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
@@ -2373,13 +2404,28 @@ export default function Home() {
                     <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
                       Refine This Variant
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {REFINE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            void refineVariant(preset.instruction);
+                          }}
+                          disabled={isRefining}
+                          className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition hover:border-orange-400/50 hover:text-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="mt-2 flex gap-2">
                       <input
                         value={refineInstruction}
                         onChange={(e: ChangeEvent<HTMLInputElement>) =>
                           setRefineInstruction(e.target.value)
                         }
-                        placeholder="e.g. shorter caption, more premium tone, stronger hook..."
+                        placeholder="Or type a custom instruction..."
                         className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:border-orange-300"
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {

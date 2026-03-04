@@ -286,3 +286,59 @@ export const publishInstagramContent = async (
     resolvedAuth,
   );
 };
+
+type MediaInsights = {
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  saves: number;
+  shares: number;
+};
+
+type InsightsDataItem = {
+  name: string;
+  values: { value: number }[];
+};
+
+type InsightsResponse = {
+  data?: InsightsDataItem[];
+  error?: { message?: string };
+};
+
+export const getMediaInsights = async (
+  mediaId: string,
+  auth: MetaAuthContext,
+): Promise<MediaInsights | null> => {
+  try {
+    const url = new URL(`https://graph.facebook.com/${auth.graphVersion}/${mediaId}/insights`);
+    url.searchParams.set("access_token", auth.accessToken);
+    url.searchParams.set("metric", "impressions,reach,likes,comments,saved,shares");
+
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = (await response.json()) as InsightsResponse;
+    if (json.error || !json.data) {
+      return null;
+    }
+
+    const metricMap = new Map<string, number>();
+    for (const item of json.data) {
+      metricMap.set(item.name, item.values?.[0]?.value ?? 0);
+    }
+
+    return {
+      impressions: metricMap.get("impressions") ?? 0,
+      reach: metricMap.get("reach") ?? 0,
+      likes: metricMap.get("likes") ?? 0,
+      comments: metricMap.get("comments") ?? 0,
+      saves: metricMap.get("saved") ?? 0,
+      shares: metricMap.get("shares") ?? 0,
+    };
+  } catch {
+    return null;
+  }
+};

@@ -5,6 +5,16 @@ export const CarouselItemSchema = z.object({
   url: z.string().url(),
 });
 
+export const OutcomeContextSchema = z.object({
+  variantName: z.string(),
+  postType: z.string(),
+  caption: z.string(),
+  hook: z.string(),
+  hashtags: z.array(z.string()),
+  brandName: z.string(),
+  score: z.number().optional(),
+});
+
 export const MetaScheduleRequestSchema = z.object({
   caption: z.string().trim().min(1).max(2200),
   publishAt: z.string().datetime().optional(),
@@ -23,6 +33,7 @@ export const MetaScheduleRequestSchema = z.object({
       items: z.array(CarouselItemSchema).min(2).max(10),
     }),
   ]),
+  outcomeContext: OutcomeContextSchema.optional(),
 });
 
 export const ScheduledJobSchema = z.object({

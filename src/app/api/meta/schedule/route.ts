@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
 import { ScheduledJobSchema } from "@/lib/meta-schemas";
+import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 class MetaScheduleClientError extends Error {
   constructor(message: string) {
@@ -66,6 +67,32 @@ export async function POST(req: Request) {
       },
       resolvedAuth.auth,
     );
+
+    // Record publish outcome (best-effort)
+    if (isBlobEnabled() && payload.outcomeContext && publish.publishId) {
+      try {
+        const session = await readWorkspaceSessionFromRequest(req);
+        const emailHash = session
+          ? createHash("sha256").update(session.email.trim().toLowerCase()).digest("hex")
+          : "anonymous";
+        const outcomeId = randomUUID().replace(/-/g, "").slice(0, 18);
+        const publishedAt = new Date().toISOString();
+        await putJson(`outcomes/${emailHash}/${Date.now()}-${outcomeId}.json`, {
+          id: outcomeId,
+          publishedAt,
+          publishId: publish.publishId,
+          postType: payload.outcomeContext.postType,
+          caption: payload.outcomeContext.caption,
+          hook: payload.outcomeContext.hook,
+          hashtags: payload.outcomeContext.hashtags,
+          variantName: payload.outcomeContext.variantName,
+          brandName: payload.outcomeContext.brandName,
+          score: payload.outcomeContext.score,
+        });
+      } catch {
+        // Outcome recording is non-critical
+      }
+    }
 
     return NextResponse.json({
       status: "published",
