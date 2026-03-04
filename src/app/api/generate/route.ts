@@ -2,16 +2,27 @@ import { NextResponse } from "next/server";
 
 import { z } from "zod";
 
+import { readJsonByPath } from "@/lib/blob-store";
 import {
   GenerationRequestSchema,
   GenerationResponseSchema,
+  InternalGenerationResponseSchema,
   buildGenerationSystemPrompt,
   buildGenerationUserPrompt,
   createFallbackResponse,
+  selectTopVariants,
 } from "@/lib/creative";
 import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
 import { generateStructuredJson } from "@/lib/llm";
-import { buildWebsiteStyleContext } from "@/lib/website-style";
+import {
+  getUserSettingsPath,
+  type UserSettings,
+} from "@/lib/user-settings";
+import {
+  buildWebsiteStyleContext,
+  type WebsiteStyleResult,
+} from "@/lib/website-style";
+import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 export const maxDuration = 60;
 
@@ -37,10 +48,42 @@ export async function POST(req: Request) {
         try {
           send({ type: "status", message: "Authenticating with provider..." });
 
-          send({ type: "status", message: "Extracting website style cues..." });
-          const websiteStyleContext = await buildWebsiteStyleContext(
-            request.brand.website,
-          );
+          // Try cached brand memory first, fall back to live scrape
+          let websiteResult: WebsiteStyleResult | null = null;
+          const normalizeHostname = (rawUrl: string | null | undefined): string | null => {
+            if (!rawUrl) return null;
+            try {
+              const urlStr = rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `https://${rawUrl}`;
+              const hostname = new URL(urlStr).hostname.toLowerCase();
+              return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+            } catch {
+              return null;
+            }
+          };
+          try {
+            const session = await readWorkspaceSessionFromRequest(req);
+            if (session) {
+              const settings = await readJsonByPath<UserSettings>(
+                getUserSettingsPath(session.email),
+              );
+              const mem = settings?.brandMemory;
+              const reqHost = normalizeHostname(request.brand.website || "");
+              const memHost = normalizeHostname(mem?.websiteUrl);
+              if (mem?.bodyText && memHost && reqHost && memHost === reqHost) {
+                websiteResult = { notes: mem.notes || "", bodyText: mem.bodyText };
+                send({ type: "status", message: "Using cached website context..." });
+              }
+            }
+          } catch {
+            // Fall through to live scrape
+          }
+
+          if (!websiteResult) {
+            send({ type: "status", message: "Extracting website style cues..." });
+            websiteResult = await buildWebsiteStyleContext(
+              request.brand.website,
+            );
+          }
 
           send({ type: "status", message: "Building prompt..." });
 
@@ -52,14 +95,21 @@ export async function POST(req: Request) {
             auth: llmAuth,
             systemPrompt: buildGenerationSystemPrompt(request.promptConfig),
             userPrompt: buildGenerationUserPrompt(request, {
-              websiteStyleContext: websiteStyleContext ?? undefined,
+              websiteStyleContext: websiteResult?.notes,
+              websiteBodyText: websiteResult?.bodyText,
+              candidateCount: 6,
             }),
             temperature: 0.9,
-            maxTokens: 8192,
+            maxTokens: 12000,
           });
 
-          send({ type: "status", message: "Parsing response..." });
-          const parsed = GenerationResponseSchema.parse(generated);
+          send({ type: "status", message: "Selecting best variants..." });
+          const internalParsed = InternalGenerationResponseSchema.parse(generated);
+          const topVariants = selectTopVariants(internalParsed.variants, 3);
+          const parsed = GenerationResponseSchema.parse({
+            strategy: internalParsed.strategy,
+            variants: topVariants,
+          });
 
           send({ type: "complete", result: parsed });
         } catch {

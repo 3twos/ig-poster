@@ -103,6 +103,10 @@ export async function PUT(req: Request) {
         ...existing?.promptConfig,
         ...body?.promptConfig,
       },
+      brandMemory: {
+        ...existing?.brandMemory,
+        ...body?.brandMemory,
+      },
     };
 
     const validated = UserSettingsSchema.parse(merged);

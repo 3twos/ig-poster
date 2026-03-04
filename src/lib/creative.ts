@@ -123,6 +123,11 @@ export const GenerationResponseSchema = z.object({
   variants: z.array(CreativeVariantSchema).length(3),
 });
 
+export const InternalGenerationResponseSchema = z.object({
+  strategy: z.string().trim().min(30).max(800),
+  variants: z.array(CreativeVariantSchema).min(3).max(8),
+});
+
 export const OverlayBlockSchema = z.object({
   x: z.number().min(0).max(100),
   y: z.number().min(0).max(100),
@@ -384,10 +389,85 @@ export const buildGenerationSystemPrompt = (promptConfig?: PromptConfig): string
   return `${DEFAULT_GENERATION_SYSTEM_PROMPT}\n\nAdditional system directives:\n${customSystem}`;
 };
 
+export const selectTopVariants = (
+  variants: CreativeVariant[],
+  targetCount = 3,
+): CreativeVariant[] => {
+  if (variants.length <= targetCount) {
+    return variants;
+  }
+
+  const scored = variants.map((variant) => {
+    let score = 0;
+
+    // Caption quality: prefer 100-500 char range
+    const captionLen = variant.caption.length;
+    if (captionLen >= 100 && captionLen <= 500) {
+      score += 2;
+    } else if (captionLen >= 40) {
+      score += 1;
+    }
+
+    // CTA presence in caption
+    if (/save|share|bookmark|tag|comment|follow|visit|link/i.test(variant.caption)) {
+      score += 2;
+    }
+
+    // Hook strength: specific numbers or questions
+    if (/\d/.test(variant.hook) || variant.hook.includes("?")) {
+      score += 1;
+    }
+
+    // Hashtag count quality (prefer 7-10)
+    if (variant.hashtags.length >= 7 && variant.hashtags.length <= 10) {
+      score += 1;
+    }
+
+    return { variant, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  // Ensure postType diversity: pick the best of each type first
+  const selected: CreativeVariant[] = [];
+  const selectedIds = new Set<string>();
+  const typeGroups = new Map<string, typeof scored>();
+
+  for (const item of scored) {
+    const type = item.variant.postType;
+    if (!typeGroups.has(type)) {
+      typeGroups.set(type, []);
+    }
+    typeGroups.get(type)!.push(item);
+  }
+
+  for (const [, items] of typeGroups) {
+    if (selected.length < targetCount && items.length > 0) {
+      selected.push(items[0].variant);
+      selectedIds.add(items[0].variant.id);
+    }
+  }
+
+  // Fill remaining with highest-scored not yet selected
+  for (const item of scored) {
+    if (selected.length >= targetCount) {
+      break;
+    }
+    if (!selectedIds.has(item.variant.id)) {
+      selected.push(item.variant);
+      selectedIds.add(item.variant.id);
+    }
+  }
+
+  return selected.slice(0, targetCount);
+};
+
 export const buildGenerationUserPrompt = (
   request: GenerationRequest,
   options?: {
     websiteStyleContext?: string;
+    websiteBodyText?: string;
+    candidateCount?: number;
   },
 ): string => {
   const assetList = request.assets.map(
@@ -401,11 +481,16 @@ export const buildGenerationUserPrompt = (
   const websiteStyleBlock = options?.websiteStyleContext
     ? `Website-derived style cues:\n${options.websiteStyleContext}\n`
     : "";
+  const websiteBodyBlock = options?.websiteBodyText
+    ? `Website body content (use for brand voice and messaging context):\n${options.websiteBodyText}\n`
+    : "";
   const customInstructionBlock = request.promptConfig?.customInstructions?.trim()
     ? `Custom user instructions:\n${request.promptConfig.customInstructions.trim()}\n`
     : "";
 
-  return `Generate 3 Instagram post creative variants as strict JSON.
+  const variantCount = options?.candidateCount ?? 3;
+
+  return `Generate ${variantCount} Instagram post creative variants as strict JSON.
 
 Brand:
 - Name: ${request.brand.brandName}
@@ -417,8 +502,7 @@ Brand:
 - Visual direction: ${request.brand.visualDirection}
 - Palette notes: ${request.brand.palette}
 - Logo guidance: ${request.brand.logoNotes || "No extra logo guidance"}
-${websiteStyleBlock}
-
+${websiteStyleBlock}${websiteBodyBlock}
 Post brief:
 - Theme: ${request.post.theme}
 - Subject: ${request.post.subject}
@@ -438,7 +522,7 @@ ${customInstructionBlock}
 Output constraints:
 - Return JSON object with keys: strategy, variants.
 - strategy: concise rationale focused on reach + conversion.
-- variants: exactly 3 objects.
+- variants: exactly ${variantCount} objects.
 - each variant fields: id, name, postType, hook, headline, supportingText, cta, caption, hashtags, layout, textAlign, colorHexes, overlayStrength, assetSequence, carouselSlides, reelPlan.
 - postType must be one of single-image, carousel, reel.
 - layout must be one of hero-quote, split-story, magazine, minimal-logo.

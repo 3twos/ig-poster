@@ -31,6 +31,14 @@ export const UserSettingsSchema = z.object({
     })
     .optional(),
   logoUrl: z.string().url().optional(),
+  brandMemory: z
+    .object({
+      websiteUrl: z.string().optional(),
+      bodyText: z.string().optional(),
+      notes: z.string().optional(),
+      fetchedAt: z.string().datetime().optional(),
+    })
+    .optional(),
 });
 
 export type UserSettings = z.infer<typeof UserSettingsSchema>;
