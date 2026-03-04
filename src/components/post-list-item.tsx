@@ -13,7 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,14 +27,6 @@ import {
 } from "@/components/ui/tooltip";
 import type { PostSummary } from "@/lib/post";
 import { cn } from "@/lib/utils";
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  draft: "secondary",
-  generated: "outline",
-  published: "default",
-  scheduled: "outline",
-  archived: "secondary",
-};
 
 const STATUS_DOT: Record<string, string> = {
   draft: "bg-slate-400",
@@ -77,28 +68,27 @@ export function PostListItem({
   return (
     <>
       <div
-        role="button"
-        tabIndex={0}
-        onClick={onSelect}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onSelect();
-          }
-        }}
         className={cn(
-          "group relative flex cursor-pointer items-start gap-2 rounded-xl px-3 py-2.5 transition",
+          "group relative flex items-start gap-2 rounded-xl px-3 py-2.5 transition",
           isActive
             ? "border border-orange-400/30 bg-orange-400/10"
             : "hover:bg-white/5",
         )}
       >
+        {/* Clickable selection overlay */}
+        <button
+          type="button"
+          onClick={onSelect}
+          className="absolute inset-0 z-0 cursor-pointer rounded-xl"
+          aria-label={`Select post: ${post.title || "Untitled Post"}`}
+        />
+
         {/* Status dot */}
         <Tooltip>
           <TooltipTrigger asChild>
             <span
               className={cn(
-                "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                "relative z-10 mt-1.5 h-2 w-2 shrink-0 rounded-full",
                 STATUS_DOT[post.status] ?? "bg-slate-400",
               )}
             />
@@ -109,7 +99,7 @@ export function PostListItem({
         </Tooltip>
 
         {/* Content */}
-        <div className="min-w-0 flex-1">
+        <div className="relative z-10 min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-white">
             {post.title || "Untitled Post"}
           </p>
@@ -126,8 +116,7 @@ export function PostListItem({
             <Button
               variant="ghost"
               size="icon-xs"
-              className="shrink-0 text-slate-500 opacity-0 transition group-hover:opacity-100 data-[state=open]:opacity-100"
-              onClick={(e) => e.stopPropagation()}
+              className="relative z-10 shrink-0 text-slate-500 opacity-0 transition group-hover:opacity-100 data-[state=open]:opacity-100"
               aria-label="Post options"
             >
               <MoreHorizontal className="h-3.5 w-3.5" />

@@ -984,30 +984,14 @@ export default function Home() {
     });
   }, []);
 
-  // Listen for keyboard shortcut / command palette events
-  useEffect(() => {
-    const onGenerate = () => {
-      if (!isAgentBusy && localAssets.length > 0) {
-        void generate();
-      }
-    };
-    const onToggleEditor = () => setEditorMode((v) => !v);
-    const onSelectVariant = (e: Event) => {
-      const idx = (e as CustomEvent).detail?.index;
-      if (typeof idx === "number" && result?.variants[idx]) {
-        dispatch({ type: "SET_ACTIVE_VARIANT", variantId: result.variants[idx].id });
-      }
-    };
-
-    window.addEventListener("ig:generate", onGenerate);
-    window.addEventListener("ig:toggle-editor", onToggleEditor);
-    window.addEventListener("ig:select-variant", onSelectVariant);
-    return () => {
-      window.removeEventListener("ig:generate", onGenerate);
-      window.removeEventListener("ig:toggle-editor", onToggleEditor);
-      window.removeEventListener("ig:select-variant", onSelectVariant);
-    };
-  }); // intentionally no deps — always uses latest closures
+  // Refs for keyboard shortcut / command palette event handlers
+  const generateRef = useRef<(() => Promise<void>) | null>(null);
+  const isAgentBusyRef = useRef(isAgentBusy);
+  const localAssetsRef = useRef(localAssets);
+  const resultRef = useRef(result);
+  isAgentBusyRef.current = isAgentBusy;
+  localAssetsRef.current = localAssets;
+  resultRef.current = result;
 
   const uploadFileToStorage = async (file: File, folder: string) => {
     const formData = new FormData();
@@ -1452,6 +1436,33 @@ export default function Home() {
       generationAbortRef.current = null;
     }
   };
+
+  // Assign generate ref after definition, then register event listeners once
+  generateRef.current = generate;
+
+  useEffect(() => {
+    const onGenerate = () => {
+      if (!isAgentBusyRef.current && localAssetsRef.current.length > 0) {
+        void generateRef.current?.();
+      }
+    };
+    const onToggleEditor = () => setEditorMode((v) => !v);
+    const onSelectVariant = (e: Event) => {
+      const idx = (e as CustomEvent).detail?.index;
+      if (typeof idx === "number" && resultRef.current?.variants[idx]) {
+        dispatch({ type: "SET_ACTIVE_VARIANT", variantId: resultRef.current.variants[idx].id });
+      }
+    };
+
+    window.addEventListener("ig:generate", onGenerate);
+    window.addEventListener("ig:toggle-editor", onToggleEditor);
+    window.addEventListener("ig:select-variant", onSelectVariant);
+    return () => {
+      window.removeEventListener("ig:generate", onGenerate);
+      window.removeEventListener("ig:toggle-editor", onToggleEditor);
+      window.removeEventListener("ig:select-variant", onSelectVariant);
+    };
+  }, [dispatch]);
 
   const renderPosterToDataUrl = async () => {
     if (!posterRef.current || !activeVariant) {

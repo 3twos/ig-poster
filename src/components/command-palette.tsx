@@ -2,12 +2,10 @@
 
 import {
   FileText,
-  ImagePlus,
   LayoutDashboard,
   Palette,
   Plus,
   Settings,
-  Sparkles,
   WandSparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";

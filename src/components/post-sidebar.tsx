@@ -85,13 +85,12 @@ function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
       </div>
 
       {/* Filter tabs */}
-      <div role="tablist" aria-label="Filter posts" className="flex gap-0.5 overflow-x-auto border-b border-white/10 px-3 py-2">
+      <div role="group" aria-label="Filter posts" className="flex gap-0.5 overflow-x-auto border-b border-white/10 px-3 py-2">
         {FILTERS.map((f) => (
           <button
             key={f.value}
             type="button"
-            role="tab"
-            aria-selected={filter === f.value}
+            aria-pressed={filter === f.value}
             onClick={() => setFilter(f.value)}
             className={cn(
               "shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold transition",
@@ -106,7 +105,7 @@ function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
       </div>
 
       {/* Post list */}
-      <div role="list" aria-label="Posts" className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="flex-1 overflow-y-auto px-2 py-2">
         {isLoadingPosts ? (
           <div className="space-y-2 px-1">
             {Array.from({ length: 5 }).map((_, i) => (
