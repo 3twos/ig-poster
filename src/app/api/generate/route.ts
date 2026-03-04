@@ -34,6 +34,16 @@ export const maxDuration = 60;
 const toErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : "Unexpected generation issue";
 
+const isAbortError = (error: unknown) =>
+  error instanceof Error &&
+  (error.name === "AbortError" || error.message.toLowerCase().includes("abort"));
+
+const createAbortError = () => {
+  const error = new Error("Generation cancelled.");
+  error.name = "AbortError";
+  return error;
+};
+
 export async function POST(req: Request) {
   try {
     const json = await req.json();
@@ -44,15 +54,41 @@ export async function POST(req: Request) {
       return NextResponse.json(createFallbackResponse(request));
     }
 
+    const generationAbortController = new AbortController();
     const stream = new ReadableStream({
       async start(controller) {
+        let streamClosed = false;
         const encoder = new TextEncoder();
+        const closeStream = () => {
+          if (streamClosed) {
+            return;
+          }
+
+          streamClosed = true;
+          try {
+            controller.close();
+          } catch {
+            // Stream may already be closed by runtime cancellation.
+          }
+        };
         const send = (event: GenerationRunEvent) => {
+          if (streamClosed) {
+            return;
+          }
+
           controller.enqueue(encoder.encode(toSseEvent(event)));
         };
         const runId = crypto.randomUUID();
         let activeStepId: string | null = null;
         let activeStepTitle: string | null = null;
+        const abortFromRequest = () => generationAbortController.abort();
+        req.signal.addEventListener("abort", abortFromRequest, { once: true });
+
+        const throwIfAborted = () => {
+          if (generationAbortController.signal.aborted) {
+            throw createAbortError();
+          }
+        };
 
         const startStep = (
           stepId: string,
@@ -82,6 +118,7 @@ export async function POST(req: Request) {
         };
 
         try {
+          throwIfAborted();
           send({
             type: "run-start",
             runId,
@@ -140,6 +177,7 @@ export async function POST(req: Request) {
           }
 
           if (!websiteResult) {
+            throwIfAborted();
             startStep(
               "load-context",
               "Load website context",
@@ -149,6 +187,7 @@ export async function POST(req: Request) {
             websiteResult = await buildWebsiteStyleContext(
               request.brand.website,
             );
+            throwIfAborted();
             completeStep(
               "load-context",
               websiteResult?.notes || websiteResult?.bodyText
@@ -175,6 +214,9 @@ export async function POST(req: Request) {
             `Calling ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
           );
           const heartbeatId = setInterval(() => {
+            if (generationAbortController.signal.aborted) {
+              return;
+            }
             send({
               type: "heartbeat",
               detail: `Still waiting on ${llmAuth.provider.toUpperCase()} response...`,
@@ -190,9 +232,11 @@ export async function POST(req: Request) {
             }),
             temperature: 0.9,
             maxTokens: 12000,
+            signal: generationAbortController.signal,
           }).finally(() => {
             clearInterval(heartbeatId);
           });
+          throwIfAborted();
           completeStep(
             "draft-variants",
             "Model returned candidate concepts and strategy rationale.",
@@ -230,6 +274,20 @@ export async function POST(req: Request) {
             fallbackUsed: false,
           });
         } catch (generationError) {
+          if (isAbortError(generationError) || generationAbortController.signal.aborted) {
+            if (activeStepId) {
+              failStep(
+                activeStepId,
+                `${activeStepTitle ?? "Active step"} cancelled by client.`,
+              );
+            }
+            send({
+              type: "run-error",
+              detail: "Generation cancelled by client.",
+            });
+            return;
+          }
+
           if (activeStepId) {
             failStep(
               activeStepId,
@@ -255,8 +313,12 @@ export async function POST(req: Request) {
             fallbackUsed: true,
           });
         } finally {
-          controller.close();
+          req.signal.removeEventListener("abort", abortFromRequest);
+          closeStream();
         }
+      },
+      cancel() {
+        generationAbortController.abort();
       },
     });
 

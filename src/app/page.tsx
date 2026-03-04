@@ -701,6 +701,15 @@ export default function Home() {
       };
     }
 
+    if (isGenerating) {
+      return {
+        tone: "active" as const,
+        text: "Preparing generation request...",
+        elapsedMs: undefined,
+        showStop: true,
+      };
+    }
+
     if (isUploadingAssets || isUploadingLogo) {
       return {
         tone: "active" as const,
@@ -801,6 +810,7 @@ export default function Home() {
   }, [
     agentRun,
     error,
+    isGenerating,
     isPublishing,
     isRefining,
     isSharing,
@@ -850,7 +860,47 @@ export default function Home() {
   }, [agentRun, runClock]);
 
   const stopGeneration = useCallback(() => {
-    generationAbortRef.current?.abort();
+    const activeController = generationAbortRef.current;
+    if (!activeController) {
+      return;
+    }
+
+    generationAbortRef.current = null;
+    activeController.abort();
+
+    const now = Date.now();
+    setAgentRun((current) => {
+      if (!current) {
+        return current;
+      }
+
+      if (
+        current.status === "success" ||
+        current.status === "error" ||
+        current.status === "cancelled"
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        status: "cancelled",
+        endedAt: now,
+        currentStepId: undefined,
+        summary: "Generation stopped by user.",
+        steps: current.steps.map((step) =>
+          step.status === "active" || step.status === "pending"
+            ? {
+                ...step,
+                status: "cancelled",
+                detail: "Cancelled by user.",
+                endedAt: now,
+              }
+            : step,
+        ),
+        logLines: [...current.logLines, "Run cancelled by user."],
+      };
+    });
   }, []);
 
   const uploadFileToStorage = async (file: File, folder: string) => {
@@ -1163,19 +1213,7 @@ export default function Home() {
           }
         }
 
-        if (finalResult) {
-          setResult(finalResult);
-          setActiveVariantId(finalResult.variants[0]?.id ?? null);
-          setOverlayLayouts(
-            Object.fromEntries(
-              finalResult.variants.map((variant) => [
-                variant.id,
-                createDefaultOverlayLayout(variant.layout),
-              ]),
-            ),
-          );
-          setShareUrl(null);
-        } else {
+        if (!finalResult) {
           throw new Error(
             "Generation stream ended without results. Please try again.",
           );
@@ -1203,8 +1241,8 @@ export default function Home() {
         applyRunEvent({
           type: "run-complete",
           result: parsed,
-          summary: "Generated concept variants successfully.",
-          fallbackUsed: false,
+          summary: "Generated concept variants using fallback path.",
+          fallbackUsed: true,
         });
         finalResult = parsed;
       }
