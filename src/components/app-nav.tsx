@@ -1,10 +1,11 @@
 "use client";
 
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { LoaderCircle, Menu, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { usePostContext } from "@/contexts/post-context";
 import type { WorkspaceAuthStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const NAV_LINKS = [
 
 export function AppNav() {
   const pathname = usePathname();
+  const { toggleSidebar } = usePostContext();
   const [workspaceAuth, setWorkspaceAuth] =
     useState<WorkspaceAuthStatus | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -53,6 +55,13 @@ export function AppNav() {
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
       <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          className="rounded-lg p-1.5 text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
           <Sparkles className="h-4 w-4" />
           IG Poster

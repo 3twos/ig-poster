@@ -30,13 +30,13 @@ import {
 
 import { AppShell } from "@/components/app-shell";
 import { PosterPreview } from "@/components/poster-preview";
+import { usePostContext } from "@/contexts/post-context";
 import {
   type AspectRatio,
   createDefaultOverlayLayout,
   type CreativeVariant,
   GenerationResponseSchema,
   type GenerationResponse,
-  type OverlayLayout,
 } from "@/lib/creative";
 import {
   type BrandState,
@@ -44,7 +44,6 @@ import {
   type LlmAuthStatus,
   type LocalAsset,
   type PostState,
-  type PromptConfigState,
   INITIAL_BRAND,
   INITIAL_POST,
   RATIO_OPTIONS,
@@ -166,29 +165,24 @@ const phaseLabel = (phase: GenerationStepPhase) => {
 };
 
 export default function Home() {
-  const [brand, setBrand] = useState<BrandState>(INITIAL_BRAND);
-  const [post, setPost] = useState<PostState>(INITIAL_POST);
-  const [assets, setAssets] = useState<LocalAsset[]>([]);
-  const [logo, setLogo] = useState<LocalAsset | null>(null);
-  const [result, setResult] = useState<GenerationResponse | null>(null);
-  const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
-  const [overlayLayouts, setOverlayLayouts] = useState<
-    Record<string, OverlayLayout>
-  >({});
-  const [editorMode, setEditorMode] = useState(false);
-  const [promptConfig, setPromptConfig] = useState<PromptConfigState>({
-    systemPrompt: "",
-    customInstructions: "",
-  });
+  const {
+    activePost,
+    dispatch,
+    createNewPost,
+  } = usePostContext();
 
+  // Local UI-only state for assets (LocalAsset includes blob URLs for preview)
+  const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
+  const [localLogo, setLocalLogo] = useState<LocalAsset | null>(null);
+
+  // Transient UI state
+  const [editorMode, setEditorMode] = useState(false);
   const [isUploadingAssets, setIsUploadingAssets] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">(
@@ -205,8 +199,7 @@ export default function Home() {
     connected: false,
     source: null,
   });
-  const [hasBrand, setHasBrand] = useState<boolean | null>(null);
-  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [isCreatingPost, setIsCreatingPost] = useState(false);
   const [refineInstruction, setRefineInstruction] = useState("");
   const [isRefining, setIsRefining] = useState(false);
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
@@ -221,13 +214,94 @@ export default function Home() {
   const assetCleanupRef = useRef<LocalAsset[]>([]);
   const logoCleanupRef = useRef<LocalAsset | null>(null);
 
+  // Derive values from active post
+  const brand: BrandState = useMemo(() => {
+    if (!activePost?.brand) return INITIAL_BRAND;
+    return { ...INITIAL_BRAND, ...activePost.brand } as BrandState;
+  }, [activePost?.brand]);
+
+  const post: PostState = useMemo(() => {
+    if (!activePost?.brief) return INITIAL_POST;
+    return { ...INITIAL_POST, ...activePost.brief } as PostState;
+  }, [activePost?.brief]);
+
+  const result: GenerationResponse | null = activePost?.result ?? null;
+  const activeVariantId = activePost?.activeVariantId ?? null;
+  const overlayLayouts = useMemo(
+    () => activePost?.overlayLayouts ?? {},
+    [activePost?.overlayLayouts],
+  );
+  const activeSlideIndex = activePost?.activeSlideIndex ?? 0;
+  const shareUrl = activePost?.shareUrl ?? null;
+  const promptConfig = useMemo(
+    () => activePost?.promptConfig ?? { systemPrompt: "", customInstructions: "" },
+    [activePost?.promptConfig],
+  );
+
+  // Hydrate localAssets from stored assets when post loads
   useEffect(() => {
-    assetCleanupRef.current = assets;
-  }, [assets]);
+    if (!activePost) {
+      setLocalAssets([]);
+      setLocalLogo(null);
+      return;
+    }
+
+    const hydrated: LocalAsset[] = (activePost.assets ?? []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      mediaType: a.mediaType ?? "image",
+      previewUrl: a.url,
+      posterUrl: a.posterUrl,
+      storageUrl: a.url,
+      status: "uploaded" as const,
+      durationSec: a.durationSec,
+    }));
+    setLocalAssets(hydrated);
+
+    if (activePost.logoUrl) {
+      setLocalLogo({
+        id: "saved-logo",
+        name: "Saved logo",
+        mediaType: "image",
+        previewUrl: activePost.logoUrl,
+        storageUrl: activePost.logoUrl,
+        status: "uploaded",
+      });
+    } else {
+      setLocalLogo(null);
+    }
+
+    // Reset transient state
+    setError(null);
+    setPublishMessage(null);
+    setEditorMode(false);
+  }, [activePost?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync localAssets to post context as StoredAssets
+  const syncAssetsToPost = useCallback(
+    (assets: LocalAsset[]) => {
+      const stored = assets
+        .filter((a) => a.status === "uploaded" && a.storageUrl)
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          url: a.storageUrl!,
+          mediaType: a.mediaType,
+          posterUrl: a.posterUrl,
+          durationSec: a.durationSec,
+        }));
+      dispatch({ type: "SET_ASSETS", assets: stored });
+    },
+    [dispatch],
+  );
 
   useEffect(() => {
-    logoCleanupRef.current = logo;
-  }, [logo]);
+    assetCleanupRef.current = localAssets;
+  }, [localAssets]);
+
+  useEffect(() => {
+    logoCleanupRef.current = localLogo;
+  }, [localLogo]);
 
   useEffect(() => {
     return () => {
@@ -253,45 +327,7 @@ export default function Home() {
     return () => window.clearInterval(interval);
   }, [agentRun?.status]);
 
-  // Load brand + promptConfig from settings on mount
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const response = await fetch("/api/settings", { cache: "no-store" });
-        if (!response.ok) {
-          // 401/503 = auth or config issue, not "no brand"
-          setHasBrand(null);
-          return;
-        }
-
-        const json = await response.json();
-        if (json?.brand?.brandName) {
-          setBrand((current) => ({ ...current, ...json.brand }));
-          setHasBrand(true);
-        } else {
-          setHasBrand(false);
-        }
-        if (json?.promptConfig) {
-          setPromptConfig((current) => ({ ...current, ...json.promptConfig }));
-        }
-        if (json?.logoUrl) {
-          setLogo({
-            id: "saved-logo",
-            name: "Saved logo",
-            mediaType: "image",
-            previewUrl: json.logoUrl,
-            storageUrl: json.logoUrl,
-            status: "uploaded",
-          });
-        }
-      } catch {
-        // Network/parse error — don't show misleading banner
-        setHasBrand(null);
-      }
-    };
-
-    void loadSettings();
-  }, []);
+  // Brand comes from the active post now (pre-filled from settings when post was created)
 
   const loadAuthStatus = useCallback(async () => {
     setIsAuthLoading(true);
@@ -383,8 +419,8 @@ export default function Home() {
 
   // Reset slide index when variant changes
   useEffect(() => {
-    setActiveSlideIndex(0);
-  }, [activeVariantId]);
+    dispatch({ type: "SET_ACTIVE_SLIDE", index: 0 });
+  }, [activeVariantId, dispatch]);
 
   const activeOverlayLayout = useMemo(() => {
     if (!activeVariant) {
@@ -398,12 +434,12 @@ export default function Home() {
   }, [activeVariant, overlayLayouts]);
 
   const assetMap = useMemo(() => {
-    return new Map(assets.map((asset) => [asset.id, asset]));
-  }, [assets]);
+    return new Map(localAssets.map((asset) => [asset.id, asset]));
+  }, [localAssets]);
 
   const orderedVariantAssets = useMemo(() => {
     if (!activeVariant) {
-      return assets;
+      return localAssets;
     }
 
     const ordered = activeVariant.assetSequence
@@ -411,13 +447,13 @@ export default function Home() {
       .filter((asset): asset is LocalAsset => Boolean(asset));
 
     if (!ordered.length) {
-      return assets;
+      return localAssets;
     }
 
     const used = new Set(ordered.map((asset) => asset.id));
-    const rest = assets.filter((asset) => !used.has(asset.id));
+    const rest = localAssets.filter((asset) => !used.has(asset.id));
     return [...ordered, ...rest];
-  }, [activeVariant, assetMap, assets]);
+  }, [activeVariant, assetMap, localAssets]);
 
   const getDisplayVisual = (asset?: LocalAsset) => {
     if (!asset) {
@@ -822,7 +858,7 @@ export default function Home() {
   ]);
 
   const canRetryGeneration =
-    !isGenerating && assets.length > 0 && !isUploadingAssets && !isUploadingLogo;
+    !isGenerating && localAssets.length > 0 && !isUploadingAssets && !isUploadingLogo;
 
   const copyRunLog = useCallback(async () => {
     if (!agentRun) {
@@ -944,7 +980,7 @@ export default function Home() {
       status: "uploading" as const,
     }));
 
-    setAssets((current) => {
+    setLocalAssets((current) => {
       current.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
       return staged;
     });
@@ -958,7 +994,7 @@ export default function Home() {
         if (staged[index].mediaType === "video") {
           try {
             const meta = await extractVideoMetadata(staged[index].previewUrl);
-            setAssets((current) =>
+            setLocalAssets((current) =>
               current.map((asset) =>
                 asset.id === itemId
                   ? {
@@ -972,7 +1008,7 @@ export default function Home() {
               ),
             );
           } catch {
-            setAssets((current) =>
+            setLocalAssets((current) =>
               current.map((asset) =>
                 asset.id === itemId
                   ? {
@@ -989,7 +1025,7 @@ export default function Home() {
           const folder =
             staged[index].mediaType === "video" ? "videos" : "assets";
           const url = await uploadFileToStorage(file, folder);
-          setAssets((current) =>
+          setLocalAssets((current) =>
             current.map((asset) =>
               asset.id === itemId
                 ? {
@@ -1001,7 +1037,7 @@ export default function Home() {
             ),
           );
         } catch (uploadError) {
-          setAssets((current) =>
+          setLocalAssets((current) =>
             current.map((asset) =>
               asset.id === itemId
                 ? {
@@ -1019,6 +1055,11 @@ export default function Home() {
       }),
     );
 
+    // Sync uploaded assets to post context
+    setLocalAssets((current) => {
+      syncAssetsToPost(current);
+      return current;
+    });
     setIsUploadingAssets(false);
   };
 
@@ -1041,7 +1082,7 @@ export default function Home() {
       status: "uploading",
     };
 
-    setLogo((current) => {
+    setLocalLogo((current) => {
       if (current) {
         URL.revokeObjectURL(current.previewUrl);
       }
@@ -1053,7 +1094,7 @@ export default function Home() {
 
     try {
       const url = await uploadFileToStorage(file, "logos");
-      setLogo((current) =>
+      setLocalLogo((current) =>
         current
           ? {
               ...current,
@@ -1062,8 +1103,9 @@ export default function Home() {
             }
           : null,
       );
+      dispatch({ type: "SET_LOGO", logoUrl: url });
     } catch (uploadError) {
-      setLogo((current) =>
+      setLocalLogo((current) =>
         current
           ? {
               ...current,
@@ -1101,7 +1143,7 @@ export default function Home() {
         body: JSON.stringify({
           brand,
           post,
-          assets: assets.map((asset) => ({
+          assets: localAssets.map((asset) => ({
             id: asset.id,
             name: asset.name,
             mediaType: asset.mediaType,
@@ -1109,7 +1151,7 @@ export default function Home() {
             width: asset.width,
             height: asset.height,
           })),
-          hasLogo: Boolean(logo),
+          hasLogo: Boolean(localLogo),
           promptConfig,
         }),
       });
@@ -1247,17 +1289,14 @@ export default function Home() {
         finalResult = parsed;
       }
 
-      setResult(finalResult);
-      setActiveVariantId(finalResult.variants[0]?.id ?? null);
-      setOverlayLayouts(
-        Object.fromEntries(
-          finalResult.variants.map((variant) => [
-            variant.id,
-            createDefaultOverlayLayout(variant.layout),
-          ]),
-        ),
+      const layouts = Object.fromEntries(
+        finalResult.variants.map((variant) => [
+          variant.id,
+          createDefaultOverlayLayout(variant.layout),
+        ]),
       );
-      setShareUrl(null);
+      dispatch({ type: "SET_RESULT", result: finalResult, overlayLayouts: layouts });
+      dispatch({ type: "SET_ACTIVE_VARIANT", variantId: finalResult.variants[0]?.id ?? "" });
     } catch (generationError) {
       if (
         generationError instanceof Error &&
@@ -1410,18 +1449,15 @@ export default function Home() {
       }
 
       const refined = json.variant;
-      setResult((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          variants: current.variants.map((v) =>
+      if (result) {
+        const updatedResult = {
+          ...result,
+          variants: result.variants.map((v) =>
             v.id === activeVariant.id ? { ...refined, id: activeVariant.id } : v,
           ),
         };
-      });
+        dispatch({ type: "SET_RESULT", result: updatedResult, overlayLayouts: overlayLayouts });
+      }
       setRefineInstruction("");
     } catch (refineError) {
       setError(
@@ -1438,7 +1474,6 @@ export default function Home() {
     }
 
     setError(null);
-    setShareUrl(null);
     setIsSharing(true);
 
     try {
@@ -1449,7 +1484,7 @@ export default function Home() {
         body: JSON.stringify({
           brand,
           post,
-          assets: assets
+          assets: localAssets
             .filter((asset) => Boolean(asset.storageUrl))
             .map((asset) => ({
               id: asset.id,
@@ -1459,7 +1494,7 @@ export default function Home() {
               posterUrl: asset.posterUrl,
               url: asset.storageUrl,
             })),
-          logoUrl: logo?.storageUrl,
+          logoUrl: localLogo?.storageUrl,
           result,
           activeVariantId: activeVariant.id,
           overlayLayouts,
@@ -1476,7 +1511,7 @@ export default function Home() {
         throw new Error("No share link returned");
       }
 
-      setShareUrl(json.shareUrl);
+      dispatch({ type: "SET_SHARE", shareUrl: json.shareUrl });
       try {
         await navigator.clipboard.writeText(json.shareUrl);
         setShareCopyState("done");
@@ -1531,7 +1566,7 @@ export default function Home() {
         sequenced.find(
           (asset) => asset.mediaType === "video" && asset.storageUrl,
         ) ??
-        assets.find(
+        localAssets.find(
           (asset) => asset.mediaType === "video" && asset.storageUrl,
         );
 
@@ -1651,7 +1686,7 @@ export default function Home() {
       <button
         key={variant.id}
         type="button"
-        onClick={() => setActiveVariantId(variant.id)}
+        onClick={() => dispatch({ type: "SET_ACTIVE_VARIANT", variantId: variant.id })}
         className={cn(
           "w-full rounded-2xl border p-4 text-left transition-all duration-200",
           isActive
@@ -1685,11 +1720,52 @@ export default function Home() {
     ? (agentRun.endedAt ?? runClock) - agentRun.startedAt
     : 0;
 
+  const handleCreatePost = async () => {
+    setIsCreatingPost(true);
+    try {
+      await createNewPost();
+    } finally {
+      setIsCreatingPost(false);
+    }
+  };
+
+  // ---- Empty state when no post is selected ----
+  if (!activePost) {
+    return (
+      <AppShell>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="text-center">
+            <Sparkles className="mx-auto h-12 w-12 text-orange-300/50" />
+            <h2 className="mt-4 text-lg font-semibold text-white">
+              No post selected
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Select a post from the sidebar or create a new one to get started.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleCreatePost()}
+              disabled={isCreatingPost}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-orange-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isCreatingPost ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Create Your First Post
+            </button>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <>
       <AppShell>
         <div className="pb-24 md:pb-28" aria-busy={isAgentBusy}>
-          {hasBrand === false ? (
+          {!brand.brandName ? (
             <div className="mb-4 rounded-xl border border-orange-300/30 bg-orange-400/10 p-3 text-xs text-orange-100">
               No saved brand kit found.{" "}
               <Link href="/brand" className="font-semibold underline">
@@ -1742,7 +1818,7 @@ export default function Home() {
             </div>
 
             <div className="mb-4 flex flex-wrap gap-2">
-              {assets.map((asset) => (
+              {localAssets.map((asset) => (
                 <span
                   key={asset.id}
                   className={cn(
@@ -1763,15 +1839,15 @@ export default function Home() {
                   {asset.status === "local" ? " (local only)" : ""}
                 </span>
               ))}
-              {logo ? (
+              {localLogo ? (
                 <span
                   className={cn(
                     "rounded-full border px-3 py-1 text-[11px] font-medium",
-                    statusChip(logo.status),
+                    statusChip(localLogo.status),
                   )}
                 >
-                  Logo: {logo.name}
-                  {logo.status === "uploading" ? " (syncing)" : ""}
+                  Logo: {localLogo.name}
+                  {localLogo.status === "uploading" ? " (syncing)" : ""}
                 </span>
               ) : null}
             </div>
@@ -1785,10 +1861,7 @@ export default function Home() {
                 <input
                   value={post.theme}
                   onChange={(event) =>
-                    setPost((current) => ({
-                      ...current,
-                      theme: event.target.value,
-                    }))
+                    dispatch({ type: "UPDATE_BRIEF", brief: { theme: event.target.value } })
                   }
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
@@ -1800,10 +1873,7 @@ export default function Home() {
                 <input
                   value={post.subject}
                   onChange={(event) =>
-                    setPost((current) => ({
-                      ...current,
-                      subject: event.target.value,
-                    }))
+                    dispatch({ type: "UPDATE_BRIEF", brief: { subject: event.target.value } })
                   }
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
@@ -1817,10 +1887,7 @@ export default function Home() {
                 <textarea
                   value={post.thought}
                   onChange={(event) =>
-                    setPost((current) => ({
-                      ...current,
-                      thought: event.target.value,
-                    }))
+                    dispatch({ type: "UPDATE_BRIEF", brief: { thought: event.target.value } })
                   }
                   rows={3}
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
@@ -1835,10 +1902,7 @@ export default function Home() {
                 <input
                   value={post.objective}
                   onChange={(event) =>
-                    setPost((current) => ({
-                      ...current,
-                      objective: event.target.value,
-                    }))
+                    dispatch({ type: "UPDATE_BRIEF", brief: { objective: event.target.value } })
                   }
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
@@ -1850,10 +1914,7 @@ export default function Home() {
                 <input
                   value={post.audience}
                   onChange={(event) =>
-                    setPost((current) => ({
-                      ...current,
-                      audience: event.target.value,
-                    }))
+                    dispatch({ type: "UPDATE_BRIEF", brief: { audience: event.target.value } })
                   }
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
@@ -1867,10 +1928,7 @@ export default function Home() {
                 <input
                   value={post.mood}
                   onChange={(event) =>
-                    setPost((current) => ({
-                      ...current,
-                      mood: event.target.value,
-                    }))
+                    dispatch({ type: "UPDATE_BRIEF", brief: { mood: event.target.value } })
                   }
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
@@ -1882,10 +1940,7 @@ export default function Home() {
                 <select
                   value={post.aspectRatio}
                   onChange={(event) =>
-                    setPost((current) => ({
-                      ...current,
-                      aspectRatio: event.target.value as AspectRatio,
-                    }))
+                    dispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: event.target.value as AspectRatio } })
                   }
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 >
@@ -1905,7 +1960,7 @@ export default function Home() {
                 onClick={generate}
                 disabled={
                   isGenerating ||
-                  assets.length === 0 ||
+                  localAssets.length === 0 ||
                   isUploadingAssets ||
                   isUploadingLogo
                 }
@@ -2141,7 +2196,7 @@ export default function Home() {
                   aspectRatio={post.aspectRatio}
                   primaryImage={primaryVisual}
                   secondaryImage={secondaryVisual}
-                  logoImage={logo?.previewUrl}
+                  logoImage={localLogo?.previewUrl}
                   editorMode={editorMode}
                   overlayLayout={activeOverlayLayout}
                   onOverlayLayoutChange={(layout) => {
@@ -2149,14 +2204,15 @@ export default function Home() {
                       return;
                     }
 
-                    setOverlayLayouts((current) => ({
-                      ...current,
-                      [activeVariant.id]: layout,
-                    }));
+                    dispatch({
+                      type: "UPDATE_OVERLAY",
+                      variantId: activeVariant.id,
+                      layout,
+                    });
                   }}
                   carouselSlides={activeVariant.carouselSlides}
                   activeSlideIndex={activeSlideIndex}
-                  onSlideChange={setActiveSlideIndex}
+                  onSlideChange={(index: number) => dispatch({ type: "SET_ACTIVE_SLIDE", index })}
                 />
               </motion.div>
             ) : (
@@ -2454,12 +2510,11 @@ export default function Home() {
                             return;
                           }
 
-                          setOverlayLayouts((current) => ({
-                            ...current,
-                            [activeVariant.id]: createDefaultOverlayLayout(
-                              activeVariant.layout,
-                            ),
-                          }));
+                          dispatch({
+                            type: "UPDATE_OVERLAY",
+                            variantId: activeVariant.id,
+                            layout: createDefaultOverlayLayout(activeVariant.layout),
+                          });
                         }}
                         className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                       >
