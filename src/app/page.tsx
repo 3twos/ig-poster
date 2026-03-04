@@ -22,6 +22,7 @@ import {
 import type { PanelImperativeHandle } from "react-resizable-panels";
 
 import { AgentActivityPanel } from "@/components/agent-activity-panel";
+import { ChatPanel } from "@/components/chat";
 import { AppShell } from "@/components/app-shell";
 import { AssetManager } from "@/components/asset-manager";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
@@ -93,6 +94,8 @@ export default function Home() {
   const [isCreatingPost, setIsCreatingPost] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
   const [mobileAgentSheetOpen, setMobileAgentSheetOpen] = useState(false);
+  const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
+  const [rightPanelTab, setRightPanelTab] = useState<"agent" | "chat">("agent");
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
@@ -485,8 +488,19 @@ export default function Home() {
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
               <ResizablePanel panelRef={rightPanelRef} defaultSize={30} minSize={18} collapsible collapsedSize={0} onResize={(size) => setRightCollapsed(size.asPercentage === 0)} className="flex flex-col">
-                <div ref={activityPanelRef} className="flex h-full flex-col rounded-2xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl mr-4 overflow-y-auto">
-                  <AgentActivityPanel agentRun={generation.agentRun} agentVerbosity={generation.agentVerbosity} setAgentVerbosity={generation.setAgentVerbosity} showStepDetails={generation.showStepDetails} setShowStepDetails={generation.setShowStepDetails} visibleAgentSteps={generation.visibleAgentSteps} runProgress={generation.runProgress} runDurationMs={generation.runDurationMs} runClock={generation.runClock} runLogCopyState={generation.runLogCopyState} onCopyRunLog={() => void generation.copyRunLog()} />
+                <div className="flex h-full flex-col rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl mr-4 overflow-hidden">
+                  {/* Agent / Chat tab switcher */}
+                  <div className="flex shrink-0 border-b border-white/10" role="tablist" aria-label="Right panel tabs">
+                    <button type="button" role="tab" aria-selected={rightPanelTab === "agent"} onClick={() => setRightPanelTab("agent")} className={cn("flex-1 px-3 py-2 text-xs font-semibold transition", rightPanelTab === "agent" ? "border-b-2 border-orange-400 text-orange-200" : "text-slate-400 hover:text-white")}>Agent</button>
+                    <button type="button" role="tab" aria-selected={rightPanelTab === "chat"} onClick={() => setRightPanelTab("chat")} className={cn("flex-1 px-3 py-2 text-xs font-semibold transition", rightPanelTab === "chat" ? "border-b-2 border-orange-400 text-orange-200" : "text-slate-400 hover:text-white")}>Chat</button>
+                  </div>
+                  {rightPanelTab === "agent" ? (
+                    <div ref={activityPanelRef} className="flex-1 overflow-y-auto p-4">
+                      <AgentActivityPanel agentRun={generation.agentRun} agentVerbosity={generation.agentVerbosity} setAgentVerbosity={generation.setAgentVerbosity} showStepDetails={generation.showStepDetails} setShowStepDetails={generation.setShowStepDetails} visibleAgentSteps={generation.visibleAgentSteps} runProgress={generation.runProgress} runDurationMs={generation.runDurationMs} runClock={generation.runClock} runLogCopyState={generation.runLogCopyState} onCopyRunLog={() => void generation.copyRunLog()} />
+                    </div>
+                  ) : (
+                    <ChatPanel />
+                  )}
                 </div>
               </ResizablePanel>
             </ResizablePanelGroup>
@@ -509,7 +523,10 @@ export default function Home() {
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
             {activeVariant && <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e, s) => void publishToInstagram(e, s)} />}
-            <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="w-full">Agent Activity</Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
+              <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>
+            </div>
           </div>
         </div>
       </AppShell>
@@ -521,6 +538,11 @@ export default function Home() {
           <div className="mt-4">
             <AgentActivityPanel agentRun={generation.agentRun} agentVerbosity={generation.agentVerbosity} setAgentVerbosity={generation.setAgentVerbosity} showStepDetails={generation.showStepDetails} setShowStepDetails={generation.setShowStepDetails} visibleAgentSteps={generation.visibleAgentSteps} runProgress={generation.runProgress} runDurationMs={generation.runDurationMs} runClock={generation.runClock} runLogCopyState={generation.runLogCopyState} onCopyRunLog={() => void generation.copyRunLog()} />
           </div>
+        </SheetContent>
+      </Sheet>
+      <Sheet open={mobileChatSheetOpen} onOpenChange={setMobileChatSheetOpen}>
+        <SheetContent side="right" className="w-[340px] border-l border-white/15 bg-slate-900/95 p-0 backdrop-blur-xl">
+          <ChatPanel />
         </SheetContent>
       </Sheet>
 

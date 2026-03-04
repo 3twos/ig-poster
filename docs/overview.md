@@ -16,6 +16,7 @@
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed queue.
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.
+- Provides an AI chat assistant panel for real-time conversation about content strategy, captions, and creative direction, with SSE-streamed responses and persistent conversation history.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
 
 ## Key Features
@@ -29,7 +30,8 @@
 ## Primary User Scenarios
 
 1. Create a new post concept from a brief
-   - Use the 3-column layout: browse posts (left), edit brief and preview (center), monitor agent activity (right).
+   - Use the 3-column layout: browse posts (left), edit brief and preview (center), agent activity or chat (right).
+   - Switch between Agent and Chat tabs in the right panel to monitor generation or converse with the AI assistant.
    - Upload assets and logo, fill brand/post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
@@ -43,6 +45,9 @@
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.
+
+6. Refine ideas with AI chat
+   - Open the Chat tab in the right panel to brainstorm captions, get hashtag suggestions, or refine creative direction in a multi-turn conversation.
 
 ## Scope Boundaries
 

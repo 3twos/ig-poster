@@ -70,7 +70,14 @@ Run these before opening or updating a PR.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls.
 - `src/components/publish-section.tsx`: share link, Instagram auth, schedule, publish form.
 - `src/components/poster-preview.tsx`: poster renderer + editable overlay blocks.
+- `src/components/chat/`: chat module — `chat-panel.tsx` (embeddable for right panel), `chat-container.tsx` (standalone with sidebar), `chat-messages.tsx`, `chat-message.tsx`, `chat-input.tsx`, `chat-markdown.tsx`, `chat-code-block.tsx`, `chat-thinking.tsx`, `chat-empty.tsx`, `chat-header.tsx`, `chat-sidebar.tsx`.
 - `src/hooks/use-generation.ts`: SSE-based generation orchestration, agent run state, thinking token handling.
+- `src/hooks/use-chat.ts`: chat message state, SSE streaming, send/stop/regenerate/edit.
+- `src/hooks/use-chat-conversations.ts`: conversation list CRUD, active conversation selection.
+- `src/lib/chat-types.ts`: Zod schemas for chat messages, conversations, and API requests.
+- `src/lib/chat-stream.ts`: server-side LLM text streaming for chat (OpenAI + Anthropic).
+- `src/lib/chat-store.ts`: Blob-backed conversation persistence with summary index.
+- `src/lib/chat-system-prompt.ts`: chat system prompt builder with brand context injection.
 - `src/lib/agent-types.ts`: agent run/step types and UI utility functions.
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, and publishing.
@@ -99,6 +106,7 @@ Run these before opening or updating a PR.
 - Prefer adding logic to `src/lib/*` and keeping route handlers thin.
 - Keep LLM prompts and output constraints in `src/lib/creative.ts`.
 - Preserve fallback behavior so generation still works without provider credentials.
+- Chat and generation share the same LLM auth resolution (`resolveAllLlmAuthFromRequest`); both use SSE streaming patterns.
 - For security-sensitive features, use existing encryption helpers and auth resolvers.
 
 ## Troubleshooting for Developers
