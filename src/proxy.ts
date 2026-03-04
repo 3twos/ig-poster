@@ -10,7 +10,6 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/auth/google/",
   "/api/auth/meta/",
   "/api/cron/publish",
-  "/share/",
   "/_next/",
 ];
 

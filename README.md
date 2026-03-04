@@ -25,7 +25,7 @@ Output:
 - Live poster preview
 - Draggable/resizable text canvas editor
 - PNG export
-- Shareable project URL
+- Workspace project URL (requires login)
 - Publish now or schedule to Instagram
 - Connect/disconnect Instagram via Meta OAuth
 - Format-aware planning: single image, carousel, and reel edit blueprint
@@ -35,7 +35,7 @@ Output:
 1. Persistent media storage and share links
 - Uploads images/logos/renders to Vercel Blob
 - Saves project snapshots in Blob
-- Generates share links at `/share/:id`
+- Generates project links at `/share/:id` (workspace login required)
 
 2. Editable drag/resize overlay canvas
 - Toggle editor mode in the right panel
@@ -55,7 +55,7 @@ Output:
 
 5. Intelligent IG Poster LLM architecture
 - User can connect OpenAI or Anthropic subscription key (BYOK)
-- BYOK stores encrypted provider keys server-side in Blob; browser only keeps a short connection-id cookie
+- BYOK stores encrypted provider keys in private Postgres (`DATABASE_URL`); browser only keeps a short connection-id cookie
 - Env fallback still supported (`OPENAI_*` or `ANTHROPIC_*`)
 - Generation uses explicit system prompt + customizable prompt addendum/instructions
 
@@ -73,6 +73,8 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+Node runtime: `>=20.9.0`.
+
 ## Environment Variables
 
 Create `.env.local` from `.env.example`:
@@ -89,6 +91,7 @@ GOOGLE_OAUTH_REDIRECT_URI=
 WORKSPACE_AUTH_PRODUCTION_HOST=
 WORKSPACE_AUTH_PREVIEW_HOST=
 WORKSPACE_AUTH_SECRET=
+DATABASE_URL=
 BLOB_READ_WRITE_TOKEN=
 INSTAGRAM_ACCESS_TOKEN=
 INSTAGRAM_BUSINESS_ID=
@@ -102,13 +105,25 @@ CRON_SECRET=
 
 Notes:
 - Without a connected provider key (or env fallback key), generation falls back to deterministic local concepts.
-- `POST /api/auth/llm/connect` uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` for encryption. If Blob is configured, BYOK credentials are stored encrypted in Blob; otherwise they are stored in an encrypted `httpOnly` cookie automatically.
+- `POST /api/auth/llm/connect` uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` for encryption. If `DATABASE_URL` is configured, BYOK credentials are stored encrypted in private Postgres; otherwise they are stored in an encrypted `httpOnly` cookie fallback.
 - `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
+- `DATABASE_URL` is recommended for private persistent credential storage (LLM + Meta OAuth connection records).
+- Provision DB schema before first credential write (recommended for least-privilege DB users):
+  ```sql
+  CREATE TABLE IF NOT EXISTS ig_poster_private_credentials (
+    namespace TEXT NOT NULL,
+    credential_id TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (namespace, credential_id)
+  );
+  ```
 - `GOOGLE_OAUTH_REDIRECT_URI` is optional (defaults to `<origin>/api/auth/google/callback`).
 - `WORKSPACE_AUTH_PRODUCTION_HOST` is optional and lets middleware redirect raw production deployment URLs to your stable production alias before auth.
 - `WORKSPACE_AUTH_PREVIEW_HOST` is optional and lets middleware redirect raw preview deployment URLs to a stable preview alias before auth.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
-- For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
+- For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`. `DATABASE_URL` is required for persistent OAuth connections and scheduled OAuth publishing.
 - In production, set one of `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` to encrypt OAuth/BYOK tokens at rest.
 - In local/preview environments with no configured encryption secret, the app uses a process-scoped runtime fallback secret; restarting the server invalidates previously encrypted OAuth/BYOK credentials and you may need to reconnect.
 - `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` remain supported as env fallback credentials.

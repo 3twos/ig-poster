@@ -80,11 +80,16 @@ export async function POST(req: Request) {
           }
         };
         const send = (event: GenerationRunEvent) => {
-          if (streamClosed) {
+          if (streamClosed || generationAbortController.signal.aborted) {
             return;
           }
 
-          controller.enqueue(encoder.encode(toSseEvent(event)));
+          try {
+            controller.enqueue(encoder.encode(toSseEvent(event)));
+          } catch {
+            streamClosed = true;
+            generationAbortController.abort();
+          }
         };
         const runId = crypto.randomUUID();
         let activeStepId: string | null = null;

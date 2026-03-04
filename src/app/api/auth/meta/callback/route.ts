@@ -49,7 +49,7 @@ export async function GET(req: Request) {
 
     const response = NextResponse.redirect(`${origin}/?auth=connected`);
 
-    response.cookies.set(META_CONNECTION_COOKIE, connection.id, {
+    response.cookies.set(META_CONNECTION_COOKIE, connection.cookieValue, {
       httpOnly: true,
       sameSite: "lax",
       secure: url.protocol === "https:",

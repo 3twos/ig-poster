@@ -179,6 +179,34 @@ const phaseNarrative = (phase: GenerationStepPhase, title: string) => {
   return "Polishing final details...";
 };
 
+const summarizeRunEvent = (event: GenerationRunEvent) => {
+  if (event.type === "run-start") {
+    return event.detail || event.label;
+  }
+
+  if (event.type === "step-start") {
+    return event.detail || `Started: ${event.title}`;
+  }
+
+  if (event.type === "step-complete") {
+    return event.detail || `Completed step: ${event.stepId}`;
+  }
+
+  if (event.type === "step-error") {
+    return event.detail;
+  }
+
+  if (event.type === "heartbeat") {
+    return event.detail;
+  }
+
+  if (event.type === "run-complete") {
+    return event.summary;
+  }
+
+  return event.detail;
+};
+
 export default function Home() {
   const {
     activePost,
@@ -1210,6 +1238,90 @@ export default function Home() {
         const decoder = new TextDecoder();
         let buffer = "";
         let seededLegacyStream = false;
+        let lastStreamDetail = "";
+
+        const processDataLine = (line: string) => {
+          const trimmedLine = line.trim();
+          if (!trimmedLine || !trimmedLine.startsWith("data:")) {
+            return;
+          }
+
+          const data = trimmedLine.slice("data:".length).trimStart();
+          if (!data) {
+            return;
+          }
+
+          try {
+            const event = JSON.parse(data) as unknown;
+
+            if (isGenerationRunEvent(event)) {
+              lastStreamDetail = summarizeRunEvent(event);
+              applyRunEvent(event);
+              if (event.type === "run-complete") {
+                finalResult = GenerationResponseSchema.parse(event.result);
+              } else if (event.type === "run-error") {
+                throw new Error(event.detail);
+              }
+              return;
+            }
+
+            const legacy = event as {
+              type?: string;
+              message?: string;
+              result?: unknown;
+            };
+
+            if (legacy.type === "status" && legacy.message) {
+              lastStreamDetail = legacy.message;
+              if (!seededLegacyStream) {
+                applyRunEvent({
+                  type: "run-start",
+                  runId: crypto.randomUUID(),
+                  label: "Generate SOTA Concepts",
+                  detail: "Streaming generation updates.",
+                });
+                applyRunEvent({
+                  type: "step-start",
+                  stepId: "legacy-stream",
+                  title: "Generate concepts",
+                  detail: legacy.message,
+                  phase: "execution",
+                });
+                seededLegacyStream = true;
+              } else {
+                applyRunEvent({
+                  type: "heartbeat",
+                  detail: legacy.message,
+                });
+              }
+            } else if (legacy.type === "complete" && legacy.result) {
+              finalResult = GenerationResponseSchema.parse(legacy.result);
+              lastStreamDetail = "Generation stream completed.";
+              if (seededLegacyStream) {
+                applyRunEvent({
+                  type: "step-complete",
+                  stepId: "legacy-stream",
+                  detail: "Generation stream completed.",
+                });
+              }
+              applyRunEvent({
+                type: "run-complete",
+                result: legacy.result,
+                summary: "Generated concept variants successfully.",
+                fallbackUsed: false,
+              });
+            } else if (legacy.type === "error" && legacy.message) {
+              throw new Error(legacy.message);
+            }
+          } catch (parseError) {
+            if (
+              parseError instanceof Error &&
+              parseError.message !== "Unexpected end of JSON input"
+            ) {
+              throw parseError;
+            }
+          }
+        };
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1220,86 +1332,23 @@ export default function Home() {
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6).trim();
-              if (!data) {
-                continue;
-              }
+            processDataLine(line);
+          }
+        }
 
-              try {
-                const event = JSON.parse(data) as unknown;
-
-                if (isGenerationRunEvent(event)) {
-                  applyRunEvent(event);
-                  if (event.type === "run-complete") {
-                    finalResult = GenerationResponseSchema.parse(event.result);
-                  } else if (event.type === "run-error") {
-                    throw new Error(event.detail);
-                  }
-                  continue;
-                }
-
-                const legacy = event as {
-                  type?: string;
-                  message?: string;
-                  result?: unknown;
-                };
-
-                if (legacy.type === "status" && legacy.message) {
-                  if (!seededLegacyStream) {
-                    applyRunEvent({
-                      type: "run-start",
-                      runId: crypto.randomUUID(),
-                      label: "Generate SOTA Concepts",
-                      detail: "Streaming generation updates.",
-                    });
-                    applyRunEvent({
-                      type: "step-start",
-                      stepId: "legacy-stream",
-                      title: "Generate concepts",
-                      detail: legacy.message,
-                      phase: "execution",
-                    });
-                    seededLegacyStream = true;
-                  } else {
-                    applyRunEvent({
-                      type: "heartbeat",
-                      detail: legacy.message,
-                    });
-                  }
-                } else if (legacy.type === "complete" && legacy.result) {
-                  finalResult = GenerationResponseSchema.parse(legacy.result);
-                  if (seededLegacyStream) {
-                    applyRunEvent({
-                      type: "step-complete",
-                      stepId: "legacy-stream",
-                      detail: "Generation stream completed.",
-                    });
-                  }
-                  applyRunEvent({
-                    type: "run-complete",
-                    result: legacy.result,
-                    summary: "Generated concept variants successfully.",
-                    fallbackUsed: false,
-                  });
-                } else if (legacy.type === "error" && legacy.message) {
-                  throw new Error(legacy.message);
-                }
-              } catch (parseError) {
-                if (
-                  parseError instanceof Error &&
-                  parseError.message !== "Unexpected end of JSON input"
-                ) {
-                  throw parseError;
-                }
-              }
-            }
+        const trailing = `${buffer}${decoder.decode()}`;
+        if (trailing.trim()) {
+          for (const line of trailing.split("\n")) {
+            processDataLine(line);
           }
         }
 
         if (!finalResult) {
+          const suffix = lastStreamDetail
+            ? ` Last update: ${lastStreamDetail}`
+            : "";
           throw new Error(
-            "Generation stream ended without results. Please try again.",
+            `Generation stream ended before final results were emitted.${suffix}`,
           );
         }
       } else {
@@ -2158,9 +2207,14 @@ export default function Home() {
                     <p className="text-xs font-semibold text-slate-100">
                       {agentRun.label}
                     </p>
-                    <p className="text-[11px] text-slate-300">
-                      {formatElapsed(runDurationMs)}
-                    </p>
+                    <div className="text-right">
+                      <p className="text-[11px] text-slate-300">
+                        {formatElapsed(runDurationMs)}
+                      </p>
+                      <p className="font-mono text-[10px] text-slate-500">
+                        run:{agentRun.id.slice(0, 8)}
+                      </p>
+                    </div>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-300">
                     {agentRun.summary ??
