@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { apiErrorResponse } from "@/lib/api-error";
 import {
   deleteMetaConnection,
   META_CONNECTION_COOKIE,
@@ -27,9 +28,6 @@ export async function POST(req: Request) {
 
     return response;
   } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to disconnect", detail: error instanceof Error ? error.message : "Unexpected error" },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, { fallback: "Failed to disconnect" });
   }
 }

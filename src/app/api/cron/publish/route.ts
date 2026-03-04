@@ -1,5 +1,8 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
+import { apiErrorResponse } from "@/lib/api-error";
 import { deleteBlob, isBlobEnabled, listBlobs } from "@/lib/blob-store";
 import { requireAppEncryptionSecret } from "@/lib/app-encryption";
 import { getMetaConnection } from "@/lib/meta-auth";
@@ -21,8 +24,12 @@ export async function GET(req: Request) {
         { status: 503 },
       );
     }
-    const authorization = req.headers.get("authorization");
-    if (authorization !== `Bearer ${cronSecret}`) {
+    const authorization = req.headers.get("authorization") ?? "";
+    const expected = `Bearer ${cronSecret}`;
+    const isValid =
+      authorization.length === expected.length &&
+      timingSafeEqual(Buffer.from(authorization), Buffer.from(expected));
+    if (!isValid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -116,12 +123,6 @@ export async function GET(req: Request) {
       ranAt: new Date().toISOString(),
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Cron publish failed",
-        detail: error instanceof Error ? error.message : "Unexpected error",
-      },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, { fallback: "Cron publish failed" });
   }
 }

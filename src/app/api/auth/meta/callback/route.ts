@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
+import { safeErrorDetail } from "@/lib/api-error";
 import {
   completeMetaOAuth,
   META_CONNECTION_COOKIE,
@@ -66,8 +67,7 @@ export async function GET(req: Request) {
 
     return response;
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Meta OAuth callback failed";
+    const message = safeErrorDetail(error, "Meta OAuth callback failed");
 
     return NextResponse.redirect(
       `${origin}/?auth=error&detail=${encodeURIComponent(message)}`,

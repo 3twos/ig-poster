@@ -1,5 +1,8 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
+import { safeErrorDetail } from "@/lib/api-error";
 import {
   completeWorkspaceOAuth,
   createWorkspaceSessionToken,
@@ -56,7 +59,11 @@ export async function GET(req: Request) {
       throw new Error("Missing OAuth code or state");
     }
 
-    if (!expectedState || state !== expectedState) {
+    if (
+      !expectedState ||
+      expectedState.length !== state.length ||
+      !timingSafeEqual(Buffer.from(expectedState), Buffer.from(state))
+    ) {
       throw new Error("Invalid OAuth state");
     }
 
@@ -82,7 +89,7 @@ export async function GET(req: Request) {
     const response = NextResponse.json(
       {
         error: "Google Workspace login failed",
-        detail: error instanceof Error ? error.message : "Unexpected error",
+        detail: safeErrorDetail(error, "Authentication failed"),
       },
       { status: 401 },
     );

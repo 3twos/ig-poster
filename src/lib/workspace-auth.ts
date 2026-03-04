@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
 import { z } from "zod";
 
@@ -191,7 +193,11 @@ export const completeWorkspaceOAuth = async (
     audience: config.clientId,
   });
 
-  if (verified.payload.nonce !== expectedNonce) {
+  const nonce = typeof verified.payload.nonce === "string" ? verified.payload.nonce : "";
+  if (
+    nonce.length !== expectedNonce.length ||
+    !timingSafeEqual(Buffer.from(nonce), Buffer.from(expectedNonce))
+  ) {
     throw new Error("Invalid Google OAuth nonce");
   }
 
