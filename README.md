@@ -139,6 +139,10 @@ Comprehensive research notes for Instagram growth mechanics + vineyard/wine comp
 - `docs/instagram-playbook-2026-03-03.md`
 - `docs/intelligent-ig-poster-competitive-research-2026-03-03.md`
 
+## Planning Docs
+
+- `docs/ai-leverage-roadmap-2026-03-03.md`
+
 ## GitHub + Vercel CI/CD
 
 ### GitHub CI (quality gates)
