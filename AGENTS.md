@@ -76,18 +76,23 @@ Use this flow for every non-trivial change:
 To reduce approval interruptions, the following commands are pre-approved by default.
 
 - Scope rule:
-  - Pre-approved command usage is limited to the active repository/worktree the agent is currently working in.
-  - Any command that writes, deletes, moves, installs, or mutates files must only target paths inside that active repository/worktree.
+  - Read-only discovery/navigation commands are pre-approved.
+  - Any command that writes, deletes, moves, installs, or mutates files must only target paths inside the active repository/worktree.
   - If a write/update action is needed outside the active repository/worktree, stop and ask the user first.
 - Core read/navigation commands:
   - `cd`, `pwd`, `ls`, `tree`, `wc`, `du`, `stat`
   - `rg`, `rg --files`, `find`, `cat`, `head`, `tail`, `sed -n`, `cut`, `sort`, `uniq`
   - `git status`, `git diff`, `git log`, `git show`, `git branch`, `git rev-parse`
-  - `npm run lint`, `npm run build`, `npm run test`, `npm run typecheck`
+  - `npm run lint`, `npm run build`
 - Web/search commands:
   - Tool-based search/open commands (for example: `web.search_query`, `web.open`) are pre-approved.
-  - Shell web fetches are pre-approved for read-only retrieval: `curl -sSL` (GET-only), `wget -qO-` (GET-only).
+  - Shell web fetches are pre-approved only for simple read-only GET requests using exact forms:
+    - `curl -sSL <URL>`
+    - `wget -qO- <URL>`
+    - Do not add flags that change method or send a request body (for example: `-X`, `-d`, `--data`, `--data-*`, `--upload-file`, `-F`, `--form`).
+    - For non-GET/authenticated/upload requests, use tool-based web commands instead of `curl`/`wget`.
 - Write/update commands (repo-scoped only):
   - `mkdir`, `touch`, `cp`, `mv`, `rm` (paths must remain inside the active repository/worktree)
   - `git fetch`, `git pull --ff-only`
-  - `npm install`
+  - `npm ci` (preferred lockfile install)
+  - `npm install` is not pre-approved when it will add/update/remove dependencies or modify `package.json`/`package-lock.json`; ask the user first.
