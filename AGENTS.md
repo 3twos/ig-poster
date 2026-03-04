@@ -67,3 +67,24 @@ Use this flow for every non-trivial change:
 - Always write PR markdown into a file and use `--body-file` (for create/edit/comments) to avoid shell interpolation and command substitution.
 - After creating or editing a PR body, verify it with `gh pr view <number> --json body --jq .body`.
 - If formatting is corrupted, immediately fix it with `gh pr edit <number> --body-file <file>` and post a corrected follow-up comment if needed.
+
+## Command Permissions (Default Allowlist)
+
+To reduce approval interruptions, the following commands are pre-approved by default.
+
+- Scope rule:
+  - Pre-approved command usage is limited to the active repository/worktree the agent is currently working in.
+  - Any command that writes, deletes, moves, installs, or mutates files must only target paths inside that active repository/worktree.
+  - If a write/update action is needed outside the active repository/worktree, stop and ask the user first.
+- Core read/navigation commands:
+  - `cd`, `pwd`, `ls`, `tree`, `wc`, `du`, `stat`
+  - `rg`, `rg --files`, `find`, `cat`, `head`, `tail`, `sed -n`, `cut`, `sort`, `uniq`
+  - `git status`, `git diff`, `git log`, `git show`, `git branch`, `git rev-parse`
+  - `npm run lint`, `npm run build`, `npm run test`, `npm run typecheck`
+- Web/search commands:
+  - Tool-based search/open commands (for example: `web.search_query`, `web.open`) are pre-approved.
+  - Shell web fetches are pre-approved for read-only retrieval: `curl -sSL` (GET-only), `wget -qO-` (GET-only).
+- Write/update commands (repo-scoped only):
+  - `mkdir`, `touch`, `cp`, `mv`, `rm` (paths must remain inside the active repository/worktree)
+  - `git fetch`, `git pull --ff-only`
+  - `npm install`
