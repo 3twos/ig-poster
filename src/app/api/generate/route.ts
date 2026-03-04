@@ -1,16 +1,24 @@
+import { createHash } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import { z } from "zod";
 
-import { readJsonByPath } from "@/lib/blob-store";
+import { listBlobs, readJsonByPath } from "@/lib/blob-store";
 import {
   GenerationRequestSchema,
   GenerationResponseSchema,
   InternalGenerationResponseSchema,
+  PublishOutcomeSchema,
   buildGenerationSystemPrompt,
   buildGenerationUserPrompt,
+  buildPerformanceContext,
   createFallbackResponse,
+  scoreVariantsWithLlm,
   selectTopVariants,
+  selectTopVariantsWithScores,
+  type CreativeVariant,
+  type PublishOutcome,
 } from "@/lib/creative";
 import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
 import { generateStructuredJson } from "@/lib/llm";
@@ -139,6 +147,7 @@ export async function POST(req: Request) {
 
           // Try cached brand memory first, fall back to live scrape
           let websiteResult: WebsiteStyleResult | null = null;
+          let performanceContext = "";
           const normalizeHostname = (rawUrl: string | null | undefined): string | null => {
             if (!rawUrl) return null;
             try {
@@ -152,6 +161,10 @@ export async function POST(req: Request) {
           try {
             const session = await readWorkspaceSessionFromRequest(req);
             if (session) {
+              const emailHash = createHash("sha256")
+                .update(session.email.trim().toLowerCase())
+                .digest("hex");
+
               const settings = await readJsonByPath<UserSettings>(
                 getUserSettingsPath(session.email),
               );
@@ -170,6 +183,30 @@ export async function POST(req: Request) {
                   "load-context",
                   "Using cached website context from saved brand memory.",
                 );
+              }
+
+              // Load performance context from past outcomes
+              try {
+                const outcomeBlobs = await listBlobs(`outcomes/${emailHash}/`, 30);
+                // Sort by pathname (timestamp-prefixed) to guarantee chronological order
+                outcomeBlobs.sort((a, b) => a.pathname.localeCompare(b.pathname));
+                const outcomes: PublishOutcome[] = [];
+                for (const blob of outcomeBlobs.slice(-20)) {
+                  try {
+                    const res = await fetch(blob.url, { cache: "no-store" });
+                    if (res.ok) {
+                      const parsed = PublishOutcomeSchema.safeParse(await res.json());
+                      if (parsed.success) {
+                        outcomes.push(parsed.data);
+                      }
+                    }
+                  } catch {
+                    // Skip individual outcome errors
+                  }
+                }
+                performanceContext = buildPerformanceContext(outcomes);
+              } catch {
+                // Performance context is non-critical
               }
             }
           } catch {
@@ -229,6 +266,7 @@ export async function POST(req: Request) {
               websiteStyleContext: websiteResult?.notes,
               websiteBodyText: websiteResult?.bodyText,
               candidateCount: 6,
+              performanceContext: performanceContext || undefined,
             }),
             temperature: 0.9,
             maxTokens: 12000,
@@ -246,10 +284,23 @@ export async function POST(req: Request) {
             "select-variants",
             "Validate and select top variants",
             "validation",
-            "Applying schema checks and selecting top three concepts.",
+            "Applying schema checks and scoring candidates.",
           );
           const internalParsed = InternalGenerationResponseSchema.parse(generated);
-          const topVariants = selectTopVariants(internalParsed.variants, 3);
+
+          let topVariants: CreativeVariant[];
+          try {
+            const scores = await scoreVariantsWithLlm(
+              llmAuth,
+              internalParsed.variants,
+              { brandName: request.brand.brandName, voice: request.brand.voice },
+              { theme: request.post.theme, audience: request.post.audience, objective: request.post.objective },
+            );
+            topVariants = selectTopVariantsWithScores(internalParsed.variants, scores, 3);
+          } catch {
+            topVariants = selectTopVariants(internalParsed.variants, 3);
+          }
+
           const parsed = GenerationResponseSchema.parse({
             strategy: internalParsed.strategy,
             variants: topVariants,
