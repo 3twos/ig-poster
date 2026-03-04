@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import {
-  deleteBlobByPath,
-  isBlobEnabled,
-  putJson,
-  readJsonByPath,
-} from "@/lib/blob-store";
+  deleteCredentialRecord,
+  type CredentialNamespace,
+  isCredentialStoreEnabled,
+  putCredentialRecord,
+  readCredentialRecord,
+} from "@/lib/private-credential-store";
 import { requireAppEncryptionSecret } from "@/lib/app-encryption";
 import { readCookieFromRequest } from "@/lib/cookies";
 import {
@@ -21,6 +22,7 @@ import { decryptString, encryptString } from "@/lib/secure";
 
 export const LLM_CONNECTION_COOKIE = "ig_llm_connection";
 const INLINE_CONNECTION_PREFIX = "inline:";
+const LLM_CONNECTION_NAMESPACE: CredentialNamespace = "llm";
 
 export const LlmConnectionSchema = z.object({
   id: z.string().min(1),
@@ -45,7 +47,7 @@ const InlineLlmConnectionSchema = z.object({
 });
 
 type SavedLlmConnection = {
-  storage: "blob" | "cookie";
+  storage: "database" | "cookie";
   cookieValue: string;
   provider: LlmProvider;
   model: string;
@@ -65,10 +67,8 @@ const parseConnectionCookie = (cookieValue: string) => {
     return { kind: "inline" as const, encryptedPayload };
   }
 
-  return { kind: "blob" as const, id: value };
+  return { kind: "stored" as const, id: value };
 };
-
-const getConnectionPath = (id: string) => `auth/llm/connections/${id}.json`;
 
 const decodeInlineConnection = (encryptedPayload: string): InlineLlmConnection => {
   const secret = requireAppEncryptionSecret();
@@ -103,7 +103,7 @@ export const saveLlmConnection = async (input: {
       ? DEFAULT_ANTHROPIC_MODEL
       : DEFAULT_OPENAI_MODEL);
 
-  if (isBlobEnabled()) {
+  if (isCredentialStoreEnabled()) {
     const record = LlmConnectionSchema.parse({
       id,
       createdAt: now,
@@ -113,9 +113,9 @@ export const saveLlmConnection = async (input: {
       encryptedApiKey: encryptString(input.apiKey.trim(), secret),
     });
 
-    await putJson(getConnectionPath(record.id), record);
+    await putCredentialRecord(LLM_CONNECTION_NAMESPACE, record.id, record);
     return {
-      storage: "blob",
+      storage: "database",
       cookieValue: record.id,
       provider: record.provider,
       model: record.model,
@@ -142,11 +142,7 @@ export const saveLlmConnection = async (input: {
 };
 
 export const getLlmConnection = async (id: string) => {
-  if (!isBlobEnabled()) {
-    return null;
-  }
-
-  const record = await readJsonByPath<unknown>(getConnectionPath(id));
+  const record = await readCredentialRecord<unknown>(LLM_CONNECTION_NAMESPACE, id);
   if (!record) {
     return null;
   }
@@ -160,26 +156,26 @@ export const deleteLlmConnection = async (id: string) => {
     return false;
   }
 
-  if (!isBlobEnabled()) {
-    return false;
-  }
-
-  return deleteBlobByPath(getConnectionPath(id));
+  return deleteCredentialRecord(LLM_CONNECTION_NAMESPACE, id);
 };
 
 export const readLlmConnectionFromRequest = async (req: Request) => {
   const connectionCookie = readCookieFromRequest(req, LLM_CONNECTION_COOKIE);
   const parsedConnection = parseConnectionCookie(connectionCookie);
-  if (!parsedConnection || parsedConnection.kind !== "blob" || !isBlobEnabled()) {
+  if (
+    !parsedConnection ||
+    parsedConnection.kind !== "stored" ||
+    !isCredentialStoreEnabled()
+  ) {
     return null;
   }
 
   return getLlmConnection(parsedConnection.id);
 };
 
-export const getBlobConnectionIdFromCookie = (cookieValue: string) => {
+export const getStoredConnectionIdFromCookie = (cookieValue: string) => {
   const parsedConnection = parseConnectionCookie(cookieValue);
-  if (!parsedConnection || parsedConnection.kind !== "blob") {
+  if (!parsedConnection || parsedConnection.kind !== "stored") {
     return "";
   }
 
@@ -206,7 +202,7 @@ export const resolveLlmAuthFromRequest = async (
     }
   }
 
-  if (parsedConnection?.kind === "blob" && isBlobEnabled()) {
+  if (parsedConnection?.kind === "stored" && isCredentialStoreEnabled()) {
     try {
       const connection = await getLlmConnection(parsedConnection.id);
       if (connection) {

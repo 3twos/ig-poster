@@ -2,17 +2,25 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import { deleteBlobByPath, isBlobEnabled, putJson, readJsonByPath } from "@/lib/blob-store";
 import {
   getAppEncryptionSecret,
   requireAppEncryptionSecret,
 } from "@/lib/app-encryption";
 import { readCookieFromRequest } from "@/lib/cookies";
 import { getEnvMetaAuth, type MetaAuthContext } from "@/lib/meta";
+import {
+  deleteCredentialRecord,
+  type CredentialNamespace,
+  isCredentialStoreEnabled,
+  putCredentialRecord,
+  readCredentialRecord,
+} from "@/lib/private-credential-store";
 import { decryptString, encryptString } from "@/lib/secure";
 
 export const META_OAUTH_STATE_COOKIE = "meta_oauth_state";
 export const META_CONNECTION_COOKIE = "ig_connection";
+const INLINE_CONNECTION_PREFIX = "inline:";
+const META_CONNECTION_NAMESPACE: CredentialNamespace = "meta";
 
 const graphVersion = process.env.META_GRAPH_VERSION ?? "v22.0";
 
@@ -55,6 +63,18 @@ export const MetaOAuthConnectionSchema = z.object({
 });
 
 export type MetaOAuthConnection = z.infer<typeof MetaOAuthConnectionSchema>;
+
+const InlineMetaOAuthConnectionSchema = z.object({
+  graphVersion: z.string().min(1),
+  instagramUserId: z.string().min(1),
+  instagramUsername: z.string().optional().default(""),
+  instagramName: z.string().optional().default(""),
+  pageName: z.string().optional().default(""),
+  tokenExpiresAt: z.string().datetime().optional(),
+  accessToken: z.string().trim().min(8).max(4000),
+});
+
+type InlineMetaOAuthConnection = z.infer<typeof InlineMetaOAuthConnectionSchema>;
 
 export type ResolvedMetaAuth = {
   source: "oauth" | "env";
@@ -105,12 +125,54 @@ const callGraphJson = async <T>(url: URL): Promise<T> => {
   return json;
 };
 
-const getConnectionPath = (id: string) => `auth/meta/connections/${id}.json`;
+const parseConnectionCookie = (cookieValue: string) => {
+  const value = cookieValue.trim();
+  if (!value) {
+    return null;
+  }
+
+  if (value.startsWith(INLINE_CONNECTION_PREFIX)) {
+    const encryptedPayload = value.slice(INLINE_CONNECTION_PREFIX.length).trim();
+    if (!encryptedPayload) {
+      return null;
+    }
+
+    return { kind: "inline" as const, encryptedPayload };
+  }
+
+  return { kind: "stored" as const, id: value };
+};
+
+const decodeInlineConnection = (
+  encryptedPayload: string,
+): InlineMetaOAuthConnection => {
+  const secret = requireAppEncryptionSecret();
+  const decrypted = decryptString(encryptedPayload, secret);
+  const parsed = InlineMetaOAuthConnectionSchema.safeParse(JSON.parse(decrypted));
+
+  if (!parsed.success) {
+    throw new Error("Invalid inline Meta OAuth payload");
+  }
+
+  return parsed.data;
+};
 
 const decryptConnectionToken = (connection: MetaOAuthConnection) => {
   const secret = requireAppEncryptionSecret();
 
   return decryptString(connection.encryptedAccessToken, secret);
+};
+
+type SavedMetaConnection = {
+  cookieValue: string;
+  account: {
+    connectionId?: string;
+    instagramUserId: string;
+    instagramUsername?: string;
+    instagramName?: string;
+    pageName?: string;
+    tokenExpiresAt?: string;
+  };
 };
 
 const saveMetaConnection = async (params: {
@@ -123,13 +185,8 @@ const saveMetaConnection = async (params: {
   instagramUsername: string;
   instagramName: string;
   instagramPictureUrl: string;
-}) => {
-  if (!isBlobEnabled()) {
-    throw new Error("BLOB_READ_WRITE_TOKEN is required for OAuth connections");
-  }
-
+}): Promise<SavedMetaConnection> => {
   const secret = requireAppEncryptionSecret();
-
   const now = new Date();
   const id = randomUUID().replace(/-/g, "").slice(0, 20);
   const tokenExpiresAt = params.tokenExpiresIn
@@ -151,12 +208,51 @@ const saveMetaConnection = async (params: {
     encryptedAccessToken: encryptString(params.accessToken, secret),
   });
 
-  await putJson(getConnectionPath(id), connection);
-  return connection;
+  if (isCredentialStoreEnabled()) {
+    await putCredentialRecord(META_CONNECTION_NAMESPACE, id, connection);
+    return {
+      cookieValue: connection.id,
+      account: {
+        connectionId: connection.id,
+        instagramUserId: connection.instagramUserId,
+        instagramUsername: connection.instagramUsername,
+        instagramName: connection.instagramName,
+        pageName: connection.pageName,
+        tokenExpiresAt: connection.tokenExpiresAt,
+      },
+    };
+  }
+
+  const inline = InlineMetaOAuthConnectionSchema.parse({
+    graphVersion: params.graphVersion,
+    instagramUserId: params.instagramUserId,
+    instagramUsername: params.instagramUsername,
+    instagramName: params.instagramName,
+    pageName: params.pageName,
+    tokenExpiresAt,
+    accessToken: params.accessToken,
+  });
+  const encryptedInline = encryptString(JSON.stringify(inline), secret);
+  if (encryptedInline.length > 3500) {
+    throw new Error(
+      "OAuth payload is too large for cookie fallback. Configure DATABASE_URL for private persistent OAuth storage.",
+    );
+  }
+
+  return {
+    cookieValue: `${INLINE_CONNECTION_PREFIX}${encryptedInline}`,
+    account: {
+      instagramUserId: inline.instagramUserId,
+      instagramUsername: inline.instagramUsername,
+      instagramName: inline.instagramName,
+      pageName: inline.pageName,
+      tokenExpiresAt: inline.tokenExpiresAt,
+    },
+  };
 };
 
 export const getMetaConnection = async (id: string) => {
-  const record = await readJsonByPath<unknown>(getConnectionPath(id));
+  const record = await readCredentialRecord<unknown>(META_CONNECTION_NAMESPACE, id);
   if (!record) {
     return null;
   }
@@ -166,11 +262,20 @@ export const getMetaConnection = async (id: string) => {
 };
 
 export const deleteMetaConnection = async (id: string) => {
-  if (!isBlobEnabled()) {
+  if (id.startsWith(INLINE_CONNECTION_PREFIX)) {
     return false;
   }
 
-  return deleteBlobByPath(getConnectionPath(id));
+  return deleteCredentialRecord(META_CONNECTION_NAMESPACE, id);
+};
+
+export const getStoredMetaConnectionIdFromCookie = (cookieValue: string) => {
+  const parsed = parseConnectionCookie(cookieValue);
+  if (!parsed || parsed.kind !== "stored") {
+    return "";
+  }
+
+  return parsed.id;
 };
 
 export const createMetaOAuthStartUrl = (origin: string, state: string) => {
@@ -284,11 +389,38 @@ export const completeMetaOAuth = async (req: Request, code: string) => {
 export const resolveMetaAuthFromRequest = async (
   req: Request,
 ): Promise<ResolvedMetaAuth> => {
-  const connectionId = readCookieFromRequest(req, META_CONNECTION_COOKIE);
+  const connectionCookie = readCookieFromRequest(req, META_CONNECTION_COOKIE);
+  const parsedConnection = parseConnectionCookie(connectionCookie);
 
-  if (connectionId && isBlobEnabled()) {
+  if (parsedConnection?.kind === "inline") {
     try {
-      const connection = await getMetaConnection(connectionId);
+      const inline = decodeInlineConnection(parsedConnection.encryptedPayload);
+      return {
+        source: "oauth",
+        auth: {
+          accessToken: inline.accessToken,
+          instagramUserId: inline.instagramUserId,
+          graphVersion: inline.graphVersion,
+        },
+        account: {
+          instagramUserId: inline.instagramUserId,
+          instagramUsername: inline.instagramUsername,
+          instagramName: inline.instagramName,
+          pageName: inline.pageName,
+          tokenExpiresAt: inline.tokenExpiresAt,
+        },
+      };
+    } catch (error) {
+      console.warn(
+        "[meta-auth] Failed to decode inline OAuth credentials, falling back to env:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  if (parsedConnection?.kind === "stored" && isCredentialStoreEnabled()) {
+    try {
+      const connection = await getMetaConnection(parsedConnection.id);
       if (connection) {
         const token = decryptConnectionToken(connection);
         return {
