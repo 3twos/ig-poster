@@ -30,6 +30,19 @@ Use this flow for every non-trivial change:
 12. Wait for explicit user approval before merging.
 13. Do not merge until user says to merge.
 
+## Documentation Maintenance (Mandatory)
+
+- Treat these files as required living docs that must stay accurate on every PR:
+  - `docs/overview.md`
+  - `docs/user-guide.md`
+  - `docs/architecture.md`
+  - `docs/dev-getting-started.md`
+- For every PR, review these docs for impact and update them when product behavior, UX flow, architecture, or developer workflow changes.
+- Before asking for merge approval, include a doc-impact note in the PR update:
+  - list which of the four docs were updated, or
+  - explicitly state why no updates were required.
+- Do not request merge approval while any of the above docs are stale relative to the code in the PR.
+
 ## Merge Gate (Mandatory)
 
 - Never self-merge without explicit user approval.
