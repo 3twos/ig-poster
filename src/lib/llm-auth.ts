@@ -324,22 +324,24 @@ const resolveConnectionsFromCookie = async (
       );
     }
   } else if (parsed.kind === "multi-stored" && isCredentialStoreEnabled()) {
-    for (const id of parsed.ids) {
-      try {
-        const conn = await getLlmConnection(id);
-        if (conn) {
-          connections.push({
-            id: conn.id,
-            source: "connection",
-            provider: conn.provider,
-            model: conn.model,
-            apiKey: decryptConnectionApiKey(conn),
-          });
-        }
-      } catch (error) {
+    const results = await Promise.allSettled(
+      parsed.ids.map((id) => getLlmConnection(id)),
+    );
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === "fulfilled" && result.value) {
+        const conn = result.value;
+        connections.push({
+          id: conn.id,
+          source: "connection",
+          provider: conn.provider,
+          model: conn.model,
+          apiKey: decryptConnectionApiKey(conn),
+        });
+      } else if (result.status === "rejected") {
         console.warn(
-          `[llm-auth] Failed to resolve connection ${id}:`,
-          error instanceof Error ? error.message : error,
+          `[llm-auth] Failed to resolve connection ${parsed.ids[i]}:`,
+          result.reason instanceof Error ? result.reason.message : result.reason,
         );
       }
     }
@@ -458,9 +460,9 @@ export const resolveAllLlmAuthFromRequest = async (
 ): Promise<ResolvedLlmAuthList> => {
   const connectionCookie = readCookieFromRequest(req, LLM_CONNECTION_COOKIE);
 
-  const [cookieConnections, envConnections, aiConfig] = await Promise.all([
+  const envConnections = resolveEnvConnections();
+  const [cookieConnections, aiConfig] = await Promise.all([
     resolveConnectionsFromCookie(connectionCookie),
-    Promise.resolve(resolveEnvConnections()),
     readUserAiConfig(req),
   ]);
 

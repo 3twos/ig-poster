@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { NextResponse } from "next/server";
 
 import { z } from "zod";
@@ -26,6 +24,7 @@ import {
   getUserSettingsPath,
   type UserSettings,
 } from "@/lib/user-settings";
+import { hashEmail, isAbortError, toErrorMessage } from "@/lib/server-utils";
 import {
   buildWebsiteStyleContext,
   type WebsiteStyleResult,
@@ -39,13 +38,6 @@ import {
 
 export const maxDuration = 60;
 const GENERATION_SOFT_TIMEOUT_MS = 50_000;
-
-const toErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Unexpected generation issue";
-
-const isAbortError = (error: unknown) =>
-  error instanceof Error &&
-  (error.name === "AbortError" || error.message.toLowerCase().includes("abort"));
 
 const createAbortError = () => {
   const error = new Error("Generation cancelled.");
@@ -199,9 +191,7 @@ export async function POST(req: Request) {
           try {
             const session = await readWorkspaceSessionFromRequest(req);
             if (session) {
-              const emailHash = createHash("sha256")
-                .update(session.email.trim().toLowerCase())
-                .digest("hex");
+              const emailHash = hashEmail(session.email);
 
               const settings = await readJsonByPath<UserSettings>(
                 getUserSettingsPath(session.email),
@@ -227,20 +217,20 @@ export async function POST(req: Request) {
               try {
                 const outcomeBlobs = await listBlobs(`outcomes/${emailHash}/`, 30);
                 outcomeBlobs.sort((a, b) => a.pathname.localeCompare(b.pathname));
-                const outcomes: PublishOutcome[] = [];
-                for (const blob of outcomeBlobs.slice(-20)) {
-                  try {
+                const results = await Promise.allSettled(
+                  outcomeBlobs.slice(-20).map(async (blob) => {
                     const res = await fetch(blob.url, { cache: "no-store" });
-                    if (res.ok) {
-                      const parsed = PublishOutcomeSchema.safeParse(await res.json());
-                      if (parsed.success) {
-                        outcomes.push(parsed.data);
-                      }
-                    }
-                  } catch {
-                    // Skip individual outcome errors
-                  }
-                }
+                    if (!res.ok) return null;
+                    const parsed = PublishOutcomeSchema.safeParse(await res.json());
+                    return parsed.success ? parsed.data : null;
+                  }),
+                );
+                const outcomes = results
+                  .filter(
+                    (r): r is PromiseFulfilledResult<PublishOutcome> =>
+                      r.status === "fulfilled" && r.value != null,
+                  )
+                  .map((r) => r.value);
                 performanceContext = buildPerformanceContext(outcomes);
               } catch {
                 // Performance context is non-critical

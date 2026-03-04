@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import {
   putJson,
   readJsonByPath,
@@ -9,13 +7,14 @@ import type {
   ChatConversation,
   ChatConversationSummary,
 } from "@/lib/chat-types";
+import { hashEmail } from "@/lib/server-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 export const chatOwnerHash = (email: string) =>
-  createHash("sha256").update(email.toLowerCase().trim()).digest("hex").slice(0, 16);
+  hashEmail(email).slice(0, 16);
 
 const conversationPath = (ownerHash: string, id: string) =>
   `chat/${ownerHash}/conversations/${id}.json`;
@@ -31,8 +30,12 @@ export async function saveChatConversation(
   conversation: ChatConversation,
 ): Promise<void> {
   const path = conversationPath(conversation.ownerHash, conversation.id);
-  await putJson(path, conversation);
-  await updateIndex(conversation);
+  // Save conversation and load index in parallel
+  const [, items] = await Promise.all([
+    putJson(path, conversation),
+    listChatConversations(conversation.ownerHash),
+  ]);
+  await updateIndex(conversation, items);
 }
 
 export async function loadChatConversation(
@@ -68,8 +71,11 @@ export async function listChatConversations(
   );
 }
 
-async function updateIndex(conversation: ChatConversation): Promise<void> {
-  const items = await listChatConversations(conversation.ownerHash);
+async function updateIndex(
+  conversation: ChatConversation,
+  items?: ChatConversationSummary[],
+): Promise<void> {
+  const resolved = items ?? await listChatConversations(conversation.ownerHash);
   const lastMsg = conversation.messages[conversation.messages.length - 1];
   const preview = lastMsg
     ? lastMsg.content.slice(0, 100)
@@ -83,7 +89,7 @@ async function updateIndex(conversation: ChatConversation): Promise<void> {
     updatedAt: conversation.updatedAt,
   };
 
-  const filtered = items.filter((i) => i.id !== conversation.id);
+  const filtered = resolved.filter((i) => i.id !== conversation.id);
   filtered.unshift(summary);
 
   await putJson(indexPath(conversation.ownerHash), filtered);

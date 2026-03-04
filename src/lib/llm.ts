@@ -7,6 +7,7 @@ import {
   type LlmProvider,
   type MultiModelMode,
 } from "@/lib/llm-constants";
+import { toErrorMessage } from "@/lib/server-utils";
 
 export type ResolvedLlmAuth = {
   id: string;
@@ -20,9 +21,6 @@ export type ResolvedLlmAuthList = {
   mode: MultiModelMode;
   connections: ResolvedLlmAuth[];
 };
-
-const toErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Unexpected provider validation failure";
 
 const selectFallbackModel = (
   availableModels: string[],
@@ -66,7 +64,7 @@ export const validateLlmCredentials = async (params: {
           DEFAULT_ANTHROPIC_MODEL,
         );
       } catch (fallbackError) {
-        throw new Error(`Anthropic credential validation failed: ${toErrorMessage(fallbackError)}`);
+        throw new Error(`Anthropic credential validation failed: ${toErrorMessage(fallbackError, "Unexpected provider validation failure")}`);
       }
     }
   }
@@ -87,7 +85,7 @@ export const validateLlmCredentials = async (params: {
 
       return selectFallbackModel(available, params.model, DEFAULT_OPENAI_MODEL);
     } catch (fallbackError) {
-      throw new Error(`OpenAI credential validation failed: ${toErrorMessage(fallbackError)}`);
+      throw new Error(`OpenAI credential validation failed: ${toErrorMessage(fallbackError, "Unexpected provider validation failure")}`);
     }
   }
 };

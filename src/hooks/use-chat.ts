@@ -21,7 +21,7 @@ type ChatAction =
   | { type: "ADD_USER_MESSAGE"; message: ChatMessage }
   | { type: "START_STREAMING" }
   | { type: "APPEND_STREAMING"; content: string }
-  | { type: "FINALIZE_STREAMING"; content: string; tokenCount?: number }
+  | { type: "FINALIZE_STREAMING"; message: ChatMessage }
   | { type: "STREAM_ERROR"; error: string }
   | { type: "DELETE_MESSAGE"; id: string }
   | { type: "EDIT_MESSAGE"; id: string; content: string }
@@ -47,22 +47,14 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, status: "streaming", streamingContent: "", error: null };
     case "APPEND_STREAMING":
       return { ...state, streamingContent: state.streamingContent + action.content };
-    case "FINALIZE_STREAMING": {
-      const assistantMsg: ChatMessage = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        role: "assistant",
-        content: action.content,
-        createdAt: new Date().toISOString(),
-        tokenCount: action.tokenCount,
-      };
+    case "FINALIZE_STREAMING":
       return {
         ...state,
-        messages: [...state.messages, assistantMsg],
+        messages: [...state.messages, action.message],
         streamingContent: "",
         status: "idle",
-        lastTokenCount: action.tokenCount ?? null,
+        lastTokenCount: action.message.tokenCount ?? null,
       };
-    }
     case "STREAM_ERROR":
       return { ...state, status: "error", error: action.error, streamingContent: "" };
     case "DELETE_MESSAGE":
@@ -208,8 +200,6 @@ export function useChat(options: UseChatOptions) {
       }
 
       if (accumulated) {
-        dispatch({ type: "FINALIZE_STREAMING", content: accumulated, tokenCount });
-        // Call onStreamComplete with updated messages (current + new assistant msg)
         const assistantMsg: ChatMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           role: "assistant",
@@ -217,16 +207,20 @@ export function useChat(options: UseChatOptions) {
           createdAt: new Date().toISOString(),
           tokenCount,
         };
-        // Use messagesRef to get the latest messages (includes the user message already dispatched)
-        const updatedMessages = [...messagesRef.current, assistantMsg];
-        optionsRef.current.onStreamComplete?.(updatedMessages);
+        dispatch({ type: "FINALIZE_STREAMING", message: assistantMsg });
+        optionsRef.current.onStreamComplete?.([...messagesRef.current, assistantMsg]);
       } else {
         dispatch({ type: "RESET_STATUS" });
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         if (accumulated) {
-          dispatch({ type: "FINALIZE_STREAMING", content: accumulated });
+          dispatch({ type: "FINALIZE_STREAMING", message: {
+            id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            role: "assistant",
+            content: accumulated,
+            createdAt: new Date().toISOString(),
+          } });
         } else {
           dispatch({ type: "RESET_STATUS" });
         }
