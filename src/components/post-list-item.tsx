@@ -110,6 +110,25 @@ export function PostListItem({
           </div>
         </div>
 
+        {/* Archive icon button (visible on hover) */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="relative z-10 shrink-0 text-slate-500 opacity-0 transition group-hover:opacity-100 hover:text-orange-300"
+              aria-label="Archive post"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive();
+              }}
+            >
+              <Archive className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Archive</TooltipContent>
+        </Tooltip>
+
         {/* Context menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

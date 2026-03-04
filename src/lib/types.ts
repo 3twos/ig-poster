@@ -15,6 +15,7 @@ export type LocalAsset = {
   durationSec?: number;
   width?: number;
   height?: number;
+  size?: number;
   error?: string;
 };
 
