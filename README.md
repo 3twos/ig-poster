@@ -110,6 +110,7 @@ Notes:
 - Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
 - For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`.
 - In production, set one of `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` to encrypt OAuth/BYOK tokens at rest.
+- In local/preview environments with no configured encryption secret, the app uses a process-scoped runtime fallback secret; restarting the server invalidates previously encrypted OAuth/BYOK credentials and you may need to reconnect.
 - `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` remain supported as env fallback credentials.
 
 ## API Endpoints

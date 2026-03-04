@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { deleteBlobByPath, isBlobEnabled, putJson, readJsonByPath } from "@/lib/blob-store";
-import { getAppEncryptionSecret } from "@/lib/app-encryption";
+import {
+  getAppEncryptionSecret,
+  requireAppEncryptionSecret,
+} from "@/lib/app-encryption";
 import { readCookieFromRequest } from "@/lib/cookies";
 import { getEnvMetaAuth, type MetaAuthContext } from "@/lib/meta";
 import { decryptString, encryptString } from "@/lib/secure";
@@ -102,12 +105,7 @@ const callGraphJson = async <T>(url: URL): Promise<T> => {
 const getConnectionPath = (id: string) => `auth/meta/connections/${id}.json`;
 
 const decryptConnectionToken = (connection: MetaOAuthConnection) => {
-  const secret = getEncryptionSecret();
-  if (!secret) {
-    throw new Error(
-      "Missing APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET in production",
-    );
-  }
+  const secret = requireAppEncryptionSecret();
 
   return decryptString(connection.encryptedAccessToken, secret);
 };
@@ -127,12 +125,7 @@ const saveMetaConnection = async (params: {
     throw new Error("BLOB_READ_WRITE_TOKEN is required for OAuth connections");
   }
 
-  const secret = getEncryptionSecret();
-  if (!secret) {
-    throw new Error(
-      "Missing APP_ENCRYPTION_SECRET, META_APP_SECRET, or WORKSPACE_AUTH_SECRET in production",
-    );
-  }
+  const secret = requireAppEncryptionSecret();
 
   const now = new Date();
   const id = randomUUID().replace(/-/g, "").slice(0, 20);
