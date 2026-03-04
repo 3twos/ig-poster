@@ -24,9 +24,15 @@ export async function POST(req: Request) {
 
     const resolvedAuth = await resolveMetaAuthFromRequest(req);
     const session = await readWorkspaceSessionFromRequest(req);
-    const emailHash = session
-      ? createHash("sha256").update(session.email.trim().toLowerCase()).digest("hex")
-      : "anonymous";
+    if (!session) {
+      return NextResponse.json(
+        { error: "Workspace authentication required for insights sync." },
+        { status: 401 },
+      );
+    }
+    const emailHash = createHash("sha256")
+      .update(session.email.trim().toLowerCase())
+      .digest("hex");
 
     const blobs = await listBlobs(`outcomes/${emailHash}/`, 100);
     const now = Date.now();

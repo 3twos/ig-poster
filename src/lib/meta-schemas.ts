@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PostTypeSchema } from "@/lib/creative";
+
 export const CarouselItemSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   url: z.string().url(),
@@ -7,7 +9,7 @@ export const CarouselItemSchema = z.object({
 
 export const OutcomeContextSchema = z.object({
   variantName: z.string(),
-  postType: z.string(),
+  postType: PostTypeSchema,
   caption: z.string(),
   hook: z.string(),
   hashtags: z.array(z.string()),
@@ -44,6 +46,7 @@ export const ScheduledJobSchema = z.object({
   createdAt: z.string().datetime(),
   authSource: z.enum(["oauth", "env"]),
   connectionId: z.string().optional(),
+  outcomeContext: OutcomeContextSchema.optional(),
 });
 
 export type MetaScheduleRequest = z.infer<typeof MetaScheduleRequestSchema>;

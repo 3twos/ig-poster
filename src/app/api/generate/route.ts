@@ -188,6 +188,8 @@ export async function POST(req: Request) {
               // Load performance context from past outcomes
               try {
                 const outcomeBlobs = await listBlobs(`outcomes/${emailHash}/`, 30);
+                // Sort by pathname (timestamp-prefixed) to guarantee chronological order
+                outcomeBlobs.sort((a, b) => a.pathname.localeCompare(b.pathname));
                 const outcomes: PublishOutcome[] = [];
                 for (const blob of outcomeBlobs.slice(-20)) {
                   try {

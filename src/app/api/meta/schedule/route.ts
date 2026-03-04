@@ -49,6 +49,7 @@ export async function POST(req: Request) {
         createdAt: new Date().toISOString(),
         authSource: resolvedAuth.source,
         connectionId: resolvedAuth.account.connectionId,
+        outcomeContext: payload.outcomeContext,
       });
 
       await putJson(`schedules/${publishAt}-${id}.json`, job);
@@ -72,9 +73,10 @@ export async function POST(req: Request) {
     if (isBlobEnabled() && payload.outcomeContext && publish.publishId) {
       try {
         const session = await readWorkspaceSessionFromRequest(req);
-        const emailHash = session
-          ? createHash("sha256").update(session.email.trim().toLowerCase()).digest("hex")
-          : "anonymous";
+        if (!session) throw new Error("No session for outcome recording");
+        const emailHash = createHash("sha256")
+          .update(session.email.trim().toLowerCase())
+          .digest("hex");
         const outcomeId = randomUUID().replace(/-/g, "").slice(0, 18);
         const publishedAt = new Date().toISOString();
         await putJson(`outcomes/${emailHash}/${Date.now()}-${outcomeId}.json`, {

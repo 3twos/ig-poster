@@ -46,6 +46,7 @@ Use this flow for every non-trivial change:
 ## Merge Gate (Mandatory)
 
 - Never self-merge without explicit user approval.
+- All review conversations must be resolved before merging. No PR may be merged with open/unresolved threads.
 - If approval is missing, stop and ask for merge approval.
 - After approval, merge PR with a non-interactive command.
 
@@ -54,6 +55,8 @@ Use this flow for every non-trivial change:
 - Treat Copilot review comments as required inputs, not optional suggestions.
 - If a comment is incorrect, respond with a short technical justification.
 - Do not ignore unresolved threads.
+- All review conversations must be resolved before a PR can be merged. This is a hard gate — no exceptions.
+- After pushing fixes, reply on each resolved comment thread and mark it resolved.
 - Ensure PR has no unresolved critical comments before asking for merge approval.
 
 ## PR Body Safety (Mandatory)

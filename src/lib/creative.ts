@@ -536,7 +536,15 @@ Score each variant. Output JSON only.`,
   });
 
   const parsed = VariantScoresResponseSchema.parse(result);
-  return parsed.scores;
+  const variantIds = new Set(variants.map((v) => v.id));
+  // Filter to known variant IDs and warn on coverage gaps
+  const validScores = parsed.scores.filter((s) => variantIds.has(s.id));
+  if (validScores.length < variants.length) {
+    console.warn(
+      `Score coverage: ${validScores.length}/${variants.length} variants scored`,
+    );
+  }
+  return validScores;
 };
 
 export const selectTopVariantsWithScores = (
