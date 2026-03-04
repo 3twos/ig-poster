@@ -16,12 +16,15 @@ Use this flow for every non-trivial change:
    - concise summary of what changed
    - validation evidence
    - any known risks or follow-ups
-7. Request Copilot review on the PR.
+7. Copilot review is automatically requested when the PR is created (do not manually request it).
 8. Wait for Copilot review to complete before taking next steps.
    - Copilot review may take around 5 minutes; wait and re-check before re-triggering.
+   - Copilot often finds important bugs; do not skip this wait.
 9. Process review comments:
    - address each actionable comment with code changes, tests, or explicit rationale
    - reply on each comment with resolution details
+   - resolve all conversations (PRs are merge-blocked until conversations are resolved)
+   - resolve all merge conflicts before asking for merge approval
    - push follow-up commits
 10. Re-run validation after fixes.
 11. Post a final PR update summarizing:
@@ -67,3 +70,29 @@ Use this flow for every non-trivial change:
 - Always write PR markdown into a file and use `--body-file` (for create/edit/comments) to avoid shell interpolation and command substitution.
 - After creating or editing a PR body, verify it with `gh pr view <number> --json body --jq .body`.
 - If formatting is corrupted, immediately fix it with `gh pr edit <number> --body-file <file>` and post a corrected follow-up comment if needed.
+
+## Command Permissions (Default Allowlist)
+
+To reduce approval interruptions, the following commands are pre-approved by default.
+
+- Scope rule:
+  - Read-only discovery/navigation commands are pre-approved.
+  - Any command that writes, deletes, moves, installs, or mutates files must only target paths inside the active repository/worktree.
+  - If a write/update action is needed outside the active repository/worktree, stop and ask the user first.
+- Core read/navigation commands:
+  - `cd`, `pwd`, `ls`, `tree`, `wc`, `du`, `stat`
+  - `rg`, `rg --files`, `find`, `cat`, `head`, `tail`, `sed -n`, `cut`, `sort`, `uniq`
+  - `git status`, `git diff`, `git log`, `git show`, `git branch`, `git rev-parse`
+  - `npm run lint`, `npm run build`
+- Web/search commands:
+  - Tool-based search/open commands (for example: `web.search_query`, `web.open`) are pre-approved.
+  - Shell web fetches are pre-approved only for simple read-only GET requests using exact forms:
+    - `curl -sSL <URL>`
+    - `wget -qO- <URL>`
+    - Do not add flags that change method or send a request body (for example: `-X`, `-d`, `--data`, `--data-*`, `--upload-file`, `-F`, `--form`).
+    - For non-GET/authenticated/upload requests, use tool-based web commands instead of `curl`/`wget`.
+- Write/update commands (repo-scoped only):
+  - `mkdir`, `touch`, `cp`, `mv`, `rm` (paths must remain inside the active repository/worktree)
+  - `git fetch`, `git pull --ff-only`
+  - `npm ci` (preferred lockfile install)
+  - `npm install` is not pre-approved when it will add/update/remove dependencies or modify `package.json`/`package-lock.json`; ask the user first.

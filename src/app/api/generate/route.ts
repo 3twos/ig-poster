@@ -297,6 +297,9 @@ export async function POST(req: Request) {
             temperature: resolveGenerationTemperature(auth.model),
             maxTokens: resolveGenerationMaxTokens(auth.model),
             signal: generationAbortController.signal,
+            onChunk: (text: string) => {
+              send({ type: "llm-thinking", stepId: "draft-variants", text });
+            },
           });
 
           let allVariants: CreativeVariant[] = [];
