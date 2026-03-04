@@ -105,6 +105,22 @@ export async function PUT(req: Request, ctx: Ctx) {
     if (body.publishHistory !== undefined)
       update.publishHistory = body.publishHistory;
 
+    // Auto-derive title from brief fields when not explicitly set
+    if (body.title === undefined) {
+      const mergedBrief = (update.brief ?? existing.brief) as
+        | Record<string, unknown>
+        | null;
+      if (mergedBrief) {
+        const derived =
+          (mergedBrief.subject as string) ||
+          (mergedBrief.theme as string) ||
+          "";
+        if (derived && derived !== existing.title) {
+          update.title = derived.slice(0, 120);
+        }
+      }
+    }
+
     // Auto-transition draft → generated when result is set
     if (body.result && existing.status === "draft") {
       update.status = "generated";

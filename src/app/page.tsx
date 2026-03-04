@@ -1673,6 +1673,7 @@ export default function Home() {
         status?: string;
         mode?: string;
         publishAt?: string;
+        publishId?: string;
       };
 
       if (json.status === "scheduled") {
@@ -1685,6 +1686,13 @@ export default function Home() {
         setPublishMessage(
           `${json.mode ? `${json.mode} ` : ""}published to Instagram successfully.`,
         );
+        dispatch({
+          type: "ADD_PUBLISH",
+          entry: {
+            publishedAt: new Date().toISOString(),
+            igMediaId: json.publishId,
+          },
+        });
       }
     } catch (publishError) {
       setError(
