@@ -17,6 +17,17 @@ const createSqlClient = (): SqlClient | null => {
 
 let initializePromise: Promise<void> | null = null;
 
+const CREDENTIAL_STORE_MIGRATION_HINT =
+  "Ensure table ig_poster_private_credentials exists and DB user has SELECT/INSERT/UPDATE/DELETE access. Run provisioning SQL:\n" +
+  "CREATE TABLE IF NOT EXISTS ig_poster_private_credentials (\n" +
+  "  namespace TEXT NOT NULL,\n" +
+  "  credential_id TEXT NOT NULL,\n" +
+  "  payload JSONB NOT NULL,\n" +
+  "  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n" +
+  "  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n" +
+  "  PRIMARY KEY (namespace, credential_id)\n" +
+  ");";
+
 const ensureTableReady = async (sql: SqlClient) => {
   if (!initializePromise) {
     initializePromise = (async () => {
@@ -37,7 +48,11 @@ const ensureTableReady = async (sql: SqlClient) => {
     await initializePromise;
   } catch (error) {
     initializePromise = null;
-    throw error;
+    const detail =
+      error instanceof Error ? error.message : "Unknown table initialization error";
+    throw new Error(
+      `Credential store initialization failed: ${detail}. ${CREDENTIAL_STORE_MIGRATION_HINT}`,
+    );
   }
 };
 

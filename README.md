@@ -73,6 +73,8 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+Node runtime: `>=20.9.0`.
+
 ## Environment Variables
 
 Create `.env.local` from `.env.example`:
@@ -106,6 +108,17 @@ Notes:
 - `POST /api/auth/llm/connect` uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` for encryption. If `DATABASE_URL` is configured, BYOK credentials are stored encrypted in private Postgres; otherwise they are stored in an encrypted `httpOnly` cookie fallback.
 - `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
 - `DATABASE_URL` is recommended for private persistent credential storage (LLM + Meta OAuth connection records).
+- Provision DB schema before first credential write (recommended for least-privilege DB users):
+  ```sql
+  CREATE TABLE IF NOT EXISTS ig_poster_private_credentials (
+    namespace TEXT NOT NULL,
+    credential_id TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (namespace, credential_id)
+  );
+  ```
 - `GOOGLE_OAUTH_REDIRECT_URI` is optional (defaults to `<origin>/api/auth/google/callback`).
 - `WORKSPACE_AUTH_PRODUCTION_HOST` is optional and lets middleware redirect raw production deployment URLs to your stable production alias before auth.
 - `WORKSPACE_AUTH_PREVIEW_HOST` is optional and lets middleware redirect raw preview deployment URLs to a stable preview alias before auth.
