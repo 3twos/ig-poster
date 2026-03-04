@@ -24,11 +24,11 @@ export async function GET(req: Request) {
         { status: 503 },
       );
     }
-    const authorization = req.headers.get("authorization") ?? "";
-    const expected = `Bearer ${cronSecret}`;
+    const authBuf = Buffer.from(req.headers.get("authorization") ?? "");
+    const expectedBuf = Buffer.from(`Bearer ${cronSecret}`);
     const isValid =
-      authorization.length === expected.length &&
-      timingSafeEqual(Buffer.from(authorization), Buffer.from(expected));
+      authBuf.length === expectedBuf.length &&
+      timingSafeEqual(authBuf, expectedBuf);
     if (!isValid) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -194,9 +194,11 @@ export const completeWorkspaceOAuth = async (
   });
 
   const nonce = typeof verified.payload.nonce === "string" ? verified.payload.nonce : "";
+  const nonceBuf = Buffer.from(nonce);
+  const expectedNonceBuf = Buffer.from(expectedNonce);
   if (
-    nonce.length !== expectedNonce.length ||
-    !timingSafeEqual(Buffer.from(nonce), Buffer.from(expectedNonce))
+    nonceBuf.length !== expectedNonceBuf.length ||
+    !timingSafeEqual(nonceBuf, expectedNonceBuf)
   ) {
     throw new Error("Invalid Google OAuth nonce");
   }

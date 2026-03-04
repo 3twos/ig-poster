@@ -59,10 +59,12 @@ export async function GET(req: Request) {
       throw new Error("Missing OAuth code or state");
     }
 
+    const expectedStateBuf = Buffer.from(expectedState ?? "");
+    const stateBuf = Buffer.from(state);
     if (
       !expectedState ||
-      expectedState.length !== state.length ||
-      !timingSafeEqual(Buffer.from(expectedState), Buffer.from(state))
+      expectedStateBuf.length !== stateBuf.length ||
+      !timingSafeEqual(expectedStateBuf, stateBuf)
     ) {
       throw new Error("Invalid OAuth state");
     }
