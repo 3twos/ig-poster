@@ -100,6 +100,8 @@ export default function Home() {
   const logoCleanupRef = useRef<LocalAsset | null>(null);
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
 
   const brand: BrandState = useMemo(() => {
     if (!activePost?.brand) return INITIAL_BRAND;
@@ -383,7 +385,7 @@ export default function Home() {
     finally { setIsDisconnecting(false); }
   };
 
-  const publishToInstagram = async (event: FormEvent) => {
+  const publishToInstagram = async (event: FormEvent, scheduleAt?: string) => {
     event.preventDefault();
     if (!activeVariant) return;
     if (!authStatus.connected) { const m = "Connect an Instagram account before publishing."; generation.setError(m); toast.error(m); return; }
@@ -403,7 +405,8 @@ export default function Home() {
         media = { mode: "image", imageUrl: await uploadRenderedPoster() };
       }
       const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caption, media, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const publishAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
+      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caption, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as { status?: string; mode?: string; publishAt?: string; publishId?: string };
       if (j.status === "scheduled") { const m = `Scheduled for ${new Date(j.publishAt ?? "").toLocaleString()}`; setPublishMessage(m); toast.success(m); }
@@ -449,7 +452,7 @@ export default function Home() {
           {/* Desktop 3-column layout */}
           <div className="hidden lg:block" style={{ height: "calc(100vh - 140px)" }}>
             <ResizablePanelGroup orientation="horizontal" className="h-full">
-              <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} collapsible collapsedSize={0} className="flex flex-col">
+              <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} collapsible collapsedSize={0} onResize={(size) => setLeftCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div className="flex h-full flex-col rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl ml-4">
                   <SidebarContent />
                 </div>
@@ -459,7 +462,7 @@ export default function Home() {
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <PostBriefForm brand={brand} post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} isUploadingLogo={isUploadingLogo} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} />
+                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} isUploadingLogo={isUploadingLogo} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} />
                     </section>
                     <section className="border-b border-white/10 pb-6">
                       <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
@@ -474,14 +477,14 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e) => void publishToInstagram(e)} />
+                        <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e, s) => void publishToInstagram(e, s)} />
                       </section>
                     )}
                   </div>
                 </ScrollArea>
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
-              <ResizablePanel panelRef={rightPanelRef} defaultSize={30} minSize={18} collapsible collapsedSize={0} className="flex flex-col">
+              <ResizablePanel panelRef={rightPanelRef} defaultSize={30} minSize={18} collapsible collapsedSize={0} onResize={(size) => setRightCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div ref={activityPanelRef} className="flex h-full flex-col rounded-2xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl mr-4 overflow-y-auto">
                   <AgentActivityPanel agentRun={generation.agentRun} agentVerbosity={generation.agentVerbosity} setAgentVerbosity={generation.setAgentVerbosity} showStepDetails={generation.showStepDetails} setShowStepDetails={generation.setShowStepDetails} visibleAgentSteps={generation.visibleAgentSteps} runProgress={generation.runProgress} runDurationMs={generation.runDurationMs} runClock={generation.runClock} runLogCopyState={generation.runLogCopyState} onCopyRunLog={() => void generation.copyRunLog()} />
                 </div>
@@ -489,23 +492,23 @@ export default function Home() {
             </ResizablePanelGroup>
             <div className="fixed left-2 top-1/2 z-40 -translate-y-1/2">
               <Button variant="outline" size="icon-xs" onClick={() => { const p = leftPanelRef.current; if (p) { if (p.isCollapsed()) p.expand(); else p.collapse(); } }} className="h-8 w-5 rounded-full border-white/20 bg-slate-900/80 text-slate-400 hover:text-white">
-                <ChevronRight className="h-3 w-3" />
+                {leftCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
               </Button>
             </div>
             <div className="fixed right-2 top-1/2 z-40 -translate-y-1/2">
               <Button variant="outline" size="icon-xs" onClick={() => { const p = rightPanelRef.current; if (p) { if (p.isCollapsed()) p.expand(); else p.collapse(); } }} className="h-8 w-5 rounded-full border-white/20 bg-slate-900/80 text-slate-400 hover:text-white">
-                <ChevronLeft className="h-3 w-3" />
+                {rightCollapsed ? <ChevronLeft className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               </Button>
             </div>
           </div>
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm brand={brand} post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} isUploadingLogo={isUploadingLogo} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} />
+            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} isUploadingLogo={isUploadingLogo} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} />
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e) => void publishToInstagram(e)} />}
+            {activeVariant && <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e, s) => void publishToInstagram(e, s)} />}
             <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="w-full">Agent Activity</Button>
           </div>
         </div>
@@ -529,6 +532,11 @@ export default function Home() {
               <span className={cn("inline-block h-2 w-2 flex-none rounded-full", statusLine.tone === "error" ? "bg-red-300" : statusLine.tone === "success" ? "bg-emerald-300" : statusLine.tone === "active" ? "bg-blue-300" : "bg-slate-400")} />
               <span className="truncate">{statusLine.text}</span>
             </p>
+            {statusLine.tone === "error" && (
+              <p role="alert" className="sr-only">
+                {statusLine.text}
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {typeof statusLine.elapsedMs === "number" && <Badge variant="outline" className="text-[11px] text-slate-300">{formatElapsed(statusLine.elapsedMs)}</Badge>}

@@ -476,17 +476,6 @@ export function useGeneration({
               return;
             }
 
-            // Handle llm-thinking events
-            const maybeThinking = event as { type?: string; stepId?: string; text?: string };
-            if (
-              maybeThinking.type === "llm-thinking" &&
-              typeof maybeThinking.stepId === "string" &&
-              typeof maybeThinking.text === "string"
-            ) {
-              applyRunEvent(event as GenerationRunEvent);
-              return;
-            }
-
             const legacy = event as {
               type?: string;
               message?: string;

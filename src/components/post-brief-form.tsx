@@ -23,12 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AspectRatio } from "@/lib/creative";
-import type { BrandState, PostState, LlmAuthStatus } from "@/lib/types";
+import type { PostState, LlmAuthStatus } from "@/lib/types";
 import { RATIO_OPTIONS } from "@/lib/types";
 import { toast } from "sonner";
 
 type Props = {
-  brand: BrandState;
   post: PostState;
   llmAuthStatus: LlmAuthStatus;
   isGenerating: boolean;

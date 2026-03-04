@@ -220,6 +220,11 @@ type StreamingGenerationOptions = StructuredGenerationOptions & {
   onChunk?: (text: string) => void;
 };
 
+// NOTE: Anthropic thinking tokens (`thinking_delta` events) only fire when the
+// `thinking` parameter is explicitly enabled in the API request. Without it,
+// `onChunk` is only called for OpenAI reasoning tokens. Enabling extended
+// thinking requires a `thinking: { type: "enabled", budget_tokens: N }` param,
+// which increases cost and latency — left as a future opt-in.
 const streamWithAnthropic = async (options: StreamingGenerationOptions) => {
   const client = new Anthropic({ apiKey: options.auth.apiKey });
   const maxTokens = resolveAnthropicMaxTokens(options.maxTokens);

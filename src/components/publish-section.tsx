@@ -27,7 +27,7 @@ type Props = {
   dispatch: (action: Record<string, unknown>) => void;
   onDisconnectInstagram: () => void;
   onCreateShareLink: () => void;
-  onPublishToInstagram: (event: FormEvent) => void;
+  onPublishToInstagram: (event: FormEvent, scheduleAt: string) => void;
 };
 
 export function PublishSection({
@@ -163,7 +163,7 @@ export function PublishSection({
         </div>
       ) : null}
 
-      <form onSubmit={(e) => { onPublishToInstagram(e); }} className="grid gap-2">
+      <form onSubmit={(e) => { onPublishToInstagram(e, scheduleAt); }} className="grid gap-2">
         <div className="space-y-1">
           <Label className="text-[11px] text-slate-300">
             Schedule (optional)
