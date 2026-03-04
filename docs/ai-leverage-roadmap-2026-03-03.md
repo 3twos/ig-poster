@@ -35,7 +35,7 @@ Core pipeline:
 
 ## 4) Phase plan
 
-## Phase 0: Foundations (Week 1)
+### Phase 0: Foundations (Week 1)
 
 Deliverables:
 - Tracking contract for generation, selection, rewrite, publish, and outcomes.
@@ -49,7 +49,7 @@ Exit criteria:
 - Policies are loaded at runtime and injected into generation/guardrail paths.
 - CI runs deterministic eval checks for core generation routes.
 
-## Phase 1: Brand Intelligence Engine (Weeks 2-3)
+### Phase 1: Brand Intelligence Engine (Weeks 2-3)
 
 Deliverables:
 - `POST /api/brand/analyze` that crawls selected pages (`/`, `/about`, product/service pages, blog entry, contact).
@@ -61,7 +61,7 @@ Deliverables:
 Exit criteria:
 - Brand analysis output is reproducible and references concrete evidence snippets.
 
-## Phase 2: Brand-to-Field Translation (Weeks 3-4)
+### Phase 2: Brand-to-Field Translation (Weeks 3-4)
 
 Deliverables:
 - Multi-step transform pipeline: extract -> normalize -> critique -> finalize.
@@ -71,7 +71,7 @@ Deliverables:
 Exit criteria:
 - Autofill output quality exceeds baseline on internal eval set.
 
-## Phase 3: Format-specific generation agents (Weeks 5-6)
+### Phase 3: Format-specific generation agents (Weeks 5-6)
 
 Deliverables:
 - Specialized agents:
@@ -86,7 +86,7 @@ Deliverables:
 Exit criteria:
 - Top-3 variants are diverse, format-correct, and schema-valid across test corpus.
 
-## Phase 4: Scoring + ranking (Weeks 6-8)
+### Phase 4: Scoring + ranking (Weeks 6-8)
 
 Deliverables:
 - Variant scoring service with explainable feature breakdown.
@@ -96,7 +96,7 @@ Deliverables:
 Exit criteria:
 - Highest ranked variant is chosen by users more often than random baseline.
 
-## Phase 5: Rewrite copilot (Weeks 8-10)
+### Phase 5: Rewrite copilot (Weeks 8-10)
 
 Deliverables:
 - One-click transforms:
@@ -112,7 +112,7 @@ Deliverables:
 Exit criteria:
 - Rewrite cycle time and manual editing effort drop measurably.
 
-## Phase 6: Closed-loop learning (Weeks 10-12)
+### Phase 6: Closed-loop learning (Weeks 10-12)
 
 Deliverables:
 - Outcome ingestion pipeline (publish metadata + performance snapshots).
@@ -122,7 +122,7 @@ Deliverables:
 Exit criteria:
 - Model strategy updates are data-backed and versioned.
 
-## Phase 7: Guardrails + recommendation eligibility (Parallel track)
+### Phase 7: Guardrails + recommendation eligibility (Parallel track)
 
 Deliverables:
 - Pre-publish policy checker with pass/warn/block outcomes.
