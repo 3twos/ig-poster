@@ -22,6 +22,7 @@ export const putJson = async (
   return put(pathname, JSON.stringify(value), {
     access: "public",
     addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: "application/json",
   });
 };
