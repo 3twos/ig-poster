@@ -138,6 +138,7 @@ Notes:
 Comprehensive research notes for Instagram growth mechanics + vineyard/wine compliance live here:
 - `docs/instagram-playbook-2026-03-03.md`
 - `docs/intelligent-ig-poster-competitive-research-2026-03-03.md`
+- `docs/ai-leverage-roadmap-2026-03-03.md`
 
 ## GitHub + Vercel CI/CD
 
