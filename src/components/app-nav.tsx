@@ -1,10 +1,11 @@
 "use client";
 
-import { LoaderCircle, Menu, Sparkles } from "lucide-react";
+import { Command, LoaderCircle, Menu, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { usePostContext } from "@/contexts/post-context";
 import type { WorkspaceAuthStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -55,19 +56,21 @@ export function AppNav() {
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
       <div className="flex items-center gap-4">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={toggleSidebar}
-          className="rounded-lg p-1.5 text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
+          className="text-slate-300 hover:text-white lg:hidden"
+          aria-label="Toggle navigation menu"
         >
           <Menu className="h-5 w-5" />
-        </button>
+        </Button>
         <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
           <Sparkles className="h-4 w-4" />
           IG Poster
         </div>
 
-        <nav className="flex gap-1">
+        <nav aria-label="Main navigation" className="flex gap-1">
           {NAV_LINKS.map((link) => {
             const isActive =
               link.href === "/"
@@ -78,6 +81,7 @@ export function AppNav() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
                   isActive
@@ -92,24 +96,41 @@ export function AppNav() {
         </nav>
       </div>
 
-      {workspaceAuth?.authenticated ? (
-        <span className="inline-flex items-center gap-2 text-xs text-slate-200">
-          <span>{workspaceAuth.user?.email ?? "Workspace user"}</span>
-          <button
-            type="button"
-            onClick={() => {
-              void signOut();
-            }}
-            disabled={isSigningOut}
-            className="inline-flex items-center gap-1 rounded-full border border-white/25 px-2 py-0.5 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSigningOut ? (
-              <LoaderCircle className="h-3 w-3 animate-spin" />
-            ) : null}
-            Sign out
-          </button>
-        </span>
-      ) : null}
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => {
+            window.dispatchEvent(
+              new KeyboardEvent("keydown", { key: "k", metaKey: true }),
+            );
+          }}
+          className="hidden gap-1.5 text-[11px] text-slate-400 md:inline-flex"
+          aria-label="Open command palette (⌘K)"
+        >
+          <Command className="h-3 w-3" />
+          <span>K</span>
+        </Button>
+
+        {workspaceAuth?.authenticated ? (
+          <span className="inline-flex items-center gap-2 text-xs text-slate-200">
+            <span>{workspaceAuth.user?.email ?? "Workspace user"}</span>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                void signOut();
+              }}
+              disabled={isSigningOut}
+            >
+              {isSigningOut ? (
+                <LoaderCircle className="h-3 w-3 animate-spin" />
+              ) : null}
+              Sign out
+            </Button>
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

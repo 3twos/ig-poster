@@ -8,8 +8,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_GENERATION_SYSTEM_PROMPT } from "@/lib/creative";
 import {
   type BrandState,
@@ -30,11 +36,6 @@ export default function BrandPage() {
 
   const [isAutofillingBrand, setIsAutofillingBrand] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [brandAutofillMessage, setBrandAutofillMessage] = useState<
-    string | null
-  >(null);
   const [lastAutofilledWebsite, setLastAutofilledWebsite] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -91,8 +92,6 @@ export default function BrandPage() {
 
   const saveSettings = async () => {
     setIsSaving(true);
-    setSaveMessage(null);
-    setError(null);
 
     try {
       const response = await fetch("/api/settings", {
@@ -109,10 +108,9 @@ export default function BrandPage() {
         throw new Error(await parseApiError(response));
       }
 
-      setSaveMessage("Brand kit saved.");
-      window.setTimeout(() => setSaveMessage(null), 3000);
+      toast.success("Brand kit saved.");
     } catch (saveError) {
-      setError(
+      toast.error(
         saveError instanceof Error
           ? saveError.message
           : "Could not save settings",
@@ -152,8 +150,6 @@ export default function BrandPage() {
       return;
     }
 
-    setError(null);
-
     const nextLogo: LocalAsset = {
       id: `${Date.now()}-${file.name}`,
       name: file.name,
@@ -170,8 +166,6 @@ export default function BrandPage() {
       return nextLogo;
     });
 
-    // Logo upload status tracked via logo.status
-
     try {
       const url = await uploadFileToStorage(file, "logos");
       setLogo((current) =>
@@ -183,6 +177,7 @@ export default function BrandPage() {
             }
           : null,
       );
+      toast.success("Logo uploaded.");
     } catch (uploadError) {
       setLogo((current) =>
         current
@@ -196,8 +191,7 @@ export default function BrandPage() {
             }
           : null,
       );
-    } finally {
-      // done
+      toast.error("Logo upload failed.");
     }
   };
 
@@ -208,8 +202,6 @@ export default function BrandPage() {
         return;
       }
 
-      setError(null);
-      setBrandAutofillMessage(null);
       setIsAutofillingBrand(true);
 
       try {
@@ -241,13 +233,13 @@ export default function BrandPage() {
           website: resolvedWebsite,
         }));
         setLastAutofilledWebsite(normalizedKey);
-        setBrandAutofillMessage(
+        toast.success(
           json.source === "model"
             ? "Brand fields autofilled from website style + messaging."
             : "Brand fields autofilled using website metadata heuristics.",
         );
       } catch (autofillError) {
-        setError(
+        toast.error(
           autofillError instanceof Error
             ? autofillError.message
             : "Could not autofill brand fields from website",
@@ -262,8 +254,22 @@ export default function BrandPage() {
   if (!isLoaded) {
     return (
       <AppShell>
-        <div className="flex items-center justify-center py-20">
-          <LoaderCircle className="h-6 w-6 animate-spin text-orange-300" />
+        <div className="mx-auto max-w-3xl space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-9 w-36" />
+          </div>
+          <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 md:p-6">
+            <Skeleton className="mb-4 h-5 w-40" />
+            <div className="grid gap-3 md:grid-cols-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="space-y-1">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </AppShell>
     );
@@ -274,13 +280,11 @@ export default function BrandPage() {
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-lg font-semibold text-white">Brand Kit</h1>
-          <button
-            type="button"
+          <Button
             onClick={() => {
               void saveSettings();
             }}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSaving ? (
               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -288,15 +292,8 @@ export default function BrandPage() {
               <Save className="h-3.5 w-3.5" />
             )}
             {isSaving ? "Saving..." : "Save Brand Kit"}
-          </button>
+          </Button>
         </div>
-
-        {saveMessage ? (
-          <p className="text-xs text-emerald-200">{saveMessage}</p>
-        ) : null}
-        {error ? (
-          <p className="text-xs font-medium text-red-300">{error}</p>
-        ) : null}
 
         <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
@@ -304,11 +301,10 @@ export default function BrandPage() {
             Brand Identity
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs font-medium text-slate-200">
-                Brand Name
-              </span>
-              <input
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="brand-name">Brand Name</Label>
+              <Input
+                id="brand-name"
                 value={brand.brandName}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -316,24 +312,16 @@ export default function BrandPage() {
                     brandName: event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs font-medium text-slate-200">
-                Website (optional)
-              </span>
-              <input
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="brand-website">Website (optional)</Label>
+              <Input
+                id="brand-website"
                 value={brand.website}
                 placeholder="example.com or https://example.com"
                 onChange={(event) => {
                   const nextWebsite = event.target.value;
-                  if (
-                    nextWebsite.trim().toLowerCase() !== lastAutofilledWebsite
-                  ) {
-                    setBrandAutofillMessage(null);
-                  }
-
                   setBrand((current) => ({
                     ...current,
                     website: nextWebsite,
@@ -351,20 +339,19 @@ export default function BrandPage() {
 
                   void autofillBrandFromWebsite(event.target.value);
                 }}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[11px] text-slate-400">
                   Providing a website can autofill brand fields and improve style
                   alignment.
                 </p>
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="xs"
                   onClick={() => {
                     void autofillBrandFromWebsite();
                   }}
                   disabled={!brand.website.trim() || isAutofillingBrand}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isAutofillingBrand ? (
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -372,17 +359,13 @@ export default function BrandPage() {
                     <Sparkles className="h-3.5 w-3.5" />
                   )}
                   {isAutofillingBrand ? "Filling..." : "Autofill Brand Fields"}
-                </button>
+                </Button>
               </div>
-              {brandAutofillMessage ? (
-                <p className="text-[11px] text-emerald-200">
-                  {brandAutofillMessage}
-                </p>
-              ) : null}
-            </label>
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs font-medium text-slate-200">Values</span>
-              <textarea
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="brand-values">Values</Label>
+              <Textarea
+                id="brand-values"
                 value={brand.values}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -391,14 +374,12 @@ export default function BrandPage() {
                   }))
                 }
                 rows={2}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">
-                Principles
-              </span>
-              <textarea
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="brand-principles">Principles</Label>
+              <Textarea
+                id="brand-principles"
                 value={brand.principles}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -407,12 +388,12 @@ export default function BrandPage() {
                   }))
                 }
                 rows={3}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">Story</span>
-              <textarea
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="brand-story">Story</Label>
+              <Textarea
+                id="brand-story"
                 value={brand.story}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -421,12 +402,12 @@ export default function BrandPage() {
                   }))
                 }
                 rows={3}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">Voice</span>
-              <textarea
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="brand-voice">Voice</Label>
+              <Textarea
+                id="brand-voice"
                 value={brand.voice}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -435,14 +416,12 @@ export default function BrandPage() {
                   }))
                 }
                 rows={2}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">
-                Visual Direction
-              </span>
-              <textarea
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="brand-visual">Visual Direction</Label>
+              <Textarea
+                id="brand-visual"
                 value={brand.visualDirection}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -451,14 +430,12 @@ export default function BrandPage() {
                   }))
                 }
                 rows={2}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">
-                Palette (hex list)
-              </span>
-              <input
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="brand-palette">Palette (hex list)</Label>
+              <Input
+                id="brand-palette"
                 value={brand.palette}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -466,14 +443,12 @@ export default function BrandPage() {
                     palette: event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs font-medium text-slate-200">
-                Logo Notes
-              </span>
-              <input
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="brand-logo-notes">Logo Notes</Label>
+              <Input
+                id="brand-logo-notes"
                 value={brand.logoNotes}
                 onChange={(event) =>
                   setBrand((current) => ({
@@ -481,9 +456,8 @@ export default function BrandPage() {
                     logoNotes: event.target.value,
                   }))
                 }
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
+            </div>
           </div>
 
           <div className="mt-5">
@@ -526,26 +500,27 @@ export default function BrandPage() {
         <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-white">Prompt Controls</p>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="xs"
               onClick={() =>
                 setPromptConfig({
                   systemPrompt: "",
                   customInstructions: "",
                 })
               }
-              className="rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10"
             >
               Reset
-            </button>
+            </Button>
           </div>
 
           <div className="grid gap-2">
-            <label className="space-y-1">
-              <span className="text-[11px] font-medium text-slate-300">
+            <div className="space-y-1">
+              <Label htmlFor="system-prompt" className="text-[11px] text-slate-300">
                 System Prompt Addendum (optional)
-              </span>
-              <textarea
+              </Label>
+              <Textarea
+                id="system-prompt"
                 value={promptConfig.systemPrompt}
                 onChange={(event) =>
                   setPromptConfig((current) => ({
@@ -555,15 +530,16 @@ export default function BrandPage() {
                 }
                 rows={3}
                 placeholder="Add global behavior rules, voice guardrails, or hard constraints."
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
+                className="text-xs"
               />
-            </label>
+            </div>
 
-            <label className="space-y-1">
-              <span className="text-[11px] font-medium text-slate-300">
+            <div className="space-y-1">
+              <Label htmlFor="custom-instructions" className="text-[11px] text-slate-300">
                 Campaign Instructions (optional)
-              </span>
-              <textarea
+              </Label>
+              <Textarea
+                id="custom-instructions"
                 value={promptConfig.customInstructions}
                 onChange={(event) =>
                   setPromptConfig((current) => ({
@@ -573,9 +549,9 @@ export default function BrandPage() {
                 }
                 rows={3}
                 placeholder="Example: prioritize educational carousel angle for saves and shares."
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
+                className="text-xs"
               />
-            </label>
+            </div>
           </div>
 
           <p className="mt-2 text-[11px] text-slate-400">

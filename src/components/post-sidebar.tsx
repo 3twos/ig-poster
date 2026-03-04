@@ -1,9 +1,22 @@
 "use client";
 
-import { Cloud, CloudOff, Loader2, Plus, X } from "lucide-react";
+import { Cloud, CloudOff, Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { PostListItem } from "@/components/post-list-item";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { usePostContext } from "@/contexts/post-context";
 import type { PostStatus } from "@/lib/post";
 import { cn } from "@/lib/utils";
@@ -57,11 +70,10 @@ function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
     <>
       {/* New Post button */}
       <div className="border-b border-white/10 p-3">
-        <button
-          type="button"
+        <Button
           onClick={() => void handleNewPost()}
           disabled={isCreating}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full"
         >
           {isCreating ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -69,15 +81,17 @@ function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
             <Plus className="h-4 w-4" />
           )}
           New Post
-        </button>
+        </Button>
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-0.5 overflow-x-auto border-b border-white/10 px-3 py-2">
+      <div role="tablist" aria-label="Filter posts" className="flex gap-0.5 overflow-x-auto border-b border-white/10 px-3 py-2">
         {FILTERS.map((f) => (
           <button
             key={f.value}
             type="button"
+            role="tab"
+            aria-selected={filter === f.value}
             onClick={() => setFilter(f.value)}
             className={cn(
               "shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold transition",
@@ -92,15 +106,30 @@ function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
       </div>
 
       {/* Post list */}
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div role="list" aria-label="Posts" className="flex-1 overflow-y-auto px-2 py-2">
         {isLoadingPosts ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <div className="space-y-2 px-1">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-2 rounded-xl px-3 py-2.5">
+                <Skeleton className="mt-1.5 h-2 w-2 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
-          <p className="py-8 text-center text-xs text-slate-500">
-            {filter === "all" ? "No posts yet" : `No ${filter} posts`}
-          </p>
+          <div className="py-8 text-center">
+            <p className="text-xs text-slate-500">
+              {filter === "all" ? "No posts yet" : `No ${filter} posts`}
+            </p>
+            {filter === "all" && (
+              <p className="mt-1 text-[11px] text-slate-600">
+                Create your first post to get started
+              </p>
+            )}
+          </div>
         ) : (
           <div className="space-y-0.5">
             {filtered.map((post) => (
@@ -118,13 +147,18 @@ function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
       </div>
 
       {/* Save status */}
-      <div className="border-t border-white/10 px-3 py-2">
+      <div className="border-t border-white/10 px-3 py-2" aria-live="polite">
         <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
           {saveStatus === "saved" && (
-            <>
-              <Cloud className="h-3 w-3" />
-              <span>Saved</span>
-            </>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1.5">
+                  <Cloud className="h-3 w-3" />
+                  <span>Saved</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>All changes saved</TooltipContent>
+            </Tooltip>
           )}
           {saveStatus === "saving" && (
             <>
@@ -153,7 +187,7 @@ function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
 /** Desktop sidebar — hidden below lg */
 export function PostSidebar() {
   return (
-    <aside className="hidden w-[280px] shrink-0 lg:block">
+    <aside aria-label="Post list" className="hidden w-[280px] shrink-0 lg:block">
       <div className="sticky top-6 flex max-h-[calc(100vh-120px)] flex-col rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl">
         <SidebarContent />
       </div>
@@ -161,38 +195,25 @@ export function PostSidebar() {
   );
 }
 
-/** Mobile slide-over drawer — visible below lg */
+/** Mobile slide-over drawer using shadcn Sheet */
 export function MobileSidebarDrawer() {
   const { isSidebarOpen, closeSidebar } = usePostContext();
 
-  if (!isSidebarOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 lg:hidden">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={closeSidebar}
-      />
-
-      {/* Drawer panel */}
-      <div className="absolute inset-y-0 left-0 flex w-[300px] flex-col border-r border-white/15 bg-slate-900/95 backdrop-blur-xl">
-        {/* Close button */}
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <span className="text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
+    <Sheet open={isSidebarOpen} onOpenChange={(open) => !open && closeSidebar()}>
+      <SheetContent
+        side="left"
+        className="w-[300px] border-r border-white/15 bg-slate-900/95 p-0 backdrop-blur-xl"
+      >
+        <SheetHeader className="border-b border-white/10 px-4 py-3">
+          <SheetTitle className="text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
             Posts
-          </span>
-          <button
-            type="button"
-            onClick={closeSidebar}
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          </SheetTitle>
+        </SheetHeader>
+        <div className="flex h-[calc(100%-3.5rem)] flex-col">
+          <SidebarContent onPostSelect={closeSidebar} />
         </div>
-
-        <SidebarContent onPostSelect={closeSidebar} />
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }

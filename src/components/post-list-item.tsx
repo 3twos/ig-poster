@@ -1,10 +1,41 @@
 "use client";
 
 import { Archive, MoreHorizontal, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { PostSummary } from "@/lib/post";
 import { cn } from "@/lib/utils";
+
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+  draft: "secondary",
+  generated: "outline",
+  published: "default",
+  scheduled: "outline",
+  archived: "secondary",
+};
 
 const STATUS_DOT: Record<string, string> = {
   draft: "bg-slate-400",
@@ -41,102 +72,115 @@ export function PostListItem({
   onArchive,
   onDelete,
 }: Props) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const handleDelete = useCallback(() => {
-    if (confirmDelete) {
-      onDelete();
-      setMenuOpen(false);
-      setConfirmDelete(false);
-    } else {
-      setConfirmDelete(true);
-    }
-  }, [confirmDelete, onDelete]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      className={cn(
-        "group relative flex cursor-pointer items-start gap-2 rounded-xl px-3 py-2.5 transition",
-        isActive
-          ? "border border-orange-400/30 bg-orange-400/10"
-          : "hover:bg-white/5",
-      )}
-    >
-      {/* Status dot */}
-      <span
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
         className={cn(
-          "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-          STATUS_DOT[post.status] ?? "bg-slate-400",
+          "group relative flex cursor-pointer items-start gap-2 rounded-xl px-3 py-2.5 transition",
+          isActive
+            ? "border border-orange-400/30 bg-orange-400/10"
+            : "hover:bg-white/5",
         )}
-      />
+      >
+        {/* Status dot */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                STATUS_DOT[post.status] ?? "bg-slate-400",
+              )}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="right" className="capitalize">
+            {post.status}
+          </TooltipContent>
+        </Tooltip>
 
-      {/* Content */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">
-          {post.title || "Untitled Post"}
-        </p>
-        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
-          <span>{relativeTime(post.updatedAt)}</span>
-          {post.assetCount > 0 && <span>{post.assetCount} assets</span>}
-          {post.variantCount > 0 && <span>{post.variantCount} variants</span>}
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-white">
+            {post.title || "Untitled Post"}
+          </p>
+          <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
+            <span>{relativeTime(post.updatedAt)}</span>
+            {post.assetCount > 0 && <span>{post.assetCount} assets</span>}
+            {post.variantCount > 0 && <span>{post.variantCount} variants</span>}
+          </div>
         </div>
+
+        {/* Context menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="shrink-0 text-slate-500 opacity-0 transition group-hover:opacity-100 data-[state=open]:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Post options"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[160px]">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive();
+              }}
+            >
+              <Archive className="h-3.5 w-3.5" />
+              Archive
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeleteDialogOpen(true);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      {/* Context menu trigger */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setMenuOpen((o) => !o);
-          setConfirmDelete(false);
-        }}
-        className="shrink-0 rounded-md p-1 text-slate-500 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
-      >
-        <MoreHorizontal className="h-3.5 w-3.5" />
-      </button>
-
-      {/* Dropdown menu */}
-      {menuOpen && (
-        <div
-          className="absolute right-2 top-9 z-10 min-w-[140px] rounded-lg border border-white/15 bg-slate-800 py-1 shadow-xl"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              onArchive();
-              setMenuOpen(false);
-            }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
-          >
-            <Archive className="h-3 w-3" />
-            Archive
-          </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            className={cn(
-              "flex w-full items-center gap-2 px-3 py-1.5 text-xs",
-              confirmDelete
-                ? "text-red-400 hover:bg-red-500/10"
-                : "text-slate-300 hover:bg-white/10",
-            )}
-          >
-            <Trash2 className="h-3 w-3" />
-            {confirmDelete ? "Confirm delete?" : "Delete"}
-          </button>
-        </div>
-      )}
-    </div>
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete &ldquo;{post.title || "Untitled Post"}&rdquo;.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                onDelete();
+                setDeleteDialogOpen(false);
+              }}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
