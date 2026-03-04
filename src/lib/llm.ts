@@ -95,9 +95,9 @@ type StructuredGenerationOptions = {
 
 const unwrapMarkdownJson = (value: string) =>
   value
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
+    .replace(/^[\s\S]*?```json\s*/i, "")
+    .replace(/^[\s\S]*?```\s*/i, "")
+    .replace(/\s*```[\s\S]*$/i, "")
     .trim();
 
 const parseJsonObject = <T>(value: string): T => {
@@ -139,7 +139,7 @@ const clampAnthropicTemperature = (temperature: number) =>
 
 const resolveAnthropicMaxTokens = (value?: number) => {
   const fallback = 8192;
-  const next = Number.isFinite(value) ? Math.round(value as number) : fallback;
+  const next = value !== undefined && Number.isFinite(value) ? Math.round(value) : fallback;
   return Math.max(256, next);
 };
 

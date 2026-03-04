@@ -21,6 +21,9 @@ export async function GET(_req: Request, context: RouteContext) {
     }
 
     const { id } = await context.params;
+    if (!/^[a-f0-9]{10,36}$/i.test(id)) {
+      return NextResponse.json({ error: "Invalid project id" }, { status: 400 });
+    }
     const project = await readJsonByPath<unknown>(`projects/${id}.json`);
 
     if (!project) {
@@ -29,13 +32,10 @@ export async function GET(_req: Request, context: RouteContext) {
 
     const parsed = SavedProjectSchema.parse(project);
     return NextResponse.json(parsed, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      {
-        error: "Could not load project",
-        detail: error instanceof Error ? error.message : "Unexpected error",
-      },
-      { status: 400 },
+      { error: "Could not load project" },
+      { status: 500 },
     );
   }
 }

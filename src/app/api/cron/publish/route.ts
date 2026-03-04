@@ -15,11 +15,15 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   try {
     const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret) {
-      const authorization = req.headers.get("authorization");
-      if (authorization !== `Bearer ${cronSecret}`) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
+    if (!cronSecret) {
+      return NextResponse.json(
+        { error: "CRON_SECRET is not configured. Cron endpoint is disabled." },
+        { status: 503 },
+      );
+    }
+    const authorization = req.headers.get("authorization");
+    if (authorization !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!isBlobEnabled()) {
@@ -38,11 +42,21 @@ export async function GET(req: Request) {
     for (const blob of blobs) {
       const response = await fetch(blob.url, { cache: "no-store" });
       if (!response.ok) {
+        errors.push({ id: blob.pathname, detail: `Failed to fetch blob (${response.status})` });
         continue;
       }
 
-      const parsed = ScheduledJobSchema.safeParse(await response.json());
+      let rawJson: unknown;
+      try {
+        rawJson = await response.json();
+      } catch {
+        errors.push({ id: blob.pathname, detail: "Blob is not valid JSON" });
+        continue;
+      }
+
+      const parsed = ScheduledJobSchema.safeParse(rawJson);
       if (!parsed.success) {
+        errors.push({ id: blob.pathname, detail: `Invalid schema: ${parsed.error.message}` });
         continue;
       }
 
@@ -64,10 +78,8 @@ export async function GET(req: Request) {
             throw new Error("OAuth connection no longer exists");
           }
 
-          const secret = requireAppEncryptionSecret("decrypting OAuth token");
-
           auth = {
-            accessToken: decryptString(connection.encryptedAccessToken, secret),
+            accessToken: decryptString(connection.encryptedAccessToken, requireAppEncryptionSecret("decrypting OAuth token")),
             instagramUserId: connection.instagramUserId,
             graphVersion: connection.graphVersion,
           };
@@ -99,7 +111,8 @@ export async function GET(req: Request) {
     return NextResponse.json({
       scanned: blobs.length,
       published,
-      errors,
+      errorCount: errors.length,
+      errors: errors.slice(0, 20),
       ranAt: new Date().toISOString(),
     });
   } catch (error) {

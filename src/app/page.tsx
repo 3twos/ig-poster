@@ -411,7 +411,8 @@ export default function Home() {
     }
 
     if (auth === "error" && detail) {
-      setError(detail);
+      const safeDetail = detail.slice(0, 200).replace(/[<>"']/g, "");
+      setError(safeDetail);
     }
 
     if (auth) {
@@ -480,7 +481,7 @@ export default function Home() {
     return [...ordered, ...rest];
   }, [activeVariant, assetMap, assets]);
 
-  const getDisplayVisual = useCallback((asset?: LocalAsset) => {
+  const getDisplayVisual = (asset?: LocalAsset) => {
     if (!asset) {
       return undefined;
     }
@@ -490,7 +491,7 @@ export default function Home() {
     }
 
     return asset.previewUrl;
-  }, []);
+  };
 
   const primaryVisual = getDisplayVisual(orderedVariantAssets[0]);
   const secondaryVisual = getDisplayVisual(orderedVariantAssets[1]);
@@ -750,11 +751,19 @@ export default function Home() {
       return;
     }
 
-    const dataUrl = await renderPosterToDataUrl();
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = `${slugify(brand.brandName)}-${slugify(post.theme)}.png`;
-    link.click();
+    try {
+      const dataUrl = await renderPosterToDataUrl();
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `${slugify(brand.brandName)}-${slugify(post.theme)}.png`;
+      link.click();
+    } catch (exportError) {
+      setError(
+        exportError instanceof Error
+          ? exportError.message
+          : "Failed to export poster image",
+      );
+    }
   };
 
   const copyCaption = async () => {
@@ -898,7 +907,6 @@ export default function Home() {
       };
 
       await loadLlmStatus();
-      setLlmApiKeyInput("");
       const resolvedModel = (json.model ?? llmModelInput) || "default model";
       setLlmModelInput(json.model ?? llmModelInput);
       const storageHint =
@@ -918,6 +926,7 @@ export default function Home() {
     } finally {
       window.clearTimeout(timeoutId);
       setIsLlmConnecting(false);
+      setLlmApiKeyInput("");
     }
   };
 
@@ -1047,11 +1056,11 @@ export default function Home() {
 
     if (variant.postType === "carousel") {
       const items = sequenced
-        .filter((asset) => Boolean(asset.storageUrl))
+        .filter((asset): asset is LocalAsset & { storageUrl: string } => Boolean(asset.storageUrl))
         .slice(0, 10)
         .map((asset) => ({
           mediaType: asset.mediaType,
-          url: asset.storageUrl!,
+          url: asset.storageUrl,
         }));
 
       if (items.length < 2) {
@@ -1162,8 +1171,8 @@ export default function Home() {
     );
   };
 
-  const imageCount = assets.filter((asset) => asset.mediaType === "image").length;
-  const videoCount = assets.filter((asset) => asset.mediaType === "video").length;
+  const imageCount = useMemo(() => assets.filter((asset) => asset.mediaType === "image").length, [assets]);
+  const videoCount = useMemo(() => assets.filter((asset) => asset.mediaType === "video").length, [assets]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-6 text-white md:px-8 md:py-8">

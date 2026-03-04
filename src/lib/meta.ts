@@ -55,7 +55,12 @@ const callGraphPost = async (
     },
   );
 
-  const json = (await response.json()) as GraphResponse;
+  let json: GraphResponse;
+  try {
+    json = (await response.json()) as GraphResponse;
+  } catch {
+    throw new Error(`Meta API returned non-JSON response on ${path} (${response.status})`);
+  }
   if (!response.ok || json.error) {
     throw new Error(json.error?.message ?? `Meta API call failed on ${path}`);
   }
@@ -71,7 +76,12 @@ const callGraphGet = async (path: string, auth: MetaAuthContext, fields?: string
   }
 
   const response = await fetch(url, { cache: "no-store" });
-  const json = (await response.json()) as GraphResponse;
+  let json: GraphResponse;
+  try {
+    json = (await response.json()) as GraphResponse;
+  } catch {
+    throw new Error(`Meta API returned non-JSON response on ${path} (${response.status})`);
+  }
 
   if (!response.ok || json.error) {
     throw new Error(json.error?.message ?? `Meta API call failed on ${path}`);
@@ -91,7 +101,10 @@ const publishContainer = (creationId: string, auth: MetaAuthContext) =>
   );
 
 const waitForContainerReady = async (creationId: string, auth: MetaAuthContext) => {
-  const maxAttempts = 15;
+  const maxAttempts = 10;
+  const baseDelay = 3000;
+  const maxTotalMs = 60_000;
+  const start = Date.now();
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const status = await callGraphGet(creationId, auth, ["status_code", "status"]);
@@ -105,7 +118,11 @@ const waitForContainerReady = async (creationId: string, auth: MetaAuthContext) 
       throw new Error(`Container ${creationId} failed with status ${code}`);
     }
 
-    await sleep(4000);
+    const delay = Math.min(baseDelay * Math.pow(1.3, attempt), 10000);
+    if (Date.now() - start + delay > maxTotalMs) {
+      throw new Error(`Container ${creationId} did not finish processing within ${maxTotalMs / 1000}s`);
+    }
+    await sleep(delay);
   }
 
   throw new Error(`Container ${creationId} did not finish processing in time`);

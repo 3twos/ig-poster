@@ -15,7 +15,10 @@ export const buildBlobPath = (folder: string, fileName: string) => {
   return `${cleanFolder}/${Date.now()}-${sanitizeName(fileName)}`;
 };
 
-export const putJson = async (pathname: string, value: unknown) => {
+export const putJson = async (
+  pathname: string,
+  value: unknown,
+) => {
   return put(pathname, JSON.stringify(value), {
     access: "public",
     addRandomSuffix: false,
@@ -25,7 +28,7 @@ export const putJson = async (pathname: string, value: unknown) => {
 
 export const readJsonByPath = async <T>(pathname: string): Promise<T | null> => {
   const { blobs } = await list({ prefix: pathname, limit: 1 });
-  const blob = blobs.find((item) => item.pathname === pathname) ?? blobs[0];
+  const blob = blobs.find((item) => item.pathname === pathname);
   if (!blob) {
     return null;
   }
@@ -47,7 +50,7 @@ export const deleteBlob = async (url: string) => del(url);
 
 export const deleteBlobByPath = async (pathname: string) => {
   const { blobs } = await list({ prefix: pathname, limit: 1 });
-  const blob = blobs.find((item) => item.pathname === pathname) ?? blobs[0];
+  const blob = blobs.find((item) => item.pathname === pathname);
   if (!blob) {
     return false;
   }

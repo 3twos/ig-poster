@@ -12,7 +12,11 @@ export const readCookieFromHeader = (cookieHeader: string | null, key: string) =
     return "";
   }
 
-  return decodeURIComponent(match.slice(key.length + 1));
+  try {
+    return decodeURIComponent(match.slice(key.length + 1));
+  } catch {
+    return match.slice(key.length + 1);
+  }
 };
 
 export const readCookieFromRequest = (req: Request, key: string) =>

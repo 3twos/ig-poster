@@ -217,8 +217,11 @@ export const resolveLlmAuthFromRequest = async (
           apiKey: decryptConnectionApiKey(connection),
         };
       }
-    } catch {
-      // Fall through to env credentials if connection record is stale/invalid.
+    } catch (error) {
+      console.warn(
+        "[llm-auth] Failed to resolve connection credentials, falling back to env:",
+        error instanceof Error ? error.message : error,
+      );
     }
   }
 

@@ -1,11 +1,13 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import {
   completeMetaOAuth,
   META_CONNECTION_COOKIE,
   META_OAUTH_STATE_COOKIE,
-  readCookieFromRequest,
 } from "@/lib/meta-auth";
+import { readCookieFromRequest } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 
@@ -32,7 +34,11 @@ export async function GET(req: Request) {
     }
 
     const expectedState = readCookieFromRequest(req, META_OAUTH_STATE_COOKIE);
-    if (!expectedState || expectedState !== state) {
+    const stateMatch =
+      expectedState &&
+      expectedState.length === state.length &&
+      timingSafeEqual(Buffer.from(expectedState), Buffer.from(state));
+    if (!stateMatch) {
       return NextResponse.redirect(
         `${origin}/?auth=error&detail=${encodeURIComponent("Invalid OAuth state")}`,
       );

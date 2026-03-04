@@ -3,8 +3,6 @@ import { z } from "zod";
 
 import { readCookieFromRequest } from "@/lib/cookies";
 
-export { readCookieFromRequest } from "@/lib/cookies";
-
 export const WORKSPACE_SESSION_COOKIE = "workspace_session";
 export const WORKSPACE_OAUTH_STATE_COOKIE = "workspace_oauth_state";
 export const WORKSPACE_OAUTH_NONCE_COOKIE = "workspace_oauth_nonce";
@@ -77,14 +75,12 @@ const getOAuthConfig = (origin: string): WorkspaceOAuthConfig => {
 };
 
 const getSessionSecret = () => {
-  const secret =
-    process.env.WORKSPACE_AUTH_SECRET ||
-    process.env.APP_ENCRYPTION_SECRET ||
-    process.env.META_APP_SECRET;
+  const secret = process.env.WORKSPACE_AUTH_SECRET || process.env.APP_ENCRYPTION_SECRET;
 
   if (!secret) {
     throw new Error(
-      "Missing WORKSPACE_AUTH_SECRET (or APP_ENCRYPTION_SECRET / META_APP_SECRET fallbacks)",
+      "Missing WORKSPACE_AUTH_SECRET (or APP_ENCRYPTION_SECRET fallback). " +
+        "Set one of these environment variables for session signing.",
     );
   }
 

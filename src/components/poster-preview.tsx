@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
 
 import {
@@ -166,7 +166,7 @@ const EditorOverlay = ({
             "inline-flex rounded-full border border-white/40 px-3 py-1 text-xs font-semibold text-white uppercase",
         },
       ] as const,
-    [variant],
+    [variant.hook, variant.headline, variant.supportingText, variant.cta],
   );
 
   const commit = (
@@ -246,7 +246,7 @@ const EditorOverlay = ({
   );
 };
 
-export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
+export const PosterPreview = memo(forwardRef<HTMLDivElement, PosterPreviewProps>(
   (
     {
       variant,
@@ -348,6 +348,6 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
       </div>
     );
   },
-);
+));
 
 PosterPreview.displayName = "PosterPreview";
