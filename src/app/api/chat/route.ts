@@ -7,7 +7,7 @@ import { streamChatCompletion, toChatSseEvent } from "@/lib/chat-stream";
 import { buildChatSystemPrompt } from "@/lib/chat-system-prompt";
 import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
 import { getUserSettingsPath, type UserSettings } from "@/lib/user-settings";
-import { isAbortError } from "@/lib/utils";
+import { isAbortError } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { readJsonByPath } from "@/lib/blob-store";
 

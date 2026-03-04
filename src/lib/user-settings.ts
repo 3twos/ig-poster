@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { MultiModelModeSchema } from "@/lib/llm-constants";
-import { hashEmail } from "@/lib/utils";
+import { hashEmail } from "@/lib/server-utils";
 
 export const UserSettingsSchema = z.object({
   email: z.string().email(),

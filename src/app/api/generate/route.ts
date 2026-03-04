@@ -24,7 +24,7 @@ import {
   getUserSettingsPath,
   type UserSettings,
 } from "@/lib/user-settings";
-import { hashEmail, isAbortError, toErrorMessage } from "@/lib/utils";
+import { hashEmail, isAbortError, toErrorMessage } from "@/lib/server-utils";
 import {
   buildWebsiteStyleContext,
   type WebsiteStyleResult,

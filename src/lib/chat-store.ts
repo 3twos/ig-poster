@@ -7,7 +7,7 @@ import type {
   ChatConversation,
   ChatConversationSummary,
 } from "@/lib/chat-types";
-import { hashEmail } from "@/lib/utils";
+import { hashEmail } from "@/lib/server-utils";
 
 // ---------------------------------------------------------------------------
 // Helpers

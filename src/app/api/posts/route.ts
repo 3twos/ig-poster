@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
 import { toSummary } from "@/lib/post";
-import { hashEmail } from "@/lib/utils";
+import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
