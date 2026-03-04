@@ -34,6 +34,11 @@ export type GenerationRunEvent =
       detail: string;
     }
   | {
+      type: "llm-thinking";
+      stepId: string;
+      text: string;
+    }
+  | {
       type: "run-complete";
       result: unknown;
       summary: string;
@@ -53,6 +58,7 @@ const EVENT_TYPES = new Set<GenerationRunEvent["type"]>([
   "step-complete",
   "step-error",
   "heartbeat",
+  "llm-thinking",
   "run-complete",
   "run-error",
 ]);
@@ -112,6 +118,10 @@ export const isGenerationRunEvent = (value: unknown): value is GenerationRunEven
 
   if (type === "heartbeat") {
     return typeof value.detail === "string";
+  }
+
+  if (type === "llm-thinking") {
+    return typeof value.stepId === "string" && typeof value.text === "string";
   }
 
   if (type === "run-complete") {
