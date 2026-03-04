@@ -66,6 +66,7 @@ Run these before opening or updating a PR.
 - `src/components/post-brief-form.tsx`: post brief fields, template gallery, generate/export buttons.
 - `src/components/asset-manager.tsx`: drag-and-drop reorderable asset list (uses `@dnd-kit/sortable`).
 - `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
+- `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time.
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls.
 - `src/components/publish-section.tsx`: share link, Instagram auth, schedule, publish form.

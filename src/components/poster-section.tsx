@@ -35,7 +35,7 @@ export function PosterSection({
 }: Props) {
   if (!activeVariant) {
     return (
-      <div className="flex aspect-[4/5] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300">
+      <div className="mx-auto flex aspect-[4/5] max-w-[430px] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300">
         Upload assets and generate concepts to preview your post.
       </div>
     );
@@ -46,6 +46,7 @@ export function PosterSection({
       key={activeVariant.id}
       initial={{ opacity: 0.2 }}
       animate={{ opacity: 1 }}
+      className="mx-auto max-w-[430px]"
     >
       <PosterPreview
         ref={posterRef}

@@ -56,9 +56,11 @@ const renderOverlayBlock = (
       <div className="absolute inset-0 grid grid-cols-[1.25fr_0.75fr]">
         <div className="flex h-full items-end p-6">
           <div className="w-full rounded-2xl bg-black/35 p-5 backdrop-blur-sm">
-            <p className="text-xs font-semibold tracking-[0.2em] text-white/75 uppercase">
-              {brandName}
-            </p>
+            {!options?.hasLogo && (
+              <p className="text-xs font-semibold tracking-[0.2em] text-white/75 uppercase">
+                {brandName}
+              </p>
+            )}
             <h2 className="mt-2 text-3xl leading-tight font-semibold text-white">
               {variant.headline}
             </h2>
@@ -407,15 +409,12 @@ export const PosterPreview = memo(forwardRef<HTMLDivElement, PosterPreviewProps>
 
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] text-slate-900 uppercase">
           {logoImage ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={logoImage}
-                alt="Brand logo"
-                className="h-6 max-w-[4rem] object-contain"
-              />
-              {brandName}
-            </>
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoImage}
+              alt="Brand logo"
+              className="h-6 max-w-[4rem] object-contain"
+            />
           ) : (
             brandName
           )}
