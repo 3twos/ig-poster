@@ -129,7 +129,8 @@ export default function Home() {
       try {
         const response = await fetch("/api/settings", { cache: "no-store" });
         if (!response.ok) {
-          setHasBrand(false);
+          // 401/503 = auth or config issue, not "no brand"
+          setHasBrand(null);
           return;
         }
 
@@ -154,7 +155,8 @@ export default function Home() {
           });
         }
       } catch {
-        setHasBrand(false);
+        // Network/parse error — don't show misleading banner
+        setHasBrand(null);
       }
     };
 

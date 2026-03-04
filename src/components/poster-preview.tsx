@@ -348,51 +348,62 @@ export const PosterPreview = memo(forwardRef<HTMLDivElement, PosterPreviewProps>
         )}
 
         {/* Carousel navigation arrows + dots */}
-        {carouselSlides && carouselSlides.length >= 2 && onSlideChange ? (
-          <>
-            <button
-              type="button"
-              onClick={() =>
-                onSlideChange(
-                  activeSlideIndex > 0
-                    ? activeSlideIndex - 1
-                    : carouselSlides.length - 1,
-                )
-              }
-              className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
-            >
-              <ChevronLeft className="h-4 w-4 text-white" />
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onSlideChange(
-                  activeSlideIndex < carouselSlides.length - 1
-                    ? activeSlideIndex + 1
-                    : 0,
-                )
-              }
-              className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
-            >
-              <ChevronRight className="h-4 w-4 text-white" />
-            </button>
-            <div className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1.5">
-              {carouselSlides.map((slide, index) => (
-                <button
-                  key={`dot-${slide.index}`}
-                  type="button"
-                  onClick={() => onSlideChange(index)}
-                  className={cn(
-                    "h-2 w-2 rounded-full transition",
-                    index === activeSlideIndex
-                      ? "bg-white"
-                      : "bg-white/40 hover:bg-white/70",
-                  )}
-                />
-              ))}
-            </div>
-          </>
-        ) : null}
+        {carouselSlides && onSlideChange
+          ? (() => {
+              const assetCount = variant.assetSequence.length;
+              const navLength = Math.min(carouselSlides.length, assetCount);
+
+              if (navLength < 2) return null;
+
+              const clamped = Math.min(activeSlideIndex, navLength - 1);
+
+              return (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Previous slide"
+                    onClick={() =>
+                      onSlideChange(
+                        clamped > 0 ? clamped - 1 : navLength - 1,
+                      )
+                    }
+                    className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
+                  >
+                    <ChevronLeft className="h-4 w-4 text-white" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next slide"
+                    onClick={() =>
+                      onSlideChange(
+                        clamped < navLength - 1 ? clamped + 1 : 0,
+                      )
+                    }
+                    className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
+                  >
+                    <ChevronRight className="h-4 w-4 text-white" />
+                  </button>
+                  <div className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1.5">
+                    {Array.from({ length: navLength }).map((_, index) => (
+                      <button
+                        key={`dot-${index}`}
+                        type="button"
+                        aria-label={`Go to slide ${index + 1}`}
+                        aria-current={index === clamped ? "true" : undefined}
+                        onClick={() => onSlideChange(index)}
+                        className={cn(
+                          "h-2 w-2 rounded-full transition",
+                          index === clamped
+                            ? "bg-white"
+                            : "bg-white/40 hover:bg-white/70",
+                        )}
+                      />
+                    ))}
+                  </div>
+                </>
+              );
+            })()
+          : null}
 
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] text-slate-900 uppercase">
           {logoImage ? (
