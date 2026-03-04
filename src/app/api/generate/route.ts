@@ -23,11 +23,26 @@ import {
   type WebsiteStyleResult,
 } from "@/lib/website-style";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import {
+  type GenerationRunEvent,
+  type GenerationStepPhase,
+  toSseEvent,
+} from "@/lib/generation-events";
 
 export const maxDuration = 60;
 
-const sseEvent = (data: Record<string, unknown>) =>
-  `data: ${JSON.stringify(data)}\n\n`;
+const toErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Unexpected generation issue";
+
+const isAbortError = (error: unknown) =>
+  error instanceof Error &&
+  (error.name === "AbortError" || error.message.toLowerCase().includes("abort"));
+
+const createAbortError = () => {
+  const error = new Error("Generation cancelled.");
+  error.name = "AbortError";
+  return error;
+};
 
 export async function POST(req: Request) {
   try {
@@ -39,14 +54,88 @@ export async function POST(req: Request) {
       return NextResponse.json(createFallbackResponse(request));
     }
 
+    const generationAbortController = new AbortController();
     const stream = new ReadableStream({
       async start(controller) {
-        const send = (data: Record<string, unknown>) => {
-          controller.enqueue(new TextEncoder().encode(sseEvent(data)));
+        let streamClosed = false;
+        const encoder = new TextEncoder();
+        const closeStream = () => {
+          if (streamClosed) {
+            return;
+          }
+
+          streamClosed = true;
+          try {
+            controller.close();
+          } catch {
+            // Stream may already be closed by runtime cancellation.
+          }
+        };
+        const send = (event: GenerationRunEvent) => {
+          if (streamClosed) {
+            return;
+          }
+
+          controller.enqueue(encoder.encode(toSseEvent(event)));
+        };
+        const runId = crypto.randomUUID();
+        let activeStepId: string | null = null;
+        let activeStepTitle: string | null = null;
+        const abortFromRequest = () => generationAbortController.abort();
+        req.signal.addEventListener("abort", abortFromRequest, { once: true });
+
+        const throwIfAborted = () => {
+          if (generationAbortController.signal.aborted) {
+            throw createAbortError();
+          }
+        };
+
+        const startStep = (
+          stepId: string,
+          title: string,
+          phase: GenerationStepPhase,
+          detail?: string,
+        ) => {
+          activeStepId = stepId;
+          activeStepTitle = title;
+          send({ type: "step-start", stepId, title, phase, detail });
+        };
+
+        const completeStep = (stepId: string, detail?: string) => {
+          send({ type: "step-complete", stepId, detail });
+          if (activeStepId === stepId) {
+            activeStepId = null;
+            activeStepTitle = null;
+          }
+        };
+
+        const failStep = (stepId: string, detail: string) => {
+          send({ type: "step-error", stepId, detail });
+          if (activeStepId === stepId) {
+            activeStepId = null;
+            activeStepTitle = null;
+          }
         };
 
         try {
-          send({ type: "status", message: "Authenticating with provider..." });
+          throwIfAborted();
+          send({
+            type: "run-start",
+            runId,
+            label: "Generate SOTA Concepts",
+            detail: "Planning and drafting post concepts.",
+          });
+
+          startStep(
+            "resolve-provider",
+            "Resolve model provider",
+            "planning",
+            "Authenticating model connection and runtime credentials.",
+          );
+          completeStep(
+            "resolve-provider",
+            `Connected to ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
+          );
 
           // Try cached brand memory first, fall back to live scrape
           let websiteResult: WebsiteStyleResult | null = null;
@@ -71,7 +160,16 @@ export async function POST(req: Request) {
               const memHost = normalizeHostname(mem?.websiteUrl);
               if (mem?.bodyText && memHost && reqHost && memHost === reqHost) {
                 websiteResult = { notes: mem.notes || "", bodyText: mem.bodyText };
-                send({ type: "status", message: "Using cached website context..." });
+                startStep(
+                  "load-context",
+                  "Load website context",
+                  "planning",
+                  "Pulling cached brand memory for better style alignment.",
+                );
+                completeStep(
+                  "load-context",
+                  "Using cached website context from saved brand memory.",
+                );
               }
             }
           } catch {
@@ -79,18 +177,51 @@ export async function POST(req: Request) {
           }
 
           if (!websiteResult) {
-            send({ type: "status", message: "Extracting website style cues..." });
+            throwIfAborted();
+            startStep(
+              "load-context",
+              "Load website context",
+              "planning",
+              "Extracting website tone, visual cues, and messaging signals.",
+            );
             websiteResult = await buildWebsiteStyleContext(
               request.brand.website,
             );
+            throwIfAborted();
+            completeStep(
+              "load-context",
+              websiteResult?.notes || websiteResult?.bodyText
+                ? "Website context extracted and attached to the prompt."
+                : "No website context found; continuing with brand kit only.",
+            );
           }
 
-          send({ type: "status", message: "Building prompt..." });
+          startStep(
+            "assemble-prompt",
+            "Assemble generation prompt",
+            "planning",
+            "Combining brand, post brief, assets, and prompt controls.",
+          );
+          completeStep(
+            "assemble-prompt",
+            "Prompt assembled with campaign constraints and format hints.",
+          );
 
-          send({
-            type: "status",
-            message: `Calling ${llmAuth.provider.toUpperCase()} (${llmAuth.model})...`,
-          });
+          startStep(
+            "draft-variants",
+            "Draft candidate variants",
+            "execution",
+            `Calling ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
+          );
+          const heartbeatId = setInterval(() => {
+            if (generationAbortController.signal.aborted) {
+              return;
+            }
+            send({
+              type: "heartbeat",
+              detail: `Still waiting on ${llmAuth.provider.toUpperCase()} response...`,
+            });
+          }, 2500);
           const generated = await generateStructuredJson<unknown>({
             auth: llmAuth,
             systemPrompt: buildGenerationSystemPrompt(request.promptConfig),
@@ -101,27 +232,93 @@ export async function POST(req: Request) {
             }),
             temperature: 0.9,
             maxTokens: 12000,
+            signal: generationAbortController.signal,
+          }).finally(() => {
+            clearInterval(heartbeatId);
           });
+          throwIfAborted();
+          completeStep(
+            "draft-variants",
+            "Model returned candidate concepts and strategy rationale.",
+          );
 
-          send({ type: "status", message: "Selecting best variants..." });
+          startStep(
+            "select-variants",
+            "Validate and select top variants",
+            "validation",
+            "Applying schema checks and selecting top three concepts.",
+          );
           const internalParsed = InternalGenerationResponseSchema.parse(generated);
           const topVariants = selectTopVariants(internalParsed.variants, 3);
           const parsed = GenerationResponseSchema.parse({
             strategy: internalParsed.strategy,
             variants: topVariants,
           });
+          completeStep(
+            "select-variants",
+            "Structured output validated and ranked.",
+          );
 
-          send({ type: "complete", result: parsed });
-        } catch {
-          const fallback = createFallbackResponse(request);
+          startStep(
+            "finalize-result",
+            "Finalize preview payload",
+            "finalization",
+            "Preparing variants for rendering in the editor.",
+          );
+          completeStep("finalize-result", "Preview payload ready.");
+
           send({
-            type: "status",
-            message: "LLM call failed, using fallback concepts...",
+            type: "run-complete",
+            result: parsed,
+            summary: "Generated 3 concept variants successfully.",
+            fallbackUsed: false,
           });
-          send({ type: "complete", result: fallback });
+        } catch (generationError) {
+          if (isAbortError(generationError) || generationAbortController.signal.aborted) {
+            if (activeStepId) {
+              failStep(
+                activeStepId,
+                `${activeStepTitle ?? "Active step"} cancelled by client.`,
+              );
+            }
+            send({
+              type: "run-error",
+              detail: "Generation cancelled by client.",
+            });
+            return;
+          }
+
+          if (activeStepId) {
+            failStep(
+              activeStepId,
+              `${activeStepTitle ?? "Active step"} failed: ${toErrorMessage(generationError)}`,
+            );
+          }
+
+          startStep(
+            "fallback-response",
+            "Build deterministic fallback",
+            "finalization",
+            "Recovering with local deterministic concepts.",
+          );
+          const fallback = createFallbackResponse(request);
+          completeStep(
+            "fallback-response",
+            "Fallback concepts prepared successfully.",
+          );
+          send({
+            type: "run-complete",
+            result: fallback,
+            summary: "Model response failed, fallback concepts were used.",
+            fallbackUsed: true,
+          });
         } finally {
-          controller.close();
+          req.signal.removeEventListener("abort", abortFromRequest);
+          closeStream();
         }
+      },
+      cancel() {
+        generationAbortController.abort();
       },
     });
 

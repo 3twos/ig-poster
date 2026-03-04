@@ -11,7 +11,9 @@ import {
   LayoutTemplate,
   Link2,
   LoaderCircle,
+  RefreshCw,
   Send,
+  Square,
   Sparkles,
   WandSparkles,
 } from "lucide-react";
@@ -54,7 +56,114 @@ import {
   parseApiError,
   statusChip,
 } from "@/lib/upload-helpers";
+import {
+  isGenerationRunEvent,
+  type GenerationRunEvent,
+  type GenerationStepPhase,
+} from "@/lib/generation-events";
 import { cn, slugify } from "@/lib/utils";
+
+type AgentStepStatus = "pending" | "active" | "completed" | "error" | "cancelled";
+type AgentRunStatus = "idle" | "running" | "success" | "error" | "cancelled";
+type AgentVerbosity = "minimal" | "standard" | "verbose";
+
+type AgentStep = {
+  id: string;
+  title: string;
+  detail?: string;
+  phase: GenerationStepPhase;
+  status: AgentStepStatus;
+  startedAt?: number;
+  endedAt?: number;
+};
+
+type AgentRun = {
+  id: string;
+  label: string;
+  detail?: string;
+  status: AgentRunStatus;
+  startedAt: number;
+  endedAt?: number;
+  currentStepId?: string;
+  heartbeat?: string;
+  fallbackUsed?: boolean;
+  summary?: string;
+  error?: string;
+  steps: AgentStep[];
+  logLines: string[];
+};
+
+const formatElapsed = (ms: number) => {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  const mins = Math.floor(sec / 60);
+  const remSec = sec % 60;
+
+  if (mins === 0) {
+    return `${remSec}s`;
+  }
+
+  return `${mins}m ${String(remSec).padStart(2, "0")}s`;
+};
+
+const statusStyle = (status: AgentRunStatus) => {
+  if (status === "success") {
+    return "border-emerald-300/40 bg-emerald-400/10 text-emerald-100";
+  }
+
+  if (status === "error") {
+    return "border-red-300/40 bg-red-400/10 text-red-100";
+  }
+
+  if (status === "cancelled") {
+    return "border-yellow-300/40 bg-yellow-400/10 text-yellow-100";
+  }
+
+  if (status === "running") {
+    return "border-blue-300/40 bg-blue-400/10 text-blue-100";
+  }
+
+  return "border-white/20 bg-white/5 text-slate-200";
+};
+
+const stepDotStyle = (status: AgentStepStatus) => {
+  if (status === "completed") {
+    return "bg-emerald-300";
+  }
+
+  if (status === "error") {
+    return "bg-red-300";
+  }
+
+  if (status === "cancelled") {
+    return "bg-yellow-300";
+  }
+
+  if (status === "active") {
+    return "bg-blue-300";
+  }
+
+  return "bg-slate-500";
+};
+
+const phaseLabel = (phase: GenerationStepPhase) => {
+  if (phase === "queue") {
+    return "Queued";
+  }
+
+  if (phase === "planning") {
+    return "Planning";
+  }
+
+  if (phase === "execution") {
+    return "Executing";
+  }
+
+  if (phase === "validation") {
+    return "Validating";
+  }
+
+  return "Finalizing";
+};
 
 export default function Home() {
   const [brand, setBrand] = useState<BrandState>(INITIAL_BRAND);
@@ -75,7 +184,6 @@ export default function Home() {
   const [isUploadingAssets, setIsUploadingAssets] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
@@ -101,8 +209,15 @@ export default function Home() {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [refineInstruction, setRefineInstruction] = useState("");
   const [isRefining, setIsRefining] = useState(false);
+  const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
+  const [agentVerbosity, setAgentVerbosity] = useState<AgentVerbosity>("standard");
+  const [showStepDetails, setShowStepDetails] = useState(true);
+  const [runClock, setRunClock] = useState(Date.now());
+  const [runLogCopyState, setRunLogCopyState] = useState<"idle" | "done">("idle");
 
   const posterRef = useRef<HTMLDivElement>(null);
+  const activityPanelRef = useRef<HTMLDivElement>(null);
+  const generationAbortRef = useRef<AbortController | null>(null);
   const assetCleanupRef = useRef<LocalAsset[]>([]);
   const logoCleanupRef = useRef<LocalAsset | null>(null);
 
@@ -122,8 +237,21 @@ export default function Home() {
       if (logoCleanupRef.current) {
         URL.revokeObjectURL(logoCleanupRef.current.previewUrl);
       }
+      generationAbortRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (agentRun?.status !== "running") {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setRunClock(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [agentRun?.status]);
 
   // Load brand + promptConfig from settings on mount
   useEffect(() => {
@@ -311,6 +439,470 @@ export default function Home() {
   );
   const secondaryVisual = getDisplayVisual(orderedVariantAssets[1]);
 
+  const applyRunEvent = useCallback((event: GenerationRunEvent) => {
+    const now = Date.now();
+    const stamp = new Date(now).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    setAgentRun((current) => {
+      if (event.type === "run-start") {
+        return {
+          id: event.runId,
+          label: event.label,
+          detail: event.detail,
+          status: "running",
+          startedAt: now,
+          currentStepId: undefined,
+          heartbeat: undefined,
+          fallbackUsed: false,
+          summary: undefined,
+          error: undefined,
+          steps: [],
+          logLines: [`${stamp} Run started: ${event.label}`],
+        };
+      }
+
+      if (!current) {
+        return current;
+      }
+
+      const withLog = (line: string) => [...current.logLines, `${stamp} ${line}`];
+      const upsertStep = (
+        stepId: string,
+        patch: (step: AgentStep) => AgentStep,
+        fallback: AgentStep,
+      ): AgentStep[] => {
+        const existingIndex = current.steps.findIndex((step) => step.id === stepId);
+        if (existingIndex === -1) {
+          return [...current.steps, fallback];
+        }
+
+        return current.steps.map((step, index): AgentStep => {
+          if (index !== existingIndex) {
+            return step;
+          }
+
+          return patch(step);
+        });
+      };
+
+      if (event.type === "step-start") {
+        const steps: AgentStep[] = current.steps.map((step): AgentStep =>
+          step.status === "active"
+            ? { ...step, status: "completed", endedAt: now }
+            : step,
+        );
+        const existingIndex = steps.findIndex((step) => step.id === event.stepId);
+        const nextStep: AgentStep = {
+          id: event.stepId,
+          title: event.title,
+          detail: event.detail,
+          phase: event.phase,
+          status: "active",
+          startedAt: now,
+        };
+
+        if (existingIndex === -1) {
+          steps.push(nextStep);
+        } else {
+          steps[existingIndex] = {
+            ...steps[existingIndex],
+            ...nextStep,
+          };
+        }
+
+        return {
+          ...current,
+          status: "running",
+          currentStepId: event.stepId,
+          heartbeat: undefined,
+          steps,
+          logLines: withLog(`Start step: ${event.title}`),
+        };
+      }
+
+      if (event.type === "step-complete") {
+        return {
+          ...current,
+          currentStepId:
+            current.currentStepId === event.stepId ? undefined : current.currentStepId,
+          heartbeat: undefined,
+          steps: upsertStep(
+            event.stepId,
+            (step) => ({
+              ...step,
+              status:
+                step.status === "cancelled"
+                  ? ("cancelled" as const)
+                  : ("completed" as const),
+              detail: event.detail ?? step.detail,
+              endedAt: now,
+            }),
+            {
+              id: event.stepId,
+              title: event.stepId,
+              detail: event.detail,
+              phase: "finalization",
+              status: "completed",
+              startedAt: now,
+              endedAt: now,
+            },
+          ),
+          logLines: withLog(
+            `Complete step: ${event.stepId}${event.detail ? ` (${event.detail})` : ""}`,
+          ),
+        };
+      }
+
+      if (event.type === "step-error") {
+        return {
+          ...current,
+          currentStepId:
+            current.currentStepId === event.stepId ? undefined : current.currentStepId,
+          heartbeat: undefined,
+          steps: upsertStep(
+            event.stepId,
+            (step) => ({
+              ...step,
+              status: "error",
+              detail: event.detail,
+              endedAt: now,
+            }),
+            {
+              id: event.stepId,
+              title: event.stepId,
+              detail: event.detail,
+              phase: "execution",
+              status: "error",
+              startedAt: now,
+              endedAt: now,
+            },
+          ),
+          logLines: withLog(`Step failed: ${event.stepId} (${event.detail})`),
+        };
+      }
+
+      if (event.type === "heartbeat") {
+        return {
+          ...current,
+          heartbeat: event.detail,
+          logLines: withLog(`Heartbeat: ${event.detail}`),
+        };
+      }
+
+      if (event.type === "run-complete") {
+        const steps: AgentStep[] = current.steps.map((step): AgentStep =>
+          step.status === "active"
+            ? { ...step, status: "completed", endedAt: now }
+            : step,
+        );
+
+        return {
+          ...current,
+          status: "success",
+          endedAt: now,
+          currentStepId: undefined,
+          heartbeat: undefined,
+          fallbackUsed: event.fallbackUsed,
+          summary: event.summary,
+          error: undefined,
+          steps,
+          logLines: withLog(
+            `Run complete${event.fallbackUsed ? " (fallback used)" : ""}: ${event.summary}`,
+          ),
+        };
+      }
+
+      if (event.type === "run-error") {
+        return {
+          ...current,
+          status: "error",
+          endedAt: now,
+          currentStepId: undefined,
+          heartbeat: undefined,
+          error: event.detail,
+          steps: current.steps.map((step) =>
+            step.status === "active"
+              ? { ...step, status: "error", detail: event.detail, endedAt: now }
+              : step,
+          ),
+          logLines: withLog(`Run error: ${event.detail}`),
+        };
+      }
+
+      return current;
+    });
+  }, []);
+
+  const visibleAgentSteps = useMemo(() => {
+    if (!agentRun) {
+      return [];
+    }
+
+    if (agentVerbosity === "verbose") {
+      return agentRun.steps;
+    }
+
+    if (agentVerbosity === "standard") {
+      return agentRun.steps.filter(
+        (step) => step.status !== "pending" || step.id === agentRun.currentStepId,
+      );
+    }
+
+    const prioritized = [
+      agentRun.steps.find((step) => step.status === "error"),
+      agentRun.steps.find((step) => step.status === "active"),
+      [...agentRun.steps].reverse().find((step) => step.status === "completed"),
+    ].filter((step): step is AgentStep => Boolean(step));
+    const seen = new Set<string>();
+    return prioritized.filter((step) => {
+      if (seen.has(step.id)) {
+        return false;
+      }
+      seen.add(step.id);
+      return true;
+    });
+  }, [agentRun, agentVerbosity]);
+
+  const completionCounts = useMemo(() => {
+    if (!agentRun) {
+      return { completed: 0, total: 0 };
+    }
+
+    const completed = agentRun.steps.filter(
+      (step) => step.status === "completed",
+    ).length;
+    return {
+      completed,
+      total: Math.max(agentRun.steps.length, completed),
+    };
+  }, [agentRun]);
+
+  const isAgentBusy =
+    isGenerating || isUploadingAssets || isUploadingLogo || isSharing || isPublishing || isRefining;
+
+  const statusLine = useMemo(() => {
+    if (agentRun?.status === "running") {
+      const activeStep =
+        agentRun.steps.find((step) => step.status === "active") ??
+        agentRun.steps[agentRun.steps.length - 1];
+      const activeIndex = activeStep
+        ? agentRun.steps.findIndex((step) => step.id === activeStep.id) + 1
+        : 1;
+
+      return {
+        tone: "active" as const,
+        text: `${activeStep?.title ?? "Generating concepts"} · Step ${Math.max(activeIndex, 1)}/${Math.max(agentRun.steps.length, 1)}${agentRun.heartbeat ? ` · ${agentRun.heartbeat}` : ""}`,
+        elapsedMs: runClock - agentRun.startedAt,
+        showStop: true,
+      };
+    }
+
+    if (isGenerating) {
+      return {
+        tone: "active" as const,
+        text: "Preparing generation request...",
+        elapsedMs: undefined,
+        showStop: true,
+      };
+    }
+
+    if (isUploadingAssets || isUploadingLogo) {
+      return {
+        tone: "active" as const,
+        text: "Uploading assets to persistent storage...",
+        elapsedMs: undefined,
+        showStop: false,
+      };
+    }
+
+    if (isSharing) {
+      return {
+        tone: "active" as const,
+        text: "Creating share link and syncing rendered preview...",
+        elapsedMs: undefined,
+        showStop: false,
+      };
+    }
+
+    if (isPublishing) {
+      return {
+        tone: "active" as const,
+        text: "Publishing to Instagram...",
+        elapsedMs: undefined,
+        showStop: false,
+      };
+    }
+
+    if (isRefining) {
+      return {
+        tone: "active" as const,
+        text: "Refining selected variant...",
+        elapsedMs: undefined,
+        showStop: false,
+      };
+    }
+
+    if (error) {
+      return {
+        tone: "error" as const,
+        text: error,
+        elapsedMs: undefined,
+        showStop: false,
+      };
+    }
+
+    if (agentRun?.status === "success") {
+      return {
+        tone: "success" as const,
+        text:
+          agentRun.summary ??
+          (agentRun.fallbackUsed
+            ? "Concept generation complete with fallback."
+            : "Concept generation complete."),
+        elapsedMs:
+          typeof agentRun.endedAt === "number"
+            ? agentRun.endedAt - agentRun.startedAt
+            : undefined,
+        showStop: false,
+      };
+    }
+
+    if (agentRun?.status === "cancelled") {
+      return {
+        tone: "error" as const,
+        text: agentRun.summary ?? "Generation stopped.",
+        elapsedMs:
+          typeof agentRun.endedAt === "number"
+            ? agentRun.endedAt - agentRun.startedAt
+            : undefined,
+        showStop: false,
+      };
+    }
+
+    if (publishMessage) {
+      return {
+        tone: "success" as const,
+        text: publishMessage,
+        elapsedMs: undefined,
+        showStop: false,
+      };
+    }
+
+    if (shareUrl) {
+      return {
+        tone: "success" as const,
+        text: "Share link created and copied to clipboard.",
+        elapsedMs: undefined,
+        showStop: false,
+      };
+    }
+
+    return {
+      tone: "idle" as const,
+      text: "Ready. Upload assets and generate concepts.",
+      elapsedMs: undefined,
+      showStop: false,
+    };
+  }, [
+    agentRun,
+    error,
+    isGenerating,
+    isPublishing,
+    isRefining,
+    isSharing,
+    isUploadingAssets,
+    isUploadingLogo,
+    publishMessage,
+    runClock,
+    shareUrl,
+  ]);
+
+  const canRetryGeneration =
+    !isGenerating && assets.length > 0 && !isUploadingAssets && !isUploadingLogo;
+
+  const copyRunLog = useCallback(async () => {
+    if (!agentRun) {
+      return;
+    }
+
+    const runDuration =
+      (agentRun.endedAt ?? runClock) - agentRun.startedAt;
+    const lines = [
+      `Run: ${agentRun.label}`,
+      `Status: ${agentRun.status}`,
+      `Duration: ${formatElapsed(runDuration)}`,
+      `Fallback used: ${agentRun.fallbackUsed ? "yes" : "no"}`,
+      "",
+      "Steps:",
+      ...agentRun.steps.map((step) => {
+        const stepDuration =
+          typeof step.startedAt === "number"
+            ? formatElapsed((step.endedAt ?? runClock) - step.startedAt)
+            : "n/a";
+        return `- [${step.status}] ${step.title} (${phaseLabel(step.phase)} · ${stepDuration})${step.detail ? ` - ${step.detail}` : ""}`;
+      }),
+      "",
+      "Log:",
+      ...agentRun.logLines,
+    ];
+
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setRunLogCopyState("done");
+      window.setTimeout(() => setRunLogCopyState("idle"), 1400);
+    } catch {
+      setRunLogCopyState("idle");
+    }
+  }, [agentRun, runClock]);
+
+  const stopGeneration = useCallback(() => {
+    const activeController = generationAbortRef.current;
+    if (!activeController) {
+      return;
+    }
+
+    generationAbortRef.current = null;
+    activeController.abort();
+
+    const now = Date.now();
+    setAgentRun((current) => {
+      if (!current) {
+        return current;
+      }
+
+      if (
+        current.status === "success" ||
+        current.status === "error" ||
+        current.status === "cancelled"
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        status: "cancelled",
+        endedAt: now,
+        currentStepId: undefined,
+        summary: "Generation stopped by user.",
+        steps: current.steps.map((step) =>
+          step.status === "active" || step.status === "pending"
+            ? {
+                ...step,
+                status: "cancelled",
+                detail: "Cancelled by user.",
+                endedAt: now,
+              }
+            : step,
+        ),
+        logLines: [...current.logLines, "Run cancelled by user."],
+      };
+    });
+  }, []);
+
   const uploadFileToStorage = async (file: File, folder: string) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -492,12 +1084,20 @@ export default function Home() {
     setError(null);
     setPublishMessage(null);
     setIsGenerating(true);
-    setGenerationStatus("validating");
+    setRunClock(Date.now());
+
+    const abortController = new AbortController();
+    generationAbortRef.current = abortController;
+    let finalResult: GenerationResponse | null = null;
 
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        signal: abortController.signal,
         body: JSON.stringify({
           brand,
           post,
@@ -514,15 +1114,18 @@ export default function Home() {
         }),
       });
 
-      // Check if the response is an SSE stream
       const contentType = response.headers.get("content-type") ?? "";
+      if (!response.ok && !contentType.includes("text/event-stream")) {
+        throw new Error(await parseApiError(response));
+      }
+
       if (contentType.includes("text/event-stream")) {
         const reader = response.body?.getReader();
         if (!reader) throw new Error("No response stream");
 
         const decoder = new TextDecoder();
         let buffer = "";
-        let finalResult: GenerationResponse | null = null;
+        let seededLegacyStream = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -534,23 +1137,75 @@ export default function Home() {
 
           for (const line of lines) {
             if (line.startsWith("data: ")) {
-              const data = line.slice(6);
+              const data = line.slice(6).trim();
+              if (!data) {
+                continue;
+              }
+
               try {
-                const event = JSON.parse(data) as {
-                  type: string;
+                const event = JSON.parse(data) as unknown;
+
+                if (isGenerationRunEvent(event)) {
+                  applyRunEvent(event);
+                  if (event.type === "run-complete") {
+                    finalResult = GenerationResponseSchema.parse(event.result);
+                  } else if (event.type === "run-error") {
+                    throw new Error(event.detail);
+                  }
+                  continue;
+                }
+
+                const legacy = event as {
+                  type?: string;
                   message?: string;
                   result?: unknown;
                 };
 
-                if (event.type === "status" && event.message) {
-                  setGenerationStatus(event.message);
-                } else if (event.type === "complete" && event.result) {
-                  finalResult = GenerationResponseSchema.parse(event.result);
-                } else if (event.type === "error" && event.message) {
-                  throw new Error(event.message);
+                if (legacy.type === "status" && legacy.message) {
+                  if (!seededLegacyStream) {
+                    applyRunEvent({
+                      type: "run-start",
+                      runId: crypto.randomUUID(),
+                      label: "Generate SOTA Concepts",
+                      detail: "Streaming generation updates.",
+                    });
+                    applyRunEvent({
+                      type: "step-start",
+                      stepId: "legacy-stream",
+                      title: "Generate concepts",
+                      detail: legacy.message,
+                      phase: "execution",
+                    });
+                    seededLegacyStream = true;
+                  } else {
+                    applyRunEvent({
+                      type: "heartbeat",
+                      detail: legacy.message,
+                    });
+                  }
+                } else if (legacy.type === "complete" && legacy.result) {
+                  finalResult = GenerationResponseSchema.parse(legacy.result);
+                  if (seededLegacyStream) {
+                    applyRunEvent({
+                      type: "step-complete",
+                      stepId: "legacy-stream",
+                      detail: "Generation stream completed.",
+                    });
+                  }
+                  applyRunEvent({
+                    type: "run-complete",
+                    result: legacy.result,
+                    summary: "Generated concept variants successfully.",
+                    fallbackUsed: false,
+                  });
+                } else if (legacy.type === "error" && legacy.message) {
+                  throw new Error(legacy.message);
                 }
               } catch (parseError) {
-                if (parseError instanceof Error && parseError.message !== "Unexpected end of JSON input") {
+                if (
+                  parseError instanceof Error &&
+                  parseError.message !== "Unexpected end of JSON input"
+                ) {
                   throw parseError;
                 }
               }
@@ -558,51 +1213,114 @@ export default function Home() {
           }
         }
 
-        if (finalResult) {
-          setResult(finalResult);
-          setActiveVariantId(finalResult.variants[0]?.id ?? null);
-          setOverlayLayouts(
-            Object.fromEntries(
-              finalResult.variants.map((variant) => [
-                variant.id,
-                createDefaultOverlayLayout(variant.layout),
-              ]),
-            ),
-          );
-          setShareUrl(null);
-        } else {
+        if (!finalResult) {
           throw new Error(
             "Generation stream ended without results. Please try again.",
           );
         }
       } else {
-        // Standard JSON response (fallback)
-        if (!response.ok) {
-          throw new Error(await parseApiError(response));
-        }
-
         const parsed = GenerationResponseSchema.parse(await response.json());
-        setResult(parsed);
-        setActiveVariantId(parsed.variants[0]?.id ?? null);
-        setOverlayLayouts(
-          Object.fromEntries(
-            parsed.variants.map((variant) => [
-              variant.id,
-              createDefaultOverlayLayout(variant.layout),
-            ]),
-          ),
-        );
-        setShareUrl(null);
+        applyRunEvent({
+          type: "run-start",
+          runId: crypto.randomUUID(),
+          label: "Generate SOTA Concepts",
+          detail: "Running non-stream fallback path.",
+        });
+        applyRunEvent({
+          type: "step-start",
+          stepId: "fallback-json",
+          title: "Generate concepts",
+          detail: "Received a non-stream response from API.",
+          phase: "execution",
+        });
+        applyRunEvent({
+          type: "step-complete",
+          stepId: "fallback-json",
+          detail: "Concept payload received.",
+        });
+        applyRunEvent({
+          type: "run-complete",
+          result: parsed,
+          summary: "Generated concept variants using fallback path.",
+          fallbackUsed: true,
+        });
+        finalResult = parsed;
       }
+
+      setResult(finalResult);
+      setActiveVariantId(finalResult.variants[0]?.id ?? null);
+      setOverlayLayouts(
+        Object.fromEntries(
+          finalResult.variants.map((variant) => [
+            variant.id,
+            createDefaultOverlayLayout(variant.layout),
+          ]),
+        ),
+      );
+      setShareUrl(null);
     } catch (generationError) {
-      setError(
+      if (
+        generationError instanceof Error &&
+        generationError.name === "AbortError"
+      ) {
+        setAgentRun((current) => {
+          if (!current || current.status !== "running") {
+            return current;
+          }
+
+          const now = Date.now();
+          return {
+            ...current,
+            status: "cancelled",
+            endedAt: now,
+            currentStepId: undefined,
+            summary: "Generation stopped by user.",
+            steps: current.steps.map((step) =>
+              step.status === "active"
+                ? {
+                    ...step,
+                    status: "cancelled",
+                    detail: "Cancelled by user.",
+                    endedAt: now,
+                  }
+                : step,
+            ),
+            logLines: [...current.logLines, "Run cancelled by user."],
+          };
+        });
+        return;
+      }
+
+      const message =
         generationError instanceof Error
           ? generationError.message
-          : "Unexpected generation issue.",
+          : "Unexpected generation issue.";
+      setAgentRun((current) => {
+        if (!current || current.status !== "running") {
+          return current;
+        }
+
+        const now = Date.now();
+        return {
+          ...current,
+          status: "error",
+          endedAt: now,
+          currentStepId: undefined,
+          error: message,
+          steps: current.steps.map((step) =>
+            step.status === "active"
+              ? { ...step, status: "error", detail: message, endedAt: now }
+              : step,
+          ),
+          logLines: [...current.logLines, `Run failed: ${message}`],
+        };
+      });
+      setError(
+        message,
       );
     } finally {
       setIsGenerating(false);
-      setGenerationStatus(null);
+      generationAbortRef.current = null;
     }
   };
 
@@ -959,19 +1677,29 @@ export default function Home() {
     );
   };
 
-  return (
-    <AppShell>
-      {hasBrand === false ? (
-        <div className="mb-4 rounded-xl border border-orange-300/30 bg-orange-400/10 p-3 text-xs text-orange-100">
-          No saved brand kit found.{" "}
-          <Link href="/brand" className="font-semibold underline">
-            Set up your Brand Kit
-          </Link>{" "}
-          for better results.
-        </div>
-      ) : null}
+  const runProgress =
+    completionCounts.total > 0
+      ? Math.round((completionCounts.completed / completionCounts.total) * 100)
+      : 0;
+  const runDurationMs = agentRun
+    ? (agentRun.endedAt ?? runClock) - agentRun.startedAt
+    : 0;
 
-      <div className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
+  return (
+    <>
+      <AppShell>
+        <div className="pb-24 md:pb-28" aria-busy={isAgentBusy}>
+          {hasBrand === false ? (
+            <div className="mb-4 rounded-xl border border-orange-300/30 bg-orange-400/10 p-3 text-xs text-orange-100">
+              No saved brand kit found.{" "}
+              <Link href="/brand" className="font-semibold underline">
+                Set up your Brand Kit
+              </Link>{" "}
+              for better results.
+            </div>
+          ) : null}
+
+          <div className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
         <section className="space-y-6">
           <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
@@ -1188,9 +1916,7 @@ export default function Home() {
                 ) : (
                   <Sparkles className="h-4 w-4" />
                 )}
-                {isGenerating
-                  ? generationStatus ?? "Generating..."
-                  : "Generate SOTA Concepts"}
+                {isGenerating ? "Generating..." : "Generate SOTA Concepts"}
               </button>
 
               <button
@@ -1225,6 +1951,182 @@ export default function Home() {
         </section>
 
         <section className="space-y-5 lg:sticky lg:top-6 lg:h-fit">
+          <div
+            ref={activityPanelRef}
+            className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.2em] text-blue-100 uppercase">
+                  Agent Activity
+                </p>
+                <p className="mt-1 text-xs text-slate-300">
+                  Reasoning steps, planning phases, and execution status.
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase",
+                  statusStyle(agentRun?.status ?? "idle"),
+                )}
+              >
+                {agentRun?.status ?? "idle"}
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2 py-1 text-[11px] text-slate-200">
+                Verbosity
+                <select
+                  value={agentVerbosity}
+                  onChange={(event) =>
+                    setAgentVerbosity(event.target.value as AgentVerbosity)
+                  }
+                  className="bg-transparent text-[11px] font-semibold outline-none"
+                >
+                  <option value="minimal" className="bg-slate-900 text-white">
+                    Minimal
+                  </option>
+                  <option value="standard" className="bg-slate-900 text-white">
+                    Standard
+                  </option>
+                  <option value="verbose" className="bg-slate-900 text-white">
+                    Verbose
+                  </option>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setShowStepDetails((current) => !current)}
+                disabled={!agentRun?.steps.length}
+                className="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {showStepDetails ? "Collapse Steps" : "Expand Steps"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void copyRunLog();
+                }}
+                disabled={!agentRun}
+                className="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {runLogCopyState === "done" ? "Copied" : "Copy Diagnostics"}
+              </button>
+            </div>
+
+            {agentRun ? (
+              <>
+                <div className="mt-3 rounded-xl border border-white/15 bg-black/20 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-100">
+                      {agentRun.label}
+                    </p>
+                    <p className="text-[11px] text-slate-300">
+                      {formatElapsed(runDurationMs)}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-300">
+                    {agentRun.summary ??
+                      agentRun.detail ??
+                      "Tracking planning and execution phases."}
+                    {agentRun.fallbackUsed ? " Fallback path used." : ""}
+                  </p>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full bg-blue-300 transition-all duration-300"
+                      style={{ width: `${Math.min(100, runProgress)}%` }}
+                    />
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-label="Generation progress"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={runProgress}
+                    className="sr-only"
+                  >
+                    {runProgress}%
+                  </div>
+                </div>
+
+                {showStepDetails ? (
+                  <div className="mt-3 space-y-2">
+                    {visibleAgentSteps.length ? (
+                      visibleAgentSteps.map((step) => {
+                        const stepDuration =
+                          typeof step.startedAt === "number"
+                            ? formatElapsed(
+                                (step.endedAt ?? runClock) - step.startedAt,
+                              )
+                            : "n/a";
+
+                        return (
+                          <div
+                            key={step.id}
+                            className={cn(
+                              "rounded-xl border bg-white/5 p-2.5",
+                              step.status === "active"
+                                ? "border-blue-300/35"
+                                : step.status === "error"
+                                  ? "border-red-300/35"
+                                  : "border-white/15",
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="inline-flex items-center gap-2 text-xs font-semibold text-slate-100">
+                                <span
+                                  className={cn(
+                                    "h-2 w-2 rounded-full",
+                                    stepDotStyle(step.status),
+                                  )}
+                                />
+                                {step.title}
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                {phaseLabel(step.phase)} · {stepDuration}
+                              </p>
+                            </div>
+                            {step.detail ? (
+                              <p className="mt-1 text-[11px] text-slate-300">
+                                {step.detail}
+                              </p>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="rounded-xl border border-white/15 bg-white/5 p-2.5 text-xs text-slate-300">
+                        Step list is empty for this run.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+
+                {agentVerbosity === "verbose" && showStepDetails ? (
+                  <div className="mt-3 rounded-xl border border-white/15 bg-black/30 p-3">
+                    <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+                      Detailed Log
+                    </p>
+                    <div className="mt-2 max-h-36 space-y-1 overflow-auto pr-1">
+                      {agentRun.logLines.map((line, index) => (
+                        <p key={`${line}-${index}`} className="text-[11px] text-slate-300">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="mt-3 rounded-xl border border-dashed border-white/20 bg-white/5 p-3 text-xs text-slate-300">
+                No active run yet. Start generation to see planning and execution steps.
+              </p>
+            )}
+          </div>
+
           <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5">
             {activeVariant ? (
               <motion.div
@@ -1623,7 +2525,97 @@ export default function Home() {
             </div>
           ) : null}
         </section>
+          </div>
+        </div>
+      </AppShell>
+
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/15 bg-slate-950/95 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5 md:px-8">
+          <div className="min-w-0 flex-1">
+            <p
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className={cn(
+                "flex items-center gap-2 text-xs font-medium",
+                statusLine.tone === "error"
+                  ? "text-red-200"
+                  : statusLine.tone === "success"
+                    ? "text-emerald-200"
+                    : statusLine.tone === "active"
+                      ? "text-blue-200"
+                      : "text-slate-200",
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-block h-2 w-2 flex-none rounded-full",
+                  statusLine.tone === "error"
+                    ? "bg-red-300"
+                    : statusLine.tone === "success"
+                      ? "bg-emerald-300"
+                      : statusLine.tone === "active"
+                        ? "bg-blue-300"
+                        : "bg-slate-400",
+                )}
+              />
+              <span className="truncate">{statusLine.text}</span>
+            </p>
+            {statusLine.tone === "error" ? (
+              <p role="alert" className="sr-only">
+                {statusLine.text}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {typeof statusLine.elapsedMs === "number" ? (
+              <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-slate-300">
+                {formatElapsed(statusLine.elapsedMs)}
+              </span>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => {
+                activityPanelRef.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+                setShowStepDetails(true);
+              }}
+              className="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10"
+            >
+              View Details
+            </button>
+
+            {statusLine.showStop ? (
+              <button
+                type="button"
+                onClick={stopGeneration}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-300/35 bg-red-400/10 px-2.5 py-1 text-[11px] font-semibold text-red-100 transition hover:bg-red-400/20"
+              >
+                <Square className="h-3 w-3 fill-current" />
+                Stop
+              </button>
+            ) : null}
+
+            {(agentRun?.status === "error" || agentRun?.status === "cancelled") &&
+            canRetryGeneration ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void generate();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Retry
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
-    </AppShell>
+    </>
   );
 }
