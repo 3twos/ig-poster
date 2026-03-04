@@ -600,6 +600,7 @@ export const scoreVariantsWithLlm = async (
   variants: CreativeVariant[],
   brand: { brandName: string; voice: string },
   post: { theme: string; audience: string; objective: string },
+  signal?: AbortSignal,
 ): Promise<VariantScore[]> => {
   const variantSummaries = variants.map((v) => ({
     id: v.id,
@@ -615,6 +616,7 @@ export const scoreVariantsWithLlm = async (
     auth,
     systemPrompt:
       "You are an Instagram content quality judge. Score each variant on a 1-10 scale. Evaluate hook strength, caption quality, CTA effectiveness, brand voice alignment, and engagement potential. Return strict JSON only.",
+    signal,
     userPrompt: `Score these Instagram creative variants for the brand "${brand.brandName}" (voice: ${brand.voice}).
 
 Post context: Theme="${post.theme}", Audience="${post.audience}", Objective="${post.objective}"

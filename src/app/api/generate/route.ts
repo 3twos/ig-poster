@@ -330,6 +330,7 @@ export async function POST(req: Request) {
               internalParsed.variants,
               { brandName: request.brand.brandName, voice: request.brand.voice },
               { theme: request.post.theme, audience: request.post.audience, objective: request.post.objective },
+              generationAbortController.signal,
             );
             topVariants = selectTopVariantsWithScores(internalParsed.variants, scores, 3);
           } catch {

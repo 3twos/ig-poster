@@ -2,8 +2,20 @@
 
 import { BrainCircuit, KeyRound, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   PROVIDER_DEFAULT_MODELS,
   type LlmProvider,
@@ -21,8 +33,6 @@ export default function SettingsPage() {
   const [isLlmAuthLoading, setIsLlmAuthLoading] = useState(true);
   const [isLlmConnecting, setIsLlmConnecting] = useState(false);
   const [isLlmDisconnecting, setIsLlmDisconnecting] = useState(false);
-  const [llmMessage, setLlmMessage] = useState<string | null>(null);
-  const [llmError, setLlmError] = useState<string | null>(null);
   const [llmAuthStatus, setLlmAuthStatus] = useState<LlmAuthStatus>({
     connected: false,
     source: null,
@@ -92,13 +102,10 @@ export default function SettingsPage() {
   const connectLlmProvider = async () => {
     const apiKey = llmApiKeyInput.trim();
     if (!apiKey) {
-      setLlmMessage(null);
-      setLlmError("Enter an API key to connect an LLM provider.");
+      toast.error("Enter an API key to connect an LLM provider.");
       return;
     }
 
-    setLlmMessage(null);
-    setLlmError(null);
     setIsLlmConnecting(true);
 
     const abortController = new AbortController();
@@ -131,7 +138,7 @@ export default function SettingsPage() {
       setLlmModelInput(json.model ?? llmModelInput);
       const storageHint =
         json.storage === "cookie" ? " (encrypted cookie fallback)" : "";
-      setLlmMessage(
+      toast.success(
         `LLM provider connected (${(json.provider ?? llmProvider).toUpperCase()} ${resolvedModel})${storageHint}.`,
       );
 
@@ -157,7 +164,7 @@ export default function SettingsPage() {
           : connectError instanceof Error
             ? connectError.message
             : "Could not connect LLM provider";
-      setLlmError(message);
+      toast.error(message);
     } finally {
       window.clearTimeout(timeoutId);
       setIsLlmConnecting(false);
@@ -170,8 +177,6 @@ export default function SettingsPage() {
       return;
     }
 
-    setLlmMessage(null);
-    setLlmError(null);
     setIsLlmDisconnecting(true);
 
     try {
@@ -184,7 +189,7 @@ export default function SettingsPage() {
       }
 
       await loadLlmStatus();
-      setLlmMessage(
+      toast.success(
         "Disconnected saved LLM key. Environment credentials remain available if configured.",
       );
     } catch (disconnectError) {
@@ -192,7 +197,7 @@ export default function SettingsPage() {
         disconnectError instanceof Error
           ? disconnectError.message
           : "Could not disconnect LLM provider";
-      setLlmError(message);
+      toast.error(message);
     } finally {
       setIsLlmDisconnecting(false);
     }
@@ -211,7 +216,10 @@ export default function SettingsPage() {
 
           <div className="rounded-xl border border-white/15 bg-black/20 p-3 text-xs text-slate-200">
             {isLlmAuthLoading ? (
-              <p>Checking provider status...</p>
+              <div className="space-y-1.5">
+                <Skeleton className="h-3 w-48" />
+                <Skeleton className="h-3 w-32" />
+              </div>
             ) : llmAuthStatus.connected ? (
               <p>
                 Connected via{" "}
@@ -230,14 +238,12 @@ export default function SettingsPage() {
           </div>
 
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">
-                Provider
-              </span>
-              <select
+            <div className="space-y-1">
+              <Label htmlFor="llm-provider">Provider</Label>
+              <Select
                 value={llmProvider}
-                onChange={(event) => {
-                  const nextProvider = event.target.value as LlmProvider;
+                onValueChange={(value) => {
+                  const nextProvider = value as LlmProvider;
                   const currentDefault = PROVIDER_DEFAULT_MODELS[llmProvider];
                   const shouldReplaceModel =
                     !llmModelInput.trim() || llmModelInput === currentDefault;
@@ -246,28 +252,31 @@ export default function SettingsPage() {
                     setLlmModelInput(PROVIDER_DEFAULT_MODELS[nextProvider]);
                   }
                 }}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               >
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-              </select>
-            </label>
+                <SelectTrigger id="llm-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">
-                Model (optional)
-              </span>
-              <input
+            <div className="space-y-1">
+              <Label htmlFor="llm-model">Model (optional)</Label>
+              <Input
+                id="llm-model"
                 value={llmModelInput}
                 onChange={(event) => setLlmModelInput(event.target.value)}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
               />
-            </label>
+            </div>
           </div>
 
-          <label className="mt-3 block space-y-1">
-            <span className="text-xs font-medium text-slate-200">API Key</span>
-            <input
+          <div className="mt-3 space-y-1">
+            <Label htmlFor="llm-key">API Key</Label>
+            <Input
+              id="llm-key"
               type="password"
               autoComplete="off"
               value={llmApiKeyInput}
@@ -275,17 +284,15 @@ export default function SettingsPage() {
               placeholder={
                 llmProvider === "anthropic" ? "sk-ant-..." : "sk-..."
               }
-              className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
             />
             <p className="text-[11px] text-slate-400">
               Stored encrypted at rest. Uses Blob storage when configured,
               otherwise falls back to an encrypted `httpOnly` cookie.
             </p>
-          </label>
+          </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
+            <Button
               onClick={() => {
                 void connectLlmProvider();
               }}
@@ -294,7 +301,6 @@ export default function SettingsPage() {
                 isLlmDisconnecting ||
                 !llmApiKeyInput.trim()
               }
-              className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLlmConnecting ? (
                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -302,31 +308,23 @@ export default function SettingsPage() {
                 <KeyRound className="h-3.5 w-3.5" />
               )}
               {isLlmConnecting ? "Connecting..." : "Connect Provider"}
-            </button>
+            </Button>
 
-            <button
-              type="button"
+            <Button
+              variant="outline"
               onClick={() => {
                 void disconnectLlmProvider();
               }}
               disabled={
                 isLlmDisconnecting || llmAuthStatus.source !== "connection"
               }
-              className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLlmDisconnecting ? (
                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
               ) : null}
               Disconnect Saved Key
-            </button>
+            </Button>
           </div>
-
-          {llmMessage ? (
-            <p className="mt-3 text-xs text-emerald-200">{llmMessage}</p>
-          ) : null}
-          {llmError ? (
-            <p className="mt-2 text-xs text-red-300">{llmError}</p>
-          ) : null}
         </div>
       </div>
     </AppShell>

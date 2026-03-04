@@ -29,7 +29,9 @@ import {
 } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { PosterPreview } from "@/components/poster-preview";
+import { TemplateGallery } from "@/components/template-gallery";
 import { usePostContext } from "@/contexts/post-context";
 import {
   type AspectRatio,
@@ -61,6 +63,14 @@ import {
   type GenerationStepPhase,
 } from "@/lib/generation-events";
 import { cn, slugify } from "@/lib/utils";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 const REFINE_PRESETS = [
   { label: "Shorter caption", instruction: "Make the caption significantly shorter and punchier while keeping the core message" },
@@ -153,23 +163,20 @@ const stepDotStyle = (status: AgentStepStatus) => {
 };
 
 const phaseLabel = (phase: GenerationStepPhase) => {
-  if (phase === "queue") {
-    return "Queued";
-  }
-
-  if (phase === "planning") {
-    return "Planning";
-  }
-
-  if (phase === "execution") {
-    return "Executing";
-  }
-
-  if (phase === "validation") {
-    return "Validating";
-  }
-
+  if (phase === "queue") return "Queued";
+  if (phase === "planning") return "Planning";
+  if (phase === "execution") return "Executing";
+  if (phase === "validation") return "Validating";
   return "Finalizing";
+};
+
+/** Human-readable narrative for each step phase */
+const phaseNarrative = (phase: GenerationStepPhase, title: string) => {
+  if (phase === "queue") return "Waiting to start...";
+  if (phase === "planning") return "Reading your brief and studying brand voice...";
+  if (phase === "execution") return title;
+  if (phase === "validation") return "Reviewing quality and brand alignment...";
+  return "Polishing final details...";
 };
 
 const summarizeRunEvent = (event: GenerationRunEvent) => {
@@ -421,11 +428,13 @@ export default function Home() {
 
     if (auth === "connected") {
       setPublishMessage("Instagram account connected.");
+      toast.success("Instagram account connected.");
     }
 
     if (auth === "error" && detail) {
       const safeDetail = detail.slice(0, 200).replace(/[<>"']/g, "");
       setError(safeDetail);
+      toast.error(safeDetail);
     }
 
     if (auth) {
@@ -975,6 +984,15 @@ export default function Home() {
     });
   }, []);
 
+  // Refs for keyboard shortcut / command palette event handlers
+  const generateRef = useRef<(() => Promise<void>) | null>(null);
+  const isAgentBusyRef = useRef(isAgentBusy);
+  const localAssetsRef = useRef(localAssets);
+  const resultRef = useRef(result);
+  isAgentBusyRef.current = isAgentBusy;
+  localAssetsRef.current = localAssets;
+  resultRef.current = result;
+
   const uploadFileToStorage = async (file: File, folder: string) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -1411,14 +1429,40 @@ export default function Home() {
           logLines: [...current.logLines, `Run failed: ${message}`],
         };
       });
-      setError(
-        message,
-      );
+      setError(message);
+      toast.error(message);
     } finally {
       setIsGenerating(false);
       generationAbortRef.current = null;
     }
   };
+
+  // Assign generate ref after definition, then register event listeners once
+  generateRef.current = generate;
+
+  useEffect(() => {
+    const onGenerate = () => {
+      if (!isAgentBusyRef.current && localAssetsRef.current.length > 0) {
+        void generateRef.current?.();
+      }
+    };
+    const onToggleEditor = () => setEditorMode((v) => !v);
+    const onSelectVariant = (e: Event) => {
+      const idx = (e as CustomEvent).detail?.index;
+      if (typeof idx === "number" && resultRef.current?.variants[idx]) {
+        dispatch({ type: "SET_ACTIVE_VARIANT", variantId: resultRef.current.variants[idx].id });
+      }
+    };
+
+    window.addEventListener("ig:generate", onGenerate);
+    window.addEventListener("ig:toggle-editor", onToggleEditor);
+    window.addEventListener("ig:select-variant", onSelectVariant);
+    return () => {
+      window.removeEventListener("ig:generate", onGenerate);
+      window.removeEventListener("ig:toggle-editor", onToggleEditor);
+      window.removeEventListener("ig:select-variant", onSelectVariant);
+    };
+  }, [dispatch]);
 
   const renderPosterToDataUrl = async () => {
     if (!posterRef.current || !activeVariant) {
@@ -1454,11 +1498,11 @@ export default function Home() {
       link.download = `${slugify(brand.brandName)}-${slugify(post.theme)}.png`;
       link.click();
     } catch (exportError) {
-      setError(
-        exportError instanceof Error
-          ? exportError.message
-          : "Failed to export poster image",
-      );
+      const msg = exportError instanceof Error
+        ? exportError.message
+        : "Failed to export poster image";
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -1518,9 +1562,9 @@ export default function Home() {
       }
       setRefineInstruction("");
     } catch (refineError) {
-      setError(
-        refineError instanceof Error ? refineError.message : "Refinement failed",
-      );
+      const msg = refineError instanceof Error ? refineError.message : "Refinement failed";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsRefining(false);
     }
@@ -1578,11 +1622,11 @@ export default function Home() {
         setShareCopyState("idle");
       }
     } catch (shareError) {
-      setError(
-        shareError instanceof Error
-          ? shareError.message
-          : "Could not create share link",
-      );
+      const msg = shareError instanceof Error
+        ? shareError.message
+        : "Could not create share link";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsSharing(false);
     }
@@ -1603,12 +1647,13 @@ export default function Home() {
 
       await loadAuthStatus();
       setPublishMessage("Instagram OAuth disconnected.");
+      toast.success("Instagram OAuth disconnected.");
     } catch (disconnectError) {
-      setError(
-        disconnectError instanceof Error
-          ? disconnectError.message
-          : "Could not disconnect Instagram OAuth",
-      );
+      const msg = disconnectError instanceof Error
+        ? disconnectError.message
+        : "Could not disconnect Instagram OAuth";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsDisconnecting(false);
     }
@@ -1679,9 +1724,9 @@ export default function Home() {
     }
 
     if (!authStatus.connected) {
-      setError(
-        "Connect an Instagram account via OAuth (or set env credentials) before publishing.",
-      );
+      const msg = "Connect an Instagram account via OAuth (or set env credentials) before publishing.";
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
@@ -1726,15 +1771,15 @@ export default function Home() {
       };
 
       if (json.status === "scheduled") {
-        setPublishMessage(
-          `Scheduled ${json.mode ? `${json.mode} ` : ""}post for ${new Date(
-            json.publishAt ?? scheduleAt,
-          ).toLocaleString()}`,
-        );
+        const msg = `Scheduled ${json.mode ? `${json.mode} ` : ""}post for ${new Date(
+          json.publishAt ?? scheduleAt,
+        ).toLocaleString()}`;
+        setPublishMessage(msg);
+        toast.success(msg);
       } else {
-        setPublishMessage(
-          `${json.mode ? `${json.mode} ` : ""}published to Instagram successfully.`,
-        );
+        const msg = `${json.mode ? `${json.mode} ` : ""}published to Instagram successfully.`;
+        setPublishMessage(msg);
+        toast.success(msg);
         dispatch({
           type: "ADD_PUBLISH",
           entry: {
@@ -1744,11 +1789,11 @@ export default function Home() {
         });
       }
     } catch (publishError) {
-      setError(
-        publishError instanceof Error
-          ? publishError.message
-          : "Instagram publish failed",
-      );
+      const msg = publishError instanceof Error
+        ? publishError.message
+        : "Instagram publish failed";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsPublishing(false);
     }
@@ -1775,14 +1820,14 @@ export default function Home() {
               {variant.name}
             </p>
             {variant.score != null && (
-              <span className="rounded-full bg-orange-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-orange-300">
+              <Badge variant="outline" className="border-orange-400/30 bg-orange-400/20 text-[10px] text-orange-300">
                 {variant.score.toFixed(1)}
-              </span>
+              </Badge>
             )}
           </div>
-          <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-200">
+          <Badge variant="outline" className="text-[10px] uppercase">
             {variant.postType}
-          </span>
+          </Badge>
         </div>
         <p className="mt-2 text-sm font-medium text-white">
           {variant.headline}
@@ -1816,19 +1861,20 @@ export default function Home() {
     return (
       <AppShell>
         <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="text-center">
-            <Sparkles className="mx-auto h-12 w-12 text-orange-300/50" />
-            <h2 className="mt-4 text-lg font-semibold text-white">
+          <div className="mx-auto max-w-md text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+              <Sparkles className="h-10 w-10 text-orange-300/60" />
+            </div>
+            <h2 className="mt-6 text-xl font-semibold text-white">
               No post selected
             </h2>
             <p className="mt-2 text-sm text-slate-400">
               Select a post from the sidebar or create a new one to get started.
             </p>
-            <button
-              type="button"
+            <Button
               onClick={() => void handleCreatePost()}
               disabled={isCreatingPost}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-orange-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-6"
             >
               {isCreatingPost ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1836,7 +1882,17 @@ export default function Home() {
                 <Sparkles className="h-4 w-4" />
               )}
               Create Your First Post
-            </button>
+            </Button>
+            <div className="mt-8 flex flex-wrap justify-center gap-3 text-[11px] text-slate-500">
+              <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono">N</kbd>
+              <span>New post</span>
+              <span className="text-white/10">|</span>
+              <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono">⌘K</kbd>
+              <span>Command palette</span>
+              <span className="text-white/10">|</span>
+              <kbd className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono">↑↓</kbd>
+              <span>Navigate posts</span>
+            </div>
           </div>
         </div>
       </AppShell>
@@ -1857,12 +1913,22 @@ export default function Home() {
             </div>
           ) : null}
 
+          <OnboardingChecklist />
+
           <div className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
         <section className="space-y-6">
           <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
-            <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
-              <WandSparkles className="h-4 w-4 text-orange-300" />
-              Post Brief + Assets
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                <WandSparkles className="h-4 w-4 text-orange-300" />
+                Post Brief + Assets
+              </div>
+              <TemplateGallery
+                onApply={(brief) => {
+                  dispatch({ type: "UPDATE_BRIEF", brief });
+                  toast.success("Template applied to brief.");
+                }}
+              />
             </div>
 
             {/* Asset Upload (top, most visual) */}
@@ -1936,109 +2002,106 @@ export default function Home() {
 
             {/* Theme + Subject (side by side) */}
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-200">
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-200">
                   Theme
-                </span>
-                <input
+                </Label>
+                <Input
                   value={post.theme}
                   onChange={(event) =>
                     dispatch({ type: "UPDATE_BRIEF", brief: { theme: event.target.value } })
                   }
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-200">
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-200">
                   Subject
-                </span>
-                <input
+                </Label>
+                <Input
                   value={post.subject}
                   onChange={(event) =>
                     dispatch({ type: "UPDATE_BRIEF", brief: { subject: event.target.value } })
                   }
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
-              </label>
+              </div>
 
               {/* Core Thought (full width) */}
-              <label className="space-y-1 md:col-span-2">
-                <span className="text-xs font-medium text-slate-200">
+              <div className="space-y-1 md:col-span-2">
+                <Label className="text-xs text-slate-200">
                   Core Thought
-                </span>
-                <textarea
+                </Label>
+                <Textarea
                   value={post.thought}
                   onChange={(event) =>
                     dispatch({ type: "UPDATE_BRIEF", brief: { thought: event.target.value } })
                   }
                   rows={3}
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
-              </label>
+              </div>
 
               {/* Objective + Audience (side by side) */}
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-200">
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-200">
                   Objective
-                </span>
-                <input
+                </Label>
+                <Input
                   value={post.objective}
                   onChange={(event) =>
                     dispatch({ type: "UPDATE_BRIEF", brief: { objective: event.target.value } })
                   }
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-200">
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-200">
                   Audience
-                </span>
-                <input
+                </Label>
+                <Input
                   value={post.audience}
                   onChange={(event) =>
                     dispatch({ type: "UPDATE_BRIEF", brief: { audience: event.target.value } })
                   }
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
-              </label>
+              </div>
 
               {/* Mood + Aspect Ratio (side by side) */}
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-200">
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-200">
                   Mood
-                </span>
-                <input
+                </Label>
+                <Input
                   value={post.mood}
                   onChange={(event) =>
                     dispatch({ type: "UPDATE_BRIEF", brief: { mood: event.target.value } })
                   }
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-slate-200">
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-200">
                   Aspect Ratio
-                </span>
-                <select
+                </Label>
+                <Select
                   value={post.aspectRatio}
-                  onChange={(event) =>
-                    dispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: event.target.value as AspectRatio } })
+                  onValueChange={(value) =>
+                    dispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value as AspectRatio } })
                   }
-                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 >
-                  {RATIO_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RATIO_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Generate button + status */}
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
+              <Button
                 onClick={generate}
                 disabled={
                   isGenerating ||
@@ -2046,7 +2109,6 @@ export default function Home() {
                   isUploadingAssets ||
                   isUploadingLogo
                 }
-                className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isGenerating ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -2054,17 +2116,16 @@ export default function Home() {
                   <Sparkles className="h-4 w-4" />
                 )}
                 {isGenerating ? "Generating..." : "Generate SOTA Concepts"}
-              </button>
+              </Button>
 
-              <button
-                type="button"
+              <Button
+                variant="outline"
                 onClick={exportPoster}
                 disabled={!activeVariant}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
                 Export PNG
-              </button>
+              </Button>
 
               {!llmAuthStatus.connected ? (
                 <p className="text-xs text-slate-400">
@@ -2079,9 +2140,6 @@ export default function Home() {
                 <p className="text-xs text-blue-200">
                   Uploading assets to persistent storage...
                 </p>
-              ) : null}
-              {error ? (
-                <p className="text-xs font-medium text-red-300">{error}</p>
               ) : null}
             </div>
           </div>
@@ -2101,57 +2159,56 @@ export default function Home() {
                   Reasoning steps, planning phases, and execution status.
                 </p>
               </div>
-              <span
+              <Badge
+                variant="outline"
                 className={cn(
-                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase",
+                  "text-[10px] uppercase",
                   statusStyle(agentRun?.status ?? "idle"),
                 )}
               >
                 {agentRun?.status ?? "idle"}
-              </span>
+              </Badge>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <label className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2 py-1 text-[11px] text-slate-200">
-                Verbosity
-                <select
+              <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-200">
+                <Label className="text-[11px] text-slate-200">Verbosity</Label>
+                <Select
                   value={agentVerbosity}
-                  onChange={(event) =>
-                    setAgentVerbosity(event.target.value as AgentVerbosity)
+                  onValueChange={(value) =>
+                    setAgentVerbosity(value as AgentVerbosity)
                   }
-                  className="bg-transparent text-[11px] font-semibold outline-none"
                 >
-                  <option value="minimal" className="bg-slate-900 text-white">
-                    Minimal
-                  </option>
-                  <option value="standard" className="bg-slate-900 text-white">
-                    Standard
-                  </option>
-                  <option value="verbose" className="bg-slate-900 text-white">
-                    Verbose
-                  </option>
-                </select>
-              </label>
+                  <SelectTrigger size="sm" className="h-6 text-[11px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minimal">Minimal</SelectItem>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="verbose">Verbose</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="xs"
                 onClick={() => setShowStepDetails((current) => !current)}
                 disabled={!agentRun?.steps.length}
-                className="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {showStepDetails ? "Collapse Steps" : "Expand Steps"}
-              </button>
+              </Button>
 
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="xs"
                 onClick={() => {
                   void copyRunLog();
                 }}
                 disabled={!agentRun}
-                className="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {runLogCopyState === "done" ? "Copied" : "Copy Diagnostics"}
-              </button>
+              </Button>
             </div>
 
             {agentRun ? (
@@ -2209,12 +2266,14 @@ export default function Home() {
                           <div
                             key={step.id}
                             className={cn(
-                              "rounded-xl border bg-white/5 p-2.5",
+                              "rounded-xl border bg-white/5 p-2.5 transition-all duration-300",
                               step.status === "active"
-                                ? "border-blue-300/35"
+                                ? "border-blue-300/35 bg-blue-400/5"
                                 : step.status === "error"
                                   ? "border-red-300/35"
-                                  : "border-white/15",
+                                  : step.status === "completed"
+                                    ? "border-emerald-300/20"
+                                    : "border-white/15",
                             )}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -2222,17 +2281,20 @@ export default function Home() {
                                 <span
                                   className={cn(
                                     "h-2 w-2 rounded-full",
+                                    step.status === "active" && "animate-pulse",
                                     stepDotStyle(step.status),
                                   )}
                                 />
-                                {step.title}
+                                {step.status === "active"
+                                  ? phaseNarrative(step.phase, step.title)
+                                  : step.title}
                               </p>
-                              <p className="text-[11px] text-slate-400">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                                 {phaseLabel(step.phase)} · {stepDuration}
-                              </p>
+                              </Badge>
                             </div>
                             {step.detail ? (
-                              <p className="mt-1 text-[11px] text-slate-300">
+                              <p className="mt-1 pl-4 text-[11px] text-slate-400">
                                 {step.detail}
                               </p>
                             ) : null}
@@ -2315,19 +2377,18 @@ export default function Home() {
                 <p className="text-xs font-semibold tracking-[0.2em] text-orange-200 uppercase">
                   Strategy
                 </p>
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="xs"
                   onClick={() => setEditorMode((value) => !value)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold uppercase transition",
-                    editorMode
-                      ? "border-orange-300/50 bg-orange-500/15 text-orange-100"
-                      : "border-white/30 bg-white/5 text-slate-200 hover:bg-white/10",
+                    "uppercase",
+                    editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100",
                   )}
                 >
                   <LayoutTemplate className="h-3.5 w-3.5" />
                   {editorMode ? "Editor On" : "Editor Off"}
-                </button>
+                </Button>
               </div>
 
               <p className="text-sm leading-relaxed text-slate-200">
@@ -2443,16 +2504,21 @@ export default function Home() {
                       <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
                         Caption Bundle
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void copyCaption();
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-xs text-white transition hover:bg-white/10"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        {copyState === "done" ? "Copied" : "Copy"}
-                      </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => {
+                              void copyCaption();
+                            }}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            {copyState === "done" ? "Copied" : "Copy"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Copy caption and hashtags</TooltipContent>
+                      </Tooltip>
                     </div>
                     <p className="mt-2 text-sm text-slate-200">
                       {activeVariant.caption}
@@ -2468,40 +2534,40 @@ export default function Home() {
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {REFINE_PRESETS.map((preset) => (
-                        <button
+                        <Button
                           key={preset.label}
-                          type="button"
+                          variant="outline"
+                          size="xs"
                           onClick={() => {
                             void refineVariant(preset.instruction);
                           }}
                           disabled={isRefining}
-                          className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-slate-300 transition hover:border-orange-400/50 hover:text-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="hover:border-orange-400/50 hover:text-orange-300"
                         >
                           {preset.label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                     <div className="mt-2 flex gap-2">
-                      <input
+                      <Input
                         value={refineInstruction}
                         onChange={(e: ChangeEvent<HTMLInputElement>) =>
                           setRefineInstruction(e.target.value)
                         }
                         placeholder="Or type a custom instruction..."
-                        className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white outline-none transition focus:border-orange-300"
+                        className="flex-1"
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             void refineVariant();
                           }
                         }}
                       />
-                      <button
-                        type="button"
+                      <Button
+                        size="sm"
                         onClick={() => {
                           void refineVariant();
                         }}
                         disabled={isRefining || !refineInstruction.trim()}
-                        className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isRefining ? (
                           <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -2509,7 +2575,7 @@ export default function Home() {
                           <WandSparkles className="h-3.5 w-3.5" />
                         )}
                         {isRefining ? "Refining..." : "Refine"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
@@ -2553,19 +2619,20 @@ export default function Home() {
                           ) : null}
 
                           {authStatus.source === "oauth" ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="outline"
+                              size="xs"
                               onClick={() => {
                                 void disconnectInstagram();
                               }}
                               disabled={isDisconnecting}
-                              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="mt-2"
                             >
                               {isDisconnecting ? (
                                 <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                               ) : null}
                               Disconnect OAuth
-                            </button>
+                            </Button>
                           ) : (
                             <a
                               href="/api/auth/meta/start"
@@ -2594,13 +2661,13 @@ export default function Home() {
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           void createShareLink();
                         }}
                         disabled={isSharing}
-                        className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isSharing ? (
                           <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -2608,10 +2675,11 @@ export default function Home() {
                           <Link2 className="h-3.5 w-3.5" />
                         )}
                         Create Share Link
-                      </button>
+                      </Button>
 
-                      <button
-                        type="button"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         disabled={!activeVariant}
                         onClick={() => {
                           if (!activeVariant) {
@@ -2624,11 +2692,10 @@ export default function Home() {
                             layout: createDefaultOverlayLayout(activeVariant.layout),
                           });
                         }}
-                        className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <LayoutTemplate className="h-3.5 w-3.5" />
                         Reset Text Layout
-                      </button>
+                      </Button>
                     </div>
 
                     {shareUrl ? (
@@ -2647,24 +2714,24 @@ export default function Home() {
                       onSubmit={publishToInstagram}
                       className="mt-4 grid gap-2"
                     >
-                      <label className="space-y-1">
-                        <span className="text-[11px] font-medium text-slate-300">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-slate-300">
                           Schedule (optional)
-                        </span>
-                        <input
+                        </Label>
+                        <Input
                           type="datetime-local"
                           value={scheduleAt}
                           onChange={(event) =>
                             setScheduleAt(event.target.value)
                           }
-                          className="w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
+                          className="text-xs"
                         />
-                      </label>
+                      </div>
 
-                      <button
+                      <Button
                         type="submit"
                         disabled={isPublishing}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
                       >
                         {isPublishing ? (
                           <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
@@ -2674,14 +2741,10 @@ export default function Home() {
                         {scheduleAt
                           ? "Schedule Instagram Publish"
                           : "Publish to Instagram"}
-                      </button>
+                      </Button>
                     </form>
 
-                    {publishMessage ? (
-                      <p className="mt-3 rounded-xl border border-emerald-300/35 bg-emerald-400/10 p-2 text-xs text-emerald-100">
-                        {publishMessage}
-                      </p>
-                    ) : null}
+                    {/* Publish messages are shown via toast */}
                   </div>
                 </>
               ) : null}
@@ -2733,13 +2796,14 @@ export default function Home() {
 
           <div className="flex shrink-0 items-center gap-2">
             {typeof statusLine.elapsedMs === "number" ? (
-              <span className="rounded-full border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-slate-300">
+              <Badge variant="outline" className="text-[11px] text-slate-300">
                 {formatElapsed(statusLine.elapsedMs)}
-              </span>
+              </Badge>
             ) : null}
 
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="xs"
               onClick={() => {
                 activityPanelRef.current?.scrollIntoView({
                   behavior: "smooth",
@@ -2747,34 +2811,34 @@ export default function Home() {
                 });
                 setShowStepDetails(true);
               }}
-              className="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10"
             >
               View Details
-            </button>
+            </Button>
 
             {statusLine.showStop ? (
-              <button
-                type="button"
+              <Button
+                variant="destructive"
+                size="xs"
                 onClick={stopGeneration}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-red-300/35 bg-red-400/10 px-2.5 py-1 text-[11px] font-semibold text-red-100 transition hover:bg-red-400/20"
+                className="border border-red-300/35 bg-red-400/10 text-red-100 hover:bg-red-400/20"
               >
                 <Square className="h-3 w-3 fill-current" />
                 Stop
-              </button>
+              </Button>
             ) : null}
 
             {(agentRun?.status === "error" || agentRun?.status === "cancelled") &&
             canRetryGeneration ? (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="xs"
                 onClick={() => {
                   void generate();
                 }}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10"
               >
                 <RefreshCw className="h-3 w-3" />
                 Retry
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
