@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { safeErrorDetail } from "@/lib/api-error";
 import {
   buildOAuthState,
   createMetaOAuthStartUrl,
@@ -27,8 +28,7 @@ export async function GET(req: Request) {
     return response;
   } catch (error) {
     const origin = new URL(req.url).origin;
-    const message =
-      error instanceof Error ? error.message : "Meta OAuth start failed";
+    const message = safeErrorDetail(error, "Meta OAuth start failed");
 
     return NextResponse.redirect(
       `${origin}/?auth=error&detail=${encodeURIComponent(message)}`,

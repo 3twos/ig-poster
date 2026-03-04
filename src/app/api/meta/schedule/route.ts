@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
@@ -76,12 +77,9 @@ export async function POST(req: Request) {
   } catch (error) {
     const isClientError = error instanceof z.ZodError ||
       (error instanceof MetaScheduleClientError);
-    return NextResponse.json(
-      {
-        error: "Could not publish to Instagram",
-        detail: error instanceof Error ? error.message : "Unexpected error",
-      },
-      { status: isClientError ? 400 : 502 },
-    );
+    return apiErrorResponse(error, {
+      fallback: "Could not publish to Instagram",
+      status: isClientError ? 400 : 502,
+    });
   }
 }

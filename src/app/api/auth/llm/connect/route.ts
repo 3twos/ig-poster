@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { apiErrorResponse } from "@/lib/api-error";
 import { LLM_CONNECTION_COOKIE, saveLlmConnection } from "@/lib/llm-auth";
 import { validateLlmCredentials } from "@/lib/llm";
 import {
@@ -53,12 +54,9 @@ export async function POST(req: Request) {
 
     return response;
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: "Could not connect LLM provider",
-        detail: error instanceof Error ? error.message : "Unexpected connection failure",
-      },
-      { status: 400 },
-    );
+    return apiErrorResponse(error, {
+      fallback: "Could not connect LLM provider",
+      status: 400,
+    });
   }
 }
