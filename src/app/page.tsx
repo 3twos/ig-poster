@@ -3,21 +3,19 @@
 import { motion } from "framer-motion";
 import { toPng } from "html-to-image";
 import {
-  BrainCircuit,
   Copy,
   Download,
   Film,
   ImagePlus,
   Images,
-  KeyRound,
   LayoutTemplate,
   Link2,
   LoaderCircle,
-  Palette,
   Send,
   Sparkles,
   WandSparkles,
 } from "lucide-react";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -28,241 +26,35 @@ import {
   type FormEvent,
 } from "react";
 
+import { AppShell } from "@/components/app-shell";
 import { PosterPreview } from "@/components/poster-preview";
 import {
   type AspectRatio,
   createDefaultOverlayLayout,
   type CreativeVariant,
-  DEFAULT_GENERATION_SYSTEM_PROMPT,
   GenerationResponseSchema,
   type GenerationResponse,
   type OverlayLayout,
 } from "@/lib/creative";
 import {
-  PROVIDER_DEFAULT_MODELS,
-  type LlmProvider,
-} from "@/lib/llm-constants";
+  type BrandState,
+  type InstagramAuthStatus,
+  type LlmAuthStatus,
+  type LocalAsset,
+  type PostState,
+  type PromptConfigState,
+  INITIAL_BRAND,
+  INITIAL_POST,
+  RATIO_OPTIONS,
+} from "@/lib/types";
+import {
+  extractVideoMetadata,
+  formatDuration,
+  mediaTypeFromFile,
+  parseApiError,
+  statusChip,
+} from "@/lib/upload-helpers";
 import { cn, slugify } from "@/lib/utils";
-
-type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
-type AssetMediaType = "image" | "video";
-
-type LocalAsset = {
-  id: string;
-  name: string;
-  mediaType: AssetMediaType;
-  previewUrl: string;
-  posterUrl?: string;
-  storageUrl?: string;
-  status: UploadStatus;
-  durationSec?: number;
-  width?: number;
-  height?: number;
-  error?: string;
-};
-
-type BrandState = {
-  brandName: string;
-  website: string;
-  values: string;
-  principles: string;
-  story: string;
-  voice: string;
-  visualDirection: string;
-  palette: string;
-  logoNotes: string;
-};
-
-type PostState = {
-  theme: string;
-  subject: string;
-  thought: string;
-  objective: string;
-  audience: string;
-  mood: string;
-  aspectRatio: AspectRatio;
-};
-
-type InstagramAuthStatus = {
-  connected: boolean;
-  source: "oauth" | "env" | null;
-  account?: {
-    connectionId?: string;
-    instagramUserId: string;
-    instagramUsername?: string;
-    instagramName?: string;
-    pageName?: string;
-    tokenExpiresAt?: string;
-  };
-  detail?: string;
-};
-
-type LlmAuthStatus = {
-  connected: boolean;
-  source: "connection" | "env" | null;
-  provider?: LlmProvider;
-  model?: string;
-  detail?: string;
-};
-
-type PromptConfigState = {
-  systemPrompt: string;
-  customInstructions: string;
-};
-
-type WorkspaceAuthStatus = {
-  authenticated: boolean;
-  user?: {
-    email: string;
-    name?: string;
-    domain: string;
-    expiresAt: string;
-  };
-};
-
-const INITIAL_BRAND: BrandState = {
-  brandName: "Nexa Labs",
-  website: "",
-  values: "Radical clarity, measurable impact, craft quality, customer empathy",
-  principles:
-    "No fluff. Show proof. Build trust with transparent language and intentional design.",
-  story:
-    "Nexa Labs helps founders transform messy growth into repeatable systems through design, AI, and strategic execution.",
-  voice: "Confident, direct, data-informed, warm but never corporate",
-  visualDirection:
-    "Bold editorial layouts, high contrast, cinematic shadows, kinetic angles, premium texture",
-  palette: "#0F172A, #F97316, #F8FAFC, #22C55E",
-  logoNotes: "Keep logo visible but subtle, preferably top-left chip",
-};
-
-const INITIAL_POST: PostState = {
-  theme: "Category authority",
-  subject: "How high-growth teams design trust",
-  thought:
-    "Trust is not a slogan. It is the result of repeated proof moments that users can feel in every interaction.",
-  objective: "Drive profile visits and inbound strategy calls",
-  audience: "Startup founders and growth leads",
-  mood: "High-energy and premium",
-  aspectRatio: "4:5",
-};
-
-const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
-  { value: "1:1", label: "Square (1:1)" },
-  { value: "4:5", label: "Feed Max (4:5)" },
-  { value: "9:16", label: "Story/Reel (9:16)" },
-];
-
-const parseApiError = async (response: Response) => {
-  try {
-    const json = await response.json();
-    if (typeof json?.detail === "string") {
-      return json.detail;
-    }
-
-    if (typeof json?.error === "string") {
-      return json.error;
-    }
-
-    return `Request failed (${response.status})`;
-  } catch {
-    return `Request failed (${response.status})`;
-  }
-};
-
-const statusChip = (status: UploadStatus) => {
-  if (status === "uploaded") {
-    return "border-emerald-300/40 bg-emerald-400/10 text-emerald-200";
-  }
-
-  if (status === "uploading") {
-    return "border-blue-300/40 bg-blue-400/10 text-blue-200";
-  }
-
-  if (status === "failed") {
-    return "border-red-300/40 bg-red-400/10 text-red-200";
-  }
-
-  return "border-white/20 bg-white/5 text-slate-200";
-};
-
-const mediaTypeFromFile = (file: File): AssetMediaType =>
-  file.type.startsWith("video/") ? "video" : "image";
-
-const formatDuration = (durationSec: number) => {
-  const total = Math.round(durationSec);
-  const mins = Math.floor(total / 60);
-  const secs = total % 60;
-
-  if (mins === 0) {
-    return `${secs}s`;
-  }
-
-  return `${mins}:${String(secs).padStart(2, "0")}`;
-};
-
-const extractVideoMetadata = async (objectUrl: string) => {
-  return new Promise<{
-    durationSec: number;
-    width: number;
-    height: number;
-    posterUrl: string;
-  }>((resolve, reject) => {
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.muted = true;
-    video.playsInline = true;
-    video.src = objectUrl;
-
-    const cleanup = () => {
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-    };
-
-    video.onloadedmetadata = () => {
-      const targetTime = Math.min(0.5, Math.max(video.duration / 4, 0.1));
-
-      const capture = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext("2d");
-
-          if (!ctx) {
-            throw new Error("Canvas context unavailable");
-          }
-
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const posterUrl = canvas.toDataURL("image/jpeg", 0.9);
-
-          resolve({
-            durationSec: Number(video.duration.toFixed(2)),
-            width: video.videoWidth,
-            height: video.videoHeight,
-            posterUrl,
-          });
-        } catch (error) {
-          reject(error instanceof Error ? error : new Error("Video metadata parsing failed"));
-        } finally {
-          cleanup();
-        }
-      };
-
-      video.currentTime = targetTime;
-      video.onseeked = capture;
-      video.onerror = () => {
-        cleanup();
-        reject(new Error("Video metadata parsing failed"));
-      };
-    };
-
-    video.onerror = () => {
-      cleanup();
-      reject(new Error("Could not load uploaded video"));
-    };
-  });
-};
 
 export default function Home() {
   const [brand, setBrand] = useState<BrandState>(INITIAL_BRAND);
@@ -271,13 +63,19 @@ export default function Home() {
   const [logo, setLogo] = useState<LocalAsset | null>(null);
   const [result, setResult] = useState<GenerationResponse | null>(null);
   const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
-  const [overlayLayouts, setOverlayLayouts] = useState<Record<string, OverlayLayout>>({});
+  const [overlayLayouts, setOverlayLayouts] = useState<
+    Record<string, OverlayLayout>
+  >({});
   const [editorMode, setEditorMode] = useState(false);
+  const [promptConfig, setPromptConfig] = useState<PromptConfigState>({
+    systemPrompt: "",
+    customInstructions: "",
+  });
 
   const [isUploadingAssets, setIsUploadingAssets] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isAutofillingBrand, setIsAutofillingBrand] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
@@ -285,36 +83,22 @@ export default function Home() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
-  const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
-  const [brandAutofillMessage, setBrandAutofillMessage] = useState<string | null>(null);
-  const [lastAutofilledWebsite, setLastAutofilledWebsite] = useState("");
+  const [shareCopyState, setShareCopyState] = useState<"idle" | "done">(
+    "idle",
+  );
   const [scheduleAt, setScheduleAt] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [isSigningOutWorkspace, setIsSigningOutWorkspace] = useState(false);
   const [authStatus, setAuthStatus] = useState<InstagramAuthStatus>({
     connected: false,
     source: null,
   });
-  const [promptConfig, setPromptConfig] = useState<PromptConfigState>({
-    systemPrompt: "",
-    customInstructions: "",
-  });
-  const [isLlmAuthLoading, setIsLlmAuthLoading] = useState(true);
-  const [isLlmConnecting, setIsLlmConnecting] = useState(false);
-  const [isLlmDisconnecting, setIsLlmDisconnecting] = useState(false);
-  const [llmMessage, setLlmMessage] = useState<string | null>(null);
-  const [llmError, setLlmError] = useState<string | null>(null);
   const [llmAuthStatus, setLlmAuthStatus] = useState<LlmAuthStatus>({
     connected: false,
     source: null,
   });
-  const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
-  const [llmApiKeyInput, setLlmApiKeyInput] = useState("");
-  const [llmModelInput, setLlmModelInput] = useState(PROVIDER_DEFAULT_MODELS.openai);
-  const [workspaceAuth, setWorkspaceAuth] = useState<WorkspaceAuthStatus | null>(
-    null,
-  );
+  const [hasBrand, setHasBrand] = useState<boolean | null>(null);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
   const posterRef = useRef<HTMLDivElement>(null);
   const assetCleanupRef = useRef<LocalAsset[]>([]);
@@ -330,17 +114,61 @@ export default function Home() {
 
   useEffect(() => {
     return () => {
-      assetCleanupRef.current.forEach((asset) => URL.revokeObjectURL(asset.previewUrl));
+      assetCleanupRef.current.forEach((asset) =>
+        URL.revokeObjectURL(asset.previewUrl),
+      );
       if (logoCleanupRef.current) {
         URL.revokeObjectURL(logoCleanupRef.current.previewUrl);
       }
     };
   }, []);
 
+  // Load brand + promptConfig from settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch("/api/settings", { cache: "no-store" });
+        if (!response.ok) {
+          // 401/503 = auth or config issue, not "no brand"
+          setHasBrand(null);
+          return;
+        }
+
+        const json = await response.json();
+        if (json?.brand?.brandName) {
+          setBrand((current) => ({ ...current, ...json.brand }));
+          setHasBrand(true);
+        } else {
+          setHasBrand(false);
+        }
+        if (json?.promptConfig) {
+          setPromptConfig((current) => ({ ...current, ...json.promptConfig }));
+        }
+        if (json?.logoUrl) {
+          setLogo({
+            id: "saved-logo",
+            name: "Saved logo",
+            mediaType: "image",
+            previewUrl: json.logoUrl,
+            storageUrl: json.logoUrl,
+            status: "uploaded",
+          });
+        }
+      } catch {
+        // Network/parse error — don't show misleading banner
+        setHasBrand(null);
+      }
+    };
+
+    void loadSettings();
+  }, []);
+
   const loadAuthStatus = useCallback(async () => {
     setIsAuthLoading(true);
     try {
-      const response = await fetch("/api/auth/meta/status", { cache: "no-store" });
+      const response = await fetch("/api/auth/meta/status", {
+        cache: "no-store",
+      });
       const json = (await response.json()) as InstagramAuthStatus;
       setAuthStatus({
         connected: Boolean(json.connected),
@@ -360,9 +188,10 @@ export default function Home() {
   }, []);
 
   const loadLlmStatus = useCallback(async () => {
-    setIsLlmAuthLoading(true);
     try {
-      const response = await fetch("/api/auth/llm/status", { cache: "no-store" });
+      const response = await fetch("/api/auth/llm/status", {
+        cache: "no-store",
+      });
       const json = (await response.json()) as LlmAuthStatus;
       setLlmAuthStatus({
         connected: Boolean(json.connected),
@@ -377,30 +206,12 @@ export default function Home() {
         source: null,
         detail: "Could not load LLM provider status.",
       });
-    } finally {
-      setIsLlmAuthLoading(false);
-    }
-  }, []);
-
-  const loadWorkspaceStatus = useCallback(async () => {
-    try {
-      const response = await fetch("/api/auth/google/status", { cache: "no-store" });
-      if (!response.ok) {
-        setWorkspaceAuth(null);
-        return;
-      }
-
-      const json = (await response.json()) as WorkspaceAuthStatus;
-      setWorkspaceAuth(json);
-    } catch {
-      setWorkspaceAuth(null);
     }
   }, []);
 
   useEffect(() => {
     void loadAuthStatus();
     void loadLlmStatus();
-    void loadWorkspaceStatus();
 
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
@@ -422,21 +233,12 @@ export default function Home() {
       window.history.replaceState(
         {},
         "",
-        next ? `${window.location.pathname}?${next}` : window.location.pathname,
+        next
+          ? `${window.location.pathname}?${next}`
+          : window.location.pathname,
       );
     }
-  }, [loadAuthStatus, loadLlmStatus, loadWorkspaceStatus]);
-
-  useEffect(() => {
-    if (!llmAuthStatus.provider) {
-      return;
-    }
-
-    setLlmProvider(llmAuthStatus.provider);
-    setLlmModelInput(
-      llmAuthStatus.model || PROVIDER_DEFAULT_MODELS[llmAuthStatus.provider],
-    );
-  }, [llmAuthStatus.model, llmAuthStatus.provider]);
+  }, [loadAuthStatus, loadLlmStatus]);
 
   const activeVariant = useMemo(() => {
     if (!result?.variants.length) {
@@ -449,13 +251,19 @@ export default function Home() {
     );
   }, [activeVariantId, result]);
 
+  // Reset slide index when variant changes
+  useEffect(() => {
+    setActiveSlideIndex(0);
+  }, [activeVariantId]);
+
   const activeOverlayLayout = useMemo(() => {
     if (!activeVariant) {
       return undefined;
     }
 
     return (
-      overlayLayouts[activeVariant.id] ?? createDefaultOverlayLayout(activeVariant.layout)
+      overlayLayouts[activeVariant.id] ??
+      createDefaultOverlayLayout(activeVariant.layout)
     );
   }, [activeVariant, overlayLayouts]);
 
@@ -493,7 +301,12 @@ export default function Home() {
     return asset.previewUrl;
   };
 
-  const primaryVisual = getDisplayVisual(orderedVariantAssets[0]);
+  // For carousel, show asset based on activeSlideIndex
+  const primaryVisualIndex =
+    activeVariant?.postType === "carousel" ? activeSlideIndex : 0;
+  const primaryVisual = getDisplayVisual(
+    orderedVariantAssets[primaryVisualIndex],
+  );
   const secondaryVisual = getDisplayVisual(orderedVariantAssets[1]);
 
   const uploadFileToStorage = async (file: File, folder: string) => {
@@ -579,7 +392,8 @@ export default function Home() {
         }
 
         try {
-          const folder = staged[index].mediaType === "video" ? "videos" : "assets";
+          const folder =
+            staged[index].mediaType === "video" ? "videos" : "assets";
           const url = await uploadFileToStorage(file, folder);
           setAssets((current) =>
             current.map((asset) =>
@@ -676,6 +490,7 @@ export default function Home() {
     setError(null);
     setPublishMessage(null);
     setIsGenerating(true);
+    setGenerationStatus("validating");
 
     try {
       const response = await fetch("/api/generate", {
@@ -697,22 +512,86 @@ export default function Home() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(await parseApiError(response));
-      }
+      // Check if the response is an SSE stream
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("text/event-stream")) {
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response stream");
 
-      const parsed = GenerationResponseSchema.parse(await response.json());
-      setResult(parsed);
-      setActiveVariantId(parsed.variants[0]?.id ?? null);
-      setOverlayLayouts(
-        Object.fromEntries(
-          parsed.variants.map((variant) => [
-            variant.id,
-            createDefaultOverlayLayout(variant.layout),
-          ]),
-        ),
-      );
-      setShareUrl(null);
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let finalResult: GenerationResponse | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              try {
+                const event = JSON.parse(data) as {
+                  type: string;
+                  message?: string;
+                  result?: unknown;
+                };
+
+                if (event.type === "status" && event.message) {
+                  setGenerationStatus(event.message);
+                } else if (event.type === "complete" && event.result) {
+                  finalResult = GenerationResponseSchema.parse(event.result);
+                } else if (event.type === "error" && event.message) {
+                  throw new Error(event.message);
+                }
+              } catch (parseError) {
+                if (parseError instanceof Error && parseError.message !== "Unexpected end of JSON input") {
+                  throw parseError;
+                }
+              }
+            }
+          }
+        }
+
+        if (finalResult) {
+          setResult(finalResult);
+          setActiveVariantId(finalResult.variants[0]?.id ?? null);
+          setOverlayLayouts(
+            Object.fromEntries(
+              finalResult.variants.map((variant) => [
+                variant.id,
+                createDefaultOverlayLayout(variant.layout),
+              ]),
+            ),
+          );
+          setShareUrl(null);
+        } else {
+          throw new Error(
+            "Generation stream ended without results. Please try again.",
+          );
+        }
+      } else {
+        // Standard JSON response (fallback)
+        if (!response.ok) {
+          throw new Error(await parseApiError(response));
+        }
+
+        const parsed = GenerationResponseSchema.parse(await response.json());
+        setResult(parsed);
+        setActiveVariantId(parsed.variants[0]?.id ?? null);
+        setOverlayLayouts(
+          Object.fromEntries(
+            parsed.variants.map((variant) => [
+              variant.id,
+              createDefaultOverlayLayout(variant.layout),
+            ]),
+          ),
+        );
+        setShareUrl(null);
+      }
     } catch (generationError) {
       setError(
         generationError instanceof Error
@@ -721,6 +600,7 @@ export default function Home() {
       );
     } finally {
       setIsGenerating(false);
+      setGenerationStatus(null);
     }
   };
 
@@ -834,7 +714,11 @@ export default function Home() {
         setShareCopyState("idle");
       }
     } catch (shareError) {
-      setError(shareError instanceof Error ? shareError.message : "Could not create share link");
+      setError(
+        shareError instanceof Error
+          ? shareError.message
+          : "Could not create share link",
+      );
     } finally {
       setIsSharing(false);
     }
@@ -866,174 +750,6 @@ export default function Home() {
     }
   };
 
-  const connectLlmProvider = async () => {
-    const apiKey = llmApiKeyInput.trim();
-    if (!apiKey) {
-      const message = "Enter an API key to connect an LLM provider.";
-      setLlmMessage(null);
-      setLlmError(message);
-      setError(message);
-      return;
-    }
-
-    setError(null);
-    setLlmMessage(null);
-    setLlmError(null);
-    setIsLlmConnecting(true);
-
-    const abortController = new AbortController();
-    const timeoutId = window.setTimeout(() => abortController.abort(), 20_000);
-
-    try {
-      const response = await fetch("/api/auth/llm/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: abortController.signal,
-        body: JSON.stringify({
-          provider: llmProvider,
-          apiKey,
-          model: llmModelInput.trim(),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await parseApiError(response));
-      }
-
-      const json = (await response.json()) as {
-        provider?: LlmProvider;
-        model?: string;
-        storage?: "blob" | "cookie";
-      };
-
-      await loadLlmStatus();
-      const resolvedModel = (json.model ?? llmModelInput) || "default model";
-      setLlmModelInput(json.model ?? llmModelInput);
-      const storageHint =
-        json.storage === "cookie" ? " (encrypted cookie fallback)" : "";
-      setLlmMessage(
-        `LLM provider connected (${(json.provider ?? llmProvider).toUpperCase()} ${resolvedModel})${storageHint}.`,
-      );
-    } catch (connectError) {
-      const message =
-        connectError instanceof Error && connectError.name === "AbortError"
-          ? "LLM connection timed out. Check your key/model and try again."
-          : connectError instanceof Error
-            ? connectError.message
-            : "Could not connect LLM provider";
-      setLlmError(message);
-      setError(message);
-    } finally {
-      window.clearTimeout(timeoutId);
-      setIsLlmConnecting(false);
-      setLlmApiKeyInput("");
-    }
-  };
-
-  const disconnectLlmProvider = async () => {
-    if (llmAuthStatus.source !== "connection") {
-      return;
-    }
-
-    setError(null);
-    setLlmMessage(null);
-    setLlmError(null);
-    setIsLlmDisconnecting(true);
-
-    try {
-      const response = await fetch("/api/auth/llm/disconnect", {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error(await parseApiError(response));
-      }
-
-      await loadLlmStatus();
-      setLlmMessage(
-        "Disconnected saved LLM key. Environment credentials remain available if configured.",
-      );
-    } catch (disconnectError) {
-      const message =
-        disconnectError instanceof Error
-          ? disconnectError.message
-          : "Could not disconnect LLM provider";
-      setLlmError(message);
-      setError(message);
-    } finally {
-      setIsLlmDisconnecting(false);
-    }
-  };
-
-  const signOutWorkspace = async () => {
-    setIsSigningOutWorkspace(true);
-    try {
-      await fetch("/api/auth/google/logout", {
-        method: "POST",
-      });
-    } finally {
-      window.location.href = "/api/auth/google/start";
-    }
-  };
-
-  const autofillBrandFromWebsite = useCallback(
-    async (websiteInput?: string) => {
-      const rawWebsite = (websiteInput ?? brand.website).trim();
-      if (!rawWebsite) {
-        return;
-      }
-
-      setError(null);
-      setBrandAutofillMessage(null);
-      setIsAutofillingBrand(true);
-
-      try {
-        const response = await fetch("/api/brand/autofill", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ website: rawWebsite }),
-        });
-
-        if (!response.ok) {
-          throw new Error(await parseApiError(response));
-        }
-
-        const json = (await response.json()) as {
-          source?: "model" | "heuristic";
-          website?: string;
-          brand?: Partial<BrandState>;
-        };
-
-        if (!json.brand) {
-          throw new Error("No brand fields returned");
-        }
-
-        const resolvedWebsite = (json.website || rawWebsite).trim();
-        const normalizedKey = resolvedWebsite.toLowerCase();
-        setBrand((current) => ({
-          ...current,
-          ...json.brand,
-          website: resolvedWebsite,
-        }));
-        setLastAutofilledWebsite(normalizedKey);
-        setBrandAutofillMessage(
-          json.source === "model"
-            ? "Brand fields autofilled from website style + messaging."
-            : "Brand fields autofilled using website metadata heuristics.",
-        );
-      } catch (autofillError) {
-        setError(
-          autofillError instanceof Error
-            ? autofillError.message
-            : "Could not autofill brand fields from website",
-        );
-      } finally {
-        setIsAutofillingBrand(false);
-      }
-    },
-    [brand.website],
-  );
-
   const buildPublishPayload = async (variant: CreativeVariant) => {
     const sequenced = variant.assetSequence
       .map((assetId) => assetMap.get(assetId))
@@ -1041,11 +757,17 @@ export default function Home() {
 
     if (variant.postType === "reel") {
       const reelAsset =
-        sequenced.find((asset) => asset.mediaType === "video" && asset.storageUrl) ??
-        assets.find((asset) => asset.mediaType === "video" && asset.storageUrl);
+        sequenced.find(
+          (asset) => asset.mediaType === "video" && asset.storageUrl,
+        ) ??
+        assets.find(
+          (asset) => asset.mediaType === "video" && asset.storageUrl,
+        );
 
       if (!reelAsset?.storageUrl) {
-        throw new Error("Reel publishing requires at least one uploaded video asset.");
+        throw new Error(
+          "Reel publishing requires at least one uploaded video asset.",
+        );
       }
 
       return {
@@ -1056,7 +778,10 @@ export default function Home() {
 
     if (variant.postType === "carousel") {
       const items = sequenced
-        .filter((asset): asset is LocalAsset & { storageUrl: string } => Boolean(asset.storageUrl))
+        .filter(
+          (asset): asset is LocalAsset & { storageUrl: string } =>
+            Boolean(asset.storageUrl),
+        )
         .slice(0, 10)
         .map((asset) => ({
           mediaType: asset.mediaType,
@@ -1064,7 +789,9 @@ export default function Home() {
         }));
 
       if (items.length < 2) {
-        throw new Error("Carousel publishing needs at least 2 uploaded media assets.");
+        throw new Error(
+          "Carousel publishing needs at least 2 uploaded media assets.",
+        );
       }
 
       return {
@@ -1088,7 +815,9 @@ export default function Home() {
     }
 
     if (!authStatus.connected) {
-      setError("Connect an Instagram account via OAuth (or set env credentials) before publishing.");
+      setError(
+        "Connect an Instagram account via OAuth (or set env credentials) before publishing.",
+      );
       return;
     }
 
@@ -1106,7 +835,9 @@ export default function Home() {
         body: JSON.stringify({
           caption,
           media,
-          publishAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+          publishAt: scheduleAt
+            ? new Date(scheduleAt).toISOString()
+            : undefined,
         }),
       });
 
@@ -1165,877 +896,645 @@ export default function Home() {
             {variant.postType}
           </span>
         </div>
-        <p className="mt-2 text-sm font-medium text-white">{variant.headline}</p>
-        <p className="mt-1 text-xs text-slate-300">{variant.layout} · {variant.assetSequence.length} asset(s)</p>
+        <p className="mt-2 text-sm font-medium text-white">
+          {variant.headline}
+        </p>
+        <p className="mt-1 text-xs text-slate-300">
+          {variant.layout} · {variant.assetSequence.length} asset(s)
+        </p>
       </button>
     );
   };
 
-  const imageCount = useMemo(() => assets.filter((asset) => asset.mediaType === "image").length, [assets]);
-  const videoCount = useMemo(() => assets.filter((asset) => asset.mediaType === "video").length, [assets]);
-
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-6 text-white md:px-8 md:py-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-orange-200 uppercase">
-            <Sparkles className="h-4 w-4" />
-            IG Poster Engine
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs text-slate-200">
-            <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{imageCount} image assets</span>
-            <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1">{videoCount} video assets</span>
-            {workspaceAuth?.authenticated ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1">
-                <span>{workspaceAuth.user?.email ?? "Workspace user"}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void signOutWorkspace();
-                  }}
-                  disabled={isSigningOutWorkspace}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/25 px-2 py-0.5 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSigningOutWorkspace ? (
-                    <LoaderCircle className="h-3 w-3 animate-spin" />
-                  ) : null}
-                  Sign out
-                </button>
-              </span>
-            ) : null}
-          </div>
+    <AppShell>
+      {hasBrand === false ? (
+        <div className="mb-4 rounded-xl border border-orange-300/30 bg-orange-400/10 p-3 text-xs text-orange-100">
+          No saved brand kit found.{" "}
+          <Link href="/brand" className="font-semibold underline">
+            Set up your Brand Kit
+          </Link>{" "}
+          for better results.
         </div>
+      ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
-          <section className="space-y-6">
-            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
-              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
-                <BrainCircuit className="h-4 w-4 text-orange-300" />
-                Intelligent IG Poster (LLM)
-              </div>
+      <div className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]">
+        <section className="space-y-6">
+          <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
+            <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+              <WandSparkles className="h-4 w-4 text-orange-300" />
+              Post Brief + Assets
+            </div>
 
-              <div className="rounded-xl border border-white/15 bg-black/20 p-3 text-xs text-slate-200">
-                {isLlmAuthLoading ? (
-                  <p>Checking provider status...</p>
-                ) : llmAuthStatus.connected ? (
-                  <p>
-                    Connected via <span className="font-semibold uppercase">{llmAuthStatus.source}</span>:
-                    {" "}
-                    <span className="font-semibold uppercase">{llmAuthStatus.provider}</span>
-                    {" "}
-                    ({llmAuthStatus.model})
-                  </p>
-                ) : (
-                  <p>{llmAuthStatus.detail || "No provider connected yet."}</p>
-                )}
-              </div>
-
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Provider</span>
-                  <select
-                    value={llmProvider}
-                    onChange={(event) => {
-                      const nextProvider = event.target.value as LlmProvider;
-                      const currentDefault = PROVIDER_DEFAULT_MODELS[llmProvider];
-                      const shouldReplaceModel =
-                        !llmModelInput.trim() || llmModelInput === currentDefault;
-                      setLlmProvider(nextProvider);
-                      if (shouldReplaceModel) {
-                        setLlmModelInput(PROVIDER_DEFAULT_MODELS[nextProvider]);
-                      }
-                    }}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                  </select>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Model (optional)</span>
-                  <input
-                    value={llmModelInput}
-                    onChange={(event) => setLlmModelInput(event.target.value)}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-              </div>
-
-              <label className="mt-3 block space-y-1">
-                <span className="text-xs font-medium text-slate-200">API Key</span>
+            {/* Asset Upload (top, most visual) */}
+            <div className="mb-4 grid gap-3 md:grid-cols-2">
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
+                <span className="inline-flex items-center gap-2">
+                  <ImagePlus className="h-4 w-4 text-orange-300" />
+                  Upload Post Assets (Images + Video)
+                </span>
                 <input
-                  type="password"
-                  autoComplete="off"
-                  value={llmApiKeyInput}
-                  onChange={(event) => setLlmApiKeyInput(event.target.value)}
-                  placeholder={
-                    llmProvider === "anthropic"
-                      ? "sk-ant-..."
-                      : "sk-..."
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    void handleAssetUpload(event);
+                  }}
+                />
+              </label>
+
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
+                <span className="inline-flex items-center gap-2">
+                  <ImagePlus className="h-4 w-4 text-orange-300" />
+                  Upload Logo
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    void handleLogoUpload(event);
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="mb-4 flex flex-wrap gap-2">
+              {assets.map((asset) => (
+                <span
+                  key={asset.id}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-medium",
+                    statusChip(asset.status),
+                  )}
+                >
+                  {asset.mediaType === "video" ? (
+                    <Film className="h-3 w-3" />
+                  ) : (
+                    <Images className="h-3 w-3" />
+                  )}
+                  {asset.name}
+                  {asset.mediaType === "video" && asset.durationSec
+                    ? ` (${formatDuration(asset.durationSec)})`
+                    : ""}
+                  {asset.status === "uploading" ? " (syncing)" : ""}
+                  {asset.status === "local" ? " (local only)" : ""}
+                </span>
+              ))}
+              {logo ? (
+                <span
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-[11px] font-medium",
+                    statusChip(logo.status),
+                  )}
+                >
+                  Logo: {logo.name}
+                  {logo.status === "uploading" ? " (syncing)" : ""}
+                </span>
+              ) : null}
+            </div>
+
+            {/* Theme + Subject (side by side) */}
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-200">
+                  Theme
+                </span>
+                <input
+                  value={post.theme}
+                  onChange={(event) =>
+                    setPost((current) => ({
+                      ...current,
+                      theme: event.target.value,
+                    }))
                   }
                   className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
                 />
-                <p className="text-[11px] text-slate-400">
-                  Stored encrypted at rest. Uses Blob storage when configured, otherwise falls back to an encrypted `httpOnly` cookie. Uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` (recommended in production). If none are set in local/preview, a temporary runtime secret is used and saved credentials are invalid after restart.
-                </p>
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-200">
+                  Subject
+                </span>
+                <input
+                  value={post.subject}
+                  onChange={(event) =>
+                    setPost((current) => ({
+                      ...current,
+                      subject: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                />
               </label>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void connectLlmProvider();
-                  }}
-                  disabled={isLlmConnecting || isLlmDisconnecting || !llmApiKeyInput.trim()}
-                  className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isLlmConnecting ? (
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <KeyRound className="h-3.5 w-3.5" />
-                  )}
-                  {isLlmConnecting ? "Connecting..." : "Connect Provider"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    void disconnectLlmProvider();
-                  }}
-                  disabled={isLlmDisconnecting || llmAuthStatus.source !== "connection"}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isLlmDisconnecting ? (
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                  ) : null}
-                  Disconnect Saved Key
-                </button>
-              </div>
-
-              {llmMessage ? (
-                <p className="mt-3 text-xs text-emerald-200">{llmMessage}</p>
-              ) : null}
-              {llmError ? (
-                <p className="mt-2 text-xs text-red-300">{llmError}</p>
-              ) : null}
-            </div>
-
-            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
-              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
-                <Palette className="h-4 w-4 text-orange-300" />
-                Brand Kit
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-medium text-slate-200">Brand Name</span>
-                  <input
-                    value={brand.brandName}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        brandName: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-medium text-slate-200">Website (optional)</span>
-                  <input
-                    value={brand.website}
-                    placeholder="example.com or https://example.com"
-                    onChange={(event) => {
-                      const nextWebsite = event.target.value;
-                      if (nextWebsite.trim().toLowerCase() !== lastAutofilledWebsite) {
-                        setBrandAutofillMessage(null);
-                      }
-
-                      setBrand((current) => ({
-                        ...current,
-                        website: nextWebsite,
-                      }));
-                    }}
-                    onBlur={(event) => {
-                      const nextWebsite = event.target.value.trim().toLowerCase();
-                      if (!nextWebsite || nextWebsite === lastAutofilledWebsite || isAutofillingBrand) {
-                        return;
-                      }
-
-                      void autofillBrandFromWebsite(event.target.value);
-                    }}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[11px] text-slate-400">
-                      Providing a website can autofill brand fields and improve style alignment.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void autofillBrandFromWebsite();
-                      }}
-                      disabled={!brand.website.trim() || isAutofillingBrand}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isAutofillingBrand ? (
-                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-3.5 w-3.5" />
-                      )}
-                      {isAutofillingBrand ? "Filling..." : "Autofill Brand Fields"}
-                    </button>
-                  </div>
-                  {brandAutofillMessage ? (
-                    <p className="text-[11px] text-emerald-200">{brandAutofillMessage}</p>
-                  ) : null}
-                </label>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-medium text-slate-200">Values</span>
-                  <textarea
-                    value={brand.values}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        values: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Principles</span>
-                  <textarea
-                    value={brand.principles}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        principles: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Story</span>
-                  <textarea
-                    value={brand.story}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        story: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Voice</span>
-                  <textarea
-                    value={brand.voice}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        voice: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Visual Direction</span>
-                  <textarea
-                    value={brand.visualDirection}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        visualDirection: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Palette (hex list)</span>
-                  <input
-                    value={brand.palette}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        palette: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-medium text-slate-200">Logo Notes</span>
-                  <input
-                    value={brand.logoNotes}
-                    onChange={(event) =>
-                      setBrand((current) => ({
-                        ...current,
-                        logoNotes: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
-              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
-                <WandSparkles className="h-4 w-4 text-orange-300" />
-                Post Brief + Assets
-              </div>
-
-              <div className="mb-4 rounded-2xl border border-white/15 bg-black/20 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold tracking-[0.16em] text-slate-200 uppercase">
-                    Prompt Controls
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPromptConfig({
-                        systemPrompt: "",
-                        customInstructions: "",
-                      })
-                    }
-                    className="rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:bg-white/10"
-                  >
-                    Reset
-                  </button>
-                </div>
-
-                <div className="grid gap-2">
-                  <label className="space-y-1">
-                    <span className="text-[11px] font-medium text-slate-300">
-                      System Prompt Addendum (optional)
-                    </span>
-                    <textarea
-                      value={promptConfig.systemPrompt}
-                      onChange={(event) =>
-                        setPromptConfig((current) => ({
-                          ...current,
-                          systemPrompt: event.target.value,
-                        }))
-                      }
-                      rows={3}
-                      placeholder="Add global behavior rules, voice guardrails, or hard constraints."
-                      className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
-                    />
-                  </label>
-
-                  <label className="space-y-1">
-                    <span className="text-[11px] font-medium text-slate-300">
-                      Campaign Instructions (optional)
-                    </span>
-                    <textarea
-                      value={promptConfig.customInstructions}
-                      onChange={(event) =>
-                        setPromptConfig((current) => ({
-                          ...current,
-                          customInstructions: event.target.value,
-                        }))
-                      }
-                      rows={3}
-                      placeholder="Example: prioritize educational carousel angle for saves and shares."
-                      className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
-                    />
-                  </label>
-                </div>
-
-                <p className="mt-2 text-[11px] text-slate-400">
-                  The default system prompt remains active automatically: {DEFAULT_GENERATION_SYSTEM_PROMPT}
-                </p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Theme</span>
-                  <input
-                    value={post.theme}
-                    onChange={(event) =>
-                      setPost((current) => ({
-                        ...current,
-                        theme: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Subject</span>
-                  <input
-                    value={post.subject}
-                    onChange={(event) =>
-                      setPost((current) => ({
-                        ...current,
-                        subject: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-xs font-medium text-slate-200">Core Thought</span>
-                  <textarea
-                    value={post.thought}
-                    onChange={(event) =>
-                      setPost((current) => ({
-                        ...current,
-                        thought: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Objective</span>
-                  <input
-                    value={post.objective}
-                    onChange={(event) =>
-                      setPost((current) => ({
-                        ...current,
-                        objective: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Audience</span>
-                  <input
-                    value={post.audience}
-                    onChange={(event) =>
-                      setPost((current) => ({
-                        ...current,
-                        audience: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Mood</span>
-                  <input
-                    value={post.mood}
-                    onChange={(event) =>
-                      setPost((current) => ({
-                        ...current,
-                        mood: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-slate-200">Aspect Ratio</span>
-                  <select
-                    value={post.aspectRatio}
-                    onChange={(event) =>
-                      setPost((current) => ({
-                        ...current,
-                        aspectRatio: event.target.value as AspectRatio,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-                  >
-                    {RATIO_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
-                  <span className="inline-flex items-center gap-2">
-                    <ImagePlus className="h-4 w-4 text-orange-300" />
-                    Upload Post Assets (Images + Video)
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    className="hidden"
-                    onChange={(event) => {
-                      void handleAssetUpload(event);
-                    }}
-                  />
-                </label>
-
-                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
-                  <span className="inline-flex items-center gap-2">
-                    <ImagePlus className="h-4 w-4 text-orange-300" />
-                    Upload Logo
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      void handleLogoUpload(event);
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {assets.map((asset) => (
-                  <span
-                    key={asset.id}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-medium",
-                      statusChip(asset.status),
-                    )}
-                  >
-                    {asset.mediaType === "video" ? <Film className="h-3 w-3" /> : <Images className="h-3 w-3" />}
-                    {asset.name}
-                    {asset.mediaType === "video" && asset.durationSec ? ` (${formatDuration(asset.durationSec)})` : ""}
-                    {asset.status === "uploading" ? " (syncing)" : ""}
-                    {asset.status === "local" ? " (local only)" : ""}
-                  </span>
-                ))}
-                {logo ? (
-                  <span
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-[11px] font-medium",
-                      statusChip(logo.status),
-                    )}
-                  >
-                    Logo: {logo.name}
-                    {logo.status === "uploading" ? " (syncing)" : ""}
-                  </span>
-                ) : null}
-              </div>
-
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={generate}
-                  disabled={
-                    isGenerating ||
-                    assets.length === 0 ||
-                    isUploadingAssets ||
-                    isUploadingLogo
+              {/* Core Thought (full width) */}
+              <label className="space-y-1 md:col-span-2">
+                <span className="text-xs font-medium text-slate-200">
+                  Core Thought
+                </span>
+                <textarea
+                  value={post.thought}
+                  onChange={(event) =>
+                    setPost((current) => ({
+                      ...current,
+                      thought: event.target.value,
+                    }))
                   }
-                  className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isGenerating ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  )}
-                  {isGenerating ? "Generating..." : "Generate SOTA Concepts"}
-                </button>
+                  rows={3}
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                />
+              </label>
 
+              {/* Objective + Audience (side by side) */}
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-200">
+                  Objective
+                </span>
+                <input
+                  value={post.objective}
+                  onChange={(event) =>
+                    setPost((current) => ({
+                      ...current,
+                      objective: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-200">
+                  Audience
+                </span>
+                <input
+                  value={post.audience}
+                  onChange={(event) =>
+                    setPost((current) => ({
+                      ...current,
+                      audience: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                />
+              </label>
+
+              {/* Mood + Aspect Ratio (side by side) */}
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-200">
+                  Mood
+                </span>
+                <input
+                  value={post.mood}
+                  onChange={(event) =>
+                    setPost((current) => ({
+                      ...current,
+                      mood: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-slate-200">
+                  Aspect Ratio
+                </span>
+                <select
+                  value={post.aspectRatio}
+                  onChange={(event) =>
+                    setPost((current) => ({
+                      ...current,
+                      aspectRatio: event.target.value as AspectRatio,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
+                >
+                  {RATIO_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {/* Generate button + status */}
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={generate}
+                disabled={
+                  isGenerating ||
+                  assets.length === 0 ||
+                  isUploadingAssets ||
+                  isUploadingLogo
+                }
+                className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGenerating ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {isGenerating
+                  ? generationStatus ?? "Generating..."
+                  : "Generate SOTA Concepts"}
+              </button>
+
+              <button
+                type="button"
+                onClick={exportPoster}
+                disabled={!activeVariant}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Export PNG
+              </button>
+
+              {!llmAuthStatus.connected ? (
+                <p className="text-xs text-slate-400">
+                  <Link href="/settings" className="underline">
+                    Connect an LLM provider
+                  </Link>{" "}
+                  for AI-powered generation.
+                </p>
+              ) : null}
+
+              {isUploadingAssets || isUploadingLogo ? (
+                <p className="text-xs text-blue-200">
+                  Uploading assets to persistent storage...
+                </p>
+              ) : null}
+              {error ? (
+                <p className="text-xs font-medium text-red-300">{error}</p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-5 lg:sticky lg:top-6 lg:h-fit">
+          <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5">
+            {activeVariant ? (
+              <motion.div
+                key={activeVariant.id}
+                initial={{ opacity: 0.2 }}
+                animate={{ opacity: 1 }}
+              >
+                <PosterPreview
+                  ref={posterRef}
+                  variant={activeVariant}
+                  brandName={brand.brandName}
+                  aspectRatio={post.aspectRatio}
+                  primaryImage={primaryVisual}
+                  secondaryImage={secondaryVisual}
+                  logoImage={logo?.previewUrl}
+                  editorMode={editorMode}
+                  overlayLayout={activeOverlayLayout}
+                  onOverlayLayoutChange={(layout) => {
+                    if (!activeVariant) {
+                      return;
+                    }
+
+                    setOverlayLayouts((current) => ({
+                      ...current,
+                      [activeVariant.id]: layout,
+                    }));
+                  }}
+                  carouselSlides={activeVariant.carouselSlides}
+                  activeSlideIndex={activeSlideIndex}
+                  onSlideChange={setActiveSlideIndex}
+                />
+              </motion.div>
+            ) : (
+              <div className="flex aspect-[4/5] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300">
+                Upload assets and generate concepts to preview your post.
+              </div>
+            )}
+          </div>
+
+          {result ? (
+            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold tracking-[0.2em] text-orange-200 uppercase">
+                  Strategy
+                </p>
                 <button
                   type="button"
-                  onClick={exportPoster}
-                  disabled={!activeVariant}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => setEditorMode((value) => !value)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold uppercase transition",
+                    editorMode
+                      ? "border-orange-300/50 bg-orange-500/15 text-orange-100"
+                      : "border-white/30 bg-white/5 text-slate-200 hover:bg-white/10",
+                  )}
                 >
-                  <Download className="h-4 w-4" />
-                  Export PNG
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                  {editorMode ? "Editor On" : "Editor Off"}
                 </button>
-
-                {isUploadingAssets || isUploadingLogo ? (
-                  <p className="text-xs text-blue-200">Uploading assets to persistent storage...</p>
-                ) : null}
-                {error ? <p className="text-xs font-medium text-red-300">{error}</p> : null}
               </div>
-            </div>
-          </section>
 
-          <section className="space-y-5 lg:sticky lg:top-6 lg:h-fit">
-            <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5">
+              <p className="text-sm leading-relaxed text-slate-200">
+                {result.strategy}
+              </p>
+
+              <div className="mt-4 grid gap-2">
+                {result.variants.map(renderVariantTile)}
+              </div>
+
               {activeVariant ? (
-                <motion.div key={activeVariant.id} initial={{ opacity: 0.2 }} animate={{ opacity: 1 }}>
-                  <PosterPreview
-                    ref={posterRef}
-                    variant={activeVariant}
-                    brandName={brand.brandName}
-                    aspectRatio={post.aspectRatio}
-                    primaryImage={primaryVisual}
-                    secondaryImage={secondaryVisual}
-                    logoImage={logo?.previewUrl}
-                    editorMode={editorMode}
-                    overlayLayout={activeOverlayLayout}
-                    onOverlayLayoutChange={(layout) => {
-                      if (!activeVariant) {
-                        return;
-                      }
-
-                      setOverlayLayouts((current) => ({
-                        ...current,
-                        [activeVariant.id]: layout,
-                      }));
-                    }}
-                  />
-                </motion.div>
-              ) : (
-                <div className="flex aspect-[4/5] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300">
-                  Upload assets and generate concepts to preview your post.
-                </div>
-              )}
-            </div>
-
-            {result ? (
-              <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl md:p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold tracking-[0.2em] text-orange-200 uppercase">
-                    Strategy
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setEditorMode((value) => !value)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-semibold uppercase transition",
-                      editorMode
-                        ? "border-orange-300/50 bg-orange-500/15 text-orange-100"
-                        : "border-white/30 bg-white/5 text-slate-200 hover:bg-white/10",
-                    )}
-                  >
-                    <LayoutTemplate className="h-3.5 w-3.5" />
-                    {editorMode ? "Editor On" : "Editor Off"}
-                  </button>
-                </div>
-
-                <p className="text-sm leading-relaxed text-slate-200">{result.strategy}</p>
-
-                <div className="mt-4 grid gap-2">{result.variants.map(renderVariantTile)}</div>
-
-                {activeVariant ? (
-                  <>
-                    {activeVariant.postType === "carousel" && activeVariant.carouselSlides ? (
-                      <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
-                        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">Carousel Slide Plan</p>
-                        <div className="mt-3 space-y-2">
-                          {activeVariant.carouselSlides.map((slide) => (
-                            <div key={`${activeVariant.id}-slide-${slide.index}`} className="rounded-xl border border-white/10 bg-white/5 p-2.5">
-                              <p className="text-[11px] font-semibold text-orange-200">Slide {slide.index}: {slide.goal}</p>
-                              <p className="mt-1 text-sm font-medium text-slate-100">{slide.headline}</p>
-                              <p className="mt-1 text-xs text-slate-300">{slide.body}</p>
-                              <p className="mt-1 text-[11px] text-slate-400">Asset hint: {slide.assetHint}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {activeVariant.postType === "reel" && activeVariant.reelPlan ? (
-                      <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
-                        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">Reel Edit Blueprint</p>
-                        <p className="mt-2 text-sm text-slate-200">Hook: {activeVariant.reelPlan.hook}</p>
-                        <p className="mt-1 text-xs text-slate-300">Target duration: {Math.round(activeVariant.reelPlan.targetDurationSec)}s</p>
-                        <p className="mt-1 text-xs text-slate-300">Cover frame: {activeVariant.reelPlan.coverFrameDirection}</p>
-                        <p className="mt-1 text-xs text-slate-300">Audio: {activeVariant.reelPlan.audioDirection}</p>
-                        <div className="mt-3 space-y-1.5">
-                          {activeVariant.reelPlan.editingActions.map((action, index) => (
-                            <p key={`${activeVariant.id}-edit-${index}`} className="text-xs text-slate-200">• {action}</p>
-                          ))}
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          {activeVariant.reelPlan.beats.map((beat, index) => (
-                            <div key={`${activeVariant.id}-beat-${index}`} className="rounded-xl border border-white/10 bg-white/5 p-2.5">
-                              <p className="text-[11px] font-semibold text-orange-200">{beat.atSec.toFixed(1)}s</p>
-                              <p className="mt-1 text-xs text-slate-100">{beat.visual}</p>
-                              <p className="mt-1 text-xs text-slate-300">On-screen: {beat.onScreenText}</p>
-                              <p className="mt-1 text-[11px] text-slate-400">Edit: {beat.editAction}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="mt-3 text-xs font-semibold text-emerald-200">End card CTA: {activeVariant.reelPlan.endCardCta}</p>
-                      </div>
-                    ) : null}
-
-                    <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
-                          Caption Bundle
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void copyCaption();
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-xs text-white transition hover:bg-white/10"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          {copyState === "done" ? "Copied" : "Copy"}
-                        </button>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-200">{activeVariant.caption}</p>
-                      <p className="mt-3 text-xs text-orange-200">{activeVariant.hashtags.join(" ")}</p>
-                    </div>
-
+                <>
+                  {activeVariant.postType === "carousel" &&
+                  activeVariant.carouselSlides ? (
                     <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
                       <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
-                        Share + Publish
+                        Carousel Slide Plan
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {activeVariant.carouselSlides.map((slide) => (
+                          <div
+                            key={`${activeVariant.id}-slide-${slide.index}`}
+                            className="rounded-xl border border-white/10 bg-white/5 p-2.5"
+                          >
+                            <p className="text-[11px] font-semibold text-orange-200">
+                              Slide {slide.index}: {slide.goal}
+                            </p>
+                            <p className="mt-1 text-sm font-medium text-slate-100">
+                              {slide.headline}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-300">
+                              {slide.body}
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-400">
+                              Asset hint: {slide.assetHint}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {activeVariant.postType === "reel" &&
+                  activeVariant.reelPlan ? (
+                    <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                      <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+                        Reel Edit Blueprint
+                      </p>
+                      <p className="mt-2 text-sm text-slate-200">
+                        Hook: {activeVariant.reelPlan.hook}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-300">
+                        Target duration:{" "}
+                        {Math.round(
+                          activeVariant.reelPlan.targetDurationSec,
+                        )}
+                        s
+                      </p>
+                      <p className="mt-1 text-xs text-slate-300">
+                        Cover frame:{" "}
+                        {activeVariant.reelPlan.coverFrameDirection}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-300">
+                        Audio: {activeVariant.reelPlan.audioDirection}
+                      </p>
+                      <div className="mt-3 space-y-1.5">
+                        {activeVariant.reelPlan.editingActions.map(
+                          (action, index) => (
+                            <p
+                              key={`${activeVariant.id}-edit-${index}`}
+                              className="text-xs text-slate-200"
+                            >
+                              • {action}
+                            </p>
+                          ),
+                        )}
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {activeVariant.reelPlan.beats.map((beat, index) => (
+                          <div
+                            key={`${activeVariant.id}-beat-${index}`}
+                            className="rounded-xl border border-white/10 bg-white/5 p-2.5"
+                          >
+                            <p className="text-[11px] font-semibold text-orange-200">
+                              {beat.atSec.toFixed(1)}s
+                            </p>
+                            <p className="mt-1 text-xs text-slate-100">
+                              {beat.visual}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-300">
+                              On-screen: {beat.onScreenText}
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-400">
+                              Edit: {beat.editAction}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-xs font-semibold text-emerald-200">
+                        End card CTA: {activeVariant.reelPlan.endCardCta}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+                        Caption Bundle
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyCaption();
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-white/5 px-2 py-1 text-xs text-white transition hover:bg-white/10"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        {copyState === "done" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-200">
+                      {activeVariant.caption}
+                    </p>
+                    <p className="mt-3 text-xs text-orange-200">
+                      {activeVariant.hashtags.join(" ")}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-white/15 bg-black/25 p-4">
+                    <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
+                      Share + Publish
+                    </p>
+
+                    <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-3 text-xs text-slate-200">
+                      <p className="font-semibold text-slate-100">
+                        Instagram Account
                       </p>
 
-                      <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-3 text-xs text-slate-200">
-                        <p className="font-semibold text-slate-100">Instagram Account</p>
+                      {isAuthLoading ? (
+                        <p className="mt-1 text-slate-300">
+                          Checking connection...
+                        </p>
+                      ) : null}
 
-                        {isAuthLoading ? (
-                          <p className="mt-1 text-slate-300">Checking connection...</p>
-                        ) : null}
-
-                        {!isAuthLoading && authStatus.connected ? (
-                          <div className="mt-1 space-y-1">
-                            <p>
-                              Connected via <span className="font-semibold uppercase">{authStatus.source}</span>
-                              {authStatus.account?.instagramUsername
-                                ? ` as @${authStatus.account.instagramUsername}`
-                                : ""}
-                              {authStatus.account?.pageName
-                                ? ` (${authStatus.account.pageName})`
-                                : ""}
-                            </p>
-                            {authStatus.account?.tokenExpiresAt ? (
-                              <p className="text-slate-300">
-                                Token expiry: {new Date(authStatus.account.tokenExpiresAt).toLocaleString()}
-                              </p>
-                            ) : null}
-
-                            {authStatus.source === "oauth" ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void disconnectInstagram();
-                                }}
-                                disabled={isDisconnecting}
-                                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {isDisconnecting ? (
-                                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                                ) : null}
-                                Disconnect OAuth
-                              </button>
-                            ) : (
-                              <a
-                                href="/api/auth/meta/start"
-                                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10"
-                              >
-                                Reconnect with OAuth
-                              </a>
-                            )}
-                          </div>
-                        ) : null}
-
-                        {!isAuthLoading && !authStatus.connected ? (
-                          <div className="mt-2">
+                      {!isAuthLoading && authStatus.connected ? (
+                        <div className="mt-1 space-y-1">
+                          <p>
+                            Connected via{" "}
+                            <span className="font-semibold uppercase">
+                              {authStatus.source}
+                            </span>
+                            {authStatus.account?.instagramUsername
+                              ? ` as @${authStatus.account.instagramUsername}`
+                              : ""}
+                            {authStatus.account?.pageName
+                              ? ` (${authStatus.account.pageName})`
+                              : ""}
+                          </p>
+                          {authStatus.account?.tokenExpiresAt ? (
                             <p className="text-slate-300">
-                              Connect your brand account to publish directly from this app.
+                              Token expiry:{" "}
+                              {new Date(
+                                authStatus.account.tokenExpiresAt,
+                              ).toLocaleString()}
                             </p>
+                          ) : null}
+
+                          {authStatus.source === "oauth" ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void disconnectInstagram();
+                              }}
+                              disabled={isDisconnecting}
+                              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isDisconnecting ? (
+                                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                              ) : null}
+                              Disconnect OAuth
+                            </button>
+                          ) : (
                             <a
                               href="/api/auth/meta/start"
-                              className="mt-2 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"
+                              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10"
                             >
-                              Connect with Meta OAuth
+                              Reconnect with OAuth
                             </a>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void createShareLink();
-                          }}
-                          disabled={isSharing}
-                          className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isSharing ? (
-                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Link2 className="h-3.5 w-3.5" />
                           )}
-                          Create Share Link
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={!activeVariant}
-                          onClick={() => {
-                            if (!activeVariant) {
-                              return;
-                            }
-
-                            setOverlayLayouts((current) => ({
-                              ...current,
-                              [activeVariant.id]: createDefaultOverlayLayout(
-                                activeVariant.layout,
-                              ),
-                            }));
-                          }}
-                          className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <LayoutTemplate className="h-3.5 w-3.5" />
-                          Reset Text Layout
-                        </button>
-                      </div>
-
-                      {shareUrl ? (
-                        <div className="mt-3 rounded-xl border border-emerald-300/35 bg-emerald-400/10 p-3 text-xs text-emerald-100">
-                          <p className="font-semibold">Share link ready:</p>
-                          <p className="mt-1 break-all">{shareUrl}</p>
-                          <p className="mt-1">{shareCopyState === "done" ? "Copied to clipboard" : "Copied automatically when created"}</p>
                         </div>
                       ) : null}
 
-                      <form onSubmit={publishToInstagram} className="mt-4 grid gap-2">
-                        <label className="space-y-1">
-                          <span className="text-[11px] font-medium text-slate-300">
-                            Schedule (optional)
-                          </span>
-                          <input
-                            type="datetime-local"
-                            value={scheduleAt}
-                            onChange={(event) => setScheduleAt(event.target.value)}
-                            className="w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
-                          />
-                        </label>
-
-                        <button
-                          type="submit"
-                          disabled={isPublishing}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isPublishing ? (
-                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Send className="h-3.5 w-3.5" />
-                          )}
-                          {scheduleAt ? "Schedule Instagram Publish" : "Publish to Instagram"}
-                        </button>
-                      </form>
-
-                      {publishMessage ? (
-                        <p className="mt-3 rounded-xl border border-emerald-300/35 bg-emerald-400/10 p-2 text-xs text-emerald-100">
-                          {publishMessage}
-                        </p>
+                      {!isAuthLoading && !authStatus.connected ? (
+                        <div className="mt-2">
+                          <p className="text-slate-300">
+                            Connect your brand account to publish directly from
+                            this app.
+                          </p>
+                          <a
+                            href="/api/auth/meta/start"
+                            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"
+                          >
+                            Connect with Meta OAuth
+                          </a>
+                        </div>
                       ) : null}
                     </div>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-          </section>
-        </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void createShareLink();
+                        }}
+                        disabled={isSharing}
+                        className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSharing ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Link2 className="h-3.5 w-3.5" />
+                        )}
+                        Create Share Link
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!activeVariant}
+                        onClick={() => {
+                          if (!activeVariant) {
+                            return;
+                          }
+
+                          setOverlayLayouts((current) => ({
+                            ...current,
+                            [activeVariant.id]: createDefaultOverlayLayout(
+                              activeVariant.layout,
+                            ),
+                          }));
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <LayoutTemplate className="h-3.5 w-3.5" />
+                        Reset Text Layout
+                      </button>
+                    </div>
+
+                    {shareUrl ? (
+                      <div className="mt-3 rounded-xl border border-emerald-300/35 bg-emerald-400/10 p-3 text-xs text-emerald-100">
+                        <p className="font-semibold">Share link ready:</p>
+                        <p className="mt-1 break-all">{shareUrl}</p>
+                        <p className="mt-1">
+                          {shareCopyState === "done"
+                            ? "Copied to clipboard"
+                            : "Copied automatically when created"}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <form
+                      onSubmit={publishToInstagram}
+                      className="mt-4 grid gap-2"
+                    >
+                      <label className="space-y-1">
+                        <span className="text-[11px] font-medium text-slate-300">
+                          Schedule (optional)
+                        </span>
+                        <input
+                          type="datetime-local"
+                          value={scheduleAt}
+                          onChange={(event) =>
+                            setScheduleAt(event.target.value)
+                          }
+                          className="w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-xs outline-none transition focus:border-orange-300"
+                        />
+                      </label>
+
+                      <button
+                        type="submit"
+                        disabled={isPublishing}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isPublishing ? (
+                          <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5" />
+                        )}
+                        {scheduleAt
+                          ? "Schedule Instagram Publish"
+                          : "Publish to Instagram"}
+                      </button>
+                    </form>
+
+                    {publishMessage ? (
+                      <p className="mt-3 rounded-xl border border-emerald-300/35 bg-emerald-400/10 p-2 text-xs text-emerald-100">
+                        {publishMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
       </div>
-    </main>
+    </AppShell>
   );
 }
