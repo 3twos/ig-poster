@@ -62,12 +62,20 @@ Run these before opening or updating a PR.
 
 ## Project Map
 
-- `src/app/page.tsx`: main editor UI and client orchestration.
+- `src/app/page.tsx`: main editor page — composes a 3-column resizable layout from focused section components.
+- `src/components/post-brief-form.tsx`: post brief fields, template gallery, generate/export buttons.
+- `src/components/asset-manager.tsx`: drag-and-drop reorderable asset list (uses `@dnd-kit/sortable`).
+- `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
+- `src/components/poster-section.tsx`: poster preview wrapper with empty state.
+- `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls.
+- `src/components/publish-section.tsx`: share link, Instagram auth, schedule, publish form.
 - `src/components/poster-preview.tsx`: poster renderer + editable overlay blocks.
+- `src/hooks/use-generation.ts`: SSE-based generation orchestration, agent run state, thinking token handling.
+- `src/lib/agent-types.ts`: agent run/step types and UI utility functions.
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, and publishing.
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
-- `src/lib/llm.ts`: provider adapters and structured JSON generation.
+- `src/lib/llm.ts`: provider adapters, structured JSON generation, and streaming with thinking token callbacks.
 - `src/lib/llm-auth.ts`: LLM credential persistence/resolution.
 - `src/lib/meta.ts`: Meta Graph publishing primitives.
 - `src/lib/meta-auth.ts`: Meta OAuth flow and credential resolution.

@@ -10,8 +10,9 @@
 ## Capabilities
 
 - Generates exactly 3 creative variants per request, including strategy rationale, caption, hashtags, and format-aware plans (single image, carousel, reel).
-- Accepts mixed media assets (images + short videos), with automatic video metadata extraction for better planning.
+- Accepts mixed media assets (images + short videos), with drag-and-drop reorderable asset management and automatic video metadata extraction for better planning.
 - Supports drag-and-resize text overlay editing on the poster canvas, then PNG export.
+- Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed queue.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
@@ -28,6 +29,7 @@
 ## Primary User Scenarios
 
 1. Create a new post concept from a brief
+   - Use the 3-column layout: browse posts (left), edit brief and preview (center), monitor agent activity (right).
    - Upload assets and logo, fill brand/post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options

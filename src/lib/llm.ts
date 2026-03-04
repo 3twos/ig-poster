@@ -215,3 +215,120 @@ export const generateStructuredJson = async <T>(
 
   return parseJsonObject<T>(raw);
 };
+
+type StreamingGenerationOptions = StructuredGenerationOptions & {
+  onChunk?: (text: string) => void;
+};
+
+const streamWithAnthropic = async (options: StreamingGenerationOptions) => {
+  const client = new Anthropic({ apiKey: options.auth.apiKey });
+  const maxTokens = resolveAnthropicMaxTokens(options.maxTokens);
+  const model = options.auth.model || DEFAULT_ANTHROPIC_MODEL;
+
+  console.log(
+    `[llm] Anthropic streaming request: model=${model}, maxTokens=${maxTokens}, ` +
+      `systemLen=${options.systemPrompt.length}, userLen=${options.userPrompt.length}`,
+  );
+  const t0 = Date.now();
+  let fullText = "";
+
+  const stream = client.messages.stream(
+    {
+      model,
+      max_tokens: maxTokens,
+      temperature: clampAnthropicTemperature(options.temperature),
+      system: options.systemPrompt,
+      messages: [{ role: "user", content: options.userPrompt }],
+    },
+    { signal: options.signal, timeout: ANTHROPIC_REQUEST_TIMEOUT_MS },
+  );
+
+  for await (const event of stream) {
+    if (event.type === "content_block_delta") {
+      const delta = event.delta;
+      if ("thinking" in delta && typeof delta.thinking === "string") {
+        options.onChunk?.(delta.thinking);
+      } else if (delta.type === "text_delta") {
+        fullText += delta.text;
+      }
+    }
+  }
+
+  const finalMessage = await stream.finalMessage();
+  const elapsed = Date.now() - t0;
+  console.log(
+    `[llm] Anthropic streaming response: ${elapsed}ms, ` +
+      `inputTokens=${finalMessage.usage.input_tokens}, outputTokens=${finalMessage.usage.output_tokens}, ` +
+      `stopReason=${finalMessage.stop_reason}`,
+  );
+
+  if (!fullText) {
+    fullText = finalMessage.content
+      .filter((part): part is Anthropic.TextBlock => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+      .trim();
+  }
+
+  if (!fullText) {
+    throw new Error("Anthropic streaming response was empty");
+  }
+
+  return fullText;
+};
+
+const streamWithOpenAI = async (options: StreamingGenerationOptions) => {
+  const client = new OpenAI({ apiKey: options.auth.apiKey });
+  const model = options.auth.model || DEFAULT_OPENAI_MODEL;
+
+  console.log(
+    `[llm] OpenAI streaming request: model=${model}, ` +
+      `systemLen=${options.systemPrompt.length}, userLen=${options.userPrompt.length}`,
+  );
+  const t0 = Date.now();
+  let fullText = "";
+
+  const stream = await client.chat.completions.create(
+    {
+      model,
+      temperature: options.temperature,
+      response_format: { type: "json_object" },
+      stream: true,
+      messages: [
+        { role: "system", content: options.systemPrompt },
+        { role: "user", content: options.userPrompt },
+      ],
+    },
+    { signal: options.signal },
+  );
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta;
+    if (delta?.content) {
+      fullText += delta.content;
+    }
+    if (delta && "reasoning_content" in delta && typeof delta.reasoning_content === "string") {
+      options.onChunk?.(delta.reasoning_content);
+    }
+  }
+
+  const elapsed = Date.now() - t0;
+  console.log(`[llm] OpenAI streaming response: ${elapsed}ms`);
+
+  if (!fullText) {
+    throw new Error("OpenAI streaming response was empty");
+  }
+
+  return fullText;
+};
+
+export const streamStructuredJsonWithCallback = async <T>(
+  options: StreamingGenerationOptions,
+): Promise<T> => {
+  const raw =
+    options.auth.provider === "anthropic"
+      ? await streamWithAnthropic(options)
+      : await streamWithOpenAI(options);
+
+  return parseJsonObject<T>(raw);
+};

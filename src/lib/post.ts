@@ -20,9 +20,9 @@ export type PostSummary = {
 export function deriveTitle(
   post: Pick<PostRow, "brief" | "title">,
 ): string {
-  if (post.title) return post.title;
   const brief = post.brief as Record<string, unknown> | null;
   if (brief?.subject && typeof brief.subject === "string") return brief.subject;
+  if (post.title) return post.title;
   if (brief?.theme && typeof brief.theme === "string") return brief.theme;
   return "Untitled Post";
 }

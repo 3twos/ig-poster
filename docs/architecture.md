@@ -28,7 +28,10 @@ flowchart LR
 - App framework: Next.js App Router (Node runtime for server routes that need Node APIs).
 - Next.js 16 auth gate entrypoint uses `src/proxy.ts` (Proxy file convention), which is executed as middleware.
 - UI layer:
-  - `src/app/page.tsx` is the primary interactive editor.
+  - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity) using `react-resizable-panels`.
+  - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-section.tsx`, `agent-activity-panel.tsx`.
+  - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
+  - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders and edits overlay layouts.
 - API layer:
@@ -49,7 +52,7 @@ flowchart LR
 2. Request is validated with `GenerationRequestSchema`.
 3. Server resolves LLM auth from connected credential or env fallback.
 4. Server optionally extracts website style context (`buildWebsiteStyleContext`).
-5. Structured JSON generation runs through provider adapter.
+5. Streaming structured JSON generation runs through provider adapter; LLM thinking/reasoning tokens are forwarded to the client as `llm-thinking` SSE events.
 6. Response is validated with `GenerationResponseSchema`.
 7. On auth/provider failure, fallback response generator returns deterministic variants.
 

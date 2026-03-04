@@ -13,6 +13,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@neondatabase/serverless": "^1.0.2",
     "@vercel/blob": "^2.3.0",
     "class-variance-authority": "^0.7.1",
@@ -29,6 +32,7 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-resizable-panels": "^4.7.1",
     "react-rnd": "^10.5.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",

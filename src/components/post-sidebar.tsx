@@ -29,7 +29,7 @@ const FILTERS: Array<{ label: string; value: "all" | PostStatus }> = [
   { label: "Archived", value: "archived" },
 ];
 
-function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
+export function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
   const {
     posts,
     isLoadingPosts,

@@ -21,7 +21,7 @@ import {
   type PublishOutcome,
 } from "@/lib/creative";
 import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
-import { generateStructuredJson } from "@/lib/llm";
+import { streamStructuredJsonWithCallback } from "@/lib/llm";
 import {
   getUserSettingsPath,
   type UserSettings,
@@ -284,16 +284,7 @@ export async function POST(req: Request) {
             `Calling ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
           );
           const candidateCount = resolveCandidateCount(llmAuth.model);
-          const heartbeatId = setInterval(() => {
-            if (generationAbortController.signal.aborted) {
-              return;
-            }
-            send({
-              type: "heartbeat",
-              detail: `Still waiting on ${llmAuth.provider.toUpperCase()} response...`,
-            });
-          }, 2500);
-          const generated = await generateStructuredJson<unknown>({
+          const generated = await streamStructuredJsonWithCallback<unknown>({
             auth: llmAuth,
             systemPrompt: buildGenerationSystemPrompt(request.promptConfig),
             userPrompt: buildGenerationUserPrompt(request, {
@@ -305,8 +296,9 @@ export async function POST(req: Request) {
             temperature: resolveGenerationTemperature(llmAuth.model),
             maxTokens: resolveGenerationMaxTokens(llmAuth.model),
             signal: generationAbortController.signal,
-          }).finally(() => {
-            clearInterval(heartbeatId);
+            onChunk: (text) => {
+              send({ type: "llm-thinking", stepId: "draft-variants", text });
+            },
           });
           throwIfAborted();
           completeStep(
