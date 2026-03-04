@@ -92,36 +92,22 @@ function saveState(state: ChecklistState) {
 }
 
 export function OnboardingChecklist() {
-  const [state, setState] = useState<ChecklistState>(() => loadState());
   const { posts, activePost } = usePostContext();
 
-  // Auto-detect completed steps
-  useEffect(() => {
-    const auto: string[] = [];
-
-    if (posts.length > 0) auto.push("post");
-
-    // Check if any post has result (generated)
-    if (activePost?.result?.variants?.length) auto.push("generate");
-
-    setState((prev) => {
-      const merged = [...new Set([...prev.completedSteps, ...auto])];
-      if (merged.length === prev.completedSteps.length) return prev;
-      const next = { ...prev, completedSteps: merged };
-      saveState(next);
-      return next;
-    });
-  }, [posts, activePost]);
+  const [state, setState] = useState<ChecklistState>(loadState);
+  // API-detected steps stored separately to avoid setState in the mount effect
+  const [apiSteps, setApiSteps] = useState<string[]>([]);
 
   // Check LLM and brand on mount
   useEffect(() => {
+    let cancelled = false;
     const check = async () => {
-      const auto: string[] = [];
+      const detected: string[] = [];
 
       try {
         const llmRes = await fetch("/api/auth/llm/status", { cache: "no-store" });
         const llm = await llmRes.json();
-        if (llm?.connected) auto.push("llm");
+        if (llm?.connected) detected.push("llm");
       } catch {
         // ignore
       }
@@ -130,28 +116,37 @@ export function OnboardingChecklist() {
         const settingsRes = await fetch("/api/settings", { cache: "no-store" });
         if (settingsRes.ok) {
           const settings = await settingsRes.json();
-          if (settings?.brand?.brandName) auto.push("brand");
-          if (settings?.logoUrl) auto.push("logo");
+          if (settings?.brand?.brandName) detected.push("brand");
+          if (settings?.logoUrl) detected.push("logo");
         }
       } catch {
         // ignore
       }
 
-      if (auto.length > 0) {
-        setState((prev) => {
-          const merged = [...new Set([...prev.completedSteps, ...auto])];
-          if (merged.length === prev.completedSteps.length) return prev;
-          const next = { ...prev, completedSteps: merged };
-          saveState(next);
-          return next;
-        });
-      }
+      if (!cancelled && detected.length > 0) setApiSteps(detected);
     };
 
     void check();
+    return () => { cancelled = true; };
   }, []);
 
-  const completedCount = state.completedSteps.length;
+  // Derive completed steps from saved state + context + API (pure computation)
+  const completedSteps = useMemo(() => {
+    const auto: string[] = [...state.completedSteps, ...apiSteps];
+    if (posts.length > 0) auto.push("post");
+    if (activePost?.result?.variants?.length) auto.push("generate");
+    return [...new Set(auto)];
+  }, [state.completedSteps, apiSteps, posts, activePost]);
+
+  // Persist when completedSteps grow beyond what's saved
+  useEffect(() => {
+    if (completedSteps.length > state.completedSteps.length) {
+      const next = { ...state, completedSteps };
+      saveState(next);
+    }
+  }, [completedSteps, state]);
+
+  const completedCount = completedSteps.length;
   const allDone = completedCount >= STEPS.length;
   const progress = Math.round((completedCount / STEPS.length) * 100);
 
@@ -229,7 +224,7 @@ export function OnboardingChecklist() {
       {!state.collapsed && (
         <div className="mt-3 space-y-1">
           {STEPS.map((step) => {
-            const done = state.completedSteps.includes(step.id);
+            const done = completedSteps.includes(step.id);
             return (
               <div
                 key={step.id}
