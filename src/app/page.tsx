@@ -120,6 +120,48 @@ type WorkspaceAuthStatus = {
   };
 };
 
+type GenerationStatusLevel = "info" | "warning" | "error";
+
+type GenerationStatusEvent = {
+  code: string;
+  detail: string;
+  level: GenerationStatusLevel;
+  at: string;
+  elapsedMs: number;
+};
+
+type GenerationMeta = {
+  requestId: string;
+  source: "model" | "fallback";
+  sourceReason: "model-success" | "no-llm-auth" | "llm-failure";
+  authSource: "connection" | "env" | "none";
+  provider: LlmProvider | null;
+  model: string | null;
+  startedAt: string;
+  completedAt: string;
+  elapsedMs: number;
+  warnings: string[];
+  fallbackDetail?: string;
+  events: GenerationStatusEvent[];
+};
+
+type GenerationStreamMessage =
+  | {
+      type: "status";
+      status?: unknown;
+      requestId?: string;
+    }
+  | {
+      type: "result";
+      result?: unknown;
+      meta?: unknown;
+    }
+  | {
+      type: "error";
+      error?: string;
+      requestId?: string;
+    };
+
 const INITIAL_BRAND: BrandState = {
   brandName: "Nexa Labs",
   website: "",
@@ -167,6 +209,237 @@ const parseApiError = async (response: Response) => {
   } catch {
     return `Request failed (${response.status})`;
   }
+};
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const parseGenerationStatusEvent = (value: unknown): GenerationStatusEvent | null => {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  const code = typeof value.code === "string" ? value.code : "";
+  const detail = typeof value.detail === "string" ? value.detail : "";
+  const level =
+    value.level === "warning" || value.level === "error" || value.level === "info"
+      ? value.level
+      : "info";
+  const at = typeof value.at === "string" ? value.at : "";
+  const elapsedMs = typeof value.elapsedMs === "number" ? value.elapsedMs : NaN;
+
+  if (!code || !detail || !at || !Number.isFinite(elapsedMs)) {
+    return null;
+  }
+
+  return {
+    code,
+    detail,
+    level,
+    at,
+    elapsedMs,
+  };
+};
+
+const parseGenerationMeta = (value: unknown): GenerationMeta | null => {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  const requestId = typeof value.requestId === "string" ? value.requestId : "";
+  const source = value.source === "model" || value.source === "fallback" ? value.source : null;
+  const sourceReason =
+    value.sourceReason === "model-success" ||
+    value.sourceReason === "no-llm-auth" ||
+    value.sourceReason === "llm-failure"
+      ? value.sourceReason
+      : null;
+  const authSource =
+    value.authSource === "connection" ||
+    value.authSource === "env" ||
+    value.authSource === "none"
+      ? value.authSource
+      : null;
+  const provider =
+    value.provider === "openai" || value.provider === "anthropic"
+      ? value.provider
+      : value.provider === null
+        ? null
+        : null;
+  const model =
+    typeof value.model === "string" ? value.model : value.model === null ? null : null;
+  const startedAt = typeof value.startedAt === "string" ? value.startedAt : "";
+  const completedAt = typeof value.completedAt === "string" ? value.completedAt : "";
+  const elapsedMs = typeof value.elapsedMs === "number" ? value.elapsedMs : NaN;
+  const warnings = Array.isArray(value.warnings)
+    ? value.warnings.filter((item): item is string => typeof item === "string")
+    : [];
+  const fallbackDetail =
+    typeof value.fallbackDetail === "string" ? value.fallbackDetail : undefined;
+  const eventsRaw = Array.isArray(value.events) ? value.events : [];
+  const events = eventsRaw
+    .map((event) => parseGenerationStatusEvent(event))
+    .filter((event): event is GenerationStatusEvent => Boolean(event));
+
+  if (
+    !requestId ||
+    !source ||
+    !sourceReason ||
+    !authSource ||
+    !startedAt ||
+    !completedAt ||
+    !Number.isFinite(elapsedMs)
+  ) {
+    return null;
+  }
+
+  return {
+    requestId,
+    source,
+    sourceReason,
+    authSource,
+    provider,
+    model,
+    startedAt,
+    completedAt,
+    elapsedMs,
+    warnings,
+    fallbackDetail,
+    events,
+  };
+};
+
+const parseGenerationStreamMessage = (line: string): GenerationStreamMessage | null => {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!isObject(parsed) || typeof parsed.type !== "string") {
+      return null;
+    }
+
+    if (parsed.type === "status") {
+      return {
+        type: "status",
+        status: parsed.status,
+        requestId: typeof parsed.requestId === "string" ? parsed.requestId : undefined,
+      };
+    }
+
+    if (parsed.type === "result") {
+      return {
+        type: "result",
+        result: parsed.result,
+        meta: parsed.meta,
+      };
+    }
+
+    if (parsed.type === "error") {
+      return {
+        type: "error",
+        error: typeof parsed.error === "string" ? parsed.error : undefined,
+        requestId: typeof parsed.requestId === "string" ? parsed.requestId : undefined,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const readGenerationStream = async (
+  response: Response,
+  onStatus: (event: GenerationStatusEvent) => void,
+) => {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("Generation stream response was empty.");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: GenerationResponse | null = null;
+  let meta: GenerationMeta | null = null;
+  let streamError: string | null = null;
+  let lastStatusDetail = "";
+
+  const processLine = (line: string) => {
+    const message = parseGenerationStreamMessage(line);
+    if (!message) {
+      return;
+    }
+
+    if (message.type === "status") {
+      const parsedStatus = parseGenerationStatusEvent(message.status);
+      if (!parsedStatus) {
+        return;
+      }
+
+      lastStatusDetail = parsedStatus.detail;
+      onStatus(parsedStatus);
+      return;
+    }
+
+    if (message.type === "result") {
+      result = GenerationResponseSchema.parse(message.result);
+      meta = parseGenerationMeta(message.meta);
+      return;
+    }
+
+    streamError =
+      message.error || "Generation failed before a final result was returned.";
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      processLine(line);
+      newlineIndex = buffer.indexOf("\n");
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) {
+    processLine(buffer);
+  }
+
+  if (streamError) {
+    throw new Error(streamError);
+  }
+
+  if (!result) {
+    const suffix = lastStatusDetail ? ` Last status: ${lastStatusDetail}` : "";
+    throw new Error(`Generation stream ended before final result.${suffix}`);
+  }
+
+  return {
+    result,
+    meta,
+  };
+};
+
+const formatElapsedSeconds = (elapsedMs: number) => {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    return "0.0s";
+  }
+
+  if (elapsedMs >= 10_000) {
+    return `${Math.round(elapsedMs / 1000)}s`;
+  }
+
+  return `${(elapsedMs / 1000).toFixed(1)}s`;
 };
 
 const statusChip = (status: UploadStatus) => {
@@ -283,6 +556,10 @@ export default function Home() {
 
   const [error, setError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [generationMeta, setGenerationMeta] = useState<GenerationMeta | null>(null);
+  const [generationStatusEvents, setGenerationStatusEvents] = useState<GenerationStatusEvent[]>([]);
+  const [generationStartedAtMs, setGenerationStartedAtMs] = useState<number | null>(null);
+  const [generationElapsedMs, setGenerationElapsedMs] = useState(0);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
@@ -336,6 +613,20 @@ export default function Home() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!isGenerating || generationStartedAtMs === null) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setGenerationElapsedMs(Date.now() - generationStartedAtMs);
+    }, 250);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [generationStartedAtMs, isGenerating]);
 
   const loadAuthStatus = useCallback(async () => {
     setIsAuthLoading(true);
@@ -675,12 +966,20 @@ export default function Home() {
   const generate = async () => {
     setError(null);
     setPublishMessage(null);
+    setGenerationMeta(null);
+    setGenerationStatusEvents([]);
     setIsGenerating(true);
+    const startedAtMs = Date.now();
+    setGenerationStartedAtMs(startedAtMs);
+    setGenerationElapsedMs(0);
 
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-generation-stream": "ndjson",
+        },
         body: JSON.stringify({
           brand,
           post,
@@ -701,7 +1000,22 @@ export default function Home() {
         throw new Error(await parseApiError(response));
       }
 
-      const parsed = GenerationResponseSchema.parse(await response.json());
+      const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+      let parsed: GenerationResponse;
+      let meta: GenerationMeta | null = null;
+
+      if (contentType.includes("application/x-ndjson")) {
+        const streamed = await readGenerationStream(response, (statusEvent) => {
+          setGenerationStatusEvents((current) => [...current, statusEvent].slice(-80));
+        });
+        parsed = streamed.result;
+        meta = streamed.meta;
+      } else {
+        const payload = await response.json();
+        parsed = GenerationResponseSchema.parse(payload);
+        meta = parseGenerationMeta(isObject(payload) ? payload._meta : undefined);
+      }
+
       setResult(parsed);
       setActiveVariantId(parsed.variants[0]?.id ?? null);
       setOverlayLayouts(
@@ -713,7 +1027,26 @@ export default function Home() {
         ),
       );
       setShareUrl(null);
+      if (meta?.events.length) {
+        setGenerationStatusEvents(meta.events);
+      }
+      setGenerationMeta(meta);
     } catch (generationError) {
+      setGenerationStatusEvents((current) =>
+        [
+          ...current,
+          {
+            code: "client.failed",
+            detail:
+              generationError instanceof Error
+                ? generationError.message
+                : "Unexpected generation issue.",
+            level: "error" as const,
+            at: new Date().toISOString(),
+            elapsedMs: Date.now() - startedAtMs,
+          },
+        ].slice(-80),
+      );
       setError(
         generationError instanceof Error
           ? generationError.message
@@ -721,6 +1054,8 @@ export default function Home() {
       );
     } finally {
       setIsGenerating(false);
+      setGenerationStartedAtMs(null);
+      setGenerationElapsedMs(Date.now() - startedAtMs);
     }
   };
 
@@ -1173,6 +1508,16 @@ export default function Home() {
 
   const imageCount = useMemo(() => assets.filter((asset) => asset.mediaType === "image").length, [assets]);
   const videoCount = useMemo(() => assets.filter((asset) => asset.mediaType === "video").length, [assets]);
+  const latestGenerationEvent =
+    generationStatusEvents[generationStatusEvents.length - 1] ?? null;
+  const generationRuntimeMs = isGenerating
+    ? generationElapsedMs
+    : generationMeta?.elapsedMs ?? generationElapsedMs;
+  const generationSourceLabel = generationMeta
+    ? generationMeta.source === "model"
+      ? "Model output"
+      : "Deterministic fallback"
+    : null;
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-6 text-white md:px-8 md:py-8">
@@ -1755,6 +2100,81 @@ export default function Home() {
                 ) : null}
                 {error ? <p className="text-xs font-medium text-red-300">{error}</p> : null}
               </div>
+
+              {isGenerating || generationStatusEvents.length > 0 || generationMeta ? (
+                <div className="mt-3 rounded-xl border border-white/15 bg-black/25 p-3 text-xs text-slate-200">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className="font-semibold tracking-[0.14em] text-orange-200 uppercase">
+                      Generation Status
+                    </p>
+                    <p className="text-slate-300">
+                      {isGenerating
+                        ? `Running (${formatElapsedSeconds(generationRuntimeMs)})`
+                        : `Finished (${formatElapsedSeconds(generationRuntimeMs)})`}
+                    </p>
+                    {generationSourceLabel ? (
+                      <p className="text-slate-300">Source: {generationSourceLabel}</p>
+                    ) : null}
+                    {generationMeta?.provider && generationMeta.model ? (
+                      <p className="text-slate-300">
+                        LLM: {generationMeta.provider.toUpperCase()} ({generationMeta.model})
+                      </p>
+                    ) : null}
+                    {generationMeta?.requestId ? (
+                      <p className="font-mono text-[11px] text-slate-400">
+                        req:{generationMeta.requestId}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {latestGenerationEvent ? (
+                    <p
+                      className={cn(
+                        "mt-2",
+                        latestGenerationEvent.level === "error"
+                          ? "text-red-300"
+                          : latestGenerationEvent.level === "warning"
+                            ? "text-amber-200"
+                            : "text-slate-200",
+                      )}
+                    >
+                      {latestGenerationEvent.detail}
+                    </p>
+                  ) : null}
+
+                  {generationMeta?.fallbackDetail ? (
+                    <p className="mt-2 text-amber-200">
+                      Fallback reason: {generationMeta.fallbackDetail}
+                    </p>
+                  ) : null}
+
+                  {generationMeta?.warnings.length ? (
+                    <p className="mt-1 text-amber-200">
+                      Warnings: {generationMeta.warnings.join(" | ")}
+                    </p>
+                  ) : null}
+
+                  {generationStatusEvents.length ? (
+                    <div className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-slate-950/50 p-2">
+                      {generationStatusEvents.slice(-8).map((event) => (
+                        <p
+                          key={`${event.at}-${event.code}-${event.elapsedMs}`}
+                          className={cn(
+                            "font-mono text-[11px]",
+                            event.level === "error"
+                              ? "text-red-300"
+                              : event.level === "warning"
+                                ? "text-amber-200"
+                                : "text-slate-300",
+                          )}
+                        >
+                          [{formatElapsedSeconds(event.elapsedMs)}] {event.detail}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </section>
 
