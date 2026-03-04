@@ -566,6 +566,10 @@ export default function Home() {
             ),
           );
           setShareUrl(null);
+        } else {
+          throw new Error(
+            "Generation stream ended without results. Please try again.",
+          );
         }
       } else {
         // Standard JSON response (fallback)

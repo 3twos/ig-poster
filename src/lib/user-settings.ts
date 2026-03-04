@@ -1,3 +1,5 @@
+import { createHash } from "crypto";
+
 import { z } from "zod";
 
 export const UserSettingsSchema = z.object({
@@ -33,12 +35,8 @@ export const UserSettingsSchema = z.object({
 
 export type UserSettings = z.infer<typeof UserSettingsSchema>;
 
-const sanitizeEmail = (email: string) =>
-  email
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9@._-]/g, "")
-    .replace(/[@.]/g, "-");
+const hashEmail = (email: string) =>
+  createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
 
 export const getUserSettingsPath = (email: string) =>
-  `settings/users/${sanitizeEmail(email)}.json`;
+  `settings/users/${hashEmail(email)}.json`;
