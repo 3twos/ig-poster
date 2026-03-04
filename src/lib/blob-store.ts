@@ -18,10 +18,9 @@ export const buildBlobPath = (folder: string, fileName: string) => {
 export const putJson = async (
   pathname: string,
   value: unknown,
-  options?: { sensitive?: boolean },
 ) => {
   return put(pathname, JSON.stringify(value), {
-    access: options?.sensitive ? "public" : "public",
+    access: "public",
     addRandomSuffix: false,
     contentType: "application/json",
   });

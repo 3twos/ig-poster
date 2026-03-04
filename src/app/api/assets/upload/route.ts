@@ -12,7 +12,6 @@ const ALLOWED_CONTENT_TYPES = new Set([
   "image/png",
   "image/gif",
   "image/webp",
-  "image/svg+xml",
   "video/mp4",
   "video/quicktime",
   "video/webm",

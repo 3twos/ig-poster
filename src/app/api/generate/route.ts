@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { z } from "zod";
+
 import {
   GenerationRequestSchema,
   GenerationResponseSchema,
@@ -38,10 +40,11 @@ export async function POST(req: Request) {
     } catch {
       return NextResponse.json(createFallbackResponse(request));
     }
-  } catch {
+  } catch (error) {
+    const status = error instanceof z.ZodError ? 400 : 500;
     return NextResponse.json(
       { error: "Could not generate creative direction" },
-      { status: 400 },
+      { status },
     );
   }
 }

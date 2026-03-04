@@ -12,7 +12,12 @@ export default function ErrorBoundary({
       <div className="max-w-md space-y-4 text-center">
         <h1 className="text-2xl font-semibold">Something went wrong</h1>
         <p className="text-sm text-slate-300">
-          {error.message || "An unexpected error occurred."}
+          An unexpected error occurred.
+          {error.digest ? (
+            <span className="mt-1 block text-xs text-slate-500">
+              Error ID: {error.digest}
+            </span>
+          ) : null}
         </p>
         <button
           type="button"

@@ -1,11 +1,19 @@
 import { randomUUID } from "node:crypto";
 
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
 import { ScheduledJobSchema } from "@/lib/meta-schemas";
+
+class MetaScheduleClientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MetaScheduleClientError";
+  }
+}
 
 export const runtime = "nodejs";
 
@@ -27,10 +35,7 @@ export async function POST(req: Request) {
       }
 
       if (resolvedAuth.source === "oauth" && !resolvedAuth.account.connectionId) {
-        return NextResponse.json(
-          { error: "OAuth connection is missing a persistent connection id." },
-          { status: 400 },
-        );
+        throw new MetaScheduleClientError("OAuth connection is missing a persistent connection id.");
       }
 
       const id = randomUUID().replace(/-/g, "").slice(0, 18);
@@ -69,8 +74,8 @@ export async function POST(req: Request) {
       children: "children" in publish ? publish.children : undefined,
     });
   } catch (error) {
-    const isClientError = error instanceof Error &&
-      (error.message.includes("requires") || error.message.includes("not connected"));
+    const isClientError = error instanceof z.ZodError ||
+      (error instanceof MetaScheduleClientError);
     return NextResponse.json(
       {
         error: "Could not publish to Instagram",

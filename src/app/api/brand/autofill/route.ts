@@ -214,10 +214,11 @@ export async function POST(request: Request) {
       website: parsed.websiteUrl || payload.website,
       brand: model ?? fallback,
     });
-  } catch {
+  } catch (error) {
+    const status = error instanceof z.ZodError ? 400 : 500;
     return NextResponse.json(
       { error: "Could not autofill brand fields from website" },
-      { status: 400 },
+      { status },
     );
   }
 }
