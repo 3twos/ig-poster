@@ -6,9 +6,9 @@ import { z } from "zod";
 
 import { listBlobs, readJsonByPath } from "@/lib/blob-store";
 import {
+  coerceInternalGenerationResponse,
   GenerationRequestSchema,
   GenerationResponseSchema,
-  InternalGenerationResponseSchema,
   PublishOutcomeSchema,
   buildGenerationSystemPrompt,
   buildGenerationUserPrompt,
@@ -52,6 +52,13 @@ const createAbortError = () => {
   error.name = "AbortError";
   return error;
 };
+
+const isMiniModel = (model: string) => model.toLowerCase().includes("mini");
+const resolveGenerationTemperature = (model: string) =>
+  isMiniModel(model) ? 0.45 : 0.7;
+const resolveCandidateCount = (model: string) => (isMiniModel(model) ? 4 : 6);
+const resolveGenerationMaxTokens = (model: string) =>
+  isMiniModel(model) ? 9_000 : 12_000;
 
 export async function POST(req: Request) {
   try {
@@ -273,6 +280,7 @@ export async function POST(req: Request) {
             "execution",
             `Calling ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
           );
+          const candidateCount = resolveCandidateCount(llmAuth.model);
           const heartbeatId = setInterval(() => {
             if (generationAbortController.signal.aborted) {
               return;
@@ -288,11 +296,11 @@ export async function POST(req: Request) {
             userPrompt: buildGenerationUserPrompt(request, {
               websiteStyleContext: websiteResult?.notes,
               websiteBodyText: websiteResult?.bodyText,
-              candidateCount: 6,
+              candidateCount,
               performanceContext: performanceContext || undefined,
             }),
-            temperature: 0.9,
-            maxTokens: 12000,
+            temperature: resolveGenerationTemperature(llmAuth.model),
+            maxTokens: resolveGenerationMaxTokens(llmAuth.model),
             signal: generationAbortController.signal,
           }).finally(() => {
             clearInterval(heartbeatId);
@@ -309,7 +317,8 @@ export async function POST(req: Request) {
             "validation",
             "Applying schema checks and scoring candidates.",
           );
-          const internalParsed = InternalGenerationResponseSchema.parse(generated);
+          const { response: internalParsed, recovery } =
+            coerceInternalGenerationResponse(generated, request);
 
           let topVariants: CreativeVariant[];
           try {
@@ -324,13 +333,35 @@ export async function POST(req: Request) {
             topVariants = selectTopVariants(internalParsed.variants, 3);
           }
 
+          const recoveryNotes: string[] = [];
+          if (recovery.droppedInvalidVariants > 0) {
+            recoveryNotes.push(
+              `dropped ${recovery.droppedInvalidVariants} invalid variant(s)`,
+            );
+          }
+          if (recovery.truncatedVariants > 0) {
+            recoveryNotes.push(
+              `trimmed ${recovery.truncatedVariants} extra variant(s)`,
+            );
+          }
+          if (recovery.usedFallbackVariants > 0) {
+            recoveryNotes.push(
+              `filled ${recovery.usedFallbackVariants} slot(s) with deterministic fallback`,
+            );
+          }
+          if (recovery.strategyFallbackUsed) {
+            recoveryNotes.push("replaced invalid strategy text");
+          }
+
           const parsed = GenerationResponseSchema.parse({
             strategy: internalParsed.strategy,
             variants: topVariants,
           });
           completeStep(
             "select-variants",
-            "Structured output validated and ranked.",
+            recoveryNotes.length
+              ? `Structured output validated with auto-repair (${recoveryNotes.join("; ")}).`
+              : "Structured output validated and ranked.",
           );
 
           startStep(
