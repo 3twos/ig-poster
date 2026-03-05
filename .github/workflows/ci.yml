@@ -24,7 +24,7 @@ jobs:
 
       - name: Ensure lightningcss Linux binary
         run: |
-          LIGHTNINGCSS_VERSION=$(node -p "require('lightningcss/package.json').version")
+          LIGHTNINGCSS_VERSION=$(node -e "const lock=require('./package-lock.json'); process.stdout.write(lock.packages['node_modules/lightningcss'].version)")
           npm install --no-save "lightningcss-linux-x64-gnu@${LIGHTNINGCSS_VERSION}"
 
       - name: Check DB migrations
