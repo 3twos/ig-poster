@@ -238,22 +238,18 @@ export function PostProvider({ children }: { children: ReactNode }) {
     }
   }, [selectPost]);
 
-  // Auto-select the first post when post list loads and nothing is selected
-  const didAutoSelectRef = useRef(false);
+  // Auto-select the first post when no post is active and the list is non-empty.
+  // This covers initial load AND when the active post is archived/deleted.
+  const isAutoSelectingRef = useRef(false);
   useEffect(() => {
-    if (didAutoSelectRef.current) return;
-    if (activePost) {
-      didAutoSelectRef.current = true;
-      return;
-    }
-    if (posts.length > 0) {
-      didAutoSelectRef.current = true;
-      // Only auto-select if URL doesn't already specify a post
-      const params = new URLSearchParams(window.location.search);
-      if (!params.get("post")) {
-        void selectPost(posts[0].id);
-      }
-    }
+    if (activePost || posts.length === 0 || isAutoSelectingRef.current) return;
+    // Don't auto-select if URL already specifies a post (initial load handles that)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("post")) return;
+    isAutoSelectingRef.current = true;
+    void selectPost(posts[0].id).finally(() => {
+      isAutoSelectingRef.current = false;
+    });
   }, [posts, activePost, selectPost]);
 
   // beforeunload — flush save using keepalive fetch (survives page close)
