@@ -317,10 +317,13 @@ export default function Home() {
   };
 
   const handleAssetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []).slice(0, 20);
     event.target.value = "";
-    if (!files.length) return;
+    const selected = Array.from(event.target.files ?? []);
+    if (!selected.length) return;
     generation.setError(null); setPublishMessage(null);
+    const remaining = 20 - localAssets.length;
+    if (remaining <= 0) return;
+    const files = selected.slice(0, remaining);
     const staged = files.map((file, i) => ({ id: `${Date.now()}-${i}-${file.name}`, name: file.name, mediaType: mediaTypeFromFile(file), previewUrl: URL.createObjectURL(file), status: "uploading" as const, size: file.size }));
     setLocalAssets((c) => [...c, ...staged]);
     setIsUploadingAssets(true);

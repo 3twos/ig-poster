@@ -193,7 +193,7 @@ function AssetTileContent({
       {/* Status indicator */}
       <span
         className={cn(
-          "absolute bottom-1.5 left-1.5 h-2 w-2 rounded-full ring-1 ring-black/30",
+          "absolute bottom-1.5 left-1.5 z-10 h-2 w-2 rounded-full ring-1 ring-black/30",
           asset.status === "uploaded"
             ? "bg-emerald-400"
             : asset.status === "uploading"
@@ -206,7 +206,7 @@ function AssetTileContent({
 
       {/* Video badge */}
       {asset.mediaType === "video" && (
-        <span className="absolute bottom-1 right-1.5 flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium text-white">
+        <span className="absolute bottom-1 right-1.5 z-10 flex items-center gap-0.5 rounded bg-black/60 px-1 py-0.5 text-[9px] font-medium text-white">
           <Film className="h-2.5 w-2.5" />
           {asset.durationSec ? formatDuration(asset.durationSec) : ""}
         </span>
@@ -263,6 +263,7 @@ function SortableAssetTile({
       <button
         type="button"
         onClick={onRemove}
+        aria-label="Remove"
         className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow transition hover:bg-red-400 group-hover:opacity-100"
       >
         <X className="h-3 w-3" />
@@ -270,11 +271,12 @@ function SortableAssetTile({
 
       {/* Reorder arrows — bottom corners, one-click */}
       {total > 1 && (
-        <div className="absolute inset-x-0 top-1 z-10 flex justify-between px-1 opacity-0 transition group-hover:opacity-100">
+        <div className="absolute inset-x-0 bottom-1 z-10 flex justify-between px-1 opacity-0 transition group-hover:opacity-100">
           <button
             type="button"
             onClick={() => onMove(-1)}
             disabled={index === 0}
+            aria-label="Move left"
             className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80 disabled:invisible"
           >
             <ArrowLeft className="h-3 w-3" />
@@ -283,6 +285,7 @@ function SortableAssetTile({
             type="button"
             onClick={() => onMove(1)}
             disabled={index === total - 1}
+            aria-label="Move right"
             className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80 disabled:invisible"
           >
             <ArrowRight className="h-3 w-3" />
