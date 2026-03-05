@@ -80,13 +80,23 @@ When interacting with PR review comments via `gh api`, use these exact endpoints
 - **Resolve review threads**: use GraphQL `resolveReviewThread` mutation with the thread's node ID
 - **Get thread node IDs**: query `reviewThreads` on the `pullRequest` object via GraphQL
 
-## Command Permissions
+## Command Permissions (Default Allowlist)
 
-Permissions are configured in `.claude/settings.json` (repo-committed). Key rules:
+To reduce approval interruptions, the following commands are pre-approved by default.
 
-- All read-only discovery/navigation commands are pre-approved.
-- All git and gh commands are pre-approved (hooks enforce safety gates).
-- `npm ci` is pre-approved. `npm install` (which modifies lockfile) requires user approval.
-- Write commands (`mkdir`, `cp`, `mv`, `rm`) must only target paths inside the active repository/worktree.
-- The worktree-guard hook detects git worktrees (via `git rev-parse`) and blocks Edit/Write/Bash file operations outside the active worktree root.
-- The pr-workflow-guard hook enforces: `--body-file` for PR bodies, `lint+test+build` before push, and resolved threads before `gh pr merge`. It resolves the PR number from the current branch if not specified explicitly.
+- Scope rule:
+  - Pre-approved command usage is limited to the active repository/worktree the agent is currently working in.
+  - Any command that writes, deletes, moves, installs, or mutates files must only target paths inside that active repository/worktree.
+  - If a write/update action is needed outside the active repository/worktree, stop and ask the user first.
+- Core read/navigation commands:
+  - `cd`, `pwd`, `ls`, `tree`, `wc`, `du`, `stat`
+  - `rg`, `rg --files`, `find`, `cat`, `head`, `tail`, `sed -n`, `cut`, `sort`, `uniq`
+  - `git status`, `git diff`, `git log`, `git show`, `git branch`, `git rev-parse`
+  - `npm run lint`, `npm run build`, `npm run test`, `npm run typecheck`
+- Web/search commands:
+  - Tool-based search/open commands (for example: `web.search_query`, `web.open`) are pre-approved.
+  - Shell web fetches are pre-approved for read-only retrieval: `curl -sSL` (GET-only), `wget -qO-` (GET-only).
+- Write/update commands (repo-scoped only):
+  - `mkdir`, `touch`, `cp`, `mv`, `rm` (paths must remain inside the active repository/worktree)
+  - `git fetch`, `git pull --ff-only`
+  - `npm install`
