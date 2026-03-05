@@ -89,8 +89,8 @@ type Props = {
   isActive: boolean;
   isDirty: boolean;
   onSelect: () => void;
-  onPostNow: () => void;
-  onSchedulePost: (scheduleAt: string) => void;
+  onPostNow?: () => void;
+  onSchedulePost?: (scheduleAt: string) => void;
   onArchive: () => void;
   onDelete: () => void;
 };
@@ -109,6 +109,7 @@ export function PostListItem({
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [scheduleAt, setScheduleAt] = useState("");
   const state = resolveState(post.status, isDirty);
+  const canQuickPublish = Boolean(onPostNow && onSchedulePost);
 
   return (
     <>
@@ -216,25 +217,29 @@ export function PostListItem({
               className="w-[182px]"
               onClick={(event) => event.stopPropagation()}
             >
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.stopPropagation();
-                  onPostNow();
-                }}
-              >
-                <Send className="h-3.5 w-3.5" />
-                Post now
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.stopPropagation();
-                  setScheduleDialogOpen(true);
-                }}
-              >
-                <CalendarClock className="h-3.5 w-3.5" />
-                Post at...
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {canQuickPublish ? (
+                <>
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.stopPropagation();
+                      onPostNow?.();
+                    }}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Post now
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.stopPropagation();
+                      setScheduleDialogOpen(true);
+                    }}
+                  >
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    Post at...
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
               <DropdownMenuItem
                 onSelect={(event) => {
                   event.stopPropagation();
@@ -284,7 +289,13 @@ export function PostListItem({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+      <Dialog
+        open={scheduleDialogOpen}
+        onOpenChange={(open) => {
+          setScheduleDialogOpen(open);
+          if (!open) setScheduleAt("");
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Post at</DialogTitle>
@@ -307,7 +318,7 @@ export function PostListItem({
             <Button
               onClick={() => {
                 if (!scheduleAt) return;
-                onSchedulePost(scheduleAt);
+                onSchedulePost?.(scheduleAt);
                 setScheduleDialogOpen(false);
               }}
               disabled={!scheduleAt}

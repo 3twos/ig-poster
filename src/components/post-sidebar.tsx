@@ -158,6 +158,7 @@ export function SidebarContent({
                 key={post.id}
                 post={post}
                 isActive={post.id === activePost?.id}
+                // Dirty state is client-side/transient for the currently loaded draft.
                 isDirty={
                   post.id === activePost?.id &&
                   (saveStatus === "unsaved" ||

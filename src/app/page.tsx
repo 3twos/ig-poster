@@ -515,10 +515,15 @@ export default function Home() {
       return;
     }
 
+    // Wait one more render for variant hydration after post selection.
+    if (activePost?.result?.variants?.length && !activeVariant) {
+      return;
+    }
+
     const scheduleAt = pendingPublishRequest.scheduleAt;
     setPendingPublishRequest(null);
     void publishToInstagramRef.current(scheduleAt);
-  }, [activePost?.id, pendingPublishRequest]);
+  }, [activePost?.id, activePost?.result?.variants?.length, activeVariant, pendingPublishRequest]);
 
   // Empty state
   if (!activePost) {
