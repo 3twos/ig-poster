@@ -31,7 +31,8 @@ export async function GET(req: Request) {
       .limit(20);
 
     return NextResponse.json({ kits: rows });
-  } catch {
+  } catch (err) {
+    console.error("[api/brand-kits]", err);
     return NextResponse.json(
       { error: "Failed to list brand kits" },
       { status: 500 },
@@ -68,7 +69,8 @@ export async function POST(req: Request) {
       .returning();
 
     return NextResponse.json({ id: row.id, kit: row });
-  } catch {
+  } catch (err) {
+    console.error("[api/brand-kits]", err);
     return NextResponse.json(
       { error: "Failed to create brand kit" },
       { status: 500 },

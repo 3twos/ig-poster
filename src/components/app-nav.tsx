@@ -1,8 +1,6 @@
 "use client";
 
-import { Command, EllipsisVertical, LoaderCircle, PanelLeft, Sparkles } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Command, EllipsisVertical, LoaderCircle, PanelLeft, Settings, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -16,14 +14,7 @@ import {
 import { usePostContext } from "@/contexts/post-context";
 import type { WorkspaceAuthStatus } from "@/lib/types";
 
-const NAV_LINKS = [
-  { href: "/", label: "Create" },
-  { href: "/brand", label: "Brand Kit" },
-  { href: "/settings", label: "Settings" },
-] as const;
-
 export function AppNav() {
-  const pathname = usePathname();
   const { toggleSidebar } = usePostContext();
   const [workspaceAuth, setWorkspaceAuth] =
     useState<WorkspaceAuthStatus | null>(null);
@@ -95,6 +86,16 @@ export function AppNav() {
           <span>K</span>
         </Button>
 
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => window.dispatchEvent(new CustomEvent("ig:open-settings"))}
+          className="text-slate-300 hover:text-white"
+          aria-label="Open settings"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
+
         {workspaceAuth?.authenticated && (
           <span className="text-xs text-slate-200">
             {workspaceAuth.user?.email ?? "Workspace user"}
@@ -114,23 +115,11 @@ export function AppNav() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[180px]">
-            {NAV_LINKS.map((link) => {
-              const isActive =
-                link.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(link.href);
-
-              return (
-                <DropdownMenuItem key={link.href} asChild>
-                  <Link
-                    href={link.href}
-                    className={isActive ? "font-semibold text-orange-200" : ""}
-                  >
-                    {link.label}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            })}
+            <DropdownMenuItem
+              onSelect={() => window.dispatchEvent(new CustomEvent("ig:open-settings"))}
+            >
+              Settings
+            </DropdownMenuItem>
             {workspaceAuth?.authenticated && (
               <>
                 <DropdownMenuSeparator />

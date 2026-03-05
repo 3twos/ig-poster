@@ -226,7 +226,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
     prevPostIdRef.current = currentId;
   }, [activePost?.id, markSaved]);
 
-  // Load post from URL on mount (one-time)
+  // Load post from URL on mount, or auto-select first post when list loads
   const didLoadUrlRef = useRef(false);
   useEffect(() => {
     if (didLoadUrlRef.current) return;
@@ -237,6 +237,20 @@ export function PostProvider({ children }: { children: ReactNode }) {
       void selectPost(postId);
     }
   }, [selectPost]);
+
+  // Auto-select the first post when no post is active and the list is non-empty.
+  // This covers initial load AND when the active post is archived/deleted.
+  const isAutoSelectingRef = useRef(false);
+  useEffect(() => {
+    if (activePost || posts.length === 0 || isAutoSelectingRef.current) return;
+    // Don't auto-select if URL already specifies a post (initial load handles that)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("post")) return;
+    isAutoSelectingRef.current = true;
+    void selectPost(posts[0].id).finally(() => {
+      isAutoSelectingRef.current = false;
+    });
+  }, [posts, activePost, selectPost]);
 
   // beforeunload — flush save using keepalive fetch (survives page close)
   const draftRef = useRef(activePost);

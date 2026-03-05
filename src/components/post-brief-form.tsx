@@ -7,7 +7,6 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
-import Link from "next/link";
 import type { ChangeEvent } from "react";
 
 import { TemplateGallery } from "@/components/template-gallery";
@@ -225,9 +224,9 @@ export function PostBriefForm({
 
         {!llmAuthStatus.connected ? (
           <p className="text-xs text-slate-400">
-            <Link href="/settings" className="underline">
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("ig:open-settings"))} className="underline">
               Connect an LLM provider
-            </Link>{" "}
+            </button>{" "}
             for AI-powered generation.
           </p>
         ) : null}

@@ -9,7 +9,7 @@ import {
   Sparkles,
   Square,
 } from "lucide-react";
-import Link from "next/link";
+
 import {
   useCallback,
   useEffect,
@@ -22,6 +22,7 @@ import {
 import type { PanelImperativeHandle } from "react-resizable-panels";
 
 import { AgentActivityPanel } from "@/components/agent-activity-panel";
+import { BrandKitModal } from "@/components/brand-kit-modal";
 import { ChatPanel } from "@/components/chat";
 import { AppShell } from "@/components/app-shell";
 import { AssetManager } from "@/components/asset-manager";
@@ -30,6 +31,7 @@ import { PostBriefForm } from "@/components/post-brief-form";
 import { PosterSection } from "@/components/poster-section";
 import { MobileSidebarDrawer, SidebarContent } from "@/components/post-sidebar";
 import { PublishSection } from "@/components/publish-section";
+import { SettingsModal } from "@/components/settings-modal";
 import { StrategySection } from "@/components/strategy-section";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +100,8 @@ export default function Home() {
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<"agent" | "chat">("agent");
   const [brandKitOptions, setBrandKitOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [brandKitsOpen, setBrandKitsOpen] = useState(false);
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
@@ -362,10 +366,14 @@ export default function Home() {
     const onGenerate = () => { if (!isAgentBusyRef.current && localAssetsRef.current.length > 0) void generateRef.current?.(); };
     const onToggleEditor = () => setEditorMode((v) => !v);
     const onSelectVariant = (e: Event) => { const idx = (e as CustomEvent).detail?.index; if (typeof idx === "number" && resultRef.current?.variants[idx]) dispatch({ type: "SET_ACTIVE_VARIANT", variantId: resultRef.current.variants[idx].id }); };
+    const onOpenSettings = () => setSettingsOpen(true);
+    const onOpenBrandKits = () => setBrandKitsOpen(true);
     window.addEventListener("ig:generate", onGenerate);
     window.addEventListener("ig:toggle-editor", onToggleEditor);
     window.addEventListener("ig:select-variant", onSelectVariant);
-    return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); };
+    window.addEventListener("ig:open-settings", onOpenSettings);
+    window.addEventListener("ig:open-brand-kits", onOpenBrandKits);
+    return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:open-settings", onOpenSettings); window.removeEventListener("ig:open-brand-kits", onOpenBrandKits); };
   }, [dispatch]);
 
   const renderPosterToDataUrl = async () => {
@@ -455,21 +463,25 @@ export default function Home() {
   // Empty state
   if (!activePost) {
     return (
-      <AppShell>
-        <div className="flex min-h-[60vh] items-center justify-center">
-          <div className="mx-auto max-w-md text-center">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-              <Sparkles className="h-10 w-10 text-orange-300/60" />
+      <>
+        <AppShell>
+          <div className="flex min-h-[60vh] items-center justify-center">
+            <div className="mx-auto max-w-md text-center">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                <Sparkles className="h-10 w-10 text-orange-300/60" />
+              </div>
+              <h2 className="mt-6 text-xl font-semibold text-white">No post selected</h2>
+              <p className="mt-2 text-sm text-slate-400">Select a post from the sidebar or create a new one to get started.</p>
+              <Button onClick={() => { setIsCreatingPost(true); createNewPost().catch((e) => { const msg = e instanceof Error ? e.message : "Failed to create post"; generation.setError(msg); toast.error(msg); }).finally(() => setIsCreatingPost(false)); }} disabled={isCreatingPost} className="mt-6">
+                {isCreatingPost ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Create Your First Post
+              </Button>
             </div>
-            <h2 className="mt-6 text-xl font-semibold text-white">No post selected</h2>
-            <p className="mt-2 text-sm text-slate-400">Select a post from the sidebar or create a new one to get started.</p>
-            <Button onClick={() => { setIsCreatingPost(true); void createNewPost().finally(() => setIsCreatingPost(false)); }} disabled={isCreatingPost} className="mt-6">
-              {isCreatingPost ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Create Your First Post
-            </Button>
           </div>
-        </div>
-      </AppShell>
+        </AppShell>
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} />
+        <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); }} />
+      </>
     );
   }
 
@@ -480,7 +492,7 @@ export default function Home() {
           {!brand.brandName && (
             <div className="mx-4 mb-4 rounded-xl border border-orange-300/30 bg-orange-400/10 p-3 text-xs text-orange-100 md:mx-8">
               No saved brand kit found.{" "}
-              <Link href="/brand" className="font-semibold underline">Set up your Brand Kit</Link>{" "}
+              <button type="button" onClick={() => setBrandKitsOpen(true)} className="font-semibold underline">Set up your Brand Kit</button>{" "}
               for better results.
             </div>
           )}
@@ -603,6 +615,9 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} />
+      <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); }} />
     </>
   );
 }

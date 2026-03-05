@@ -8,7 +8,7 @@ import {
   Settings,
   WandSparkles,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -26,7 +26,18 @@ import { usePostContext } from "@/contexts/post-context";
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const { posts, selectPost, createNewPost, activePost } = usePostContext();
+
+  const dispatchModalEvent = useCallback((eventName: string) => {
+    if (pathname !== "/") {
+      // Navigate home first, then open modal after a tick
+      router.push("/");
+      setTimeout(() => window.dispatchEvent(new CustomEvent(eventName)), 300);
+    } else {
+      window.dispatchEvent(new CustomEvent(eventName));
+    }
+  }, [pathname, router]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -88,14 +99,14 @@ export function CommandPalette() {
         <CommandGroup heading="Navigate">
           <CommandItem onSelect={() => runAction(() => router.push("/"))}>
             <LayoutDashboard className="h-4 w-4" />
-            <span>Create</span>
+            <span>Posts</span>
           </CommandItem>
-          <CommandItem onSelect={() => runAction(() => router.push("/brand"))}>
+          <CommandItem onSelect={() => runAction(() => dispatchModalEvent("ig:open-brand-kits"))}>
             <Palette className="h-4 w-4" />
-            <span>Brand Kit</span>
+            <span>Brand Kits</span>
           </CommandItem>
           <CommandItem
-            onSelect={() => runAction(() => router.push("/settings"))}
+            onSelect={() => runAction(() => dispatchModalEvent("ig:open-settings"))}
           >
             <Settings className="h-4 w-4" />
             <span>Settings</span>

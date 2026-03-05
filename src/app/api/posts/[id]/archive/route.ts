@@ -36,7 +36,8 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     return NextResponse.json(updated);
-  } catch {
+  } catch (err) {
+    console.error("[api/posts/archive]", err);
     return NextResponse.json(
       { error: "Failed to archive post" },
       { status: 500 },
@@ -78,7 +79,8 @@ export async function DELETE(req: Request, ctx: Ctx) {
       .returning();
 
     return NextResponse.json(updated);
-  } catch {
+  } catch (err) {
+    console.error("[api/posts/archive]", err);
     return NextResponse.json(
       { error: "Failed to unarchive post" },
       { status: 500 },
