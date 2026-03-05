@@ -28,7 +28,11 @@ import {
   type PromptConfigState,
   INITIAL_BRAND,
 } from "@/lib/types";
-import { parseApiError, statusChip } from "@/lib/upload-helpers";
+import {
+  parseApiError,
+  revokeObjectUrlIfNeeded,
+  statusChip,
+} from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
 
 interface BrandKitModalProps {
@@ -74,7 +78,11 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
 
   useEffect(() => { logoCleanupRef.current = logo; }, [logo]);
   useEffect(() => {
-    return () => { if (logoCleanupRef.current) URL.revokeObjectURL(logoCleanupRef.current.previewUrl); };
+    return () => {
+      if (logoCleanupRef.current) {
+        revokeObjectUrlIfNeeded(logoCleanupRef.current.previewUrl);
+      }
+    };
   }, []);
 
   const loadKitData = useCallback((kit: BrandKitRow) => {
@@ -161,7 +169,12 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     event.target.value = "";
     if (!file) return;
     const nextLogo: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
-    setLogo((current) => { if (current) URL.revokeObjectURL(current.previewUrl); return nextLogo; });
+    setLogo((current) => {
+      if (current) {
+        revokeObjectUrlIfNeeded(current.previewUrl);
+      }
+      return nextLogo;
+    });
     try {
       const url = await uploadFileToStorage(file, "logos");
       setLogo((current) => current ? { ...current, status: "uploaded", storageUrl: url } : null);

@@ -68,16 +68,11 @@ import {
   extractVideoMetadata,
   mediaTypeFromFile,
   parseApiError,
+  revokeObjectUrlIfNeeded,
 } from "@/lib/upload-helpers";
 import { withPerf } from "@/lib/perf";
 import { cn, slugify } from "@/lib/utils";
 import { toast } from "sonner";
-
-const revokeObjectUrlIfNeeded = (url: string) => {
-  if (url.startsWith("blob:")) {
-    URL.revokeObjectURL(url);
-  }
-};
 
 export default function Home() {
   const {
