@@ -88,14 +88,14 @@ export function CommandPalette() {
         <CommandGroup heading="Navigate">
           <CommandItem onSelect={() => runAction(() => router.push("/"))}>
             <LayoutDashboard className="h-4 w-4" />
-            <span>Create</span>
+            <span>Posts</span>
           </CommandItem>
-          <CommandItem onSelect={() => runAction(() => router.push("/brand"))}>
+          <CommandItem onSelect={() => runAction(() => { window.dispatchEvent(new CustomEvent("ig:open-brand-kits")); })}>
             <Palette className="h-4 w-4" />
-            <span>Brand Kit</span>
+            <span>Brand Kits</span>
           </CommandItem>
           <CommandItem
-            onSelect={() => runAction(() => router.push("/settings"))}
+            onSelect={() => runAction(() => { window.dispatchEvent(new CustomEvent("ig:open-settings")); })}
           >
             <Settings className="h-4 w-4" />
             <span>Settings</span>
