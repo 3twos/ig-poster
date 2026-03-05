@@ -84,9 +84,8 @@ When interacting with PR review comments via `gh api`, use these exact endpoints
 
 Permissions are configured in `.claude/settings.json` (repo-committed). Key rules:
 
-- All read-only discovery/navigation commands are pre-approved.
-- All git and gh commands are pre-approved (hooks enforce safety gates).
+- Common git and gh commands used in this workflow are pre-approved; other invocations may require explicit user approval or additional configuration in `.claude/settings.json`.
 - `npm ci` is pre-approved. `npm install` (which modifies lockfile) requires user approval.
 - Write commands (`mkdir`, `cp`, `mv`, `rm`) must only target paths inside the active repository/worktree.
-- The worktree-guard hook blocks writes outside the active worktree.
-- The pr-workflow-guard hook enforces: `--body-file` for PR bodies, lint+build before push, resolved threads before merge.
+- The worktree-guard hook detects git worktrees (via `git rev-parse`) and blocks Edit/Write/Bash file operations outside the active worktree root.
+- The pr-workflow-guard hook enforces: `--body-file` for PR bodies, `lint+test+build` before push, and resolved threads before `gh pr merge`. It resolves the PR number from the current branch if not specified explicitly.
