@@ -81,12 +81,34 @@ npm run build
 
 Run these before opening or updating a PR.
 
+## Monitor CI Timings
+
+Use the CI timing monitor to keep GitHub Actions fast and catch regressions against baseline:
+
+```bash
+# monitor PR CI timings for current branch and compare against main push runs
+./scripts/monitor-ci-timing.sh --event pull_request --interval 20
+
+# optional: monitor a specific workflow/branch with stricter regression threshold
+./scripts/monitor-ci-timing.sh --workflow CI --branch main --regression-threshold 15
+```
+
+Useful options:
+- `--repo <owner/repo>` (defaults from `origin`)
+- `--workflow <name|id|file>` (default: `CI`)
+- `--branch <branch>` and optional `--event <event>`
+- `--baseline-branch <branch>` + `--baseline-event <event>` (defaults: `main`, `push`)
+- `--window <count>` (default: 20)
+- `--top-jobs <count>` (default: 6)
+- `--regression-threshold <pct>` (default: 20)
+- `--plain` for non-dashboard output
+
 ## Monitor Vercel Deployments
 
 Use the monitor script for continuous status/alert monitoring while you work (stop with `Ctrl+C`):
 
 ```bash
-# recommended: watch the latest deployment for a project
+# recommended: watch recent project deployments (parallel-aware)
 VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
 # optional: watch a specific deployment continuously
@@ -95,13 +117,19 @@ VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --
 
 Optional environment variables:
 - `VERCEL_TOKEN` (recommended over `--token` for better shell-history hygiene)
-- `VERCEL_PROJECT_ID` (for latest-deployment watcher mode)
+- `VERCEL_PROJECT_ID` (for project watcher mode)
 - `VERCEL_PROJECT_SHORT_NAME` (optional short name for spoken alerts)
 - `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (use for team-scoped deployments)
 
+CLI options:
+- `--max-deployments <count>` controls how many recent deployments are shown in project mode
+- `--event-mode auto|stream|poll` controls stream-vs-poll event ingestion (default: `auto`)
+
 The script emits spoken alerts when possible (`say`, `spd-say`, or `espeak`). Completion duration format is seconds if under 1 minute, otherwise `mm:ss`.
 Interactive runs use a non-scrolling dashboard by default; pass `--plain` for line-by-line log output.
-Dashboard view now includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and a deployment-stage progress bar.
+Dashboard view includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and richer per-deployment progress bars.
+Project mode now tracks multiple deployments in parallel, with separate status, step, timing, and error details per deployment.
+Voice alerts are queued so multiple deployment events do not speak over each other.
 Dashboard and alerts explicitly distinguish Preview vs Production deployments and include the branch name.
 Production voice alerts include a subtle two-hit beat before speech.
 

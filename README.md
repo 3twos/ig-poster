@@ -189,6 +189,27 @@ Comprehensive research notes for Instagram growth mechanics + vineyard/wine comp
 - Workflow: `.github/workflows/ci.yml`
 - Runs lint + typecheck + test coverage + build on PRs and pushes
 
+### CI timing monitor
+Use the CI timing monitor to watch queue/exec/total durations and detect regressions against `main`:
+
+```bash
+# monitor current branch PR runs and compare to main push baseline
+./scripts/monitor-ci-timing.sh --event pull_request --interval 20
+
+# monitor a specific branch/workflow and tighten regression threshold
+./scripts/monitor-ci-timing.sh --workflow CI --branch main --regression-threshold 15
+```
+
+Key options:
+- `--repo <owner/repo>` (defaults from `origin` remote)
+- `--workflow <name|id|file>` (default: `CI`)
+- `--branch <branch>` + optional `--event <event>`
+- `--baseline-branch <branch>` + `--baseline-event <event>` (defaults: `main`, `push`)
+- `--window <count>` (default: 20 recent runs)
+- `--top-jobs <count>` (default: 6 slowest jobs shown)
+- `--regression-threshold <pct>` (default: 20)
+- `--plain` for line-by-line logs instead of dashboard
+
 ### Vercel deployment workflow
 - Workflow: `.github/workflows/vercel.yml`
 - PRs deploy Preview
@@ -215,7 +236,7 @@ After these are set, pushes to `main` auto-deploy production and PRs auto-deploy
 Monitor deployments continuously from your terminal (stop with `Ctrl+C`):
 
 ```bash
-# watch the latest deployment for a project (recommended for day-to-day alerting)
+# watch recent project deployments (parallel-aware, recommended for day-to-day alerting)
 VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
 # watch one specific deployment id/url continuously
@@ -224,13 +245,19 @@ VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --
 
 Environment options:
 - `VERCEL_TOKEN` (recommended over `--token` for better shell-history hygiene)
-- `VERCEL_PROJECT_ID` (for latest-deployment watcher mode)
+- `VERCEL_PROJECT_ID` (for project watcher mode)
 - `VERCEL_PROJECT_SHORT_NAME` (optional short name for spoken alerts)
 - `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (optional, for team-scoped deploys)
 
+CLI options:
+- `--max-deployments <count>` controls how many recent deployments are shown in project mode
+- `--event-mode auto|stream|poll` controls stream-vs-poll event ingestion (default: `auto`)
+
 The monitor announces completion/failure in the terminal and uses spoken alerts (via `say`/`spd-say`/`espeak` if available). Completion duration is formatted as seconds when under 1 minute, otherwise `mm:ss`.
 In an interactive terminal it uses a non-scrolling dashboard view by default; use `--plain` for line-by-line logs.
-Dashboard view now includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and a deployment-stage progress bar.
+Dashboard view includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and richer per-deployment progress bars.
+Project mode now tracks multiple deployments in parallel, with separate status, step, timing, and error details per deployment.
+Voice alerts are queued so multiple deployment events do not speak over each other.
 Preview vs Production and branch name are explicitly labeled in the dashboard and alerts.
 Production voice alerts include a subtle two-hit beat before speech.
 
