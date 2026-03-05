@@ -101,6 +101,7 @@ Optional environment variables:
 
 The script emits spoken alerts when possible (`say`, `spd-say`, or `espeak`). Completion duration format is seconds if under 1 minute, otherwise `mm:ss`.
 Interactive runs use a non-scrolling dashboard by default; pass `--plain` for line-by-line log output.
+Dashboard view now includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and a deployment-stage progress bar.
 Dashboard and alerts explicitly distinguish Preview vs Production deployments and include the branch name.
 Production voice alerts include a subtle two-hit beat before speech.
 
