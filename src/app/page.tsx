@@ -318,7 +318,7 @@ export default function Home() {
     if (!files.length) return;
     generation.setError(null); setPublishMessage(null);
     const staged = files.map((file, i) => ({ id: `${Date.now()}-${i}-${file.name}`, name: file.name, mediaType: mediaTypeFromFile(file), previewUrl: URL.createObjectURL(file), status: "uploading" as const, size: file.size }));
-    setLocalAssets((c) => { c.forEach((a) => URL.revokeObjectURL(a.previewUrl)); return staged; });
+    setLocalAssets((c) => [...c, ...staged]);
     setIsUploadingAssets(true);
     await Promise.allSettled(files.map(async (file, i) => {
       const itemId = staged[i].id;
