@@ -5,8 +5,8 @@
 Use this flow for every non-trivial change:
 
 1. Create a dedicated git worktree for the task (never work in a shared worktree).
-   - Example: `git worktree add ../ig-poster-<task> -b codex/<task>`
-2. In that worktree, create/use a branch with prefix `codex/`.
+   - Example: `git worktree add ../ig-poster-<task> -b claude/<task>`
+2. In that worktree, create/use a branch with prefix `claude/`.
 3. Run a pre-flight isolation check before editing:
    - `git status --short`
    - If there are unexpected tracked/untracked files, stop and ask the user before proceeding.
@@ -17,9 +17,9 @@ Use this flow for every non-trivial change:
    - validation evidence
    - any known risks or follow-ups
 7. Copilot review is automatically requested when the PR is created (do not manually request it).
-8. Wait for Copilot review to complete before taking next steps.
-   - Copilot review may take around 5 minutes; wait and re-check before re-triggering.
-   - Copilot often finds important bugs; do not skip this wait.
+8. After creating the PR, continue working on other tasks while Copilot review runs (~5 minutes).
+   - Before requesting merge approval, verify Copilot review is complete.
+   - Copilot often finds important bugs; always address its comments before merging.
 9. Process review comments:
    - address each actionable comment with code changes, tests, or explicit rationale
    - reply on each comment with resolution details
@@ -34,18 +34,17 @@ Use this flow for every non-trivial change:
 12. Wait for explicit user approval before merging.
 13. Do not merge until user says to merge.
 
-## Documentation Maintenance (Mandatory)
+## Documentation Maintenance
 
-- Treat these files as required living docs that must stay accurate on every PR:
+These docs must stay accurate:
   - `docs/overview.md`
   - `docs/user-guide.md`
   - `docs/architecture.md`
   - `docs/dev-getting-started.md`
-- For every PR, review these docs for impact and update them when product behavior, UX flow, architecture, or developer workflow changes.
-- Before asking for merge approval, include a doc-impact note in the PR update:
-  - list which of the four docs were updated, or
-  - explicitly state why no updates were required.
-- Do not request merge approval while any of the above docs are stale relative to the code in the PR.
+
+- Update docs when the PR changes user-facing behavior, architecture, or setup steps.
+- For purely internal changes (refactors, dependency updates, tooling), state "No doc impact" in the PR update.
+- Before asking for merge approval, include a brief doc-impact note (which docs were updated, or "No doc impact").
 
 ## Merge Gate (Mandatory)
 
@@ -81,28 +80,12 @@ When interacting with PR review comments via `gh api`, use these exact endpoints
 - **Resolve review threads**: use GraphQL `resolveReviewThread` mutation with the thread's node ID
 - **Get thread node IDs**: query `reviewThreads` on the `pullRequest` object via GraphQL
 
-## Command Permissions (Default Allowlist)
+## Command Permissions
 
-To reduce approval interruptions, the following commands are pre-approved by default.
+Permissions are configured in `.claude/settings.json` (repo-committed). Key rules:
 
-- Scope rule:
-  - Read-only discovery/navigation commands are pre-approved.
-  - Any command that writes, deletes, moves, installs, or mutates files must only target paths inside the active repository/worktree.
-  - If a write/update action is needed outside the active repository/worktree, stop and ask the user first.
-- Core read/navigation commands:
-  - `cd`, `pwd`, `ls`, `tree`, `wc`, `du`, `stat`
-  - `rg`, `rg --files`, `find`, `cat`, `head`, `tail`, `sed -n`, `cut`, `sort`, `uniq`
-  - `git status`, `git diff`, `git log`, `git show`, `git branch`, `git rev-parse`
-  - `npm run lint`, `npm run build`
-- Web/search commands:
-  - Tool-based search/open commands (for example: `web.search_query`, `web.open`) are pre-approved.
-  - Shell web fetches are pre-approved only for simple read-only GET requests using exact forms:
-    - `curl -sSL <URL>`
-    - `wget -qO- <URL>`
-    - Do not add flags that change method or send a request body (for example: `-X`, `-d`, `--data`, `--data-*`, `--upload-file`, `-F`, `--form`).
-    - For non-GET/authenticated/upload requests, use tool-based web commands instead of `curl`/`wget`.
-- Write/update commands (repo-scoped only):
-  - `mkdir`, `touch`, `cp`, `mv`, `rm` (paths must remain inside the active repository/worktree)
-  - `git fetch`, `git pull --ff-only`
-  - `npm ci` (preferred lockfile install)
-  - `npm install` is not pre-approved when it will add/update/remove dependencies or modify `package.json`/`package-lock.json`; ask the user first.
+- Common git and gh commands used in this workflow are pre-approved; other invocations may require explicit user approval or additional configuration in `.claude/settings.json`.
+- `npm ci` is pre-approved. `npm install` (which modifies lockfile) requires user approval.
+- Write commands (`mkdir`, `cp`, `mv`, `rm`) must only target paths inside the active repository/worktree.
+- The worktree-guard hook detects git worktrees (via `git rev-parse`) and blocks Edit/Write/Bash file operations outside the active worktree root.
+- The pr-workflow-guard hook enforces: `--body-file` for PR bodies, `lint+test+build` before push, and resolved threads before `gh pr merge`. It resolves the PR number from the current branch if not specified explicitly.

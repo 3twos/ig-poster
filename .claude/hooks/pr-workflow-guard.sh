@@ -5,11 +5,11 @@
 # Rules enforced:
 # 1. gh pr create/edit/comment must use --body-file, never inline --body
 # 2. gh pr merge blocked if unresolved review threads exist
-# 3. gh pr merge blocked if PR has merge conflicts
-# 4. git push blocked if lint or build hasn't been run in this session
+# 3. gh pr merge blocked if PR has merge conflicts or conflict status unknown
+# 4. git push blocked unless lint, test, and build have been run this session
 #
-# Note: Additional workflow rules (e.g., explicit user approval markers, Copilot review waits)
-# are defined in AGENTS.md but are not enforced by this hook script.
+# Note: Additional workflow rules (e.g., explicit user approval, Copilot review waits)
+# are defined in AGENTS.md but enforced by convention, not this hook.
 
 set -euo pipefail
 
@@ -46,64 +46,73 @@ if echo "$CMD" | grep -qE '\bgh\s+pr\s+merge\b'; then
   PR_NUM=$(echo "$CMD" | grep -oE '\bgh\s+pr\s+merge\s+([0-9]+)' | awk '{print $NF}')
 
   if [ -z "$PR_NUM" ]; then
-    # No explicit PR number — resolve from current branch
-    PR_NUM=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
+    # Try to resolve PR number from current branch
+    PR_NUM=$(gh pr view --json number --jq .number 2>/dev/null || echo "")
   fi
 
   if [ -z "$PR_NUM" ]; then
-    echo "BLOCKED: Could not determine PR number for merge. Specify the PR number explicitly (AGENTS.md §Merge Gate)." >&2
+    echo "BLOCKED: Could not determine PR number. Specify it explicitly: gh pr merge <number> (AGENTS.md §Merge Gate)." >&2
     exit 2
   fi
 
-  # Derive repo owner/name from current gh context
-  NAME_WITH_OWNER=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
+  # Determine repository owner/name dynamically
+  REPO_NWO=""
+  if [[ -n "${GH_REPO:-}" ]]; then
+    REPO_NWO="$GH_REPO"
+  else
+    REPO_NWO=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || echo "")
+  fi
 
-  if [ -z "$NAME_WITH_OWNER" ]; then
-    echo "BLOCKED: Could not determine repo for merge gate check. Verify gh context." >&2
+  if [ -z "$REPO_NWO" ]; then
+    echo "BLOCKED: Could not determine repository. Check manually before merging (AGENTS.md §Merge Gate)." >&2
     exit 2
   fi
 
-  REPO_OWNER=${NAME_WITH_OWNER%%/*}
-  REPO_NAME=${NAME_WITH_OWNER##*/}
+  REPO_OWNER="${REPO_NWO%%/*}"
+  REPO_NAME="${REPO_NWO##*/}"
 
   # Check for unresolved review threads
-  UNRESOLVED=$(gh api graphql \
-    -f owner="$REPO_OWNER" \
-    -f name="$REPO_NAME" \
-    -F number="$PR_NUM" \
-    -f query='
-      query($owner: String!, $name: String!, $number: Int!) {
-        repository(owner: $owner, name: $name) {
-          pullRequest(number: $number) {
-            reviewThreads(first: 50) {
-              nodes { isResolved }
-            }
+  UNRESOLVED=$(gh api graphql -f query="
+    query(\$owner: String!, \$name: String!, \$number: Int!) {
+      repository(owner: \$owner, name: \$name) {
+        pullRequest(number: \$number) {
+          reviewThreads(first: 50) {
+            nodes { isResolved }
           }
         }
-      }' 2>/dev/null | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' 2>/dev/null || echo "unknown")
+      }
+    }" -F owner="$REPO_OWNER" -F name="$REPO_NAME" -F number="$PR_NUM" 2>/dev/null | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' 2>/dev/null || echo "unknown")
 
-    if [[ "$UNRESOLVED" == "unknown" ]]; then
-      echo "BLOCKED: Could not verify review thread status for PR #$PR_NUM. Check manually before merging (AGENTS.md §Merge Gate)." >&2
-      exit 2
-    elif [[ "$UNRESOLVED" -gt 0 ]]; then
-      echo "BLOCKED: PR #$PR_NUM has $UNRESOLVED unresolved review thread(s). Resolve all conversations before merging (AGENTS.md §Merge Gate)." >&2
-      exit 2
-    fi
+  if [[ "$UNRESOLVED" == "unknown" ]]; then
+    echo "BLOCKED: Could not verify review thread status for PR #$PR_NUM. Check manually before merging (AGENTS.md §Merge Gate)." >&2
+    exit 2
+  elif [[ "$UNRESOLVED" -gt 0 ]]; then
+    echo "BLOCKED: PR #$PR_NUM has $UNRESOLVED unresolved review thread(s). Resolve all conversations before merging (AGENTS.md §Merge Gate)." >&2
+    exit 2
+  fi
 
-    # Check for merge conflicts
-    MERGEABLE=$(gh pr view "$PR_NUM" --json mergeable --jq '.mergeable' 2>/dev/null || echo "unknown")
-    if [[ "$MERGEABLE" == "CONFLICTING" ]]; then
-      echo "BLOCKED: PR #$PR_NUM has merge conflicts. Rebase or merge the base branch first (AGENTS.md §Merge Gate)." >&2
-      exit 2
-    fi
+  # Check for merge conflicts
+  MERGEABLE=$(gh pr view "$PR_NUM" --json mergeable --jq '.mergeable' 2>/dev/null || echo "unknown")
+  if [[ "$MERGEABLE" == "unknown" ]]; then
+    echo "BLOCKED: Could not verify merge conflict status for PR #$PR_NUM. Check manually before merging (AGENTS.md §Merge Gate)." >&2
+    exit 2
+  elif [[ "$MERGEABLE" == "CONFLICTING" ]]; then
+    echo "BLOCKED: PR #$PR_NUM has merge conflicts. Rebase or merge the base branch first (AGENTS.md §Merge Gate)." >&2
+    exit 2
   fi
 fi
 
 # ─── Rule 4: Lint+test+build before push ─────────────────────────────────
-# Track lint/test/build runs via marker files; scoped to repo root to avoid cross-repo leaks.
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "unknown")
-REPO_HASH=$(echo "$REPO_ROOT" | shasum -a 256 | cut -c1-12)
-MARKER_DIR="/tmp/.claude-pr-guards-${REPO_HASH}"
+# Track lint/test/build runs via marker files; block push if missing.
+# Namespace markers by repo root to avoid cross-repo contamination.
+MARKER_BASE_DIR="/tmp/.claude-pr-guards"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -n "$REPO_ROOT" ]; then
+  REPO_HASH=$(printf '%s' "$REPO_ROOT" | shasum | awk '{print $1}')
+  MARKER_DIR="$MARKER_BASE_DIR/$REPO_HASH"
+else
+  MARKER_DIR="$MARKER_BASE_DIR/unknown-repo"
+fi
 
 # Record lint/test/build completions
 if echo "$CMD" | grep -qE '\bnpm\s+run\s+lint\b'; then
