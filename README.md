@@ -206,7 +206,7 @@ Environment options:
 
 The monitor announces completion/failure in the terminal and uses spoken alerts (via `say`/`spd-say`/`espeak` if available). Completion duration is formatted as seconds when under 1 minute, otherwise `mm:ss`.
 In an interactive terminal it uses a non-scrolling dashboard view by default; use `--plain` for line-by-line logs.
-Preview vs Production is explicitly labeled in the dashboard and alerts.
+Preview vs Production and branch name are explicitly labeled in the dashboard and alerts.
 
 ## Vercel Cron
 

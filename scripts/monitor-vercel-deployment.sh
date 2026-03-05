@@ -142,6 +142,17 @@ if (payload && payload.error) {
 const text = (value) => (typeof value === "string" ? value : "");
 const intMs = (value) =>
   typeof value === "number" && Number.isFinite(value) ? String(Math.trunc(value)) : "";
+const pick = (...values) =>
+  values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
+const normalizeBranch = (value) => {
+  let branch = pick(value).trim();
+  if (!branch) return "";
+  if (branch.startsWith("refs/heads/")) branch = branch.slice("refs/heads/".length);
+  try {
+    branch = decodeURIComponent(branch);
+  } catch {}
+  return branch;
+};
 
 const status = text(payload.readyState || payload.state).toUpperCase() || "UNKNOWN";
 const deploymentId = text(payload.id || payload.uid);
@@ -149,10 +160,21 @@ const deploymentUrl = text(payload.url) ? `https://${payload.url}` : "";
 const createdAtMs = intMs(payload.createdAt);
 const readyAtMs = intMs(payload.ready);
 const target = text(payload.target).toLowerCase();
+const branch = normalizeBranch(
+  pick(
+    payload?.meta?.githubCommitRef,
+    payload?.meta?.gitlabCommitRef,
+    payload?.meta?.bitbucketCommitRef,
+    payload?.meta?.gitCommitRef,
+    payload?.meta?.branch,
+    payload?.meta?.commitRef,
+    payload?.gitSource?.ref,
+  ),
+);
 const errorMessage = text(payload.errorMessage || payload.errorCode);
 
 process.stdout.write(
-  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, errorMessage].join("\u001f"),
+  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage].join("\u001f"),
 );
 '
 }
@@ -187,12 +209,34 @@ if (deployments.length === 0) {
 
 const latest = deployments[0] ?? {};
 const text = (value) => (typeof value === "string" ? value : "");
+const pick = (...values) =>
+  values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
+const normalizeBranch = (value) => {
+  let branch = pick(value).trim();
+  if (!branch) return "";
+  if (branch.startsWith("refs/heads/")) branch = branch.slice("refs/heads/".length);
+  try {
+    branch = decodeURIComponent(branch);
+  } catch {}
+  return branch;
+};
 const id = text(latest.uid || latest.id);
 const state = text(latest.readyState || latest.state).toUpperCase() || "UNKNOWN";
 const url = text(latest.url) ? `https://${latest.url}` : "";
 const target = text(latest.target).toLowerCase();
+const branch = normalizeBranch(
+  pick(
+    latest?.meta?.githubCommitRef,
+    latest?.meta?.gitlabCommitRef,
+    latest?.meta?.bitbucketCommitRef,
+    latest?.meta?.gitCommitRef,
+    latest?.meta?.branch,
+    latest?.meta?.commitRef,
+    latest?.gitSource?.ref,
+  ),
+);
 
-process.stdout.write([id, state, url, target].join("\u001f"));
+process.stdout.write([id, state, url, target, branch].join("\u001f"));
 '
 }
 
@@ -273,6 +317,32 @@ friendly_environment_label() {
   esac
 }
 
+friendly_branch_label() {
+  local branch="$1"
+  local target="$2"
+
+  if [[ -n "$branch" ]]; then
+    printf '%s' "$branch"
+    return
+  fi
+  if [[ "$target" == "production" || "$target" == "PRODUCTION" ]]; then
+    printf '%s' "main"
+    return
+  fi
+  printf '%s' "unknown"
+}
+
+spoken_branch_name() {
+  local branch="$1"
+  local normalized
+
+  normalized="$branch"
+  normalized="${normalized//\// slash }"
+  normalized="${normalized//-/ }"
+  normalized="${normalized//_/ }"
+  printf '%s' "$normalized"
+}
+
 friendly_host() {
   local deployment_url="$1"
   local host
@@ -322,6 +392,7 @@ render_dashboard() {
   printf 'Project      : %s\n' "${DASH_PROJECT_NAME:-n/a}"
   printf 'Mode         : %s\n' "${DASH_MODE_LABEL:-n/a}"
   printf 'Environment  : %s\n' "${DASH_ENV_LABEL:-Preview}"
+  printf 'Branch       : %s\n' "${DASH_BRANCH_LABEL:-unknown}"
   printf 'Status       : %s\n' "${DASH_STATUS_LABEL:-Unknown}"
   printf 'Deployment   : %s\n' "${DASH_DEPLOYMENT_LABEL:-n/a}"
   printf 'URL          : %s\n' "${DASH_URL_LABEL:-n/a}"
@@ -438,6 +509,7 @@ DASH_PROJECT_NAME="n/a"
 DASH_MODE_LABEL="n/a"
 DASH_STATUS_LABEL="Waiting"
 DASH_ENV_LABEL="Preview"
+DASH_BRANCH_LABEL="unknown"
 DASH_DEPLOYMENT_LABEL="n/a"
 DASH_URL_LABEL="n/a"
 DASH_STARTED_LABEL="n/a"
@@ -621,6 +693,7 @@ ACTIVE_TERMINAL_ANNOUNCED=0
 ACTIVE_FIRST_SEEN_EPOCH="$(date +%s)"
 ACTIVE_PROJECT_SHORT_NAME=""
 ACTIVE_TARGET_KIND=""
+ACTIVE_BRANCH_NAME=""
 NO_DEPLOYMENTS_REPORTED=0
 
 while true; do
@@ -649,6 +722,8 @@ while true; do
         NO_DEPLOYMENTS_REPORTED=1
       fi
       DASH_STATUS_LABEL="Waiting for deployment"
+      DASH_ENV_LABEL="Preview"
+      DASH_BRANCH_LABEL="unknown"
       DASH_DEPLOYMENT_LABEL="n/a"
       DASH_URL_LABEL="n/a"
       DASH_STARTED_LABEL="n/a"
@@ -659,7 +734,7 @@ while true; do
     fi
 
     NO_DEPLOYMENTS_REPORTED=0
-    IFS=$'\x1f' read -r LATEST_ID LATEST_STATE LATEST_URL LATEST_TARGET <<<"${LATEST_PARSED}"
+    IFS=$'\x1f' read -r LATEST_ID LATEST_STATE LATEST_URL LATEST_TARGET LATEST_BRANCH <<<"${LATEST_PARSED}"
 
     if [[ -z "$LATEST_ID" ]]; then
       warn_line "Latest deployment payload did not include a deployment id. Retrying..."
@@ -676,9 +751,11 @@ while true; do
       ACTIVE_FIRST_SEEN_EPOCH="$(date +%s)"
       ACTIVE_PROJECT_SHORT_NAME="$(derive_short_project_name "${LATEST_URL}" "${ACTIVE_TARGET}")"
       ACTIVE_TARGET_KIND="$LATEST_TARGET"
+      ACTIVE_BRANCH_NAME="$(friendly_branch_label "$LATEST_BRANCH" "$LATEST_TARGET")"
       DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
       DASH_STATUS_LABEL="$(friendly_status "${LATEST_STATE}")"
       DASH_ENV_LABEL="$(friendly_environment_label "${LATEST_TARGET}")"
+      DASH_BRANCH_LABEL="$ACTIVE_BRANCH_NAME"
       DASH_DEPLOYMENT_LABEL="$(short_deployment_label "${ACTIVE_TARGET}")"
       DASH_URL_LABEL="$(friendly_host "${LATEST_URL}")"
       DASH_STARTED_LABEL="n/a"
@@ -711,7 +788,7 @@ while true; do
     continue
   fi
 
-  IFS=$'\x1f' read -r STATUS DEPLOYMENT_ID DEPLOYMENT_URL CREATED_AT_MS READY_AT_MS DEPLOYMENT_TARGET ERROR_MESSAGE <<<"${PARSED}"
+  IFS=$'\x1f' read -r STATUS DEPLOYMENT_ID DEPLOYMENT_URL CREATED_AT_MS READY_AT_MS DEPLOYMENT_TARGET DEPLOYMENT_BRANCH ERROR_MESSAGE <<<"${PARSED}"
   if [[ -n "$DEPLOYMENT_ID" ]]; then
     ACTIVE_TARGET="$DEPLOYMENT_ID"
   else
@@ -720,12 +797,15 @@ while true; do
   ACTIVE_PROJECT_SHORT_NAME="$(derive_short_project_name "${DEPLOYMENT_URL}" "${ACTIVE_TARGET}")"
   ACTIVE_TARGET_KIND="$DEPLOYMENT_TARGET"
   ACTIVE_ENV_LABEL="$(friendly_environment_label "${ACTIVE_TARGET_KIND}")"
+  ACTIVE_BRANCH_NAME="$(friendly_branch_label "$DEPLOYMENT_BRANCH" "$DEPLOYMENT_TARGET")"
+  ACTIVE_SPOKEN_BRANCH_NAME="$(spoken_branch_name "$ACTIVE_BRANCH_NAME")"
   DURATION_SECONDS="$(duration_seconds_for_active "$CREATED_AT_MS" "$READY_AT_MS")"
   DURATION_TEXT="$(format_duration "$DURATION_SECONDS")"
 
   DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
   DASH_STATUS_LABEL="$(friendly_status "$STATUS")"
   DASH_ENV_LABEL="$ACTIVE_ENV_LABEL"
+  DASH_BRANCH_LABEL="$ACTIVE_BRANCH_NAME"
   DASH_DEPLOYMENT_LABEL="$(short_deployment_label "$DEPLOYMENT_ID")"
   DASH_URL_LABEL="$(friendly_host "$DEPLOYMENT_URL")"
   DASH_STARTED_LABEL="$(format_ms_local "$CREATED_AT_MS")"
@@ -735,12 +815,12 @@ while true; do
     log_line "Transition: ${ACTIVE_LAST_STATUS} -> ${STATUS} (id=${DEPLOYMENT_ID})"
   fi
 
-  log_line "Status ${DASH_STATUS_LABEL} for ${DASH_PROJECT_NAME} ${DASH_ENV_LABEL} (${DASH_DEPLOYMENT_LABEL})"
+  log_line "Status ${DASH_STATUS_LABEL} for ${DASH_PROJECT_NAME} ${DASH_ENV_LABEL}/${DASH_BRANCH_LABEL} (${DASH_DEPLOYMENT_LABEL})"
 
   case "$STATUS" in
     READY)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
-        ALERT_MESSAGE="${ACTIVE_ENV_LABEL} deployment completed in ${DURATION_TEXT}."
+        ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment completed in ${DURATION_TEXT}."
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
         log_line "Alert: ${ALERT_MESSAGE}"
         speak_alert "$ALERT_MESSAGE"
@@ -749,7 +829,7 @@ while true; do
       ;;
     ERROR|CANCELED)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
-        ALERT_MESSAGE="${ACTIVE_ENV_LABEL} deployment ended with ${STATUS} after ${DURATION_TEXT}."
+        ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment ended with ${STATUS} after ${DURATION_TEXT}."
         if [[ -n "$ERROR_MESSAGE" ]]; then
           ALERT_MESSAGE="${ALERT_MESSAGE} ${ERROR_MESSAGE}"
         fi
