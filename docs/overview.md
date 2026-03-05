@@ -14,6 +14,7 @@
 - Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
 - Supports drag-and-resize text overlay editing on the poster canvas, then PNG export.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
+- Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed queue.
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.

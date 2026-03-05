@@ -40,6 +40,7 @@ flowchart LR
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders and edits overlay layouts.
+  - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
   - Zod schemas enforce request and response validity.
@@ -188,6 +189,8 @@ Why this shape:
 - Failed jobs remain for retry/inspection.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
 - Blob-dependent features return clear 503 errors when storage is not configured.
+- Post selection: stale async responses are ignored so rapid switching cannot overwrite the latest selected draft.
+- Sidebar refresh: summary reconciliation preserves stable list items to avoid unnecessary list re-renders.
 
 ## Deployment and Operations
 
