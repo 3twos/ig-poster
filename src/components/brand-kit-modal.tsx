@@ -98,38 +98,10 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
           const kitsJson = await kitsRes.json();
           loadedKits = kitsJson.kits ?? [];
         }
+        setKits(loadedKits);
         if (loadedKits.length > 0) {
-          setKits(loadedKits);
           const defaultKit = loadedKits.find((k) => k.isDefault) ?? loadedKits[0];
           loadKitData(defaultKit);
-        } else {
-          const response = await fetch("/api/settings", { cache: "no-store" });
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          let settingsJson: any = null;
-          if (response.ok) {
-            settingsJson = await response.json();
-            if (settingsJson?.brand) setBrand((current) => ({ ...current, ...settingsJson.brand }));
-            if (settingsJson?.promptConfig) setPromptConfig((current) => ({ ...current, ...settingsJson.promptConfig }));
-            if (settingsJson?.logoUrl) {
-              setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: settingsJson.logoUrl, storageUrl: settingsJson.logoUrl, status: "uploaded" });
-            }
-          }
-          const loadedBrand = settingsJson?.brand ? { ...INITIAL_BRAND, ...settingsJson.brand } : INITIAL_BRAND;
-          const loadedPromptConfig = settingsJson?.promptConfig ? { systemPrompt: "", customInstructions: "", ...settingsJson.promptConfig } : { systemPrompt: "", customInstructions: "" };
-          const loadedLogoUrl = settingsJson?.logoUrl ?? undefined;
-          try {
-            const createRes = await fetch("/api/brand-kits", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: "Default", brand: loadedBrand, promptConfig: loadedPromptConfig, logoUrl: loadedLogoUrl, isDefault: true }),
-            });
-            if (createRes.ok) {
-              const createJson = await createRes.json();
-              setKits([createJson.kit]);
-              setActiveKitId(createJson.kit.id);
-              setKitName("Default");
-            }
-          } catch { /* Best effort */ }
         }
       } catch { /* Settings may not be available */ }
       finally { setIsLoaded(true); }
@@ -273,7 +245,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
           </Button>
           <h1 className="text-lg font-semibold text-white">Brand Kits</h1>
         </div>
-        <Button onClick={() => void saveSettings()} disabled={isSaving || !isDirty}>
+        <Button onClick={() => void saveSettings()} disabled={isSaving || !isDirty || !activeKitId}>
           {isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           {isSaving ? "Saving..." : "Save"}
         </Button>
@@ -322,6 +294,19 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
 
           {/* Detail — kit editor (right) */}
           <ScrollArea className="flex-1">
+            {!activeKitId ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 p-12 text-center">
+                <Palette className="h-10 w-10 text-slate-500" />
+                <div>
+                  <p className="text-lg font-semibold text-slate-200">No brand kits yet</p>
+                  <p className="mt-1 text-sm text-slate-400">Create a kit to define your brand identity, colors, and prompt controls.</p>
+                </div>
+                <Button onClick={() => void createNewKit()}>
+                  <Plus className="h-4 w-4" />
+                  Create Kit
+                </Button>
+              </div>
+            ) : (
             <div className="mx-auto max-w-3xl space-y-6 p-6">
               {/* Kit name + delete */}
               <div className="flex items-center gap-3">
@@ -478,6 +463,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                 </p>
               </div>
             </div>
+            )}
           </ScrollArea>
         </div>
       )}
