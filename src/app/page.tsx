@@ -317,8 +317,8 @@ export default function Home() {
   };
 
   const handleAssetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    event.target.value = "";
     const selected = Array.from(event.target.files ?? []);
+    event.target.value = "";
     if (!selected.length) return;
     generation.setError(null); setPublishMessage(null);
     const remaining = 20 - localAssets.length;
