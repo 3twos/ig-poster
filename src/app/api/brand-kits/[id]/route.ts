@@ -31,7 +31,8 @@ export async function GET(req: Request, { params }: Params) {
     }
 
     return NextResponse.json(row);
-  } catch {
+  } catch (err) {
+    console.error("[api/brand-kits/id]", err);
     return NextResponse.json(
       { error: "Failed to get brand kit" },
       { status: 500 },
@@ -73,7 +74,8 @@ export async function PUT(req: Request, { params }: Params) {
     }
 
     return NextResponse.json(row);
-  } catch {
+  } catch (err) {
+    console.error("[api/brand-kits/id]", err);
     return NextResponse.json(
       { error: "Failed to update brand kit" },
       { status: 500 },
@@ -97,7 +99,8 @@ export async function DELETE(req: Request, { params }: Params) {
       .where(and(eq(brandKits.id, id), eq(brandKits.ownerHash, ownerHash)));
 
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("[api/brand-kits/id]", err);
     return NextResponse.json(
       { error: "Failed to delete brand kit" },
       { status: 500 },

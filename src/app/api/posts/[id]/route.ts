@@ -32,7 +32,8 @@ export async function GET(req: Request, ctx: Ctx) {
     }
 
     return NextResponse.json(row);
-  } catch {
+  } catch (err) {
+    console.error("[api/posts/id]", err);
     return NextResponse.json(
       { error: "Failed to load post" },
       { status: 500 },
@@ -131,7 +132,8 @@ export async function PUT(req: Request, ctx: Ctx) {
       .returning();
 
     return NextResponse.json(updated);
-  } catch {
+  } catch (err) {
+    console.error("[api/posts/id]", err);
     return NextResponse.json(
       { error: "Failed to update post" },
       { status: 500 },
@@ -155,7 +157,8 @@ export async function DELETE(req: Request, ctx: Ctx) {
       .where(and(eq(posts.id, id), eq(posts.ownerHash, ownerHash)));
 
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("[api/posts/id]", err);
     return NextResponse.json(
       { error: "Failed to delete post" },
       { status: 500 },
