@@ -39,7 +39,7 @@ Settings and Brand Kits are full-screen modal overlays rendered from the home pa
 - `src/components/settings-modal.tsx` — LLM provider config, entry point to Brand Kits
 - `src/components/brand-kit-modal.tsx` — Master/detail brand kit editor (multiple kits)
 
-Modals are opened via custom events (`ig:open-settings`, `ig:open-brand-kits`) dispatched from the nav bar, command palette, and onboarding checklist.
+The Settings modal is opened via the `ig:open-settings` custom event dispatched from `<AppNav>`, the command palette, the onboarding checklist, and `post-brief-form.tsx`. The Brand Kits modal is opened from within the Settings modal via a callback, or via `ig:open-brand-kits` from the command palette and onboarding checklist.
 
 All pages share `<AppShell>` (`src/components/app-shell.tsx`) which wraps content with `<AppNav>` (`src/components/app-nav.tsx`).
 
