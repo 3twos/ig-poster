@@ -5,7 +5,7 @@
 - Keep the product usable even when optional integrations are missing.
 - Enforce strict input/output contracts for AI and publishing workflows.
 - Keep credential handling encrypted and server-side.
-- Use Postgres for relational app state while keeping Blob for binary assets and snapshots.
+- Use Postgres (via Drizzle ORM) for relational app state (posts, brand kits, private credentials) while keeping Blob for binary assets and snapshots.
 
 ## System Overview
 
@@ -17,7 +17,7 @@ flowchart LR
   API --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
   API --> META["Meta Publisher (`src/lib/meta.ts`)"]
   API --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
-  API --> PG["Postgres (`posts` + private credentials)"]
+  API --> PG["Postgres (posts, brand_kits, credentials)"]
   API --> BLOB["Vercel Blob Storage"]
   CRON["Vercel Cron (`/api/cron/publish`)"] --> BLOB
   CRON --> META
@@ -150,7 +150,9 @@ Why this shape:
 
 ## Storage Model
 
-- Primary relational persistence: Postgres (`posts`, private credentials).
+- Primary relational persistence: Postgres via Drizzle ORM (`posts`, `brand_kits`, private credentials).
+  - `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`).
+  - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, logo URL, and default flag.
 - Blob persistence: binary media, shared project snapshots, scheduled publish queue, and chat conversation blobs.
 - Typical paths:
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`
@@ -194,10 +196,9 @@ Why this shape:
 
 ## Tradeoffs and Future Work
 
-- Blob-as-store is simple and low-overhead, but job querying/analytics are limited at scale.
+- Blob-as-store is simple and low-overhead for media and snapshots, but job querying/analytics are limited at scale.
 - Scheduling scans recent blobs; high-volume workloads may need a dedicated queue.
 - Share artifacts are immutable snapshots; future requirements may need versioned edits.
 - As usage grows, consider introducing:
-  - typed persistence layer (SQL + migrations)
   - background workers with dead-letter handling
   - observability around generation/publish success rates

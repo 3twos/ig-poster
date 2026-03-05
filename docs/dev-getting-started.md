@@ -38,6 +38,10 @@ Open `http://localhost:3000`.
 - `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` -- models configured via these env vars auto-appear in the multi-model list alongside any BYOK connections.
 - Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`
 
+### Required for posts and brand kits
+
+- `POSTGRES_URL` -- PostgreSQL connection string used by the app DB layer (Drizzle ORM). Run `npx drizzle-kit push` after schema changes.
+
 ### Required for upload/share/scheduling features
 
 - `BLOB_READ_WRITE_TOKEN`
@@ -68,7 +72,7 @@ Run these before opening or updating a PR.
 ## Project Map
 
 - `src/app/page.tsx`: main editor page — composes a 3-column resizable layout from focused section components.
-- `src/components/post-brief-form.tsx`: post brief fields, template gallery, generate/export buttons.
+- `src/components/post-brief-form.tsx`: post brief fields, brand kit selector, generate/export buttons.
 - `src/components/asset-manager.tsx`: drag-and-drop reorderable asset list (uses `@dnd-kit/sortable`).
 - `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
 - `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time.
@@ -86,7 +90,8 @@ Run these before opening or updating a PR.
 - `src/lib/chat-system-prompt.ts`: chat system prompt builder with brand context injection.
 - `src/lib/agent-types.ts`: agent run/step types and UI utility functions.
 - `src/app/share/[id]/page.tsx`: shared project view.
-- `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, and publishing.
+- `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing, and brand kit CRUD (`/api/brand-kits`).
+- `src/db/schema.ts`: Drizzle ORM schema for `posts` and `brand_kits` tables.
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
@@ -99,7 +104,7 @@ Run these before opening or updating a PR.
 
 1. Create an isolated worktree + `codex/*` branch.
 2. Run pre-flight `git status --short`.
-3. Use `AGENTS.md` command permissions: common read/search/web commands are pre-approved, and write/update commands must stay inside the active repo/worktree.
+3. Use `AGENTS.md` command permissions: common read/search/web commands are pre-approved, and write/update commands must stay inside the active repo/worktree. Shared Claude Code hooks and settings are tracked in `.claude/`.
 4. Implement changes.
 5. Run `npm run lint` and `npm run build`.
 6. Update docs when behavior/architecture/dev workflow changes.
