@@ -16,6 +16,11 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -171,31 +176,25 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
 
   const providerLabel = (provider: LlmProvider) => provider === "openai" ? "OpenAI" : "Anthropic";
 
-  const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handleKeyDown);
-    modalRef.current?.focus();
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   return (
-    <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Settings" tabIndex={-1} className="fixed inset-0 z-[60] flex flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white outline-none">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <h1 className="text-lg font-semibold text-white">Settings</h1>
-        <Button variant="ghost" size="icon-sm" onClick={onClose} className="text-slate-300 hover:text-white" aria-label="Close settings">
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="z-[60] h-[100dvh] w-screen max-w-none translate-x-[-50%] translate-y-[-50%] rounded-none border-0 bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] p-0 text-white"
+      >
+        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <div className="flex h-full flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+            <h1 className="text-lg font-semibold text-white">Settings</h1>
+            <Button variant="ghost" size="icon-sm" onClick={onClose} className="text-slate-300 hover:text-white" aria-label="Close settings">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto max-w-2xl space-y-6">
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="mx-auto max-w-2xl space-y-6">
           {/* Brand Kits entry point */}
           <button
             type="button"
@@ -326,8 +325,10 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
               </div>
             )}
           </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

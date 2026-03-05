@@ -199,7 +199,7 @@ export function PostListItem({
         </div>
 
         {/* Context menu */}
-        <div className="absolute top-1.5 right-1.5 z-20 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+        <div className="absolute top-1.5 right-1.5 z-20 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 md:group-focus-within:opacity-100">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
