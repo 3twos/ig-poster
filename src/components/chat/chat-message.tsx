@@ -9,7 +9,7 @@ import {
   Trash2,
   User,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 
 import { ChatMarkdown } from "@/components/chat/chat-markdown";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ type ChatMessageProps = {
 // Component
 // ---------------------------------------------------------------------------
 
-export function ChatMessage({
+export const ChatMessage = memo(function ChatMessage({
   message,
   isStreaming,
   streamingContent,
@@ -222,7 +222,7 @@ export function ChatMessage({
       </div>
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Small action button

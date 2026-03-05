@@ -67,6 +67,7 @@ import {
   mediaTypeFromFile,
   parseApiError,
 } from "@/lib/upload-helpers";
+import { withPerf } from "@/lib/perf";
 import { cn, slugify } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -369,7 +370,7 @@ export default function Home() {
 
   const renderPosterToDataUrl = async () => {
     if (!posterRef.current || !activeVariant) throw new Error("No poster selected");
-    return toPng(posterRef.current, { cacheBust: true, pixelRatio: 3 });
+    return withPerf("toPng", () => toPng(posterRef.current!, { cacheBust: true, pixelRatio: 2 }));
   };
   const uploadRenderedPoster = async () => {
     const d = await renderPosterToDataUrl(); const r = await fetch(d); const b = await r.blob();

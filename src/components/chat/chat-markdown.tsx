@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, memo, useMemo } from "react";
 
 import { ChatCodeBlock } from "@/components/chat/chat-code-block";
 
@@ -311,7 +311,7 @@ function renderBlock(block: Block, index: number): ReactNode {
 // Component
 // ---------------------------------------------------------------------------
 
-export function ChatMarkdown({ content, isStreaming }: ChatMarkdownProps) {
+export const ChatMarkdown = memo(function ChatMarkdown({ content, isStreaming }: ChatMarkdownProps) {
   const blocks = useMemo(() => parseBlocks(content), [content]);
 
   return (
@@ -322,4 +322,4 @@ export function ChatMarkdown({ content, isStreaming }: ChatMarkdownProps) {
       )}
     </div>
   );
-}
+});

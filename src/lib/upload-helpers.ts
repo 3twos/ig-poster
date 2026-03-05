@@ -1,4 +1,5 @@
 import type { AssetMediaType, UploadStatus } from "@/lib/types";
+import { withPerf } from "@/lib/perf";
 
 export const parseApiError = async (response: Response) => {
   try {
@@ -49,7 +50,7 @@ export const formatDuration = (durationSec: number) => {
 };
 
 export const extractVideoMetadata = async (objectUrl: string) => {
-  return new Promise<{
+  return withPerf("extractVideoMetadata", () => new Promise<{
     durationSec: number;
     width: number;
     height: number;
@@ -72,9 +73,13 @@ export const extractVideoMetadata = async (objectUrl: string) => {
 
       const capture = () => {
         try {
+          const maxW = 640;
+          const nativeW = video.videoWidth;
+          const nativeH = video.videoHeight;
+          const scale = nativeW > maxW ? maxW / nativeW : 1;
           const canvas = document.createElement("canvas");
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          canvas.width = Math.round(nativeW * scale);
+          canvas.height = Math.round(nativeH * scale);
           const ctx = canvas.getContext("2d");
 
           if (!ctx) {
@@ -82,12 +87,12 @@ export const extractVideoMetadata = async (objectUrl: string) => {
           }
 
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const posterUrl = canvas.toDataURL("image/jpeg", 0.9);
+          const posterUrl = canvas.toDataURL("image/jpeg", 0.7);
 
           resolve({
             durationSec: Number(video.duration.toFixed(2)),
-            width: video.videoWidth,
-            height: video.videoHeight,
+            width: nativeW,
+            height: nativeH,
             posterUrl,
           });
         } catch (error) {
@@ -109,5 +114,5 @@ export const extractVideoMetadata = async (objectUrl: string) => {
       cleanup();
       reject(new Error("Could not load uploaded video"));
     };
-  });
+  }));
 };
