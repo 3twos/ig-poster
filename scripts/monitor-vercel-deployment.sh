@@ -447,6 +447,29 @@ speak_alert() {
   ) &
 }
 
+play_production_beat() {
+  local deployment_target="$1"
+
+  if (( ENABLE_SPEAK == 0 )); then
+    return
+  fi
+  if [[ "$deployment_target" != "production" && "$deployment_target" != "PRODUCTION" ]]; then
+    return
+  fi
+
+  (
+    if command -v afplay >/dev/null 2>&1 && [[ -f "/System/Library/Sounds/Pop.aiff" ]]; then
+      afplay "/System/Library/Sounds/Pop.aiff" >/dev/null 2>&1
+      sleep 0.12
+      afplay "/System/Library/Sounds/Pop.aiff" >/dev/null 2>&1
+    else
+      printf '\a'
+      sleep 0.12
+      printf '\a'
+    fi
+  ) &
+}
+
 check_timeout_or_exit() {
   local elapsed_seconds
 
@@ -827,6 +850,7 @@ while true; do
         ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment completed in ${DURATION_TEXT}."
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
         log_line "Alert: ${ALERT_MESSAGE}"
+        play_production_beat "$ACTIVE_TARGET_KIND"
         speak_alert "$ALERT_MESSAGE"
         ACTIVE_TERMINAL_ANNOUNCED=1
       fi
@@ -839,6 +863,7 @@ while true; do
         fi
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
         warn_line "Alert: ${ALERT_MESSAGE}"
+        play_production_beat "$ACTIVE_TARGET_KIND"
         speak_alert "$ALERT_MESSAGE"
         ACTIVE_TERMINAL_ANNOUNCED=1
       fi
