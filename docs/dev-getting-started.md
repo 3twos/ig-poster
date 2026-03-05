@@ -75,7 +75,7 @@ Use the monitor script for continuous status/alert monitoring while you work (st
 
 ```bash
 # recommended: watch the latest deployment for a project
-VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --interval 5
+VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
 # optional: watch a specific deployment continuously
 ./scripts/monitor-vercel-deployment.sh <deployment-id-or-url> --interval 5
@@ -84,9 +84,11 @@ VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --
 Optional environment variables:
 - `VERCEL_TOKEN` (recommended over `--token` for better shell-history hygiene)
 - `VERCEL_PROJECT_ID` (for latest-deployment watcher mode)
+- `VERCEL_PROJECT_SHORT_NAME` (optional short name for spoken alerts)
 - `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (use for team-scoped deployments)
 
 The script emits spoken alerts when possible (`say`, `spd-say`, or `espeak`). Completion duration format is seconds if under 1 minute, otherwise `mm:ss`.
+Interactive runs use a non-scrolling dashboard by default; pass `--plain` for line-by-line log output.
 
 ## Project Map
 

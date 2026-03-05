@@ -192,7 +192,7 @@ Monitor deployments continuously from your terminal (stop with `Ctrl+C`):
 
 ```bash
 # watch the latest deployment for a project (recommended for day-to-day alerting)
-VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --interval 5
+VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
 # watch one specific deployment id/url continuously
 ./scripts/monitor-vercel-deployment.sh <deployment-id-or-url> --interval 5
@@ -201,9 +201,11 @@ VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --
 Environment options:
 - `VERCEL_TOKEN` (recommended over `--token` for better shell-history hygiene)
 - `VERCEL_PROJECT_ID` (for latest-deployment watcher mode)
+- `VERCEL_PROJECT_SHORT_NAME` (optional short name for spoken alerts)
 - `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (optional, for team-scoped deploys)
 
 The monitor announces completion/failure in the terminal and uses spoken alerts (via `say`/`spd-say`/`espeak` if available). Completion duration is formatted as seconds when under 1 minute, otherwise `mm:ss`.
+In an interactive terminal it uses a non-scrolling dashboard view by default; use `--plain` for line-by-line logs.
 
 ## Vercel Cron
 

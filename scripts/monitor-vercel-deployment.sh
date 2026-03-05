@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+DASHBOARD_ENABLED=0
+LAST_EVENT_MESSAGE="Starting..."
+LAST_ALERT_MESSAGE="None"
+
 usage() {
   cat <<'HELP'
 Continuously monitor Vercel deployment status until you stop the script (Ctrl+C).
@@ -19,14 +23,16 @@ Options:
   -i, --interval <seconds>  Poll interval in seconds (default: 10)
   --timeout <seconds>       Optional script timeout (default: 0, disabled)
   --project-id <id>         Project id for latest-deployment watcher mode
+  --project-name <name>     Short name used in spoken alerts
   --team-id <id>            Team/org id (default: $VERCEL_TEAM_ID or $VERCEL_ORG_ID)
   --token <token>           Vercel token (default: $VERCEL_TOKEN, or secure prompt)
   --no-speak                Disable spoken alerts
+  --plain                   Print line-by-line logs instead of the dashboard view
   -h, --help                Show help
 
 Examples:
   # Watch latest deployment for a project until Ctrl+C
-  VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --interval 5
+  VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
   # Watch one deployment continuously until Ctrl+C
   ./scripts/monitor-vercel-deployment.sh dpl_123abc --interval 5
@@ -38,11 +44,19 @@ print_error() {
 }
 
 log_line() {
-  echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*"
+  local message="$*"
+  LAST_EVENT_MESSAGE="$message"
+  if (( DASHBOARD_ENABLED == 0 )); then
+    echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $message"
+  fi
 }
 
 warn_line() {
-  echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*" >&2
+  local message="$*"
+  LAST_EVENT_MESSAGE="$message"
+  if (( DASHBOARD_ENABLED == 0 )); then
+    echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $message" >&2
+  fi
 }
 
 normalize_target() {
@@ -65,6 +79,54 @@ normalize_target() {
   fi
 
   printf '%s' "$target"
+}
+
+derive_short_project_name() {
+  local deployment_url="$1"
+  local fallback_id="$2"
+  local host slug short_name
+
+  if [[ -n "$PROJECT_SHORT_NAME" ]]; then
+    printf '%s' "$PROJECT_SHORT_NAME"
+    return
+  fi
+
+  host="$(normalize_target "$deployment_url")"
+  host="${host%%/*}"
+  slug="${host%.vercel.app}"
+
+  # Typical preview domains look like "<project>-git-<branch>-<team>.vercel.app".
+  if [[ "$slug" == *-git-* ]]; then
+    slug="${slug%%-git-*}"
+  fi
+  if [[ "$slug" == *.* ]]; then
+    slug="${slug%%.*}"
+  fi
+
+  short_name="$slug"
+  if [[ -z "$short_name" ]]; then
+    short_name="${PROJECT_ID#prj_}"
+  fi
+  if [[ -z "$short_name" ]]; then
+    short_name="$fallback_id"
+  fi
+  if [[ -z "$short_name" ]]; then
+    short_name="deployment"
+  fi
+
+  printf '%s' "$short_name"
+}
+
+spoken_project_name() {
+  local project_name="$1"
+
+  if [[ -z "$project_name" ]]; then
+    printf '%s' "deployment"
+    return
+  fi
+
+  # Make slug-like names easier to hear.
+  printf '%s' "${project_name//-/ }"
 }
 
 parse_deployment_payload() {
@@ -185,6 +247,88 @@ format_duration() {
   printf '%02d:%02d' $(( total_seconds / 60 )) $(( total_seconds % 60 ))
 }
 
+friendly_status() {
+  local status="$1"
+
+  case "$status" in
+    READY) printf '%s' "Ready" ;;
+    BUILDING) printf '%s' "Building" ;;
+    QUEUED) printf '%s' "Queued" ;;
+    INITIALIZING) printf '%s' "Initializing" ;;
+    CANCELED) printf '%s' "Canceled" ;;
+    ERROR) printf '%s' "Failed" ;;
+    UNKNOWN|"") printf '%s' "Unknown" ;;
+    *) printf '%s' "$status" ;;
+  esac
+}
+
+friendly_mode_label() {
+  if [[ "$WATCH_MODE" == "project" ]]; then
+    printf '%s' "Latest deployment"
+  else
+    printf '%s' "Single deployment"
+  fi
+}
+
+friendly_host() {
+  local deployment_url="$1"
+  local host
+
+  host="$(normalize_target "$deployment_url")"
+  if [[ -z "$host" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+  printf '%s' "$host"
+}
+
+short_deployment_label() {
+  local deployment_id="$1"
+
+  if [[ -z "$deployment_id" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+  if (( ${#deployment_id} > 18 )); then
+    printf '%s...' "${deployment_id:0:18}"
+    return
+  fi
+  printf '%s' "$deployment_id"
+}
+
+format_ms_local() {
+  local epoch_ms="$1"
+  local epoch_seconds
+
+  if ! [[ "$epoch_ms" =~ ^[0-9]+$ ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+  epoch_seconds=$(( epoch_ms / 1000 ))
+  date -r "$epoch_seconds" '+%H:%M:%S'
+}
+
+render_dashboard() {
+  if (( DASHBOARD_ENABLED == 0 )); then
+    return
+  fi
+
+  printf '\033[H\033[2J'
+  printf 'Vercel Deploy Monitor\n'
+  printf '=====================\n'
+  printf 'Project      : %s\n' "${DASH_PROJECT_NAME:-n/a}"
+  printf 'Mode         : %s\n' "${DASH_MODE_LABEL:-n/a}"
+  printf 'Status       : %s\n' "${DASH_STATUS_LABEL:-Unknown}"
+  printf 'Deployment   : %s\n' "${DASH_DEPLOYMENT_LABEL:-n/a}"
+  printf 'URL          : %s\n' "${DASH_URL_LABEL:-n/a}"
+  printf 'Started      : %s\n' "${DASH_STARTED_LABEL:-n/a}"
+  printf 'Elapsed      : %s\n' "${DASH_DURATION_LABEL:-n/a}"
+  printf 'Last Update  : %s\n' "$(date '+%H:%M:%S')"
+  printf 'Last Event   : %s\n' "${LAST_EVENT_MESSAGE:-Starting...}"
+  printf 'Last Alert   : %s\n' "${LAST_ALERT_MESSAGE:-None}"
+  printf '\nPress Ctrl+C to stop.\n'
+}
+
 duration_seconds_for_active() {
   local created_at_ms="$1"
   local ready_at_ms="$2"
@@ -234,6 +378,8 @@ check_timeout_or_exit() {
   elapsed_seconds=$(( $(date +%s) - START_EPOCH ))
   if (( elapsed_seconds >= TIMEOUT_SECONDS )); then
     warn_line "Timeout reached after ${TIMEOUT_SECONDS}s."
+    DASH_STATUS_LABEL="Timed out"
+    render_dashboard
     exit 124
   fi
 }
@@ -249,6 +395,8 @@ sleep_for_next_poll() {
   elapsed_seconds=$(( $(date +%s) - START_EPOCH ))
   if (( elapsed_seconds >= TIMEOUT_SECONDS )); then
     warn_line "Timeout reached after ${TIMEOUT_SECONDS}s."
+    DASH_STATUS_LABEL="Timed out"
+    render_dashboard
     exit 124
   fi
 
@@ -275,10 +423,20 @@ INTERVAL_SECONDS=10
 TIMEOUT_SECONDS=0
 TEAM_ID="${VERCEL_TEAM_ID:-${VERCEL_ORG_ID:-}}"
 PROJECT_ID="${VERCEL_PROJECT_ID:-}"
+PROJECT_SHORT_NAME="${VERCEL_PROJECT_SHORT_NAME:-}"
 TOKEN="${VERCEL_TOKEN:-}"
 TOKEN_FROM_ARG=0
 ENABLE_SPEAK=1
+FORCE_PLAIN=0
 TARGET=""
+
+DASH_PROJECT_NAME="n/a"
+DASH_MODE_LABEL="n/a"
+DASH_STATUS_LABEL="Waiting"
+DASH_DEPLOYMENT_LABEL="n/a"
+DASH_URL_LABEL="n/a"
+DASH_STARTED_LABEL="n/a"
+DASH_DURATION_LABEL="n/a"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -310,6 +468,14 @@ while [[ $# -gt 0 ]]; do
       PROJECT_ID="$2"
       shift 2
       ;;
+    --project-name|--voice-project-name)
+      if [[ $# -lt 2 ]]; then
+        print_error "$1 requires a value."
+        exit 1
+      fi
+      PROJECT_SHORT_NAME="$2"
+      shift 2
+      ;;
     --team-id|--scope|--org-id)
       if [[ $# -lt 2 ]]; then
         print_error "$1 requires a value."
@@ -329,6 +495,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-speak)
       ENABLE_SPEAK=0
+      shift
+      ;;
+    --plain)
+      FORCE_PLAIN=1
       shift
       ;;
     --)
@@ -392,6 +562,10 @@ else
   WATCH_MODE="project"
 fi
 
+if (( FORCE_PLAIN == 0 )) && [[ -t 1 ]]; then
+  DASHBOARD_ENABLED=1
+fi
+
 SPEAKER_CMD=""
 if (( ENABLE_SPEAK == 1 )); then
   if command -v say >/dev/null 2>&1; then
@@ -403,6 +577,15 @@ if (( ENABLE_SPEAK == 1 )); then
   else
     warn_line "Speech command not found (checked: say, spd-say, espeak). Alerts will be text-only."
   fi
+fi
+
+DASH_MODE_LABEL="$(friendly_mode_label)"
+if [[ -n "$PROJECT_SHORT_NAME" ]]; then
+  DASH_PROJECT_NAME="$PROJECT_SHORT_NAME"
+elif [[ "$WATCH_MODE" == "project" ]]; then
+  DASH_PROJECT_NAME="${PROJECT_ID#prj_}"
+elif [[ -n "$TARGET" ]]; then
+  DASH_PROJECT_NAME="$(derive_short_project_name "$TARGET" "$TARGET")"
 fi
 
 if [[ "$WATCH_MODE" == "deployment" ]]; then
@@ -418,14 +601,20 @@ fi
 if [[ -n "$SPEAKER_CMD" ]]; then
   log_line "Spoken alerts enabled via '${SPEAKER_CMD}'."
 fi
+if [[ -n "$PROJECT_SHORT_NAME" ]]; then
+  log_line "Using spoken project name: ${PROJECT_SHORT_NAME}"
+fi
 
-trap 'warn_line "Stopped deployment monitor."; exit 0' INT TERM
+render_dashboard
+
+trap 'warn_line "Stopped deployment monitor."; DASH_STATUS_LABEL="Stopped"; render_dashboard; if (( DASHBOARD_ENABLED == 1 )); then echo; fi; exit 0' INT TERM
 
 START_EPOCH="$(date +%s)"
 ACTIVE_TARGET=""
 ACTIVE_LAST_STATUS=""
 ACTIVE_TERMINAL_ANNOUNCED=0
 ACTIVE_FIRST_SEEN_EPOCH="$(date +%s)"
+ACTIVE_PROJECT_SHORT_NAME=""
 NO_DEPLOYMENTS_REPORTED=0
 
 while true; do
@@ -434,12 +623,16 @@ while true; do
   if [[ "$WATCH_MODE" == "project" ]]; then
     if ! LATEST_RESPONSE="$(fetch_json "$(build_latest_deployment_url)")"; then
       warn_line "Failed to fetch latest project deployment. Retrying..."
+      DASH_STATUS_LABEL="Connection issue"
+      render_dashboard
       sleep_for_next_poll
       continue
     fi
 
     if ! LATEST_PARSED="$(printf '%s' "${LATEST_RESPONSE}" | parse_latest_deployment_payload 2>&1)"; then
       warn_line "Latest deployment API error: ${LATEST_PARSED}"
+      DASH_STATUS_LABEL="API error"
+      render_dashboard
       sleep_for_next_poll
       continue
     fi
@@ -449,6 +642,12 @@ while true; do
         log_line "No deployments found yet for project '${PROJECT_ID}'."
         NO_DEPLOYMENTS_REPORTED=1
       fi
+      DASH_STATUS_LABEL="Waiting for deployment"
+      DASH_DEPLOYMENT_LABEL="n/a"
+      DASH_URL_LABEL="n/a"
+      DASH_STARTED_LABEL="n/a"
+      DASH_DURATION_LABEL="n/a"
+      render_dashboard
       sleep_for_next_poll
       continue
     fi
@@ -458,6 +657,8 @@ while true; do
 
     if [[ -z "$LATEST_ID" ]]; then
       warn_line "Latest deployment payload did not include a deployment id. Retrying..."
+      DASH_STATUS_LABEL="API error"
+      render_dashboard
       sleep_for_next_poll
       continue
     fi
@@ -467,22 +668,37 @@ while true; do
       ACTIVE_LAST_STATUS=""
       ACTIVE_TERMINAL_ANNOUNCED=0
       ACTIVE_FIRST_SEEN_EPOCH="$(date +%s)"
+      ACTIVE_PROJECT_SHORT_NAME="$(derive_short_project_name "${LATEST_URL}" "${ACTIVE_TARGET}")"
+      DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
+      DASH_STATUS_LABEL="$(friendly_status "${LATEST_STATE}")"
+      DASH_DEPLOYMENT_LABEL="$(short_deployment_label "${ACTIVE_TARGET}")"
+      DASH_URL_LABEL="$(friendly_host "${LATEST_URL}")"
+      DASH_STARTED_LABEL="n/a"
+      DASH_DURATION_LABEL="n/a"
       log_line "Watching deployment id=${ACTIVE_TARGET} url=${LATEST_URL:-n/a} state=${LATEST_STATE:-UNKNOWN}"
+      render_dashboard
     fi
   elif [[ -z "$ACTIVE_TARGET" ]]; then
     ACTIVE_TARGET="$TARGET"
     ACTIVE_FIRST_SEEN_EPOCH="$(date +%s)"
+    ACTIVE_PROJECT_SHORT_NAME="$(derive_short_project_name "${TARGET}" "${ACTIVE_TARGET}")"
+    DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
+    DASH_DEPLOYMENT_LABEL="$(short_deployment_label "${ACTIVE_TARGET}")"
   fi
 
   DETAIL_URL="$(build_deployment_url "$ACTIVE_TARGET")"
   if ! RESPONSE="$(fetch_json "$DETAIL_URL")"; then
     warn_line "Failed to fetch deployment '${ACTIVE_TARGET}'. Retrying..."
+    DASH_STATUS_LABEL="Connection issue"
+    render_dashboard
     sleep_for_next_poll
     continue
   fi
 
   if ! PARSED="$(printf '%s' "${RESPONSE}" | parse_deployment_payload 2>&1)"; then
     warn_line "Deployment API error for '${ACTIVE_TARGET}': ${PARSED}"
+    DASH_STATUS_LABEL="API error"
+    render_dashboard
     sleep_for_next_poll
     continue
   fi
@@ -493,33 +709,42 @@ while true; do
   else
     DEPLOYMENT_ID="$ACTIVE_TARGET"
   fi
+  ACTIVE_PROJECT_SHORT_NAME="$(derive_short_project_name "${DEPLOYMENT_URL}" "${ACTIVE_TARGET}")"
+  ACTIVE_SPOKEN_PROJECT_NAME="$(spoken_project_name "${ACTIVE_PROJECT_SHORT_NAME}")"
+  DURATION_SECONDS="$(duration_seconds_for_active "$CREATED_AT_MS" "$READY_AT_MS")"
+  DURATION_TEXT="$(format_duration "$DURATION_SECONDS")"
+
+  DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
+  DASH_STATUS_LABEL="$(friendly_status "$STATUS")"
+  DASH_DEPLOYMENT_LABEL="$(short_deployment_label "$DEPLOYMENT_ID")"
+  DASH_URL_LABEL="$(friendly_host "$DEPLOYMENT_URL")"
+  DASH_STARTED_LABEL="$(format_ms_local "$CREATED_AT_MS")"
+  DASH_DURATION_LABEL="$DURATION_TEXT"
 
   if [[ -n "$ACTIVE_LAST_STATUS" && "$STATUS" != "$ACTIVE_LAST_STATUS" ]]; then
     log_line "Transition: ${ACTIVE_LAST_STATUS} -> ${STATUS} (id=${DEPLOYMENT_ID})"
   fi
 
-  log_line "status=${STATUS} id=${DEPLOYMENT_ID} url=${DEPLOYMENT_URL:-n/a}"
+  log_line "Status ${DASH_STATUS_LABEL} for ${DASH_PROJECT_NAME} (${DASH_DEPLOYMENT_LABEL})"
 
   case "$STATUS" in
     READY)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
-        DURATION_SECONDS="$(duration_seconds_for_active "$CREATED_AT_MS" "$READY_AT_MS")"
-        DURATION_TEXT="$(format_duration "$DURATION_SECONDS")"
-        ALERT_MESSAGE="Deployment ${DEPLOYMENT_ID} completed in ${DURATION_TEXT}."
-        log_line "ALERT: ${ALERT_MESSAGE}"
+        ALERT_MESSAGE="${ACTIVE_SPOKEN_PROJECT_NAME} deployment completed in ${DURATION_TEXT}."
+        LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
+        log_line "Alert: ${ALERT_MESSAGE}"
         speak_alert "$ALERT_MESSAGE"
         ACTIVE_TERMINAL_ANNOUNCED=1
       fi
       ;;
     ERROR|CANCELED)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
-        DURATION_SECONDS="$(duration_seconds_for_active "$CREATED_AT_MS" "$READY_AT_MS")"
-        DURATION_TEXT="$(format_duration "$DURATION_SECONDS")"
-        ALERT_MESSAGE="Deployment ${DEPLOYMENT_ID} ended with ${STATUS} after ${DURATION_TEXT}."
+        ALERT_MESSAGE="${ACTIVE_SPOKEN_PROJECT_NAME} deployment ended with ${STATUS} after ${DURATION_TEXT}."
         if [[ -n "$ERROR_MESSAGE" ]]; then
           ALERT_MESSAGE="${ALERT_MESSAGE} ${ERROR_MESSAGE}"
         fi
-        warn_line "ALERT: ${ALERT_MESSAGE}"
+        LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
+        warn_line "Alert: ${ALERT_MESSAGE}"
         speak_alert "$ALERT_MESSAGE"
         ACTIVE_TERMINAL_ANNOUNCED=1
       fi
@@ -527,5 +752,6 @@ while true; do
   esac
 
   ACTIVE_LAST_STATUS="$STATUS"
+  render_dashboard
   sleep_for_next_poll
 done
