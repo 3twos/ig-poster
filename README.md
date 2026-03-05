@@ -188,6 +188,17 @@ gh secret set VERCEL_PROJECT_ID --repo 3twos/ig-poster --body "<your_project_id>
 
 After these are set, pushes to `main` auto-deploy production and PRs auto-deploy preview.
 
+Monitor a deployment continuously from your terminal:
+
+```bash
+# deployment id, deployment URL host, or Vercel dashboard deployment URL
+./scripts/monitor-vercel-deployment.sh <deployment-id-or-url> --interval 5
+```
+
+Environment options:
+- `VERCEL_TOKEN` (required unless passed via `--token`)
+- `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (optional, for team-scoped deploys)
+
 ## Vercel Cron
 
 Cron is configured in `vercel.json`:
