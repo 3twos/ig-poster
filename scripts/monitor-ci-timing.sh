@@ -996,7 +996,7 @@ render_dashboard() {
   printf 'Last Update  : %s\n' "$(date '+%H:%M:%S')"
 
   printf '\nLatest Run\n'
-  printf '----------\n'
+  printf '%s\n' '----------'
   printf 'Run         : #%s (%s)\n' "$latest_number" "$(truncate_text "$latest_id" 20)"
   printf 'State       : %s %s\n' "$latest_state_mark" "$latest_state_label"
   printf 'Branch/Event: %s / %s\n' "$latest_branch" "$latest_event"
@@ -1007,7 +1007,7 @@ render_dashboard() {
   printf 'Title       : %s\n' "${latest_title:-n/a}"
 
   printf '\nTrend (Completed Runs)\n'
-  printf '----------------------\n'
+  printf '%s\n' '----------------------'
   printf 'Branch p50  : queue %s | exec %s | total %s\n' \
     "$(format_duration "$BRANCH_P50_QUEUE")" "$(format_duration "$BRANCH_P50_EXEC")" "$(format_duration "$BRANCH_P50_TOTAL")"
   printf 'Branch p95  : queue %s | exec %s | total %s\n' \
@@ -1026,7 +1026,7 @@ render_dashboard() {
   fi
 
   printf '\nTop Slow Jobs (Latest Run)\n'
-  printf '--------------------------\n'
+  printf '%s\n' '--------------------------'
 
   if (( ${#JOB_IDS[@]} == 0 )); then
     printf 'No job timing data available yet.\n'
@@ -1052,7 +1052,7 @@ render_dashboard() {
   fi
 
   printf '\nRecent Runs\n'
-  printf '-----------\n'
+  printf '%s\n' '-----------'
 
   if (( ${#RUN_IDS[@]} == 0 )); then
     printf 'No runs found for branch %s.\n' "$BRANCH"

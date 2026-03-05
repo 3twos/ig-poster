@@ -1675,7 +1675,7 @@ render_dashboard() {
   printf 'Last Update  : %s\n' "${DASH_UPDATED_AT_LABEL:-n/a}"
 
   printf '\nCurrent Status\n'
-  printf '--------------\n'
+  printf '%s\n' '--------------'
   printf 'Overall      : %s %s\n' "$status_mark" "${DASH_STATUS_LABEL:-Unknown}"
   printf 'Deployments  : %s total | %s active | %s ready | %s failed\n' \
     "${DASH_DEPLOYMENTS_TOTAL:-0}" "${DASH_DEPLOYMENTS_ACTIVE:-0}" "${DASH_DEPLOYMENTS_READY:-0}" "${DASH_DEPLOYMENTS_FAILED:-0}"
@@ -1685,7 +1685,7 @@ render_dashboard() {
   printf 'Alert Time   : %s\n' "$alert_time_display"
 
   printf '\nDeployment Details\n'
-  printf '------------------\n'
+  printf '%s\n' '------------------'
 
   if (( ${#DEP_IDS[@]} == 0 )); then
     printf 'No deployments detected yet.\n'
