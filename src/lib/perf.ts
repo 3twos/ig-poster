@@ -8,12 +8,23 @@ export function perfMark(label: string): void {
 export function perfMeasure(label: string, startMark: string): void {
   if (!isDev) return;
   try {
-    const entry = performance.measure(label, startMark);
-    console.log(`[perf] ${label}: ${Math.round(entry.duration)}ms`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const measureResult = performance.measure(label, startMark) as any;
+    const duration: number | undefined =
+      measureResult?.duration ??
+      performance.getEntriesByName(label).at(-1)?.duration;
+    if (duration != null) {
+      console.log(`[perf] ${label}: ${Math.round(duration)}ms`);
+    }
+  } catch {
+    // marks may have been cleared already or measure() is unsupported
+    const fallback = performance.getEntriesByName(label).at(-1)?.duration;
+    if (fallback != null) {
+      console.log(`[perf] ${label}: ${Math.round(fallback)}ms`);
+    }
+  } finally {
     performance.clearMarks(startMark);
     performance.clearMeasures(label);
-  } catch {
-    // marks may have been cleared already
   }
 }
 

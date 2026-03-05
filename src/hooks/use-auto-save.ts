@@ -17,7 +17,7 @@ export function useAutoSave(
 ) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const lastSavedRef = useRef<string | null>(null);
-  const lastSerializedRef = useRef<string | null>(null);
+  const lastSerializedRef = useRef<{ id: string; json: string } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const onSavedRef = useRef(options?.onSaved);
@@ -39,7 +39,8 @@ export function useAutoSave(
     const d = draftRef.current;
     if (!d) return;
 
-    const serialized = lastSerializedRef.current ?? withPerfSync("autoSave:serialize", () => serializeDraft(d));
+    const cached = lastSerializedRef.current;
+    const serialized = (cached && cached.id === d.id) ? cached.json : withPerfSync("autoSave:serialize", () => serializeDraft(d));
     if (serialized === lastSavedRef.current) return;
 
     // Cancel any pending debounce
@@ -89,7 +90,7 @@ export function useAutoSave(
     if (!draft) return;
 
     const serialized = withPerfSync("autoSave:serialize", () => serializeDraft(draft));
-    lastSerializedRef.current = serialized;
+    lastSerializedRef.current = { id: draft.id, json: serialized };
     if (serialized === lastSavedRef.current) {
       // Draft reverted to saved state (e.g. undo) — clear pending timer
       if (timerRef.current) clearTimeout(timerRef.current);

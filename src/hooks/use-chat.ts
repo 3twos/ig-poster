@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useReducer, useRef } from "react";
 
 import type { ChatMessage, ChatStreamingStatus } from "@/lib/chat-types";
 import { perfMark, perfMeasure } from "@/lib/perf";
@@ -124,16 +124,6 @@ export function useChat(options: UseChatOptions) {
   const messagesRef = useRef(state.messages);
   messagesRef.current = state.messages;
 
-  // rAF handle for token batching cleanup
-  const rafRef = useRef<number | null>(null);
-
-  // Cleanup rAF on unmount
-  useEffect(() => {
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
   /**
    * Shared streaming logic used by both `send` and `regenerate`.
    * Handles fetch, SSE parsing, dispatch, abort, and onStreamComplete callback.
@@ -143,6 +133,11 @@ export function useChat(options: UseChatOptions) {
     message: string,
     history: Array<{ role: string; content: string }>,
   ) => {
+    // Abort any in-flight stream before starting a new one
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+
     dispatch({ type: "START_STREAMING" });
     perfMark("chat:stream:start");
 
@@ -150,11 +145,12 @@ export function useChat(options: UseChatOptions) {
     abortRef.current = controller;
     let accumulated = "";
     let tokenBuffer = "";
+    let localRaf: number | null = null;
 
     const flushTokens = () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      if (localRaf !== null) {
+        cancelAnimationFrame(localRaf);
+        localRaf = null;
       }
       if (tokenBuffer) {
         dispatch({ type: "APPEND_STREAMING", content: tokenBuffer });
@@ -163,9 +159,9 @@ export function useChat(options: UseChatOptions) {
     };
 
     const scheduleFlush = () => {
-      if (rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = null;
+      if (localRaf === null) {
+        localRaf = requestAnimationFrame(() => {
+          localRaf = null;
           if (tokenBuffer) {
             dispatch({ type: "APPEND_STREAMING", content: tokenBuffer });
             tokenBuffer = "";
