@@ -372,14 +372,6 @@ export default function Home() {
     });
   }, [syncAssetsToPost]);
 
-  const removeLogo = useCallback(() => {
-    setLocalLogo((current) => {
-      if (current) URL.revokeObjectURL(current.previewUrl);
-      return null;
-    });
-    dispatch({ type: "SET_LOGO", logoUrl: null });
-  }, [dispatch]);
-
   const reorderAssets = useCallback((reordered: LocalAsset[]) => {
     setLocalAssets(reordered); syncAssetsToPost(reordered);
   }, [syncAssetsToPost]);
