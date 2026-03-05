@@ -31,9 +31,15 @@ Next.js 16 App Router application (React 19, TypeScript 5, Tailwind CSS v4) depl
 
 | Route | File | Purpose |
 |---|---|---|
-| `/` | `src/app/page.tsx` | Post brief, asset upload, generate, preview, results, publish |
-| `/brand` | `src/app/brand/page.tsx` | Brand kit fields, website autofill, logo upload, prompt config |
-| `/settings` | `src/app/settings/page.tsx` | LLM provider config (connect/disconnect) |
+| `/` | `src/app/page.tsx` | Posts home — post brief, asset upload, generate, preview, results, publish |
+| `/brand` | `src/app/brand/page.tsx` | Redirects to `/` |
+| `/settings` | `src/app/settings/page.tsx` | Redirects to `/` |
+
+Settings and Brand Kits are full-screen modal overlays rendered from the home page:
+- `src/components/settings-modal.tsx` — LLM provider config, entry point to Brand Kits
+- `src/components/brand-kit-modal.tsx` — Master/detail brand kit editor (multiple kits)
+
+The Settings modal is opened via the `ig:open-settings` custom event dispatched from `<AppNav>`, the command palette, the onboarding checklist, and `post-brief-form.tsx`. The Brand Kits modal is opened from within the Settings modal via a callback, or via `ig:open-brand-kits` from the command palette and onboarding checklist.
 
 All pages share `<AppShell>` (`src/components/app-shell.tsx`) which wraps content with `<AppNav>` (`src/components/app-nav.tsx`).
 
