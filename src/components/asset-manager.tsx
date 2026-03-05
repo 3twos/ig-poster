@@ -27,7 +27,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useState, type ChangeEvent } from "react";
+import { useId, useRef, useState, type ChangeEvent } from "react";
 
 import type { LocalAsset } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -60,6 +60,10 @@ export function AssetManager({
   onRemoveLogo,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const addAssetInputId = useId();
+  const addAssetInputRef = useRef<HTMLInputElement>(null);
+  const logoInputId = useId();
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -93,17 +97,23 @@ export function AssetManager({
           <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
             Assets
           </p>
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300"
+            onClick={() => addAssetInputRef.current?.click()}
+          >
             <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
             {assets.length > 0 ? "Add assets" : "Attach assets"}
-            <input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              className="hidden"
-              onChange={onAssetUpload}
-            />
-          </label>
+          </button>
+          <input
+            id={addAssetInputId}
+            ref={addAssetInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            className="sr-only"
+            onChange={onAssetUpload}
+          />
         </div>
         <p className="mt-1 text-[11px] text-slate-400">
           Upload images and short videos for generation.
@@ -150,18 +160,22 @@ export function AssetManager({
             Logo
           </p>
           <div className="flex items-center gap-1.5">
-            <label className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/20 text-slate-200 transition hover:border-orange-300 hover:text-white">
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/20 bg-black/20 text-slate-200 transition hover:border-orange-300 hover:text-white"
+              aria-label={logo ? "Replace logo" : "Attach logo"}
+            >
               <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
-              <span className="sr-only">
-                {logo ? "Replace logo" : "Attach logo"}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={onLogoUpload}
-              />
-            </label>
+            </button>
+            <input
+              id={logoInputId}
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={onLogoUpload}
+            />
             <button
               type="button"
               onClick={onRemoveLogo}
@@ -308,14 +322,14 @@ function SortableAssetTile({
         type="button"
         onClick={onRemove}
         aria-label="Remove"
-        className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow transition hover:bg-red-400 group-hover:opacity-100"
+        className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-100 shadow transition hover:bg-red-400 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
       >
         <X className="h-3 w-3" />
       </button>
 
       {/* Reorder arrows — bottom corners, one-click */}
       {total > 1 && (
-        <div className="absolute inset-x-0 bottom-1 z-10 flex justify-between px-1 opacity-0 transition group-hover:opacity-100">
+        <div className="absolute inset-x-0 bottom-1 z-10 flex justify-between px-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
           <button
             type="button"
             onClick={() => onMove(-1)}
@@ -339,7 +353,7 @@ function SortableAssetTile({
 
       {/* Position badge */}
       {total > 1 && (
-        <span className="absolute left-1.5 top-1.5 z-[5] flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-[9px] font-bold text-white group-hover:opacity-0 transition">
+        <span className="absolute left-1.5 top-1.5 z-[5] flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-[9px] font-bold text-white transition md:group-hover:opacity-0 md:group-focus-within:opacity-0">
           {index + 1}
         </span>
       )}

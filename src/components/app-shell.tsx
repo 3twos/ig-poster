@@ -3,7 +3,13 @@
 import { AppNav } from "@/components/app-nav";
 import { AppStatusBar } from "@/components/app-status-bar";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  showFooterStatusBar = true,
+}: {
+  children: React.ReactNode;
+  showFooterStatusBar?: boolean;
+}) {
   return (
     <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white">
       <a
@@ -20,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main id="main-content" className="min-w-0 flex-1">
         {children}
       </main>
-      <AppStatusBar />
+      {showFooterStatusBar ? <AppStatusBar /> : null}
     </div>
   );
 }

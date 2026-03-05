@@ -16,6 +16,11 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -171,163 +176,159 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
 
   const providerLabel = (provider: LlmProvider) => provider === "openai" ? "OpenAI" : "Anthropic";
 
-  const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handleKeyDown);
-    modalRef.current?.focus();
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   return (
-    <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Settings" tabIndex={-1} className="fixed inset-0 z-[60] flex flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white outline-none">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <h1 className="text-lg font-semibold text-white">Settings</h1>
-        <Button variant="ghost" size="icon-sm" onClick={onClose} className="text-slate-300 hover:text-white" aria-label="Close settings">
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="z-[60] h-[100dvh] w-screen max-w-none translate-x-[-50%] translate-y-[-50%] rounded-none border-0 bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] p-0 text-white"
+      >
+        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <div className="flex h-full flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+            <h1 className="text-lg font-semibold text-white">Settings</h1>
+            <Button variant="ghost" size="icon-sm" onClick={onClose} className="text-slate-300 hover:text-white" aria-label="Close settings">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto max-w-2xl space-y-6">
-          {/* Brand Kits entry point */}
-          <button
-            type="button"
-            onClick={onOpenBrandKits}
-            className="flex w-full items-center gap-3 rounded-2xl border border-white/15 bg-slate-900/55 p-5 text-left backdrop-blur-xl transition hover:border-orange-300/30 hover:bg-slate-900/70"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
-              <Palette className="h-5 w-5 text-orange-300" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-white">Brand Kits</p>
-              <p className="text-xs text-slate-400">Manage brand identity, colors, voice, and logos</p>
-            </div>
-            <span className="text-slate-500">&rsaquo;</span>
-          </button>
-
-          {/* LLM Providers */}
-          <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
-            <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
-              <BrainCircuit className="h-4 w-4 text-orange-300" />
-              LLM Providers
-            </div>
-
-            {connections.length > 1 && (
-              <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
-                <Label className="mb-2 block text-xs text-slate-300">Execution Mode</Label>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => handleModeChange("fallback")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${mode === "fallback" ? "bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-300"}`}>
-                    Fallback
-                    <span className="mt-0.5 block text-[10px] font-normal opacity-70">Try models in order. First success wins.</span>
-                  </button>
-                  <button type="button" onClick={() => handleModeChange("parallel")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${mode === "parallel" ? "bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-300"}`}>
-                    Parallel
-                    <span className="mt-0.5 block text-[10px] font-normal opacity-70">Query all models. Pick best variants.</span>
-                  </button>
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="mx-auto max-w-2xl space-y-6">
+              {/* Brand Kits entry point */}
+              <button
+                type="button"
+                onClick={onOpenBrandKits}
+                className="flex w-full items-center gap-3 rounded-2xl border border-white/15 bg-slate-900/55 p-5 text-left backdrop-blur-xl transition hover:border-orange-300/30 hover:bg-slate-900/70"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
+                  <Palette className="h-5 w-5 text-orange-300" />
                 </div>
-                {isSavingOrder && <p className="mt-1.5 text-[10px] text-slate-500">Saving...</p>}
-              </div>
-            )}
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-white">Brand Kits</p>
+                  <p className="text-xs text-slate-400">Manage brand identity, colors, voice, and logos</p>
+                </div>
+                <span className="text-slate-500">&rsaquo;</span>
+              </button>
 
-            <div className="space-y-2">
-              {isLoading ? (
+              {/* LLM Providers */}
+              <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
+                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+                  <BrainCircuit className="h-4 w-4 text-orange-300" />
+                  LLM Providers
+                </div>
+
+                {connections.length > 1 && (
+                  <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
+                    <Label className="mb-2 block text-xs text-slate-300">Execution Mode</Label>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => handleModeChange("fallback")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${mode === "fallback" ? "bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-300"}`}>
+                        Fallback
+                        <span className="mt-0.5 block text-[10px] font-normal opacity-70">Try models in order. First success wins.</span>
+                      </button>
+                      <button type="button" onClick={() => handleModeChange("parallel")} className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${mode === "parallel" ? "bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-300"}`}>
+                        Parallel
+                        <span className="mt-0.5 block text-[10px] font-normal opacity-70">Query all models. Pick best variants.</span>
+                      </button>
+                    </div>
+                    {isSavingOrder && <p className="mt-1.5 text-[10px] text-slate-500">Saving...</p>}
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <Skeleton className="h-14 w-full rounded-xl" />
-                  <Skeleton className="h-14 w-full rounded-xl" />
-                </div>
-              ) : connections.length === 0 ? (
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-center text-xs text-slate-400">
-                  No providers connected yet. Add a model below.
-                </div>
-              ) : (
-                connections.map((conn, index) => (
-                  <div
-                    key={conn.id}
-                    draggable={connections.length > 1}
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDrop={handleDrop}
-                    className="group flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-3 transition-colors hover:border-white/20"
-                  >
-                    {connections.length > 1 && (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <GripVertical className="h-3.5 w-3.5 cursor-grab text-slate-500 active:cursor-grabbing" />
+                  {isLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-14 w-full rounded-xl" />
+                      <Skeleton className="h-14 w-full rounded-xl" />
+                    </div>
+                  ) : connections.length === 0 ? (
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-center text-xs text-slate-400">
+                      No providers connected yet. Add a model below.
+                    </div>
+                  ) : (
+                    connections.map((conn, index) => (
+                      <div
+                        key={conn.id}
+                        draggable={connections.length > 1}
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDrop={handleDrop}
+                        className="group flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-3 transition-colors hover:border-white/20"
+                      >
+                        {connections.length > 1 && (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <GripVertical className="h-3.5 w-3.5 cursor-grab text-slate-500 active:cursor-grabbing" />
+                          </div>
+                        )}
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-slate-300">{index + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-white">{providerLabel(conn.provider)}</span>
+                            <span className="text-xs text-slate-400">{conn.model}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                            {conn.source === "env" ? (<><Monitor className="h-2.5 w-2.5" />auto-detected (env)</>) : (<><KeyRound className="h-2.5 w-2.5" />connected (BYOK)</>)}
+                          </div>
+                        </div>
+                        {connections.length > 1 && (
+                          <div className="flex flex-col gap-0.5">
+                            <button type="button" disabled={index === 0} onClick={() => moveConnection(index, index - 1)} aria-label="Move model up" className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"><ArrowUp className="h-3 w-3" /></button>
+                            <button type="button" disabled={index === connections.length - 1} onClick={() => moveConnection(index, index + 1)} aria-label="Move model down" className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"><ArrowDown className="h-3 w-3" /></button>
+                          </div>
+                        )}
+                        {conn.removable && (
+                          <button type="button" onClick={() => void disconnectConnection(conn.id)} disabled={disconnectingId === conn.id} className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50" title="Disconnect" aria-label="Disconnect model">
+                            {disconnectingId === conn.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
                       </div>
-                    )}
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-slate-300">{index + 1}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-white">{providerLabel(conn.provider)}</span>
-                        <span className="text-xs text-slate-400">{conn.model}</span>
+                    ))
+                  )}
+                </div>
+
+                {!showAddForm ? (
+                  <Button variant="outline" className="mt-3 w-full" onClick={() => setShowAddForm(true)}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Model Connection
+                  </Button>
+                ) : (
+                  <div className="mt-3 rounded-xl border border-white/15 bg-black/10 p-3">
+                    <div className="mb-2 text-xs font-semibold text-slate-300">Connect a new model</div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="llm-provider">Provider</Label>
+                        <Select value={llmProvider} onValueChange={(value) => { const nextProvider = value as LlmProvider; const currentDefault = PROVIDER_DEFAULT_MODELS[llmProvider]; const shouldReplaceModel = !llmModelInput.trim() || llmModelInput === currentDefault; setLlmProvider(nextProvider); if (shouldReplaceModel) setLlmModelInput(PROVIDER_DEFAULT_MODELS[nextProvider]); }}>
+                          <SelectTrigger id="llm-provider"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="openai">OpenAI</SelectItem>
+                            <SelectItem value="anthropic">Anthropic</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                        {conn.source === "env" ? (<><Monitor className="h-2.5 w-2.5" />auto-detected (env)</>) : (<><KeyRound className="h-2.5 w-2.5" />connected (BYOK)</>)}
+                      <div className="space-y-1">
+                        <Label htmlFor="llm-model">Model (optional)</Label>
+                        <Input id="llm-model" value={llmModelInput} onChange={(event) => setLlmModelInput(event.target.value)} />
                       </div>
                     </div>
-                    {connections.length > 1 && (
-                      <div className="flex flex-col gap-0.5">
-                        <button type="button" disabled={index === 0} onClick={() => moveConnection(index, index - 1)} aria-label="Move model up" className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"><ArrowUp className="h-3 w-3" /></button>
-                        <button type="button" disabled={index === connections.length - 1} onClick={() => moveConnection(index, index + 1)} aria-label="Move model down" className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"><ArrowDown className="h-3 w-3" /></button>
-                      </div>
-                    )}
-                    {conn.removable && (
-                      <button type="button" onClick={() => void disconnectConnection(conn.id)} disabled={disconnectingId === conn.id} className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50" title="Disconnect" aria-label="Disconnect model">
-                        {disconnectingId === conn.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
-                      </button>
-                    )}
+                    <div className="mt-3 space-y-1">
+                      <Label htmlFor="llm-key">API Key</Label>
+                      <Input id="llm-key" type="password" autoComplete="off" value={llmApiKeyInput} onChange={(event) => setLlmApiKeyInput(event.target.value)} placeholder={llmProvider === "anthropic" ? "sk-ant-..." : "sk-..."} />
+                      <p className="text-[11px] text-slate-400">Stored encrypted at rest. Uses database when configured, otherwise falls back to an encrypted httpOnly cookie.</p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button onClick={() => void connectProvider()} disabled={isConnecting || !llmApiKeyInput.trim()}>
+                        {isConnecting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+                        {isConnecting ? "Connecting..." : "Connect"}
+                      </Button>
+                      <Button variant="ghost" onClick={() => { setShowAddForm(false); setLlmApiKeyInput(""); }} disabled={isConnecting}>Cancel</Button>
+                    </div>
                   </div>
-                ))
-              )}
-            </div>
-
-            {!showAddForm ? (
-              <Button variant="outline" className="mt-3 w-full" onClick={() => setShowAddForm(true)}>
-                <Plus className="h-3.5 w-3.5" />
-                Add Model Connection
-              </Button>
-            ) : (
-              <div className="mt-3 rounded-xl border border-white/15 bg-black/10 p-3">
-                <div className="mb-2 text-xs font-semibold text-slate-300">Connect a new model</div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="llm-provider">Provider</Label>
-                    <Select value={llmProvider} onValueChange={(value) => { const nextProvider = value as LlmProvider; const currentDefault = PROVIDER_DEFAULT_MODELS[llmProvider]; const shouldReplaceModel = !llmModelInput.trim() || llmModelInput === currentDefault; setLlmProvider(nextProvider); if (shouldReplaceModel) setLlmModelInput(PROVIDER_DEFAULT_MODELS[nextProvider]); }}>
-                      <SelectTrigger id="llm-provider"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="openai">OpenAI</SelectItem>
-                        <SelectItem value="anthropic">Anthropic</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="llm-model">Model (optional)</Label>
-                    <Input id="llm-model" value={llmModelInput} onChange={(event) => setLlmModelInput(event.target.value)} />
-                  </div>
-                </div>
-                <div className="mt-3 space-y-1">
-                  <Label htmlFor="llm-key">API Key</Label>
-                  <Input id="llm-key" type="password" autoComplete="off" value={llmApiKeyInput} onChange={(event) => setLlmApiKeyInput(event.target.value)} placeholder={llmProvider === "anthropic" ? "sk-ant-..." : "sk-..."} />
-                  <p className="text-[11px] text-slate-400">Stored encrypted at rest. Uses database when configured, otherwise falls back to an encrypted httpOnly cookie.</p>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button onClick={() => void connectProvider()} disabled={isConnecting || !llmApiKeyInput.trim()}>
-                    {isConnecting ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
-                    {isConnecting ? "Connecting..." : "Connect"}
-                  </Button>
-                  <Button variant="ghost" onClick={() => { setShowAddForm(false); setLlmApiKeyInput(""); }} disabled={isConnecting}>Cancel</Button>
-                </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

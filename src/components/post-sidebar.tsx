@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 const FILTERS: Array<{ label: string; value: "all" | PostStatus }> = [
   { label: "All", value: "all" },
   { label: "Drafts", value: "draft" },
+  { label: "Generated", value: "generated" },
   { label: "Scheduled", value: "scheduled" },
   { label: "Published", value: "published" },
   { label: "Archived", value: "archived" },

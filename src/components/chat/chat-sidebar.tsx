@@ -156,7 +156,7 @@ function SidebarContent({
                   </button>
 
                   {/* Context menu */}
-                  <div className="absolute right-1.5 top-1.5 opacity-0 transition group-hover:opacity-100">
+                  <div className="absolute right-1.5 top-1.5 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button

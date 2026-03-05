@@ -85,7 +85,6 @@ export default function Home() {
   const [localLogo, setLocalLogo] = useState<LocalAsset | null>(null);
   const [editorMode, setEditorMode] = useState(false);
   const [isUploadingAssets, setIsUploadingAssets] = useState(false);
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
@@ -135,6 +134,10 @@ export default function Home() {
       customInstructions: activePost?.promptConfig?.customInstructions ?? "",
     }),
     [activePost?.promptConfig],
+  );
+  const localTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "local time",
+    [],
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -294,8 +297,8 @@ export default function Home() {
   const primaryVisual = getDisplayVisual(orderedVariantAssets[primaryVisualIndex]);
   const secondaryVisual = getDisplayVisual(orderedVariantAssets[1]);
 
-  const isAgentBusy = generation.isGenerating || isUploadingAssets || isUploadingLogo || isSharing || isPublishing || isRefining;
-  const canRetryGeneration = !generation.isGenerating && localAssets.length > 0 && !isUploadingAssets && !isUploadingLogo;
+  const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
+  const canRetryGeneration = !generation.isGenerating && localAssets.length > 0 && !isUploadingAssets;
 
   const statusLine = useMemo(() => {
     if (generation.agentRun?.status === "running") {
@@ -304,7 +307,7 @@ export default function Home() {
       return { tone: "active" as const, text: `${activeStep?.title ?? "Generating concepts"} · Step ${Math.max(activeIndex, 1)}/${Math.max(generation.agentRun.steps.length, 1)}${generation.agentRun.heartbeat ? ` · ${generation.agentRun.heartbeat}` : ""}`, elapsedMs: generation.runClock - generation.agentRun.startedAt, showStop: true };
     }
     if (generation.isGenerating) return { tone: "active" as const, text: "Preparing generation request...", elapsedMs: undefined, showStop: true };
-    if (isUploadingAssets || isUploadingLogo) return { tone: "active" as const, text: "Uploading assets...", elapsedMs: undefined, showStop: false };
+    if (isUploadingAssets) return { tone: "active" as const, text: "Uploading assets...", elapsedMs: undefined, showStop: false };
     if (isSharing) return { tone: "active" as const, text: "Creating share link...", elapsedMs: undefined, showStop: false };
     if (isPublishing) return { tone: "active" as const, text: "Publishing to Instagram...", elapsedMs: undefined, showStop: false };
     if (isRefining) return { tone: "active" as const, text: "Refining selected variant...", elapsedMs: undefined, showStop: false };
@@ -314,7 +317,7 @@ export default function Home() {
     if (publishMessage) return { tone: "success" as const, text: publishMessage, elapsedMs: undefined, showStop: false };
     if (shareUrl) return { tone: "success" as const, text: "Share link created.", elapsedMs: undefined, showStop: false };
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
-  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, isUploadingLogo, publishMessage, shareUrl]);
+  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, shareUrl]);
 
   const uploadFileToStorage = async (file: File, folder: string) => {
     const fd = new FormData(); fd.append("file", file); fd.append("folder", folder);
@@ -351,12 +354,9 @@ export default function Home() {
     generation.setError(null); setPublishMessage(null);
     const next: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
     setLocalLogo((c) => { if (c) revokeObjectUrlIfNeeded(c.previewUrl); return next; });
-    setIsUploadingLogo(true);
     try { const url = await uploadFileToStorage(file, "logos"); setLocalLogo((c) => c ? { ...c, status: "uploaded", storageUrl: url } : null); dispatch({ type: "SET_LOGO", logoUrl: url }); }
     catch (e) { setLocalLogo((c) => c ? { ...c, status: "local", error: e instanceof Error ? e.message : "Upload failed" } : null); }
-    finally { setIsUploadingLogo(false); }
   };
-
   const removeAsset = useCallback((id: string) => {
     setLocalAssets((current) => {
       const removing = current.find((asset) => asset.id === id);
@@ -442,6 +442,15 @@ export default function Home() {
     finally { setIsRefining(false); }
   };
 
+  const handleResetTextLayout = useCallback(() => {
+    if (!activeVariant) return;
+    dispatch({
+      type: "UPDATE_OVERLAY",
+      variantId: activeVariant.id,
+      layout: createDefaultOverlayLayout(activeVariant.layout),
+    });
+  }, [activeVariant, dispatch]);
+
   const createShareLink = async () => {
     if (!result || !activeVariant) return;
     generation.setError(null); setIsSharing(true);
@@ -491,7 +500,16 @@ export default function Home() {
       const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caption, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as { status?: string; mode?: string; publishAt?: string; publishId?: string };
-      if (j.status === "scheduled") { const m = `Scheduled for ${new Date(j.publishAt ?? "").toLocaleString()}`; setPublishMessage(m); toast.success(m); }
+      if (j.status === "scheduled") {
+        const scheduledIso = j.publishAt ?? publishAt;
+        const scheduledDate = scheduledIso ? new Date(scheduledIso) : null;
+        const scheduledText = scheduledDate && !Number.isNaN(scheduledDate.getTime())
+          ? scheduledDate.toLocaleString()
+          : "the selected time";
+        const m = `Scheduled for ${scheduledText} (${localTimeZone})`;
+        setPublishMessage(m);
+        toast.success(m);
+      }
       else { const m = "Published to Instagram successfully."; setPublishMessage(m); toast.success(m); dispatch({ type: "ADD_PUBLISH", entry: { publishedAt: new Date().toISOString(), igMediaId: j.publishId } }); }
     } catch (e) { const m = e instanceof Error ? e.message : "Instagram publish failed"; generation.setError(m); toast.error(m); }
     finally { setIsPublishing(false); }
@@ -529,7 +547,7 @@ export default function Home() {
   if (!activePost) {
     return (
       <>
-        <AppShell>
+        <AppShell showFooterStatusBar={false}>
           <div className="flex min-h-[60vh] items-center justify-center">
             <div className="mx-auto max-w-md text-center">
               <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
@@ -552,7 +570,7 @@ export default function Home() {
 
   return (
     <>
-      <AppShell>
+      <AppShell showFooterStatusBar={false}>
         <div className="pb-14" aria-busy={isAgentBusy}>
           {!brand.brandName && (
             <div className="mx-4 mb-4 rounded-xl border border-orange-300/30 bg-orange-400/10 p-3 text-xs text-orange-100 md:mx-8">
@@ -591,12 +609,12 @@ export default function Home() {
                     </section>
                     {result && (
                       <section className="border-b border-white/10 pb-6">
-                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />
+                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />
                       </section>
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
+                        <PublishSection authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
                       </section>
                     )}
                   </div>
@@ -621,12 +639,12 @@ export default function Home() {
               </ResizablePanel>
             </ResizablePanelGroup>
             <div className="fixed left-2 top-1/2 z-40 -translate-y-1/2">
-              <Button variant="outline" size="icon-xs" onClick={() => { const p = leftPanelRef.current; if (p) { if (p.isCollapsed()) p.expand(); else p.collapse(); } }} className="h-8 w-5 rounded-full border-white/20 bg-slate-900/80 text-slate-400 hover:text-white">
+              <Button variant="outline" size="icon-xs" onClick={() => { const p = leftPanelRef.current; if (p) { if (p.isCollapsed()) p.expand(); else p.collapse(); } }} className="h-8 w-5 rounded-full border-white/20 bg-slate-900/80 text-slate-400 hover:text-white" aria-label={leftCollapsed ? "Expand post list panel" : "Collapse post list panel"}>
                 {leftCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
               </Button>
             </div>
             <div className="fixed right-2 top-1/2 z-40 -translate-y-1/2">
-              <Button variant="outline" size="icon-xs" onClick={() => { const p = rightPanelRef.current; if (p) { if (p.isCollapsed()) p.expand(); else p.collapse(); } }} className="h-8 w-5 rounded-full border-white/20 bg-slate-900/80 text-slate-400 hover:text-white">
+              <Button variant="outline" size="icon-xs" onClick={() => { const p = rightPanelRef.current; if (p) { if (p.isCollapsed()) p.expand(); else p.collapse(); } }} className="h-8 w-5 rounded-full border-white/20 bg-slate-900/80 text-slate-400 hover:text-white" aria-label={rightCollapsed ? "Expand insights panel" : "Collapse insights panel"}>
                 {rightCollapsed ? <ChevronLeft className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               </Button>
             </div>
@@ -637,8 +655,8 @@ export default function Home() {
             <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
-            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
+            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
+            {activeVariant && <PublishSection authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

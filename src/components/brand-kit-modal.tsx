@@ -11,10 +11,15 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -60,6 +65,8 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
   const [kitName, setKitName] = useState("Default");
 
   const logoCleanupRef = useRef<LocalAsset | null>(null);
+  const logoInputId = useId();
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const computeSnapshot = useCallback(() => {
     return JSON.stringify({ brand, promptConfig, logoUrl: logo?.storageUrl });
@@ -248,91 +255,85 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     }
   };
 
-  const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handleKeyDown);
-    modalRef.current?.focus();
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   return (
-    <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Brand Kits" tabIndex={-1} className="fixed inset-0 z-[70] flex flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white outline-none">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon-sm" onClick={onClose} className="text-slate-300 hover:text-white" aria-label="Back to Settings">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-semibold text-white">Brand Kits</h1>
-        </div>
-        <Button onClick={() => void saveSettings()} disabled={isSaving || !isDirty || !activeKitId}>
-          {isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          {isSaving ? "Saving..." : "Save"}
-        </Button>
-      </div>
-
-      {/* Master/Detail layout */}
-      {!isLoaded ? (
-        <div className="flex-1 p-6">
-          <div className="mx-auto max-w-4xl space-y-4">
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-64 w-full rounded-xl" />
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-1 overflow-hidden">
-          {/* Master — kit list (left sidebar) */}
-          <div className="flex w-64 shrink-0 flex-col border-r border-white/10 max-md:w-48">
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-              <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase">Kits</span>
-              <Button variant="ghost" size="icon-sm" onClick={() => void createNewKit()} disabled={isCreatingKit} className="text-slate-400 hover:text-white" aria-label="New kit">
-                <Plus className="h-4 w-4" />
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="z-[70] h-[100dvh] w-screen max-w-none translate-x-[-50%] translate-y-[-50%] rounded-none border-0 bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] p-0 text-white"
+      >
+        <DialogTitle className="sr-only">Brand Kits</DialogTitle>
+        <div className="flex h-full flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon-sm" onClick={onClose} className="text-slate-300 hover:text-white" aria-label="Back to Settings">
+                <ArrowLeft className="h-5 w-5" />
               </Button>
+              <h1 className="text-lg font-semibold text-white">Brand Kits</h1>
             </div>
-            <ScrollArea className="flex-1">
-              <div className="space-y-1 p-2">
-                {kits.map((kit) => (
-                  <button
-                    key={kit.id}
-                    type="button"
-                    onClick={() => loadKitData(kit)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition",
-                      kit.id === activeKitId
-                        ? "bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30"
-                        : "text-slate-300 hover:bg-white/5 hover:text-white",
-                    )}
-                  >
-                    <Palette className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{kit.name}</span>
-                    {kit.isDefault && <span className="ml-auto text-[10px] text-slate-500">default</span>}
-                  </button>
-                ))}
-              </div>
-            </ScrollArea>
+            <Button onClick={() => void saveSettings()} disabled={isSaving || !isDirty || !activeKitId}>
+              {isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              {isSaving ? "Saving..." : "Save"}
+            </Button>
           </div>
 
-          {/* Detail — kit editor (right) */}
-          <ScrollArea className="flex-1">
-            {!activeKitId ? (
-              <div className="flex h-full flex-col items-center justify-center gap-4 p-12 text-center">
-                <Palette className="h-10 w-10 text-slate-500" />
-                <div>
-                  <p className="text-lg font-semibold text-slate-200">No brand kits yet</p>
-                  <p className="mt-1 text-sm text-slate-400">Create a kit to define your brand identity, colors, and prompt controls.</p>
-                </div>
-                <Button onClick={() => void createNewKit()} disabled={isCreatingKit}>
-                  {isCreatingKit ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {isCreatingKit ? "Creating..." : "Create Kit"}
-                </Button>
+          {/* Master/Detail layout */}
+          {!isLoaded ? (
+            <div className="flex-1 p-6">
+              <div className="mx-auto max-w-4xl space-y-4">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-64 w-full rounded-xl" />
               </div>
-            ) : (
-            <div className="mx-auto max-w-3xl space-y-6 p-6">
+            </div>
+          ) : (
+            <div className="flex flex-1 overflow-hidden">
+              {/* Master — kit list (left sidebar) */}
+              <div className="flex w-64 shrink-0 flex-col border-r border-white/10 max-md:w-48">
+                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                  <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase">Kits</span>
+                  <Button variant="ghost" size="icon-sm" onClick={() => void createNewKit()} disabled={isCreatingKit} className="text-slate-400 hover:text-white" aria-label="New kit">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <ScrollArea className="flex-1">
+                  <div className="space-y-1 p-2">
+                    {kits.map((kit) => (
+                      <button
+                        key={kit.id}
+                        type="button"
+                        onClick={() => loadKitData(kit)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition",
+                          kit.id === activeKitId
+                            ? "bg-orange-500/15 text-orange-200 ring-1 ring-orange-500/30"
+                            : "text-slate-300 hover:bg-white/5 hover:text-white",
+                        )}
+                      >
+                        <Palette className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{kit.name}</span>
+                        {kit.isDefault && <span className="ml-auto text-[10px] text-slate-500">default</span>}
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Detail — kit editor (right) */}
+              <ScrollArea className="flex-1">
+                {!activeKitId ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-4 p-12 text-center">
+                    <Palette className="h-10 w-10 text-slate-500" />
+                    <div>
+                      <p className="text-lg font-semibold text-slate-200">No brand kits yet</p>
+                      <p className="mt-1 text-sm text-slate-400">Create a kit to define your brand identity, colors, and prompt controls.</p>
+                    </div>
+                    <Button onClick={() => void createNewKit()} disabled={isCreatingKit}>
+                      {isCreatingKit ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      {isCreatingKit ? "Creating..." : "Create Kit"}
+                    </Button>
+                  </div>
+                ) : (
+                <div className="mx-auto max-w-3xl space-y-6 p-6">
               {/* Kit name + delete */}
               <div className="flex items-center gap-3">
                 <Input
@@ -364,7 +365,11 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                 {/* Logo */}
                 <div className="mb-5">
                   <Label className="mb-1.5 block">Logo</Label>
-                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/30 bg-white/5 p-4 text-xs font-medium text-slate-200 transition hover:border-orange-300">
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/30 bg-white/5 p-4 text-xs font-medium text-slate-200 transition hover:border-orange-300 focus-visible:border-orange-300"
+                  >
                     {logo ? (
                       <div className="flex items-center gap-3">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -383,8 +388,15 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                         Attach logo
                       </span>
                     )}
-                    <input type="file" accept="image/*" className="hidden" onChange={(event) => void handleLogoUpload(event)} />
-                  </label>
+                  </button>
+                  <input
+                    id={logoInputId}
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(event) => void handleLogoUpload(event)}
+                  />
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
@@ -489,10 +501,12 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                 </p>
               </div>
             </div>
-            )}
-          </ScrollArea>
+                )}
+              </ScrollArea>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

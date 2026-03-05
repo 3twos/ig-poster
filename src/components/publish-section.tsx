@@ -2,7 +2,6 @@
 
 import {
   CalendarClock,
-  LayoutTemplate,
   Link2,
   LoaderCircle,
   Send,
@@ -12,12 +11,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { CreativeVariant } from "@/lib/creative";
 import type { InstagramAuthStatus } from "@/lib/types";
-import { createDefaultOverlayLayout } from "@/lib/creative";
 
 type Props = {
-  activeVariant: CreativeVariant | null;
   authStatus: InstagramAuthStatus;
   isAuthLoading: boolean;
   isDisconnecting: boolean;
@@ -25,7 +21,7 @@ type Props = {
   isPublishing: boolean;
   shareUrl: string | null;
   shareCopyState: "idle" | "done";
-  dispatch: (action: Record<string, unknown>) => void;
+  localTimeZone: string;
   onDisconnectInstagram: () => void;
   onCreateShareLink: () => void;
   onPostNow: () => void;
@@ -33,7 +29,6 @@ type Props = {
 };
 
 export function PublishSection({
-  activeVariant,
   authStatus,
   isAuthLoading,
   isDisconnecting,
@@ -41,7 +36,7 @@ export function PublishSection({
   isPublishing,
   shareUrl,
   shareCopyState,
-  dispatch,
+  localTimeZone,
   onDisconnectInstagram,
   onCreateShareLink,
   onPostNow,
@@ -135,23 +130,6 @@ export function PublishSection({
           )}
           Create Share Link
         </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!activeVariant}
-          onClick={() => {
-            if (!activeVariant) return;
-            dispatch({
-              type: "UPDATE_OVERLAY",
-              variantId: activeVariant.id,
-              layout: createDefaultOverlayLayout(activeVariant.layout),
-            });
-          }}
-        >
-          <LayoutTemplate className="h-3.5 w-3.5" />
-          Reset Text Layout
-        </Button>
       </div>
 
       {shareUrl ? (
@@ -201,6 +179,9 @@ export function PublishSection({
               Schedule
             </Button>
           </div>
+          <p className="text-[11px] text-slate-400">
+            Time uses your local timezone: {localTimeZone}
+          </p>
         </div>
       </div>
     </div>

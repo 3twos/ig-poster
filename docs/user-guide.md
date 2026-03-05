@@ -16,7 +16,7 @@
    - Open the app and complete Google Workspace login.
 
 2. (Optional but recommended) Connect one or more LLM providers
-   - On the Settings page, add an OpenAI or Anthropic connection by entering an API key and model.
+   - Open **Settings** from the top-right controls, then add an OpenAI or Anthropic connection by entering an API key and model.
    - You can connect multiple providers/models simultaneously. They appear in a prioritized list that you can drag to reorder.
    - Choose an execution mode:
      - **Fallback** -- models are tried in priority order; the first successful response wins.
@@ -28,7 +28,7 @@
    - Left panel: posts list with thumbnails — browse, select, post now/schedule, archive, or delete posts.
    - Each post row is fully clickable (title, thumbnail, and metadata), and hover on a thumbnail shows a larger preview.
    - Post rows show visual state chips (`Unposted`, `Dirty`, `Posted`, plus `Scheduled`/`Archived` where applicable).
-   - Filter tabs include All, Drafts, Scheduled, Published, and Archived.
+   - Filter tabs include All, Drafts, Generated, Scheduled, Published, and Archived.
    - Center panel: post brief, asset manager, preview, strategy, and publish sections.
    - Right panel: switch between **Agent** and **Chat** tabs.
      - Agent tab: real-time generation progress and LLM reasoning.
@@ -75,6 +75,7 @@
    - Connect Instagram via Meta OAuth (if not already connected).
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
+   - Scheduling uses your browser's local timezone (shown next to the date-time field).
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).

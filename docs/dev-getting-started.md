@@ -122,7 +122,9 @@ psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
 - `src/components/post-brief-form.tsx`: post brief fields, brand kit selector, generate/export buttons.
 - `src/components/asset-manager.tsx`: drag-and-drop reorderable asset list (uses `@dnd-kit/sortable`).
 - `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
-- `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time.
+- `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time (optionally hidden on pages that render their own fixed status controls).
+- `src/components/settings-modal.tsx`: full-screen settings dialog (LLM connections, ordering, execution mode).
+- `src/components/brand-kit-modal.tsx`: full-screen brand kit dialog (logo, palette, voice, prompt controls, kit CRUD).
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls.
 - `src/components/publish-section.tsx`: share link, Instagram auth, schedule, publish form.
@@ -137,6 +139,7 @@ psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
 - `src/lib/chat-system-prompt.ts`: chat system prompt builder with brand context injection.
 - `src/lib/agent-types.ts`: agent run/step types and UI utility functions.
 - `src/app/share/[id]/page.tsx`: shared project view.
+- `src/app/settings/page.tsx` and `src/app/brand/page.tsx`: compatibility routes that redirect to `/` (settings and brand editing now live in modals from the main shell).
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing, and brand kit CRUD (`/api/brand-kits`).
 - `src/db/schema.ts`: Drizzle ORM schema for `posts` and `brand_kits` tables.
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
