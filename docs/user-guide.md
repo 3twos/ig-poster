@@ -5,6 +5,7 @@
 - You need an allowed Google Workspace account to create, edit, generate, publish, and schedule content.
 - Shared project links at `/share/<id>` are public read-only pages; treat links as sensitive.
 - For full functionality, ensure the environment has:
+  - Postgres configured (`POSTGRES_URL` or `DATABASE_URL`) for post creation/loading and autosave.
   - Blob storage configured (`BLOB_READ_WRITE_TOKEN`) for uploads/shares/scheduling.
   - Meta credentials configured (OAuth app settings and/or env fallback) for publishing.
   - LLM credentials connected (or env fallback) for model-based generation.
@@ -102,6 +103,9 @@
 
 - "Unauthorized" responses:
   - Sign in again with your Workspace account.
+
+- Main page is empty and "New Post" does nothing:
+  - Verify `POSTGRES_URL` or `DATABASE_URL` is configured for the running environment.
 
 - Upload/share/schedule errors mentioning Blob:
   - Configure `BLOB_READ_WRITE_TOKEN`.

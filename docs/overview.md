@@ -22,10 +22,11 @@
 ## Key Features
 
 - Workspace login gate for all private pages and APIs; `/share/<id>` remains a public, read-only link.
+- Postgres-backed persistent post workspace (create/select/archive/delete + autosave).
 - Multi-model LLM generation pipeline with strict schema validation, supporting prioritized model lists with Fallback and Parallel execution modes.
 - Deterministic fallback generation when no LLM credentials are available or all models fail.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
-- Blob-backed storage for uploads, projects, auth connection records, and scheduled jobs.
+- Blob-backed storage for uploads, shared project snapshots, and scheduled publish jobs.
 
 ## Primary User Scenarios
 
@@ -51,6 +52,7 @@
 
 ## Scope Boundaries
 
+- Without `POSTGRES_URL` or `DATABASE_URL`, private post creation/loading is unavailable.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads, sharing, and scheduling are unavailable.
 - Without Meta credentials (OAuth or env), Instagram publishing is unavailable.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).

@@ -5,7 +5,7 @@
 - Keep the product usable even when optional integrations are missing.
 - Enforce strict input/output contracts for AI and publishing workflows.
 - Keep credential handling encrypted and server-side.
-- Avoid introducing a database until workload and query patterns require one.
+- Use Postgres for relational app state while keeping Blob for binary assets and snapshots.
 
 ## System Overview
 
@@ -17,6 +17,7 @@ flowchart LR
   API --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
   API --> META["Meta Publisher (`src/lib/meta.ts`)"]
   API --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
+  API --> PG["Postgres (`posts` + private credentials)"]
   API --> BLOB["Vercel Blob Storage"]
   CRON["Vercel Cron (`/api/cron/publish`)"] --> BLOB
   CRON --> META
@@ -40,6 +41,9 @@ flowchart LR
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
   - Zod schemas enforce request and response validity.
+- Data layer:
+  - `src/db/schema.ts` defines relational post records.
+  - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
   - LLM provider abstraction
@@ -49,7 +53,18 @@ flowchart LR
 
 ## Request and Data Flows
 
-### 1) Generate Creative
+### 1) Post Workspace (Core App State)
+
+1. Client loads `GET /api/posts` to populate sidebar.
+2. Client creates/selects posts through `POST/GET /api/posts*`.
+3. Client autosaves edits with `PUT /api/posts/:id` (debounced + beforeunload keepalive).
+4. Server persists post state in Postgres.
+
+Why this shape:
+- Keeps long-lived drafts out of browser memory and enables multi-post workflow.
+- Supports reliable autosave and recent-post retrieval per authenticated workspace user.
+
+### 2) Generate Creative
 
 1. Client submits brand/post/assets to `POST /api/generate`.
 2. Request is validated with `GenerationRequestSchema`.
@@ -66,7 +81,7 @@ Why this shape:
 - Schema-first contracts reduce malformed LLM output risk.
 - Fallback response keeps the core workflow available during outages or unconfigured environments.
 
-### 2) Share Project
+### 3) Share Project
 
 1. Client renders selected poster to PNG.
 2. `POST /api/projects/save` stores validated payload as `projects/<id>.json` in Blob.
@@ -77,7 +92,7 @@ Why this shape:
 - Blob-backed JSON is enough for immutable share snapshots.
 - No relational DB needed for current lookup pattern (`id -> single project`).
 
-### 3) Publish / Schedule
+### 4) Publish / Schedule
 
 1. Client submits caption + media payload to `POST /api/meta/schedule`.
 2. Route resolves auth context (OAuth connection first, env fallback second).
@@ -135,14 +150,14 @@ Why this shape:
 
 ## Storage Model
 
-- Primary persistence: Vercel Blob.
+- Primary relational persistence: Postgres (`posts`, private credentials).
+- Blob persistence: binary media, shared project snapshots, scheduled publish queue, and chat conversation blobs.
 - Typical paths:
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`
   - shared projects: `projects/<id>.json`
   - schedule queue: `schedules/<publishAt>-<id>.json`
   - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
   - chat index: `chat/<ownerHash>/index.json`
-  - OAuth/LLM connection records: `auth/...`
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 
 ## Security Posture
@@ -165,6 +180,7 @@ Why this shape:
 - Generation: in Fallback mode, provider errors cascade to the next model in priority order before degrading to deterministic fallback output. In Parallel mode, partial model failures are tolerated as long as at least one model succeeds.
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
 - Scheduling: successful jobs are deleted; failed jobs remain for retry/inspection.
+- Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
 - Blob-dependent features return clear 503 errors when storage is not configured.
 
 ## Deployment and Operations
