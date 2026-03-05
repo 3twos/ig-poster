@@ -89,14 +89,17 @@ To reduce approval interruptions, the following commands are pre-approved by def
   - Any command that writes, deletes, moves, installs, or mutates files must only target paths inside that active repository/worktree.
   - If a write/update action is needed outside the active repository/worktree, stop and ask the user first.
 - Core read/navigation commands:
-  - `cd`, `pwd`, `ls`, `tree`, `wc`, `du`, `stat`
-  - `rg`, `rg --files`, `find`, `cat`, `head`, `tail`, `sed -n`, `cut`, `sort`, `uniq`
-  - `git status`, `git diff`, `git log`, `git show`, `git branch`, `git rev-parse`
-  - `npm run lint`, `npm run build`, `npm run test`, `npm run typecheck`
+  - `Read`, `Glob`, `Grep`
+  - `ls`, `cat`, `head`, `tail`, `find`, `wc`, `du`, `stat`, `tree`, `pwd`, `echo`, `xargs`, `grep`, `sort`, `uniq`, `cut`
+  - `git *`, `gh *`
 - Web/search commands:
-  - Tool-based search/open commands (for example: `web.search_query`, `web.open`) are pre-approved.
-  - Shell web fetches are pre-approved for read-only retrieval: `curl -sSL` (GET-only), `wget -qO-` (GET-only).
+  - `WebSearch`, `WebFetch`
 - Write/update commands (repo-scoped only):
-  - `mkdir`, `touch`, `cp`, `mv`, `rm` (paths must remain inside the active repository/worktree)
-  - `git fetch`, `git pull --ff-only`
-  - `npm install`
+  - `mkdir`, `cp`, `mv`, `rm`, `touch` (paths must remain inside the active repository/worktree)
+  - `npm run *`, `npm ci`, `npm ls`, `npm test`
+  - `npx tsc`, `npx eslint`, `npx next`, `npx vitest`, `npx shadcn@latest`
+  - `npm install` is **not** pre-approved by default; ask first.
+
+Safety hooks:
+- `worktree-guard` and `pr-workflow-guard` are enforced via `.claude/settings.json` PreToolUse hooks.
+- These hooks add additional guardrails beyond static allowlist entries.
