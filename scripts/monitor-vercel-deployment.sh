@@ -334,10 +334,14 @@ friendly_branch_label() {
 
 spoken_branch_name() {
   local branch="$1"
-  local normalized
+  local normalized leaf
 
-  normalized="$branch"
-  normalized="${normalized//\// slash }"
+  leaf="${branch##*/}"
+  if [[ -z "$leaf" ]]; then
+    leaf="$branch"
+  fi
+
+  normalized="$leaf"
   normalized="${normalized//-/ }"
   normalized="${normalized//_/ }"
   printf '%s' "$normalized"
