@@ -88,5 +88,5 @@ Permissions are configured in `.claude/settings.json` (repo-committed). Key rule
 - All git and gh commands are pre-approved (hooks enforce safety gates).
 - `npm ci` is pre-approved. `npm install` (which modifies lockfile) requires user approval.
 - Write commands (`mkdir`, `cp`, `mv`, `rm`) must only target paths inside the active repository/worktree.
-- The worktree-guard hook blocks writes outside the active worktree.
-- The pr-workflow-guard hook enforces: `--body-file` for PR bodies, lint+build before push, resolved threads before merge.
+- The worktree-guard hook detects git worktrees (via `git rev-parse`) and blocks Edit/Write/Bash file operations outside the active worktree root.
+- The pr-workflow-guard hook enforces: `--body-file` for PR bodies, `lint+test+build` before push, and resolved threads before `gh pr merge`. It resolves the PR number from the current branch if not specified explicitly.
