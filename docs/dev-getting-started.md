@@ -3,6 +3,7 @@
 ## Prerequisites
 
 - Node.js 20+ and npm.
+- A Postgres database URL (`POSTGRES_URL` or `DATABASE_URL`) for persistent posts.
 - A Google Workspace OAuth app for login.
 - Optional but recommended for full local feature testing:
   - Vercel Blob token
@@ -20,6 +21,10 @@ npm run dev
 Open `http://localhost:3000`.
 
 ## Environment Setup
+
+### Required for core post workflow
+
+- `POSTGRES_URL` or `DATABASE_URL` (either one is accepted)
 
 ### Required for login (minimum usable app)
 
@@ -116,6 +121,9 @@ Run these before opening or updating a PR.
 - For security-sensitive features, use existing encryption helpers and auth resolvers.
 
 ## Troubleshooting for Developers
+
+- Main page shows no posts and "Create post" fails:
+  - Configure `POSTGRES_URL` or `DATABASE_URL` and restart the app.
 
 - 401s on most routes:
   - Workspace session cookie missing/expired; re-run Google OAuth login.
