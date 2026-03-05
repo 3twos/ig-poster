@@ -110,7 +110,7 @@ Production voice alerts include a subtle two-hit beat before speech.
 - Apply migration SQL before deploying this branch:
 
 ```bash
-psql "$POSTGRES_URL" -f drizzle/0001_post_status_enum.sql
+psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
 ```
 
 - If existing rows contain non-standard `posts.status` values, migration will fail until those rows are corrected.

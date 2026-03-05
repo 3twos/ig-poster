@@ -150,7 +150,7 @@ npm run build
 Breaking DB migration in this branch:
 
 ```bash
-psql "$POSTGRES_URL" -f drizzle/0001_post_status_enum.sql
+psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
 ```
 
 ## API Endpoints
