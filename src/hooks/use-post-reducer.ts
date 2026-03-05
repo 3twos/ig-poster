@@ -175,8 +175,13 @@ export function postReducer(
         ...state,
         brandKitId: action.brandKitId,
         brand: { ...(state.brand ?? {}), ...action.brand },
-        logoUrl: action.logoUrl !== undefined ? (action.logoUrl ?? state.logoUrl) : state.logoUrl,
-        promptConfig: action.promptConfig ? { ...(state.promptConfig ?? {}), ...action.promptConfig } : state.promptConfig,
+        logoUrl: action.logoUrl !== undefined ? action.logoUrl : state.logoUrl,
+        promptConfig:
+          action.promptConfig !== undefined
+            ? (action.promptConfig === null
+                ? null
+                : { ...(state.promptConfig ?? {}), ...action.promptConfig })
+            : state.promptConfig,
       };
 
     default:

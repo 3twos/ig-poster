@@ -231,6 +231,8 @@ export default function Home() {
       });
       if (kit.logoUrl) {
         setLocalLogo({ id: "kit-logo", name: "Kit logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
+      } else {
+        setLocalLogo(null);
       }
     } catch { /* ignore */ }
   }, [dispatch]);

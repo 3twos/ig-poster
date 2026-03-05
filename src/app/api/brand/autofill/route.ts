@@ -248,13 +248,16 @@ export async function POST(request: Request) {
     }
 
     const brandResult = model ?? fallback;
-    // Attach extracted fonts from website
-    const fontsValue = parsed.fonts.length ? parsed.fonts.join(", ") : "";
+    // Attach extracted fonts from website (only when non-empty to avoid wiping user-entered fonts)
+    const fontsValue = parsed.fonts.length ? parsed.fonts.join(", ") : undefined;
+    const brandPayload = fontsValue !== undefined
+      ? { ...brandResult, fonts: fontsValue }
+      : brandResult;
 
     return NextResponse.json({
       source: model ? "model" : "heuristic",
       website: parsed.websiteUrl || payload.website,
-      brand: { ...brandResult, fonts: fontsValue },
+      brand: brandPayload,
     });
   } catch (error) {
     const status = error instanceof z.ZodError ? 400 : 500;

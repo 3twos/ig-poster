@@ -62,14 +62,17 @@ export default function BrandPage() {
     return JSON.stringify({ brand, promptConfig, logoUrl: logo?.storageUrl });
   }, [brand, promptConfig, logo?.storageUrl]);
 
-  // Set initial snapshot once settings are loaded
-  const didSetInitialSnapshot = useRef(false);
+  // Reset snapshot whenever the active kit changes or settings finish loading
+  // This runs after React state updates from loadKitData have been applied
+  const prevKitIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isLoaded && !didSetInitialSnapshot.current) {
-      didSetInitialSnapshot.current = true;
+    if (!isLoaded) return;
+    // Reset snapshot on initial load or when switching kits
+    if (prevKitIdRef.current !== activeKitId) {
+      prevKitIdRef.current = activeKitId;
       savedSnapshotRef.current = computeSnapshot();
     }
-  }, [isLoaded, computeSnapshot]);
+  }, [isLoaded, activeKitId, computeSnapshot]);
 
   const isDirty = isLoaded && computeSnapshot() !== savedSnapshotRef.current;
 
@@ -117,21 +120,26 @@ export default function BrandPage() {
         } else {
           // No kits exist — fall back to settings and auto-create a kit
           const response = await fetch("/api/settings", { cache: "no-store" });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let settingsJson: any = null;
           if (response.ok) {
-            const json = await response.json();
-            if (json?.brand) setBrand((current) => ({ ...current, ...json.brand }));
-            if (json?.promptConfig) setPromptConfig((current) => ({ ...current, ...json.promptConfig }));
-            if (json?.logoUrl) {
-              setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: json.logoUrl, storageUrl: json.logoUrl, status: "uploaded" });
+            settingsJson = await response.json();
+            if (settingsJson?.brand) setBrand((current) => ({ ...current, ...settingsJson.brand }));
+            if (settingsJson?.promptConfig) setPromptConfig((current) => ({ ...current, ...settingsJson.promptConfig }));
+            if (settingsJson?.logoUrl) {
+              setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: settingsJson.logoUrl, storageUrl: settingsJson.logoUrl, status: "uploaded" });
             }
           }
 
-          // Auto-create "Default" kit from current settings
+          // Auto-create "Default" kit from loaded settings (not stale React state)
+          const loadedBrand = settingsJson?.brand ? { ...INITIAL_BRAND, ...settingsJson.brand } : brand;
+          const loadedPromptConfig = settingsJson?.promptConfig ? { ...promptConfig, ...settingsJson.promptConfig } : promptConfig;
+          const loadedLogoUrl = settingsJson?.logoUrl ?? logo?.storageUrl;
           try {
             const createRes = await fetch("/api/brand-kits", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: "Default", brand, promptConfig, logoUrl: logo?.storageUrl, isDefault: true }),
+              body: JSON.stringify({ name: "Default", brand: loadedBrand, promptConfig: loadedPromptConfig, logoUrl: loadedLogoUrl, isDefault: true }),
             });
             if (createRes.ok) {
               const createJson = await createRes.json();
@@ -387,10 +395,6 @@ export default function BrandPage() {
                 const kit = kits.find((k) => k.id === id);
                 if (kit) {
                   loadKitData(kit);
-                  // Reset snapshot for dirty tracking
-                  setTimeout(() => {
-                    savedSnapshotRef.current = computeSnapshot();
-                  }, 0);
                 }
               }}
             >

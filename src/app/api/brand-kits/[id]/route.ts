@@ -51,16 +51,20 @@ export async function PUT(req: Request, { params }: Params) {
     const body = await req.json();
     const db = getDb();
 
+    // Build update object with only provided fields
+    const updateData: Partial<typeof brandKits.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.brand !== undefined) updateData.brand = body.brand;
+    if (body.promptConfig !== undefined) updateData.promptConfig = body.promptConfig;
+    if (body.logoUrl !== undefined) updateData.logoUrl = body.logoUrl;
+    if (body.isDefault !== undefined) updateData.isDefault = body.isDefault;
+
     const [row] = await db
       .update(brandKits)
-      .set({
-        name: body.name,
-        brand: body.brand,
-        promptConfig: body.promptConfig,
-        logoUrl: body.logoUrl,
-        isDefault: body.isDefault,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(and(eq(brandKits.id, id), eq(brandKits.ownerHash, ownerHash)))
       .returning();
 
