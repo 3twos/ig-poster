@@ -281,6 +281,38 @@ format_duration() {
   printf '%02d:%02d' $(( total_seconds / 60 )) $(( total_seconds % 60 ))
 }
 
+format_spoken_duration() {
+  local total_seconds="$1"
+  local minutes seconds minute_word second_word
+
+  if (( total_seconds < 60 )); then
+    if (( total_seconds == 1 )); then
+      printf '%s' "1 second"
+    else
+      printf '%s seconds' "$total_seconds"
+    fi
+    return
+  fi
+
+  minutes=$(( total_seconds / 60 ))
+  seconds=$(( total_seconds % 60 ))
+  minute_word="minutes"
+  second_word="seconds"
+
+  if (( minutes == 1 )); then
+    minute_word="minute"
+  fi
+  if (( seconds == 1 )); then
+    second_word="second"
+  fi
+
+  if (( seconds == 0 )); then
+    printf '%s %s' "$minutes" "$minute_word"
+  else
+    printf '%s %s %s %s' "$minutes" "$minute_word" "$seconds" "$second_word"
+  fi
+}
+
 friendly_status() {
   local status="$1"
 
@@ -848,23 +880,28 @@ while true; do
     READY)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
         ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment completed in ${DURATION_TEXT}."
+        SPOKEN_DURATION_TEXT="$(format_spoken_duration "$DURATION_SECONDS")"
+        SPOKEN_ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment completed in ${SPOKEN_DURATION_TEXT}."
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
         log_line "Alert: ${ALERT_MESSAGE}"
         play_production_beat "$ACTIVE_TARGET_KIND"
-        speak_alert "$ALERT_MESSAGE"
+        speak_alert "$SPOKEN_ALERT_MESSAGE"
         ACTIVE_TERMINAL_ANNOUNCED=1
       fi
       ;;
     ERROR|CANCELED)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
         ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment ended with ${STATUS} after ${DURATION_TEXT}."
+        SPOKEN_DURATION_TEXT="$(format_spoken_duration "$DURATION_SECONDS")"
+        SPOKEN_ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment ended with ${STATUS} after ${SPOKEN_DURATION_TEXT}."
         if [[ -n "$ERROR_MESSAGE" ]]; then
           ALERT_MESSAGE="${ALERT_MESSAGE} ${ERROR_MESSAGE}"
+          SPOKEN_ALERT_MESSAGE="${SPOKEN_ALERT_MESSAGE} ${ERROR_MESSAGE}"
         fi
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
         warn_line "Alert: ${ALERT_MESSAGE}"
         play_production_beat "$ACTIVE_TARGET_KIND"
-        speak_alert "$ALERT_MESSAGE"
+        speak_alert "$SPOKEN_ALERT_MESSAGE"
         ACTIVE_TERMINAL_ANNOUNCED=1
       fi
       ;;
