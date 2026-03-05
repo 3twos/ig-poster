@@ -120,6 +120,8 @@ Optional environment variables:
 - `VERCEL_PROJECT_ID` (for project watcher mode)
 - `VERCEL_PROJECT_SHORT_NAME` (optional short name for spoken alerts)
 - `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (use for team-scoped deployments)
+
+CLI options:
 - `--max-deployments <count>` controls how many recent deployments are shown in project mode
 - `--event-mode auto|stream|poll` controls stream-vs-poll event ingestion (default: `auto`)
 

@@ -338,17 +338,40 @@ for (const event of events) {
   const state = sanitize(text(pick(info?.readyState, payloadObj?.readyState, event?.readyState)).toUpperCase());
   const logText = sanitize(pick(payloadObj?.text, event?.text));
 
+  if (created === 0 && latestCreated > 0) {
+    continue;
+  }
   if (created > latestCreated) {
     latestCreated = created;
-  }
-  if (step) {
-    latestStep = step;
-  }
-  if (state) {
     latestState = state;
-  }
-  if (logText) {
+    latestStep = step;
     latestText = logText;
+    continue;
+  }
+
+  if (created === latestCreated) {
+    if (step) {
+      latestStep = step;
+    }
+    if (state) {
+      latestState = state;
+    }
+    if (logText) {
+      latestText = logText;
+    }
+    continue;
+  }
+
+  if (latestCreated == 0) {
+    if (step && !latestStep) {
+      latestStep = step;
+    }
+    if (state && !latestState) {
+      latestState = state;
+    }
+    if (logText && !latestText) {
+      latestText = logText;
+    }
   }
 }
 
@@ -1321,7 +1344,7 @@ stop_all_event_stream_workers() {
 start_event_stream_worker() {
   local deployment_id="$1"
   local since_ms="${2:-}"
-  local stream_url
+  local stream_url backoff_seconds max_backoff_seconds
 
   if [[ "$EVENT_MODE_ACTIVE" != "stream" ]]; then
     return
@@ -1331,12 +1354,14 @@ start_event_stream_worker() {
   fi
 
   stream_url="$(build_deployment_events_url "$deployment_id" "$since_ms" 1 "forward")"
+  backoff_seconds=1
+  max_backoff_seconds=30
 
   (
     set +e
     while true; do
       # Stream disconnects and downstream pipe resets are expected; keep reconnecting quietly.
-      curl --silent --no-buffer --location \
+      if curl --silent --no-buffer --location \
         --header "Authorization: Bearer ${TOKEN}" \
         --header "Accept: application/json" \
         "$stream_url" |
@@ -1348,9 +1373,18 @@ start_event_stream_worker() {
           printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' \
             "$deployment_id" "$created_ms" "$event_state" "$event_step" "$event_text" "$event_type" >>"$EVENT_BUS_FILE"
         done
+      then
+        backoff_seconds=1
+      else
+        if (( backoff_seconds < max_backoff_seconds )); then
+          backoff_seconds=$(( backoff_seconds * 2 ))
+          if (( backoff_seconds > max_backoff_seconds )); then
+            backoff_seconds="$max_backoff_seconds"
+          fi
+        fi
+      fi
 
-      # Streams can disconnect; reconnect after a short backoff.
-      sleep 1
+      sleep "$backoff_seconds"
     done
   ) &
 
@@ -1439,6 +1473,10 @@ consume_event_bus_updates() {
   done < <(sed -n "${start_line},${total_lines}p" "$EVENT_BUS_FILE")
 
   EVENT_BUS_OFFSET="$total_lines"
+  if (( EVENT_BUS_OFFSET >= EVENT_BUS_TRUNCATE_LINES )); then
+    : >"$EVENT_BUS_FILE" || true
+    EVENT_BUS_OFFSET=0
+  fi
 }
 
 reconcile_event_stream_workers() {
@@ -2227,6 +2265,9 @@ DEP_PROJECT_NAME=()
 STREAM_IDS=()
 STREAM_PIDS=()
 EVENT_BUS_OFFSET=0
+EVENT_BUS_TRUNCATE_LINES=2000
+EVENT_RECONCILE_EVERY=6
+EVENT_RECONCILE_CYCLE=0
 RUNTIME_DIR=""
 EVENT_BUS_FILE=""
 AUDIO_QUEUE_ENABLED=0
@@ -2323,11 +2364,25 @@ while true; do
   if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
     reconcile_event_stream_workers
     consume_event_bus_updates
+    EVENT_RECONCILE_CYCLE=$(( EVENT_RECONCILE_CYCLE + 1 ))
   fi
 
-  # Poll event snapshots for all visible deployments to keep details current even if streaming lags.
+  # In stream mode, poll only for deployments without active streams, plus periodic reconciliation.
   for (( i = 0; i < ${#DEP_IDS[@]}; i++ )); do
-    update_events_for_index "$i" >/dev/null 2>&1 || true
+    should_poll_events=1
+    if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
+      should_poll_events=0
+      stream_index_for_dep="$(stream_worker_index_by_id "${DEP_IDS[i]}")"
+      if (( stream_index_for_dep < 0 )); then
+        should_poll_events=1
+      elif (( EVENT_RECONCILE_CYCLE % EVENT_RECONCILE_EVERY == 0 )); then
+        should_poll_events=1
+      fi
+    fi
+
+    if (( should_poll_events == 1 )); then
+      update_events_for_index "$i" >/dev/null 2>&1 || true
+    fi
   done
 
   process_deployment_transitions_and_alerts

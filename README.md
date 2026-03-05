@@ -248,6 +248,8 @@ Environment options:
 - `VERCEL_PROJECT_ID` (for project watcher mode)
 - `VERCEL_PROJECT_SHORT_NAME` (optional short name for spoken alerts)
 - `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (optional, for team-scoped deploys)
+
+CLI options:
 - `--max-deployments <count>` controls how many recent deployments are shown in project mode
 - `--event-mode auto|stream|poll` controls stream-vs-poll event ingestion (default: `auto`)
 
