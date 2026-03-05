@@ -4,6 +4,9 @@ set -euo pipefail
 DASHBOARD_ENABLED=0
 LAST_EVENT_MESSAGE="Starting..."
 LAST_ALERT_MESSAGE="None"
+LAST_EVENT_EPOCH=0
+LAST_ALERT_EPOCH=0
+LAST_ALERT_LEVEL="info"
 
 usage() {
   cat <<'HELP'
@@ -46,6 +49,7 @@ print_error() {
 log_line() {
   local message="$*"
   LAST_EVENT_MESSAGE="$message"
+  LAST_EVENT_EPOCH="$(date +%s)"
   if (( DASHBOARD_ENABLED == 0 )); then
     echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $message"
   fi
@@ -54,6 +58,7 @@ log_line() {
 warn_line() {
   local message="$*"
   LAST_EVENT_MESSAGE="$message"
+  LAST_EVENT_EPOCH="$(date +%s)"
   if (( DASHBOARD_ENABLED == 0 )); then
     echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $message" >&2
   fi
@@ -432,26 +437,236 @@ format_ms_local() {
   printf '%s' "n/a"
 }
 
+relative_time_from_seconds() {
+  local elapsed_seconds="$1"
+
+  if ! [[ "$elapsed_seconds" =~ ^-?[0-9]+$ ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+  if (( elapsed_seconds < 0 )); then
+    elapsed_seconds=0
+  fi
+
+  if (( elapsed_seconds < 5 )); then
+    printf '%s' "just now"
+    return
+  fi
+  if (( elapsed_seconds < 60 )); then
+    printf '%ss ago' "$elapsed_seconds"
+    return
+  fi
+  if (( elapsed_seconds < 3600 )); then
+    printf '%sm ago' $(( elapsed_seconds / 60 ))
+    return
+  fi
+  if (( elapsed_seconds < 86400 )); then
+    printf '%sh ago' $(( elapsed_seconds / 3600 ))
+    return
+  fi
+
+  printf '%sd ago' $(( elapsed_seconds / 86400 ))
+}
+
+relative_time_from_epoch() {
+  local epoch_seconds="$1"
+  local now_seconds elapsed_seconds
+
+  if ! [[ "$epoch_seconds" =~ ^[0-9]+$ ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+  if (( epoch_seconds <= 0 )); then
+    printf '%s' "n/a"
+    return
+  fi
+
+  now_seconds="$(date +%s)"
+  elapsed_seconds=$(( now_seconds - epoch_seconds ))
+  relative_time_from_seconds "$elapsed_seconds"
+}
+
+relative_time_from_ms() {
+  local epoch_ms="$1"
+  local epoch_seconds
+
+  if ! [[ "$epoch_ms" =~ ^[0-9]+$ ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  epoch_seconds=$(( epoch_ms / 1000 ))
+  relative_time_from_epoch "$epoch_seconds"
+}
+
+format_ms_with_relative() {
+  local epoch_ms="$1"
+  local local_clock relative_time
+
+  local_clock="$(format_ms_local "$epoch_ms")"
+  if [[ "$local_clock" == "n/a" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  relative_time="$(relative_time_from_ms "$epoch_ms")"
+  if [[ "$relative_time" == "n/a" ]]; then
+    printf '%s' "$local_clock"
+    return
+  fi
+
+  printf '%s (%s)' "$local_clock" "$relative_time"
+}
+
+format_epoch_with_relative() {
+  local epoch_seconds="$1"
+  local epoch_ms local_clock relative_time
+
+  if ! [[ "$epoch_seconds" =~ ^[0-9]+$ ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+  if (( epoch_seconds <= 0 )); then
+    printf '%s' "n/a"
+    return
+  fi
+
+  epoch_ms=$(( epoch_seconds * 1000 ))
+  local_clock="$(format_ms_local "$epoch_ms")"
+  relative_time="$(relative_time_from_epoch "$epoch_seconds")"
+
+  if [[ "$local_clock" == "n/a" ]]; then
+    printf '%s' "$relative_time"
+    return
+  fi
+  if [[ "$relative_time" == "n/a" ]]; then
+    printf '%s' "$local_clock"
+    return
+  fi
+
+  printf '%s (%s)' "$local_clock" "$relative_time"
+}
+
+status_icon() {
+  local status="$1"
+
+  case "$status" in
+    READY) printf '%s' "✓" ;;
+    ERROR|CANCELED|FAILED) printf '%s' "✖" ;;
+    BUILDING|INITIALIZING|QUEUED) printf '%s' "⏳" ;;
+    WAITING) printf '%s' "…" ;;
+    CONNECTION_ISSUE|API_ERROR|TIMED_OUT) printf '%s' "⚠" ;;
+    STOPPED) printf '%s' "■" ;;
+    *) printf '%s' "?" ;;
+  esac
+}
+
+environment_icon() {
+  local target="$1"
+
+  case "$target" in
+    production|PRODUCTION) printf '%s' "🚀" ;;
+    preview|PREVIEW|"") printf '%s' "🧪" ;;
+    *) printf '%s' "•" ;;
+  esac
+}
+
+alert_icon() {
+  local level="$1"
+
+  case "$level" in
+    success) printf '%s' "✓" ;;
+    error) printf '%s' "✖" ;;
+    warning) printf '%s' "⚠" ;;
+    info|"") printf '%s' "ℹ" ;;
+    *) printf '%s' "ℹ" ;;
+  esac
+}
+
+status_progress_percent() {
+  local status="$1"
+
+  case "$status" in
+    READY) printf '%s' "100" ;;
+    ERROR|CANCELED|FAILED) printf '%s' "100" ;;
+    BUILDING) printf '%s' "70" ;;
+    INITIALIZING) printf '%s' "35" ;;
+    QUEUED) printf '%s' "15" ;;
+    WAITING) printf '%s' "5" ;;
+    CONNECTION_ISSUE|API_ERROR|TIMED_OUT) printf '%s' "0" ;;
+    STOPPED) printf '%s' "0" ;;
+    *) printf '%s' "10" ;;
+  esac
+}
+
+render_progress_bar() {
+  local percent="$1"
+  local width="${2:-24}"
+  local fill_count empty_count i bar
+
+  if ! [[ "$percent" =~ ^[0-9]+$ ]]; then
+    percent=0
+  fi
+  if (( percent < 0 )); then
+    percent=0
+  fi
+  if (( percent > 100 )); then
+    percent=100
+  fi
+  if ! [[ "$width" =~ ^[0-9]+$ ]] || (( width <= 0 )); then
+    width=24
+  fi
+
+  fill_count=$(( (percent * width) / 100 ))
+  empty_count=$(( width - fill_count ))
+
+  bar="["
+  for (( i = 0; i < fill_count; i++ )); do
+    bar="${bar}#"
+  done
+  for (( i = 0; i < empty_count; i++ )); do
+    bar="${bar}-"
+  done
+  bar="${bar}]"
+
+  printf '%s' "$bar"
+}
+
 render_dashboard() {
+  local status_mark env_mark alert_mark progress_percent progress_bar
+  local started_display event_time_display alert_time_display
+
   if (( DASHBOARD_ENABLED == 0 )); then
     return
   fi
+
+  status_mark="$(status_icon "${DASH_STATUS_RAW:-UNKNOWN}")"
+  env_mark="$(environment_icon "${DASH_ENV_RAW:-preview}")"
+  alert_mark="$(alert_icon "${LAST_ALERT_LEVEL:-info}")"
+  progress_percent="$(status_progress_percent "${DASH_STATUS_RAW:-UNKNOWN}")"
+  progress_bar="$(render_progress_bar "$progress_percent" 26)"
+  started_display="${DASH_STARTED_LABEL:-n/a}"
+  event_time_display="$(format_epoch_with_relative "$LAST_EVENT_EPOCH")"
+  alert_time_display="$(format_epoch_with_relative "$LAST_ALERT_EPOCH")"
 
   printf '\033[H\033[2J'
   printf 'Vercel Deploy Monitor\n'
   printf '=====================\n'
   printf 'Project      : %s\n' "${DASH_PROJECT_NAME:-n/a}"
   printf 'Mode         : %s\n' "${DASH_MODE_LABEL:-n/a}"
-  printf 'Environment  : %s\n' "${DASH_ENV_LABEL:-Preview}"
+  printf 'Environment  : %s %s\n' "$env_mark" "${DASH_ENV_LABEL:-Preview}"
   printf 'Branch       : %s\n' "${DASH_BRANCH_LABEL:-unknown}"
-  printf 'Status       : %s\n' "${DASH_STATUS_LABEL:-Unknown}"
+  printf 'Status       : %s %s\n' "$status_mark" "${DASH_STATUS_LABEL:-Unknown}"
+  printf 'Progress     : %s %3d%%\n' "$progress_bar" "$progress_percent"
   printf 'Deployment   : %s\n' "${DASH_DEPLOYMENT_LABEL:-n/a}"
   printf 'URL          : %s\n' "${DASH_URL_LABEL:-n/a}"
-  printf 'Started      : %s\n' "${DASH_STARTED_LABEL:-n/a}"
+  printf 'Started      : %s\n' "$started_display"
   printf 'Elapsed      : %s\n' "${DASH_DURATION_LABEL:-n/a}"
   printf 'Last Update  : %s\n' "$(date '+%H:%M:%S')"
   printf 'Last Event   : %s\n' "${LAST_EVENT_MESSAGE:-Starting...}"
-  printf 'Last Alert   : %s\n' "${LAST_ALERT_MESSAGE:-None}"
+  printf 'Event Time   : %s\n' "$event_time_display"
+  printf 'Last Alert   : %s %s\n' "$alert_mark" "${LAST_ALERT_MESSAGE:-None}"
+  printf 'Alert Time   : %s\n' "$alert_time_display"
   printf '\nPress Ctrl+C to stop.\n'
 }
 
@@ -531,6 +746,10 @@ check_timeout_or_exit() {
   if (( elapsed_seconds >= TIMEOUT_SECONDS )); then
     warn_line "Timeout reached after ${TIMEOUT_SECONDS}s."
     DASH_STATUS_LABEL="Timed out"
+    DASH_STATUS_RAW="TIMED_OUT"
+    LAST_ALERT_MESSAGE="Monitor timed out after ${TIMEOUT_SECONDS}s."
+    LAST_ALERT_LEVEL="warning"
+    LAST_ALERT_EPOCH="$(date +%s)"
     render_dashboard
     exit 124
   fi
@@ -548,6 +767,10 @@ sleep_for_next_poll() {
   if (( elapsed_seconds >= TIMEOUT_SECONDS )); then
     warn_line "Timeout reached after ${TIMEOUT_SECONDS}s."
     DASH_STATUS_LABEL="Timed out"
+    DASH_STATUS_RAW="TIMED_OUT"
+    LAST_ALERT_MESSAGE="Monitor timed out after ${TIMEOUT_SECONDS}s."
+    LAST_ALERT_LEVEL="warning"
+    LAST_ALERT_EPOCH="$(date +%s)"
     render_dashboard
     exit 124
   fi
@@ -585,7 +808,9 @@ TARGET=""
 DASH_PROJECT_NAME="n/a"
 DASH_MODE_LABEL="n/a"
 DASH_STATUS_LABEL="Waiting"
+DASH_STATUS_RAW="WAITING"
 DASH_ENV_LABEL="Preview"
+DASH_ENV_RAW="preview"
 DASH_BRANCH_LABEL="unknown"
 DASH_DEPLOYMENT_LABEL="n/a"
 DASH_URL_LABEL="n/a"
@@ -761,7 +986,7 @@ fi
 
 render_dashboard
 
-trap 'warn_line "Stopped deployment monitor."; DASH_STATUS_LABEL="Stopped"; render_dashboard; if (( DASHBOARD_ENABLED == 1 )); then echo; fi; exit 0' INT TERM
+trap 'warn_line "Stopped deployment monitor."; DASH_STATUS_LABEL="Stopped"; DASH_STATUS_RAW="STOPPED"; render_dashboard; if (( DASHBOARD_ENABLED == 1 )); then echo; fi; exit 0' INT TERM
 
 START_EPOCH="$(date +%s)"
 ACTIVE_TARGET=""
@@ -780,6 +1005,7 @@ while true; do
     if ! LATEST_RESPONSE="$(fetch_json "$(build_latest_deployment_url)")"; then
       warn_line "Failed to fetch latest project deployment. Retrying..."
       DASH_STATUS_LABEL="Connection issue"
+      DASH_STATUS_RAW="CONNECTION_ISSUE"
       render_dashboard
       sleep_for_next_poll
       continue
@@ -788,6 +1014,7 @@ while true; do
     if ! LATEST_PARSED="$(printf '%s' "${LATEST_RESPONSE}" | parse_latest_deployment_payload 2>&1)"; then
       warn_line "Latest deployment API error: ${LATEST_PARSED}"
       DASH_STATUS_LABEL="API error"
+      DASH_STATUS_RAW="API_ERROR"
       render_dashboard
       sleep_for_next_poll
       continue
@@ -799,7 +1026,9 @@ while true; do
         NO_DEPLOYMENTS_REPORTED=1
       fi
       DASH_STATUS_LABEL="Waiting for deployment"
+      DASH_STATUS_RAW="WAITING"
       DASH_ENV_LABEL="Preview"
+      DASH_ENV_RAW="preview"
       DASH_BRANCH_LABEL="unknown"
       DASH_DEPLOYMENT_LABEL="n/a"
       DASH_URL_LABEL="n/a"
@@ -816,6 +1045,7 @@ while true; do
     if [[ -z "$LATEST_ID" ]]; then
       warn_line "Latest deployment payload did not include a deployment id. Retrying..."
       DASH_STATUS_LABEL="API error"
+      DASH_STATUS_RAW="API_ERROR"
       render_dashboard
       sleep_for_next_poll
       continue
@@ -831,7 +1061,9 @@ while true; do
       ACTIVE_BRANCH_NAME="$(friendly_branch_label "$LATEST_BRANCH" "$LATEST_TARGET")"
       DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
       DASH_STATUS_LABEL="$(friendly_status "${LATEST_STATE}")"
+      DASH_STATUS_RAW="${LATEST_STATE:-UNKNOWN}"
       DASH_ENV_LABEL="$(friendly_environment_label "${LATEST_TARGET}")"
+      DASH_ENV_RAW="${LATEST_TARGET:-preview}"
       DASH_BRANCH_LABEL="$ACTIVE_BRANCH_NAME"
       DASH_DEPLOYMENT_LABEL="$(short_deployment_label "${ACTIVE_TARGET}")"
       DASH_URL_LABEL="$(friendly_host "${LATEST_URL}")"
@@ -852,6 +1084,7 @@ while true; do
   if ! RESPONSE="$(fetch_json "$DETAIL_URL")"; then
     warn_line "Failed to fetch deployment '${ACTIVE_TARGET}'. Retrying..."
     DASH_STATUS_LABEL="Connection issue"
+    DASH_STATUS_RAW="CONNECTION_ISSUE"
     render_dashboard
     sleep_for_next_poll
     continue
@@ -860,6 +1093,7 @@ while true; do
   if ! PARSED="$(printf '%s' "${RESPONSE}" | parse_deployment_payload 2>&1)"; then
     warn_line "Deployment API error for '${ACTIVE_TARGET}': ${PARSED}"
     DASH_STATUS_LABEL="API error"
+    DASH_STATUS_RAW="API_ERROR"
     render_dashboard
     sleep_for_next_poll
     continue
@@ -881,11 +1115,13 @@ while true; do
 
   DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
   DASH_STATUS_LABEL="$(friendly_status "$STATUS")"
+  DASH_STATUS_RAW="$STATUS"
   DASH_ENV_LABEL="$ACTIVE_ENV_LABEL"
+  DASH_ENV_RAW="$ACTIVE_TARGET_KIND"
   DASH_BRANCH_LABEL="$ACTIVE_BRANCH_NAME"
   DASH_DEPLOYMENT_LABEL="$(short_deployment_label "$DEPLOYMENT_ID")"
   DASH_URL_LABEL="$(friendly_host "$DEPLOYMENT_URL")"
-  DASH_STARTED_LABEL="$(format_ms_local "$CREATED_AT_MS")"
+  DASH_STARTED_LABEL="$(format_ms_with_relative "$CREATED_AT_MS")"
   DASH_DURATION_LABEL="$DURATION_TEXT"
 
   if [[ -n "$ACTIVE_LAST_STATUS" && "$STATUS" != "$ACTIVE_LAST_STATUS" ]]; then
@@ -901,6 +1137,8 @@ while true; do
         SPOKEN_DURATION_TEXT="$(format_spoken_duration "$DURATION_SECONDS")"
         SPOKEN_ALERT_MESSAGE="${ACTIVE_ENV_LABEL} ${ACTIVE_SPOKEN_BRANCH_NAME} deployment completed in ${SPOKEN_DURATION_TEXT}."
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
+        LAST_ALERT_LEVEL="success"
+        LAST_ALERT_EPOCH="$(date +%s)"
         log_line "Alert: ${ALERT_MESSAGE}"
         play_production_beat "$ACTIVE_TARGET_KIND"
         speak_alert "$SPOKEN_ALERT_MESSAGE"
@@ -917,6 +1155,8 @@ while true; do
           SPOKEN_ALERT_MESSAGE="${SPOKEN_ALERT_MESSAGE} ${ERROR_MESSAGE}"
         fi
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
+        LAST_ALERT_LEVEL="error"
+        LAST_ALERT_EPOCH="$(date +%s)"
         warn_line "Alert: ${ALERT_MESSAGE}"
         play_production_beat "$ACTIVE_TARGET_KIND"
         speak_alert "$SPOKEN_ALERT_MESSAGE"
