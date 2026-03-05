@@ -215,7 +215,7 @@ After these are set, pushes to `main` auto-deploy production and PRs auto-deploy
 Monitor deployments continuously from your terminal (stop with `Ctrl+C`):
 
 ```bash
-# watch the latest deployment for a project (recommended for day-to-day alerting)
+# watch recent project deployments (parallel-aware, recommended for day-to-day alerting)
 VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
 # watch one specific deployment id/url continuously
@@ -224,13 +224,16 @@ VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --
 
 Environment options:
 - `VERCEL_TOKEN` (recommended over `--token` for better shell-history hygiene)
-- `VERCEL_PROJECT_ID` (for latest-deployment watcher mode)
+- `VERCEL_PROJECT_ID` (for project watcher mode)
 - `VERCEL_PROJECT_SHORT_NAME` (optional short name for spoken alerts)
 - `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (optional, for team-scoped deploys)
+- `--max-deployments <count>` controls how many recent deployments are shown in project mode
+- `--event-mode auto|stream|poll` controls stream-vs-poll event ingestion (default: `auto`)
 
 The monitor announces completion/failure in the terminal and uses spoken alerts (via `say`/`spd-say`/`espeak` if available). Completion duration is formatted as seconds when under 1 minute, otherwise `mm:ss`.
 In an interactive terminal it uses a non-scrolling dashboard view by default; use `--plain` for line-by-line logs.
-Dashboard view now includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and a deployment-stage progress bar.
+Dashboard view includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and richer per-deployment progress bars.
+Project mode now tracks multiple deployments in parallel, with separate status, step, timing, and error details per deployment.
 Preview vs Production and branch name are explicitly labeled in the dashboard and alerts.
 Production voice alerts include a subtle two-hit beat before speech.
 
