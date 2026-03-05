@@ -5,6 +5,11 @@
 
 set -euo pipefail
 
+# Dependency check: jq is required to parse hook input
+if ! command -v jq &>/dev/null; then
+  exit 0  # Skip enforcement when jq is unavailable
+fi
+
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd')

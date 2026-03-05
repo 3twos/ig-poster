@@ -7,10 +7,16 @@
 # 2. gh pr merge blocked if unresolved review threads exist
 # 3. gh pr merge blocked if PR has merge conflicts
 # 4. git push blocked if lint or build hasn't been run in this session
-# 5. gh pr merge blocked without explicit user approval marker
-# 6. Must wait for Copilot review before resolving/merging
+#
+# Note: Additional workflow rules (e.g., explicit user approval markers, Copilot review waits)
+# are defined in AGENTS.md but are not enforced by this hook script.
 
 set -euo pipefail
+
+# Dependency check: jq and gh are required
+if ! command -v jq &>/dev/null || ! command -v gh &>/dev/null; then
+  exit 0  # Skip enforcement when dependencies are unavailable
+fi
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
@@ -36,21 +42,45 @@ fi
 # ─── Rule 2 & 3: Merge gate ──────────────────────────────────────────────
 # Block `gh pr merge` unless we can verify: no unresolved threads, no conflicts
 if echo "$CMD" | grep -qE '\bgh\s+pr\s+merge\b'; then
-  # Extract PR number from command
+  # Extract PR number from command, or resolve from current branch
   PR_NUM=$(echo "$CMD" | grep -oE '\bgh\s+pr\s+merge\s+([0-9]+)' | awk '{print $NF}')
 
-  if [ -n "$PR_NUM" ]; then
-    # Check for unresolved review threads
-    UNRESOLVED=$(gh api graphql -f query="
-      query {
-        repository(owner: \"3twos\", name: \"ig-poster\") {
-          pullRequest(number: $PR_NUM) {
+  if [ -z "$PR_NUM" ]; then
+    # No explicit PR number — resolve from current branch
+    PR_NUM=$(gh pr view --json number --jq '.number' 2>/dev/null || echo "")
+  fi
+
+  if [ -z "$PR_NUM" ]; then
+    echo "BLOCKED: Could not determine PR number for merge. Specify the PR number explicitly (AGENTS.md §Merge Gate)." >&2
+    exit 2
+  fi
+
+  # Derive repo owner/name from current gh context
+  NAME_WITH_OWNER=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
+
+  if [ -z "$NAME_WITH_OWNER" ]; then
+    echo "BLOCKED: Could not determine repo for merge gate check. Verify gh context." >&2
+    exit 2
+  fi
+
+  REPO_OWNER=${NAME_WITH_OWNER%%/*}
+  REPO_NAME=${NAME_WITH_OWNER##*/}
+
+  # Check for unresolved review threads
+  UNRESOLVED=$(gh api graphql \
+    -f owner="$REPO_OWNER" \
+    -f name="$REPO_NAME" \
+    -F number="$PR_NUM" \
+    -f query='
+      query($owner: String!, $name: String!, $number: Int!) {
+        repository(owner: $owner, name: $name) {
+          pullRequest(number: $number) {
             reviewThreads(first: 50) {
               nodes { isResolved }
             }
           }
         }
-      }" 2>/dev/null | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' 2>/dev/null || echo "unknown")
+      }' 2>/dev/null | jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' 2>/dev/null || echo "unknown")
 
     if [[ "$UNRESOLVED" == "unknown" ]]; then
       echo "BLOCKED: Could not verify review thread status for PR #$PR_NUM. Check manually before merging (AGENTS.md §Merge Gate)." >&2
@@ -69,14 +99,26 @@ if echo "$CMD" | grep -qE '\bgh\s+pr\s+merge\b'; then
   fi
 fi
 
-# ─── Rule 4: Lint+build before push ──────────────────────────────────────
-# Track lint/build runs via marker files; block push if missing.
-MARKER_DIR="/tmp/.claude-pr-guards"
+# ─── Rule 4: Lint+test+build before push ─────────────────────────────────
+# Track lint/test/build runs via marker files; scoped to repo root to avoid cross-repo leaks.
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "unknown")
+REPO_HASH=$(echo "$REPO_ROOT" | shasum -a 256 | cut -c1-12)
+MARKER_DIR="/tmp/.claude-pr-guards-${REPO_HASH}"
 
-# Record lint/build completions
+# Record lint/test/build completions
 if echo "$CMD" | grep -qE '\bnpm\s+run\s+lint\b'; then
   mkdir -p "$MARKER_DIR"
   touch "$MARKER_DIR/lint-passed"
+  exit 0
+fi
+if echo "$CMD" | grep -qE '\bnpm\s+(run\s+test|test)\b'; then
+  mkdir -p "$MARKER_DIR"
+  touch "$MARKER_DIR/test-passed"
+  exit 0
+fi
+if echo "$CMD" | grep -qE '\bnpx\s+vitest\b'; then
+  mkdir -p "$MARKER_DIR"
+  touch "$MARKER_DIR/test-passed"
   exit 0
 fi
 if echo "$CMD" | grep -qE '\bnpm\s+run\s+build\b'; then
@@ -85,17 +127,20 @@ if echo "$CMD" | grep -qE '\bnpm\s+run\s+build\b'; then
   exit 0
 fi
 
-# Block push if lint or build hasn't been run
+# Block push if lint, test, or build hasn't been run
 if echo "$CMD" | grep -qE '\bgit\s+push\b'; then
   MISSING=""
   if [ ! -f "$MARKER_DIR/lint-passed" ] 2>/dev/null; then
     MISSING="lint"
   fi
+  if [ ! -f "$MARKER_DIR/test-passed" ] 2>/dev/null; then
+    MISSING="${MISSING:+$MISSING, }test"
+  fi
   if [ ! -f "$MARKER_DIR/build-passed" ] 2>/dev/null; then
     MISSING="${MISSING:+$MISSING, }build"
   fi
   if [ -n "$MISSING" ]; then
-    echo "BLOCKED: Must run $MISSING before pushing (AGENTS.md §PR Flow step 4). Run: npm run lint && npm run build" >&2
+    echo "BLOCKED: Must run $MISSING before pushing (AGENTS.md §PR Flow step 4). Run: npm run lint && npm test && npm run build" >&2
     exit 2
   fi
 fi

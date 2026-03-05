@@ -35,7 +35,7 @@ Open `http://localhost:3000`.
 
 ### Required for posts and brand kits
 
-- `DATABASE_URL` -- PostgreSQL connection string (Drizzle ORM). Run `npx drizzle-kit push` after schema changes.
+- `POSTGRES_URL` -- PostgreSQL connection string used by the app DB layer (Drizzle ORM). Run `npx drizzle-kit push` after schema changes.
 
 ### Required for upload/share/scheduling features
 
