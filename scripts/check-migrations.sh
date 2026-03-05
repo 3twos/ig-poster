@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-POSTGRES_URL="postgresql://check@localhost/check" npx drizzle-kit generate 2>&1
+POSTGRES_URL="postgresql://check@localhost/check" npx --no-install drizzle-kit generate 2>&1
 
 # Check if drizzle-kit created any new/modified files
 if [ -n "$(git diff --name-only -- drizzle/)" ] || [ -n "$(git ls-files --others --exclude-standard -- drizzle/)" ]; then
