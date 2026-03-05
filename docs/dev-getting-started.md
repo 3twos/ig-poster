@@ -69,6 +69,18 @@ npm run build
 
 Run these before opening or updating a PR.
 
+## Monitor Vercel Deployments
+
+Use the monitor script to poll deployment status until it reaches `READY`, `ERROR`, or `CANCELED`:
+
+```bash
+./scripts/monitor-vercel-deployment.sh <deployment-id-or-url> --interval 5
+```
+
+Optional environment variables:
+- `VERCEL_TOKEN` (required unless you pass `--token`)
+- `VERCEL_TEAM_ID` or `VERCEL_ORG_ID` (use for team-scoped deployments)
+
 ## Project Map
 
 - `src/app/page.tsx`: main editor page — composes a 3-column resizable layout from focused section components.
