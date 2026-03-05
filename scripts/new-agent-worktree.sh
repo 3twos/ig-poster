@@ -20,7 +20,7 @@ if [[ -z "$SAFE_AGENT" ]]; then
 fi
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-BRANCH="codex/${SAFE_AGENT}-${TIMESTAMP}"
+BRANCH="claude/${SAFE_AGENT}-${TIMESTAMP}"
 WORKTREE_PARENT="$(dirname "$ROOT_DIR")/${REPO_NAME}-worktrees"
 WORKTREE_PATH="$WORKTREE_PARENT/${BRANCH//\//-}"
 

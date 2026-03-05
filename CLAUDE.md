@@ -8,10 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Start dev server on localhost:3000
 npm run build        # Production build (also used as CI quality gate)
 npm run lint         # ESLint check
+npm run test         # Run Vitest tests
+npm run test:watch   # Run Vitest in watch mode
 npm install          # Install dependencies
 ```
 
-There are no tests configured. CI runs `lint` then `build` only.
+CI runs `lint`, `test`, then `build`.
 
 ## Architecture
 
@@ -81,10 +83,10 @@ Zod schemas are used pervasively for request validation in API routes and for ty
 
 ## PR and Branch Policy
 
-**Read `AGENTS.md` for additional instructions** on PR flow, merge gates, and review handling rules. Key points: branches use `codex/` prefix, never self-merge — wait for explicit user approval, and treat review comments as required inputs. Parallel agent work uses git worktrees via `scripts/new-agent-worktree.sh`.
+**Read `AGENTS.md` for additional instructions** on PR flow, merge gates, and review handling rules. Key points: branches use `claude/` prefix, never self-merge — wait for explicit user approval, and treat review comments as required inputs. Parallel agent work uses git worktrees via `scripts/new-agent-worktree.sh`.
 
 ## CI/CD
 
-- `.github/workflows/ci.yml` — lint + build on PRs and main pushes (Node 22)
+- `.github/workflows/ci.yml` — lint + test + build on PRs and main pushes (Node 22)
 - `.github/workflows/vercel.yml` — Vercel preview deploys on PRs, production on main
 - `vercel.json` — Cron config for `/api/cron/publish` every 15 minutes
