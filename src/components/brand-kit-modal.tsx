@@ -45,6 +45,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
   });
 
   const [isAutofillingBrand, setIsAutofillingBrand] = useState(false);
+  const [isCreatingKit, setIsCreatingKit] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastAutofilledWebsite, setLastAutofilledWebsite] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -90,6 +91,13 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
 
   useEffect(() => {
     if (!open) return;
+    setIsLoaded(false);
+    setKits([]);
+    setActiveKitId(null);
+    setKitName("New Kit");
+    setBrand(INITIAL_BRAND);
+    setPromptConfig({ systemPrompt: "", customInstructions: "" });
+    setLogo(null);
     const loadAll = async () => {
       try {
         const kitsRes = await fetch("/api/brand-kits", { cache: "no-store" });
@@ -103,7 +111,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
           const defaultKit = loadedKits.find((k) => k.isDefault) ?? loadedKits[0];
           loadKitData(defaultKit);
         }
-      } catch { /* Settings may not be available */ }
+      } catch { /* Brand kits may not be available */ }
       finally { setIsLoaded(true); }
     };
     void loadAll();
@@ -193,6 +201,8 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
   );
 
   const createNewKit = async () => {
+    if (isCreatingKit) return;
+    setIsCreatingKit(true);
     try {
       const res = await fetch("/api/brand-kits", {
         method: "POST",
@@ -206,6 +216,8 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
       toast.success("New kit created.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not create kit");
+    } finally {
+      setIsCreatingKit(false);
     }
   };
 
@@ -265,7 +277,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
           <div className="flex w-64 shrink-0 flex-col border-r border-white/10 max-md:w-48">
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <span className="text-xs font-semibold tracking-wider text-slate-400 uppercase">Kits</span>
-              <Button variant="ghost" size="icon-sm" onClick={() => void createNewKit()} className="text-slate-400 hover:text-white" aria-label="New kit">
+              <Button variant="ghost" size="icon-sm" onClick={() => void createNewKit()} disabled={isCreatingKit} className="text-slate-400 hover:text-white" aria-label="New kit">
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
@@ -301,9 +313,9 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                   <p className="text-lg font-semibold text-slate-200">No brand kits yet</p>
                   <p className="mt-1 text-sm text-slate-400">Create a kit to define your brand identity, colors, and prompt controls.</p>
                 </div>
-                <Button onClick={() => void createNewKit()}>
-                  <Plus className="h-4 w-4" />
-                  Create Kit
+                <Button onClick={() => void createNewKit()} disabled={isCreatingKit}>
+                  {isCreatingKit ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {isCreatingKit ? "Creating..." : "Create Kit"}
                 </Button>
               </div>
             ) : (
