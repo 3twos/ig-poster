@@ -472,7 +472,7 @@ export default function Home() {
               </div>
               <h2 className="mt-6 text-xl font-semibold text-white">No post selected</h2>
               <p className="mt-2 text-sm text-slate-400">Select a post from the sidebar or create a new one to get started.</p>
-              <Button onClick={() => { setIsCreatingPost(true); void createNewPost().finally(() => setIsCreatingPost(false)); }} disabled={isCreatingPost} className="mt-6">
+              <Button onClick={() => { setIsCreatingPost(true); createNewPost().catch((e) => { const msg = e instanceof Error ? e.message : "Failed to create post"; generation.setError(msg); toast.error(msg); }).finally(() => setIsCreatingPost(false)); }} disabled={isCreatingPost} className="mt-6">
                 {isCreatingPost ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 Create Your First Post
               </Button>
