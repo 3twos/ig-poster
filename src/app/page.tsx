@@ -17,7 +17,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type FormEvent,
 } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 
@@ -79,6 +78,7 @@ export default function Home() {
     activePost,
     dispatch,
     createNewPost,
+    selectPost,
   } = usePostContext();
 
   const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
@@ -103,6 +103,7 @@ export default function Home() {
   const [brandKitOptions, setBrandKitOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [brandKitsOpen, setBrandKitsOpen] = useState(false);
+  const [pendingPublishRequest, setPendingPublishRequest] = useState<{ postId: string; scheduleAt?: string } | null>(null);
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
@@ -371,6 +372,14 @@ export default function Home() {
     });
   }, [syncAssetsToPost]);
 
+  const removeLogo = useCallback(() => {
+    setLocalLogo((current) => {
+      if (current) URL.revokeObjectURL(current.previewUrl);
+      return null;
+    });
+    dispatch({ type: "SET_LOGO", logoUrl: null });
+  }, [dispatch]);
+
   const reorderAssets = useCallback((reordered: LocalAsset[]) => {
     setLocalAssets(reordered); syncAssetsToPost(reordered);
   }, [syncAssetsToPost]);
@@ -462,9 +471,13 @@ export default function Home() {
     finally { setIsDisconnecting(false); }
   };
 
-  const publishToInstagram = async (event: FormEvent, scheduleAt?: string) => {
-    event.preventDefault();
-    if (!activeVariant) return;
+  const publishToInstagram = async (scheduleAt?: string) => {
+    if (!activeVariant) {
+      const m = "Generate and select a variant before posting.";
+      generation.setError(m);
+      toast.error(m);
+      return;
+    }
     if (!authStatus.connected) { const m = "Connect an Instagram account before publishing."; generation.setError(m); toast.error(m); return; }
     generation.setError(null); setPublishMessage(null); setIsPublishing(true);
     try {
@@ -491,6 +504,29 @@ export default function Home() {
     } catch (e) { const m = e instanceof Error ? e.message : "Instagram publish failed"; generation.setError(m); toast.error(m); }
     finally { setIsPublishing(false); }
   };
+
+  const publishToInstagramRef = useRef<(scheduleAt?: string) => Promise<void>>(async () => {});
+  publishToInstagramRef.current = publishToInstagram;
+
+  const requestPublishForPost = useCallback(async (postId: string, scheduleAt?: string) => {
+    if (!postId) return;
+    if (activePost?.id !== postId) {
+      setPendingPublishRequest({ postId, scheduleAt });
+      await selectPost(postId);
+      return;
+    }
+    await publishToInstagramRef.current(scheduleAt);
+  }, [activePost?.id, selectPost]);
+
+  useEffect(() => {
+    if (!pendingPublishRequest || activePost?.id !== pendingPublishRequest.postId) {
+      return;
+    }
+
+    const scheduleAt = pendingPublishRequest.scheduleAt;
+    setPendingPublishRequest(null);
+    void publishToInstagramRef.current(scheduleAt);
+  }, [activePost?.id, pendingPublishRequest]);
 
   // Empty state
   if (!activePost) {
@@ -535,7 +571,12 @@ export default function Home() {
             <ResizablePanelGroup orientation="horizontal" className="h-full">
               <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} collapsible collapsedSize={0} onResize={(size) => setLeftCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div className="flex h-full flex-col rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl ml-4">
-                  <SidebarContent />
+                  <SidebarContent
+                    onPostNow={(postId) => void requestPublishForPost(postId)}
+                    onSchedulePost={(postId, scheduleAt) =>
+                      void requestPublishForPost(postId, scheduleAt)
+                    }
+                  />
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
@@ -558,7 +599,7 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e, s) => void publishToInstagram(e, s)} />
+                        <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
                       </section>
                     )}
                   </div>
@@ -600,7 +641,7 @@ export default function Home() {
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e, s) => void publishToInstagram(e, s)} />}
+            {activeVariant && <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>
@@ -609,7 +650,12 @@ export default function Home() {
         </div>
       </AppShell>
 
-      <MobileSidebarDrawer />
+      <MobileSidebarDrawer
+        onPostNow={(postId) => void requestPublishForPost(postId)}
+        onSchedulePost={(postId, scheduleAt) =>
+          void requestPublishForPost(postId, scheduleAt)
+        }
+      />
       <Sheet open={mobileAgentSheetOpen} onOpenChange={setMobileAgentSheetOpen}>
         <SheetContent side="right" className="w-[340px] border-l border-white/15 bg-slate-900/95 p-4 backdrop-blur-xl">
           <SheetHeader><SheetTitle className="text-xs font-semibold tracking-[0.16em] text-blue-200 uppercase">Agent Activity</SheetTitle></SheetHeader>

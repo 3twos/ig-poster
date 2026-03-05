@@ -1,12 +1,13 @@
 "use client";
 
 import {
+  CalendarClock,
   LayoutTemplate,
   Link2,
   LoaderCircle,
   Send,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,8 @@ type Props = {
   dispatch: (action: Record<string, unknown>) => void;
   onDisconnectInstagram: () => void;
   onCreateShareLink: () => void;
-  onPublishToInstagram: (event: FormEvent, scheduleAt: string) => void;
+  onPostNow: () => void;
+  onSchedulePost: (scheduleAt: string) => void;
 };
 
 export function PublishSection({
@@ -42,7 +44,8 @@ export function PublishSection({
   dispatch,
   onDisconnectInstagram,
   onCreateShareLink,
-  onPublishToInstagram,
+  onPostNow,
+  onSchedulePost,
 }: Props) {
   const [scheduleAt, setScheduleAt] = useState("");
 
@@ -163,22 +166,11 @@ export function PublishSection({
         </div>
       ) : null}
 
-      <form onSubmit={(e) => { onPublishToInstagram(e, scheduleAt); }} className="grid gap-2">
-        <div className="space-y-1">
-          <Label className="text-[11px] text-slate-300">
-            Schedule (optional)
-          </Label>
-          <Input
-            type="datetime-local"
-            value={scheduleAt}
-            onChange={(event) => setScheduleAt(event.target.value)}
-            className="text-xs"
-          />
-        </div>
-
+      <div className="grid gap-2">
         <Button
-          type="submit"
+          type="button"
           disabled={isPublishing}
+          onClick={onPostNow}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
           {isPublishing ? (
@@ -186,9 +178,31 @@ export function PublishSection({
           ) : (
             <Send className="h-3.5 w-3.5" />
           )}
-          {scheduleAt ? "Schedule Instagram Publish" : "Publish to Instagram"}
+          Post now
         </Button>
-      </form>
+
+        <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
+          <Label className="text-[11px] text-slate-300">Post at</Label>
+          <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+            <Input
+              type="datetime-local"
+              value={scheduleAt}
+              onChange={(event) => setScheduleAt(event.target.value)}
+              className="text-xs"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPublishing || !scheduleAt}
+              onClick={() => onSchedulePost(scheduleAt)}
+              className="sm:min-w-[135px]"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+              Schedule
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

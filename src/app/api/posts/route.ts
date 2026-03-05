@@ -1,9 +1,9 @@
-import { desc, eq, ne, and } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getDb } from "@/db";
-import { posts } from "@/db/schema";
+import { brandKits, posts } from "@/db/schema";
 import { toSummary } from "@/lib/post";
 import { PostCreateRequestSchema } from "@/lib/post-schemas";
 import { hashEmail } from "@/lib/server-utils";
@@ -63,6 +63,27 @@ export async function POST(req: Request) {
     const now = new Date();
 
     const db = getDb();
+    let brandKitId = body.brandKitId ?? null;
+    let brand = body.brand ?? null;
+    let promptConfig = body.promptConfig ?? null;
+    let logoUrl = body.logoUrl ?? null;
+
+    if (!brandKitId) {
+      const [firstBrandKit] = await db
+        .select()
+        .from(brandKits)
+        .where(eq(brandKits.ownerHash, ownerHash))
+        .orderBy(asc(brandKits.createdAt))
+        .limit(1);
+
+      if (firstBrandKit) {
+        brandKitId = firstBrandKit.id;
+        brand = firstBrandKit.brand ?? null;
+        promptConfig = firstBrandKit.promptConfig ?? null;
+        logoUrl = firstBrandKit.logoUrl ?? null;
+      }
+    }
+
     const [row] = await db
       .insert(posts)
       .values({
@@ -70,12 +91,12 @@ export async function POST(req: Request) {
         ownerHash,
         title: body.title ?? "",
         status: "draft",
-        brand: body.brand ?? null,
+        brand,
         brief: body.brief ?? null,
         assets: body.assets ?? [],
-        logoUrl: body.logoUrl ?? null,
-        brandKitId: body.brandKitId ?? null,
-        promptConfig: body.promptConfig ?? null,
+        logoUrl,
+        brandKitId,
+        promptConfig,
         createdAt: now,
         updatedAt: now,
       })

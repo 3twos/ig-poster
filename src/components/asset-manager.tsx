@@ -149,10 +149,12 @@ export function AssetManager({
           <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
             Logo
           </p>
-          <div className="flex items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300">
+          <div className="flex items-center gap-1.5">
+            <label className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/20 text-slate-200 transition hover:border-orange-300 hover:text-white">
               <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
-              {logo ? "Replace logo" : "Attach logo"}
+              <span className="sr-only">
+                {logo ? "Replace logo" : "Attach logo"}
+              </span>
               <input
                 type="file"
                 accept="image/*"
@@ -160,16 +162,15 @@ export function AssetManager({
                 onChange={onLogoUpload}
               />
             </label>
-            {logo ? (
-              <button
-                type="button"
-                onClick={onRemoveLogo}
-                className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-black/35"
-              >
-                <Trash2 className="h-3 w-3" />
-                Remove
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={onRemoveLogo}
+              disabled={!logo}
+              aria-label="Remove logo"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/20 bg-black/20 text-slate-300 transition hover:border-red-300 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
 
@@ -183,17 +184,17 @@ export function AssetManager({
                 className="max-h-full max-w-full object-contain"
               />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-medium text-slate-200">
-                {logo.name === "Logo" ? "Logo ready" : logo.name}
+                {logo.name}
               </p>
               <p className="text-[10px] text-slate-400">
-                {logo.status === "uploading" ? "Syncing logo..." : logo.error || "Ready"}
+                {logo.status === "uploading" ? "syncing..." : logo.error || "ready"}
               </p>
             </div>
           </div>
         ) : (
-          <p className="mt-2 text-[11px] text-slate-400">No logo attached.</p>
+          <p className="mt-2 text-[11px] text-slate-500">No logo selected.</p>
         )}
       </div>
     </div>
