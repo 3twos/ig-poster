@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createWorkspaceSessionToken,
@@ -8,8 +8,13 @@ import {
 
 describe("workspace-auth", () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     vi.stubEnv("WORKSPACE_AUTH_SECRET", "test-secret");
     vi.stubEnv("GOOGLE_WORKSPACE_DOMAIN", "example.com");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("sanitizes redirect next paths", () => {

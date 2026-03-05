@@ -135,7 +135,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 },

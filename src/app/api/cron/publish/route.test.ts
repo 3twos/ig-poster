@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/blob-store", () => ({
   isBlobEnabled: vi.fn(),
@@ -36,7 +36,14 @@ const mockedDeleteBlob = vi.mocked(deleteBlob);
 describe("GET /api/cron/publish", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.stubEnv("CRON_SECRET", "cron-secret");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it("returns 401 for invalid bearer token", async () => {

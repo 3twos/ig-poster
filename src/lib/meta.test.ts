@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getEnvMetaAuth, getMediaInsights } from "@/lib/meta";
 
@@ -28,6 +28,10 @@ describe("meta auth/env helpers", () => {
 });
 
 describe("getMediaInsights", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("returns parsed metrics on success", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

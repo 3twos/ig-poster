@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     }
 
     const ownerHash = hashEmail(session.email);
-    const body = PostCreateRequestSchema.parse(await req.json().catch(() => ({})));
+    const body = PostCreateRequestSchema.parse(await req.json());
     const id = randomId();
     const now = new Date();
 
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: row.id, post: row });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 },
