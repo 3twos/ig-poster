@@ -78,6 +78,12 @@
    - Start a new conversation with the "+" button.
    - The chat uses the same LLM connections configured in Settings.
 
+## Working with Saved Posts
+
+- Selecting a different post saves pending edits first, then loads the selected draft.
+- If you click multiple posts quickly, stale responses are ignored and only the latest selection is applied.
+- Sidebar list refreshes keep existing entries visible to avoid flicker while background updates run.
+
 ## Publishing Behavior
 
 - `single-image` variant publishes a rendered poster image.
