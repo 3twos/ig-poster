@@ -39,7 +39,8 @@ export async function GET(req: Request) {
       .limit(50);
 
     return NextResponse.json({ posts: rows.map(toSummary) });
-  } catch {
+  } catch (err) {
+    console.error("[api/posts]", err);
     return NextResponse.json(
       { error: "Failed to list posts" },
       { status: 500 },
@@ -78,7 +79,8 @@ export async function POST(req: Request) {
       .returning();
 
     return NextResponse.json({ id: row.id, post: row });
-  } catch {
+  } catch (err) {
+    console.error("[api/posts]", err);
     return NextResponse.json(
       { error: "Failed to create post" },
       { status: 500 },
