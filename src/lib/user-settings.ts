@@ -1,6 +1,7 @@
-import { createHash } from "crypto";
-
 import { z } from "zod";
+
+import { MultiModelModeSchema } from "@/lib/llm-constants";
+import { hashEmail } from "@/lib/server-utils";
 
 export const UserSettingsSchema = z.object({
   email: z.string().email(),
@@ -22,6 +23,8 @@ export const UserSettingsSchema = z.object({
     .object({
       provider: z.enum(["openai", "anthropic"]).optional(),
       model: z.string().optional(),
+      mode: MultiModelModeSchema.optional(),
+      connectionOrder: z.array(z.string()).optional(),
     })
     .optional(),
   promptConfig: z
@@ -42,9 +45,6 @@ export const UserSettingsSchema = z.object({
 });
 
 export type UserSettings = z.infer<typeof UserSettingsSchema>;
-
-const hashEmail = (email: string) =>
-  createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
 
 export const getUserSettingsPath = (email: string) =>
   `settings/users/${hashEmail(email)}.json`;

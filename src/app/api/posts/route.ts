@@ -1,17 +1,13 @@
-import { createHash } from "crypto";
-
 import { desc, eq, ne, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
 import { toSummary } from "@/lib/post";
+import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
-
-const hashEmail = (email: string) =>
-  createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
 
 const randomId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(9)))

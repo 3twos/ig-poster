@@ -1,5 +1,5 @@
 import type { AspectRatio } from "@/lib/creative";
-import type { LlmProvider } from "@/lib/llm-constants";
+import type { LlmProvider, MultiModelMode } from "@/lib/llm-constants";
 
 export type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
 export type AssetMediaType = "image" | "video";
@@ -15,6 +15,7 @@ export type LocalAsset = {
   durationSec?: number;
   width?: number;
   height?: number;
+  size?: number;
   error?: string;
 };
 
@@ -27,6 +28,7 @@ export type BrandState = {
   voice: string;
   visualDirection: string;
   palette: string;
+  fonts: string;
   logoNotes: string;
 };
 
@@ -62,6 +64,26 @@ export type LlmAuthStatus = {
   detail?: string;
 };
 
+export type LlmConnectionStatus = {
+  id: string;
+  source: "connection" | "env";
+  provider: LlmProvider;
+  model: string;
+  connected: boolean;
+  removable: boolean;
+  detail?: string;
+};
+
+export type LlmMultiAuthStatus = {
+  connections: LlmConnectionStatus[];
+  mode: MultiModelMode;
+  connected: boolean;
+  // Legacy compat fields (from first connection)
+  source?: "connection" | "env" | null;
+  provider?: LlmProvider;
+  model?: string;
+};
+
 export type PromptConfigState = {
   systemPrompt: string;
   customInstructions: string;
@@ -89,6 +111,7 @@ export const INITIAL_BRAND: BrandState = {
   visualDirection:
     "Bold editorial layouts, high contrast, cinematic shadows, kinetic angles, premium texture",
   palette: "#0F172A, #F97316, #F8FAFC, #22C55E",
+  fonts: "",
   logoNotes: "Keep logo visible but subtle, preferably top-left chip",
 };
 

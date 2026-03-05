@@ -1,23 +1,33 @@
 import { NextResponse } from "next/server";
 
-import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
+import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
+import type { LlmConnectionStatus, LlmMultiAuthStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const resolved = await resolveLlmAuthFromRequest(req);
-  if (!resolved) {
-    return NextResponse.json({
-      connected: false,
-      source: null,
-      detail: "No connected provider. Add OpenAI/Anthropic key or set env credentials.",
-    });
-  }
+  const authList = await resolveAllLlmAuthFromRequest(req);
 
-  return NextResponse.json({
+  const connections: LlmConnectionStatus[] = authList.connections.map((conn) => ({
+    id: conn.id,
+    source: conn.source,
+    provider: conn.provider,
+    model: conn.model,
     connected: true,
-    source: resolved.source,
-    provider: resolved.provider,
-    model: resolved.model,
-  });
+    removable: conn.source === "connection",
+  }));
+
+  const first = authList.connections[0];
+
+  const status: LlmMultiAuthStatus = {
+    connections,
+    mode: authList.mode,
+    connected: connections.length > 0,
+    // Legacy compat fields
+    source: first?.source ?? null,
+    provider: first?.provider,
+    model: first?.model,
+  };
+
+  return NextResponse.json(status);
 }

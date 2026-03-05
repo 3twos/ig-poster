@@ -1,16 +1,12 @@
-import { createHash } from "crypto";
-
 import { eq, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
+import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
-
-const hashEmail = (email: string) =>
-  createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
 
 type Ctx = { params: Promise<{ id: string }> };
 

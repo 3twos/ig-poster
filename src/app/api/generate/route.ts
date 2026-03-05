@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { NextResponse } from "next/server";
 
 import { z } from "zod";
@@ -20,12 +18,13 @@ import {
   type CreativeVariant,
   type PublishOutcome,
 } from "@/lib/creative";
-import { resolveLlmAuthFromRequest } from "@/lib/llm-auth";
-import { generateStructuredJson } from "@/lib/llm";
+import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
+import { streamStructuredJsonWithCallback, type ResolvedLlmAuth } from "@/lib/llm";
 import {
   getUserSettingsPath,
   type UserSettings,
 } from "@/lib/user-settings";
+import { hashEmail, isAbortError, toErrorMessage } from "@/lib/server-utils";
 import {
   buildWebsiteStyleContext,
   type WebsiteStyleResult,
@@ -39,13 +38,6 @@ import {
 
 export const maxDuration = 60;
 const GENERATION_SOFT_TIMEOUT_MS = 50_000;
-
-const toErrorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : "Unexpected generation issue";
-
-const isAbortError = (error: unknown) =>
-  error instanceof Error &&
-  (error.name === "AbortError" || error.message.toLowerCase().includes("abort"));
 
 const createAbortError = () => {
   const error = new Error("Generation cancelled.");
@@ -64,11 +56,11 @@ export async function POST(req: Request) {
   try {
     const json = await req.json();
     const request = GenerationRequestSchema.parse(json);
-    const llmAuth = await resolveLlmAuthFromRequest(req);
+    const authList = await resolveAllLlmAuthFromRequest(req);
 
-    if (!llmAuth) {
+    if (authList.connections.length === 0) {
       return NextResponse.json(createFallbackResponse(request));
-  }
+    }
 
   const generationAbortController = new AbortController();
   let abortReason: "client" | "timeout" | "transport" | null = null;
@@ -160,11 +152,16 @@ export async function POST(req: Request) {
 
         try {
           throwIfAborted();
+
+          const modelSummary = authList.connections
+            .map((c) => `${c.provider.toUpperCase()} (${c.model})`)
+            .join(", ");
+
           send({
             type: "run-start",
             runId,
             label: "Generate SOTA Concepts",
-            detail: "Planning and drafting post concepts.",
+            detail: `Planning and drafting post concepts. Mode: ${authList.mode}.`,
           });
 
           startStep(
@@ -175,7 +172,7 @@ export async function POST(req: Request) {
           );
           completeStep(
             "resolve-provider",
-            `Connected to ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
+            `Connected to ${modelSummary}. Mode: ${authList.mode}.`,
           );
 
           // Try cached brand memory first, fall back to live scrape
@@ -194,9 +191,7 @@ export async function POST(req: Request) {
           try {
             const session = await readWorkspaceSessionFromRequest(req);
             if (session) {
-              const emailHash = createHash("sha256")
-                .update(session.email.trim().toLowerCase())
-                .digest("hex");
+              const emailHash = hashEmail(session.email);
 
               const settings = await readJsonByPath<UserSettings>(
                 getUserSettingsPath(session.email),
@@ -221,22 +216,21 @@ export async function POST(req: Request) {
               // Load performance context from past outcomes
               try {
                 const outcomeBlobs = await listBlobs(`outcomes/${emailHash}/`, 30);
-                // Sort by pathname (timestamp-prefixed) to guarantee chronological order
                 outcomeBlobs.sort((a, b) => a.pathname.localeCompare(b.pathname));
-                const outcomes: PublishOutcome[] = [];
-                for (const blob of outcomeBlobs.slice(-20)) {
-                  try {
+                const results = await Promise.allSettled(
+                  outcomeBlobs.slice(-20).map(async (blob) => {
                     const res = await fetch(blob.url, { cache: "no-store" });
-                    if (res.ok) {
-                      const parsed = PublishOutcomeSchema.safeParse(await res.json());
-                      if (parsed.success) {
-                        outcomes.push(parsed.data);
-                      }
-                    }
-                  } catch {
-                    // Skip individual outcome errors
-                  }
-                }
+                    if (!res.ok) return null;
+                    const parsed = PublishOutcomeSchema.safeParse(await res.json());
+                    return parsed.success ? parsed.data : null;
+                  }),
+                );
+                const outcomes = results
+                  .filter(
+                    (r): r is PromiseFulfilledResult<PublishOutcome> =>
+                      r.status === "fulfilled" && r.value != null,
+                  )
+                  .map((r) => r.value);
                 performanceContext = buildPerformanceContext(outcomes);
               } catch {
                 // Performance context is non-critical
@@ -277,24 +271,12 @@ export async function POST(req: Request) {
             "Prompt assembled with campaign constraints and format hints.",
           );
 
-          startStep(
-            "draft-variants",
-            "Draft candidate variants",
-            "execution",
-            `Calling ${llmAuth.provider.toUpperCase()} (${llmAuth.model}).`,
-          );
-          const candidateCount = resolveCandidateCount(llmAuth.model);
-          const heartbeatId = setInterval(() => {
-            if (generationAbortController.signal.aborted) {
-              return;
-            }
-            send({
-              type: "heartbeat",
-              detail: `Still waiting on ${llmAuth.provider.toUpperCase()} response...`,
-            });
-          }, 2500);
-          const generated = await generateStructuredJson<unknown>({
-            auth: llmAuth,
+          // ---------------------------------------------------------------
+          // Draft variants: fallback or parallel mode
+          // ---------------------------------------------------------------
+
+          const buildLlmOptions = (auth: ResolvedLlmAuth, candidateCount: number) => ({
+            auth,
             systemPrompt: buildGenerationSystemPrompt(request.promptConfig),
             userPrompt: buildGenerationUserPrompt(request, {
               websiteStyleContext: websiteResult?.notes,
@@ -302,17 +284,146 @@ export async function POST(req: Request) {
               candidateCount,
               performanceContext: performanceContext || undefined,
             }),
-            temperature: resolveGenerationTemperature(llmAuth.model),
-            maxTokens: resolveGenerationMaxTokens(llmAuth.model),
+            temperature: resolveGenerationTemperature(auth.model),
+            maxTokens: resolveGenerationMaxTokens(auth.model),
             signal: generationAbortController.signal,
-          }).finally(() => {
-            clearInterval(heartbeatId);
+            onChunk: (text: string) => {
+              send({ type: "llm-thinking", stepId: "draft-variants", text });
+            },
           });
-          throwIfAborted();
-          completeStep(
-            "draft-variants",
-            "Model returned candidate concepts and strategy rationale.",
-          );
+
+          let allVariants: CreativeVariant[] = [];
+          let strategyText = "";
+          let scoringAuth: ResolvedLlmAuth = authList.connections[0];
+          let generationSucceeded = false;
+
+          if (authList.mode === "parallel" && authList.connections.length > 1) {
+            // ---------- Parallel mode ----------
+            startStep(
+              "draft-variants",
+              "Draft candidate variants (parallel)",
+              "execution",
+              `Querying ${authList.connections.length} models simultaneously.`,
+            );
+
+            const results = await Promise.allSettled(
+              authList.connections.map(async (auth) => {
+                const perModelCount = Math.ceil(
+                  resolveCandidateCount(auth.model) * 1.2 / authList.connections.length,
+                );
+                const generated = await streamStructuredJsonWithCallback<unknown>(
+                  buildLlmOptions(auth, Math.max(3, perModelCount)),
+                );
+                return { auth, generated };
+              }),
+            );
+
+            const succeededResults: Array<{ auth: ResolvedLlmAuth; generated: unknown }> = [];
+            for (const result of results) {
+              if (result.status === "fulfilled") {
+                succeededResults.push(result.value);
+              }
+            }
+
+            if (succeededResults.length > 0) {
+              generationSucceeded = true;
+              scoringAuth = succeededResults[0].auth;
+
+              for (const { generated } of succeededResults) {
+                try {
+                  const { response: parsed } = coerceInternalGenerationResponse(
+                    generated,
+                    request,
+                  );
+                  allVariants.push(...parsed.variants);
+                  if (!strategyText && parsed.strategy) {
+                    strategyText = parsed.strategy;
+                  }
+                } catch {
+                  // Skip invalid responses
+                }
+              }
+
+              const failedCount = results.length - succeededResults.length;
+              completeStep(
+                "draft-variants",
+                `Received ${allVariants.length} candidates from ${succeededResults.length} model(s)` +
+                  (failedCount > 0 ? ` (${failedCount} model(s) failed).` : "."),
+              );
+            } else {
+              throwIfAborted();
+              failStep(
+                "draft-variants",
+                "All models failed in parallel mode.",
+              );
+            }
+          } else {
+            // ---------- Fallback mode ----------
+            for (let i = 0; i < authList.connections.length; i++) {
+              const auth = authList.connections[i];
+              throwIfAborted();
+
+              const stepId = i === 0 ? "draft-variants" : `draft-variants-fallback-${i}`;
+              startStep(
+                stepId,
+                i === 0 ? "Draft candidate variants" : `Fallback to ${auth.provider.toUpperCase()} (${auth.model})`,
+                "execution",
+                `Calling ${auth.provider.toUpperCase()} (${auth.model}).`,
+              );
+
+              try {
+                const candidateCount = resolveCandidateCount(auth.model);
+                const generated = await streamStructuredJsonWithCallback<unknown>({
+                  ...buildLlmOptions(auth, candidateCount),
+                  onChunk: (text) => {
+                    send({ type: "llm-thinking", stepId, text });
+                  },
+                });
+                throwIfAborted();
+
+                const { response: parsed, recovery } = coerceInternalGenerationResponse(
+                  generated,
+                  request,
+                );
+                allVariants = parsed.variants;
+                strategyText = parsed.strategy;
+                scoringAuth = auth;
+                generationSucceeded = true;
+
+                const recoveryNotes: string[] = [];
+                if (recovery.droppedInvalidVariants > 0) {
+                  recoveryNotes.push(`dropped ${recovery.droppedInvalidVariants} invalid`);
+                }
+                if (recovery.usedFallbackVariants > 0) {
+                  recoveryNotes.push(`filled ${recovery.usedFallbackVariants} fallback`);
+                }
+
+                completeStep(
+                  stepId,
+                  `${auth.provider.toUpperCase()} (${auth.model}) returned ${allVariants.length} candidates` +
+                    (recoveryNotes.length ? ` (${recoveryNotes.join(", ")}).` : "."),
+                );
+                break; // Success — exit fallback loop
+              } catch (modelError) {
+                if (isAbortError(modelError) || generationAbortController.signal.aborted) {
+                  throw modelError; // Re-throw abort errors
+                }
+                failStep(
+                  stepId,
+                  `${auth.provider.toUpperCase()} (${auth.model}) failed: ${toErrorMessage(modelError)}`,
+                );
+                // Continue to next model
+              }
+            }
+          }
+
+          if (!generationSucceeded || allVariants.length === 0) {
+            throw new Error("All models failed to generate variants.");
+          }
+
+          // ---------------------------------------------------------------
+          // Score and select top variants
+          // ---------------------------------------------------------------
 
           startStep(
             "select-variants",
@@ -320,51 +431,28 @@ export async function POST(req: Request) {
             "validation",
             "Applying schema checks and scoring candidates.",
           );
-          const { response: internalParsed, recovery } =
-            coerceInternalGenerationResponse(generated, request);
 
           let topVariants: CreativeVariant[];
           try {
             const scores = await scoreVariantsWithLlm(
-              llmAuth,
-              internalParsed.variants,
+              scoringAuth,
+              allVariants,
               { brandName: request.brand.brandName, voice: request.brand.voice },
               { theme: request.post.theme, audience: request.post.audience, objective: request.post.objective },
+              generationAbortController.signal,
             );
-            topVariants = selectTopVariantsWithScores(internalParsed.variants, scores, 3);
+            topVariants = selectTopVariantsWithScores(allVariants, scores, 3);
           } catch {
-            topVariants = selectTopVariants(internalParsed.variants, 3);
-          }
-
-          const recoveryNotes: string[] = [];
-          if (recovery.droppedInvalidVariants > 0) {
-            recoveryNotes.push(
-              `dropped ${recovery.droppedInvalidVariants} invalid variant(s)`,
-            );
-          }
-          if (recovery.truncatedVariants > 0) {
-            recoveryNotes.push(
-              `trimmed ${recovery.truncatedVariants} extra variant(s)`,
-            );
-          }
-          if (recovery.usedFallbackVariants > 0) {
-            recoveryNotes.push(
-              `filled ${recovery.usedFallbackVariants} slot(s) with deterministic fallback`,
-            );
-          }
-          if (recovery.strategyFallbackUsed) {
-            recoveryNotes.push("replaced invalid strategy text");
+            topVariants = selectTopVariants(allVariants, 3);
           }
 
           const parsed = GenerationResponseSchema.parse({
-            strategy: internalParsed.strategy,
+            strategy: strategyText,
             variants: topVariants,
           });
           completeStep(
             "select-variants",
-            recoveryNotes.length
-              ? `Structured output validated with auto-repair (${recoveryNotes.join("; ")}).`
-              : "Structured output validated and ranked.",
+            `Selected top 3 from ${allVariants.length} candidates.`,
           );
 
           startStep(

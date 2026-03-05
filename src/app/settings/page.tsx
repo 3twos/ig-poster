@@ -1,105 +1,162 @@
 "use client";
 
-import { BrainCircuit, KeyRound, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  BrainCircuit,
+  GripVertical,
+  KeyRound,
+  LoaderCircle,
+  Monitor,
+  Plus,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   PROVIDER_DEFAULT_MODELS,
   type LlmProvider,
+  type MultiModelMode,
 } from "@/lib/llm-constants";
-import type { LlmAuthStatus } from "@/lib/types";
+import type { LlmConnectionStatus, LlmMultiAuthStatus } from "@/lib/types";
 import { parseApiError } from "@/lib/upload-helpers";
 
 export default function SettingsPage() {
+  // Add model form state
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
   const [llmApiKeyInput, setLlmApiKeyInput] = useState("");
   const [llmModelInput, setLlmModelInput] = useState(
     PROVIDER_DEFAULT_MODELS.openai,
   );
+  const [showAddForm, setShowAddForm] = useState(false);
 
-  const [isLlmAuthLoading, setIsLlmAuthLoading] = useState(true);
-  const [isLlmConnecting, setIsLlmConnecting] = useState(false);
-  const [isLlmDisconnecting, setIsLlmDisconnecting] = useState(false);
-  const [llmMessage, setLlmMessage] = useState<string | null>(null);
-  const [llmError, setLlmError] = useState<string | null>(null);
-  const [llmAuthStatus, setLlmAuthStatus] = useState<LlmAuthStatus>({
-    connected: false,
-    source: null,
-  });
+  // Multi-model state
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [connections, setConnections] = useState<LlmConnectionStatus[]>([]);
+  const [mode, setMode] = useState<MultiModelMode>("fallback");
 
-  const loadLlmStatus = useCallback(async () => {
-    setIsLlmAuthLoading(true);
+  // Drag state
+  const dragItemRef = useRef<number | null>(null);
+  const dragOverItemRef = useRef<number | null>(null);
+
+  const loadStatus = useCallback(async () => {
+    setIsLoading(true);
     try {
       const response = await fetch("/api/auth/llm/status", {
         cache: "no-store",
       });
-      const json = (await response.json()) as LlmAuthStatus;
-      setLlmAuthStatus({
-        connected: Boolean(json.connected),
-        source: json.source ?? null,
-        provider: json.provider,
-        model: json.model,
-        detail: json.detail,
-      });
+      const json = (await response.json()) as LlmMultiAuthStatus;
+      setConnections(json.connections ?? []);
+      setMode(json.mode ?? "fallback");
     } catch {
-      setLlmAuthStatus({
-        connected: false,
-        source: null,
-        detail: "Could not load LLM provider status.",
-      });
+      setConnections([]);
     } finally {
-      setIsLlmAuthLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadLlmStatus();
-  }, [loadLlmStatus]);
+    void loadStatus();
+  }, [loadStatus]);
 
-  useEffect(() => {
-    if (!llmAuthStatus.provider) {
-      return;
-    }
-
-    setLlmProvider(llmAuthStatus.provider);
-    setLlmModelInput(
-      llmAuthStatus.model || PROVIDER_DEFAULT_MODELS[llmAuthStatus.provider],
-    );
-  }, [llmAuthStatus.model, llmAuthStatus.provider]);
-
-  // Load saved AI config from settings
-  useEffect(() => {
-    const loadSavedConfig = async () => {
+  const saveOrder = useCallback(
+    async (newConnections: LlmConnectionStatus[], newMode: MultiModelMode) => {
+      setIsSavingOrder(true);
       try {
-        const response = await fetch("/api/settings", { cache: "no-store" });
-        if (!response.ok) return;
-        const json = await response.json();
-        if (json?.aiConfig?.provider) {
-          setLlmProvider(json.aiConfig.provider);
+        const response = await fetch("/api/auth/llm/reorder", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            connectionOrder: newConnections.map((c) => c.id),
+            mode: newMode,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await parseApiError(response));
         }
-        if (json?.aiConfig?.model) {
-          setLlmModelInput(json.aiConfig.model);
-        }
-      } catch {
-        // Settings may not be available (no auth, no blob)
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to save model ordering",
+        );
+      } finally {
+        setIsSavingOrder(false);
       }
-    };
+    },
+    [],
+  );
 
-    void loadSavedConfig();
-  }, []);
+  const moveConnection = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= connections.length ||
+        toIndex >= connections.length
+      ) {
+        return;
+      }
+      const updated = [...connections];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      setConnections(updated);
+      void saveOrder(updated, mode);
+    },
+    [connections, mode, saveOrder],
+  );
 
-  const connectLlmProvider = async () => {
+  const handleDragStart = (index: number) => {
+    dragItemRef.current = index;
+  };
+
+  const handleDragOver = (e: DragEvent, index: number) => {
+    e.preventDefault();
+    dragOverItemRef.current = index;
+  };
+
+  const handleDrop = () => {
+    if (
+      dragItemRef.current !== null &&
+      dragOverItemRef.current !== null &&
+      dragItemRef.current !== dragOverItemRef.current
+    ) {
+      moveConnection(dragItemRef.current, dragOverItemRef.current);
+    }
+    dragItemRef.current = null;
+    dragOverItemRef.current = null;
+  };
+
+  const handleModeChange = (newMode: MultiModelMode) => {
+    setMode(newMode);
+    void saveOrder(connections, newMode);
+  };
+
+  const connectProvider = async () => {
     const apiKey = llmApiKeyInput.trim();
     if (!apiKey) {
-      setLlmMessage(null);
-      setLlmError("Enter an API key to connect an LLM provider.");
+      toast.error("Enter an API key to connect an LLM provider.");
       return;
     }
 
-    setLlmMessage(null);
-    setLlmError(null);
-    setIsLlmConnecting(true);
+    setIsConnecting(true);
 
     const abortController = new AbortController();
     const timeoutId = window.setTimeout(() => abortController.abort(), 20_000);
@@ -123,17 +180,17 @@ export default function SettingsPage() {
       const json = (await response.json()) as {
         provider?: LlmProvider;
         model?: string;
-        storage?: "blob" | "cookie";
+        connectionId?: string;
+        storage?: "database" | "cookie";
       };
 
-      await loadLlmStatus();
+      await loadStatus();
       const resolvedModel = (json.model ?? llmModelInput) || "default model";
-      setLlmModelInput(json.model ?? llmModelInput);
-      const storageHint =
-        json.storage === "cookie" ? " (encrypted cookie fallback)" : "";
-      setLlmMessage(
-        `LLM provider connected (${(json.provider ?? llmProvider).toUpperCase()} ${resolvedModel})${storageHint}.`,
+      toast.success(
+        `Connected ${(json.provider ?? llmProvider).toUpperCase()} (${resolvedModel}).`,
       );
+      setShowAddForm(false);
+      setLlmApiKeyInput("");
 
       // Persist AI config to settings
       try {
@@ -153,50 +210,43 @@ export default function SettingsPage() {
     } catch (connectError) {
       const message =
         connectError instanceof Error && connectError.name === "AbortError"
-          ? "LLM connection timed out. Check your key/model and try again."
+          ? "Connection timed out. Check your key/model and try again."
           : connectError instanceof Error
             ? connectError.message
-            : "Could not connect LLM provider";
-      setLlmError(message);
+            : "Could not connect provider";
+      toast.error(message);
     } finally {
       window.clearTimeout(timeoutId);
-      setIsLlmConnecting(false);
-      setLlmApiKeyInput("");
+      setIsConnecting(false);
     }
   };
 
-  const disconnectLlmProvider = async () => {
-    if (llmAuthStatus.source !== "connection") {
-      return;
-    }
-
-    setLlmMessage(null);
-    setLlmError(null);
-    setIsLlmDisconnecting(true);
-
+  const disconnectConnection = async (connectionId: string) => {
+    setDisconnectingId(connectionId);
     try {
       const response = await fetch("/api/auth/llm/disconnect", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connectionId }),
       });
 
       if (!response.ok) {
         throw new Error(await parseApiError(response));
       }
 
-      await loadLlmStatus();
-      setLlmMessage(
-        "Disconnected saved LLM key. Environment credentials remain available if configured.",
+      await loadStatus();
+      toast.success("Model disconnected.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not disconnect",
       );
-    } catch (disconnectError) {
-      const message =
-        disconnectError instanceof Error
-          ? disconnectError.message
-          : "Could not disconnect LLM provider";
-      setLlmError(message);
     } finally {
-      setIsLlmDisconnecting(false);
+      setDisconnectingId(null);
     }
   };
+
+  const providerLabel = (provider: LlmProvider) =>
+    provider === "openai" ? "OpenAI" : "Anthropic";
 
   return (
     <AppShell>
@@ -206,127 +256,255 @@ export default function SettingsPage() {
         <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
             <BrainCircuit className="h-4 w-4 text-orange-300" />
-            LLM Provider
+            LLM Providers
           </div>
 
-          <div className="rounded-xl border border-white/15 bg-black/20 p-3 text-xs text-slate-200">
-            {isLlmAuthLoading ? (
-              <p>Checking provider status...</p>
-            ) : llmAuthStatus.connected ? (
-              <p>
-                Connected via{" "}
-                <span className="font-semibold uppercase">
-                  {llmAuthStatus.source}
-                </span>
-                :{" "}
-                <span className="font-semibold uppercase">
-                  {llmAuthStatus.provider}
-                </span>{" "}
-                ({llmAuthStatus.model})
-              </p>
+          {/* Mode toggle */}
+          {connections.length > 1 && (
+            <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-3">
+              <Label className="mb-2 block text-xs text-slate-300">
+                Execution Mode
+              </Label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleModeChange("fallback")}
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                    mode === "fallback"
+                      ? "bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40"
+                      : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-300"
+                  }`}
+                >
+                  Fallback
+                  <span className="mt-0.5 block text-[10px] font-normal opacity-70">
+                    Try models in order. First success wins.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleModeChange("parallel")}
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                    mode === "parallel"
+                      ? "bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40"
+                      : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-300"
+                  }`}
+                >
+                  Parallel
+                  <span className="mt-0.5 block text-[10px] font-normal opacity-70">
+                    Query all models. Pick best variants.
+                  </span>
+                </button>
+              </div>
+              {isSavingOrder && (
+                <p className="mt-1.5 text-[10px] text-slate-500">Saving...</p>
+              )}
+            </div>
+          )}
+
+          {/* Connected models list */}
+          <div className="space-y-2">
+            {isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-14 w-full rounded-xl" />
+                <Skeleton className="h-14 w-full rounded-xl" />
+              </div>
+            ) : connections.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-center text-xs text-slate-400">
+                No providers connected yet. Add a model below.
+              </div>
             ) : (
-              <p>{llmAuthStatus.detail || "No provider connected yet."}</p>
+              connections.map((conn, index) => (
+                <div
+                  key={conn.id}
+                  draggable={connections.length > 1}
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={handleDrop}
+                  className="group flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-3 transition-colors hover:border-white/20"
+                >
+                  {/* Drag handle */}
+                  {connections.length > 1 && (
+                    <div className="flex flex-col items-center gap-0.5">
+                      <GripVertical className="h-3.5 w-3.5 cursor-grab text-slate-500 active:cursor-grabbing" />
+                    </div>
+                  )}
+
+                  {/* Priority number */}
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-slate-300">
+                    {index + 1}
+                  </span>
+
+                  {/* Model info */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-white">
+                        {providerLabel(conn.provider)}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {conn.model}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                      {conn.source === "env" ? (
+                        <>
+                          <Monitor className="h-2.5 w-2.5" />
+                          auto-detected (env)
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="h-2.5 w-2.5" />
+                          connected (BYOK)
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Reorder buttons (mobile-friendly alternative to drag) */}
+                  {connections.length > 1 && (
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() => moveConnection(index, index - 1)}
+                        aria-label="Move model up"
+                        className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === connections.length - 1}
+                        onClick={() => moveConnection(index, index + 1)}
+                        aria-label="Move model down"
+                        className="rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-slate-300 disabled:opacity-30"
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Disconnect button */}
+                  {conn.removable && (
+                    <button
+                      type="button"
+                      onClick={() => void disconnectConnection(conn.id)}
+                      disabled={disconnectingId === conn.id}
+                      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                      title="Disconnect"
+                      aria-label="Disconnect model"
+                    >
+                      {disconnectingId === conn.id ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <X className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              ))
             )}
           </div>
 
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">
-                Provider
-              </span>
-              <select
-                value={llmProvider}
-                onChange={(event) => {
-                  const nextProvider = event.target.value as LlmProvider;
-                  const currentDefault = PROVIDER_DEFAULT_MODELS[llmProvider];
-                  const shouldReplaceModel =
-                    !llmModelInput.trim() || llmModelInput === currentDefault;
-                  setLlmProvider(nextProvider);
-                  if (shouldReplaceModel) {
-                    setLlmModelInput(PROVIDER_DEFAULT_MODELS[nextProvider]);
+          {/* Add model section */}
+          {!showAddForm ? (
+            <Button
+              variant="outline"
+              className="mt-3 w-full"
+              onClick={() => setShowAddForm(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Model Connection
+            </Button>
+          ) : (
+            <div className="mt-3 rounded-xl border border-white/15 bg-black/10 p-3">
+              <div className="mb-2 text-xs font-semibold text-slate-300">
+                Connect a new model
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="llm-provider">Provider</Label>
+                  <Select
+                    value={llmProvider}
+                    onValueChange={(value) => {
+                      const nextProvider = value as LlmProvider;
+                      const currentDefault =
+                        PROVIDER_DEFAULT_MODELS[llmProvider];
+                      const shouldReplaceModel =
+                        !llmModelInput.trim() ||
+                        llmModelInput === currentDefault;
+                      setLlmProvider(nextProvider);
+                      if (shouldReplaceModel) {
+                        setLlmModelInput(
+                          PROVIDER_DEFAULT_MODELS[nextProvider],
+                        );
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="llm-provider">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="llm-model">Model (optional)</Label>
+                  <Input
+                    id="llm-model"
+                    value={llmModelInput}
+                    onChange={(event) => setLlmModelInput(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-1">
+                <Label htmlFor="llm-key">API Key</Label>
+                <Input
+                  id="llm-key"
+                  type="password"
+                  autoComplete="off"
+                  value={llmApiKeyInput}
+                  onChange={(event) => setLlmApiKeyInput(event.target.value)}
+                  placeholder={
+                    llmProvider === "anthropic" ? "sk-ant-..." : "sk-..."
                   }
-                }}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-              >
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-              </select>
-            </label>
+                />
+                <p className="text-[11px] text-slate-400">
+                  Stored encrypted at rest. Uses database when configured,
+                  otherwise falls back to an encrypted httpOnly cookie.
+                </p>
+              </div>
 
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-slate-200">
-                Model (optional)
-              </span>
-              <input
-                value={llmModelInput}
-                onChange={(event) => setLlmModelInput(event.target.value)}
-                className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-              />
-            </label>
-          </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={() => void connectProvider()}
+                  disabled={isConnecting || !llmApiKeyInput.trim()}
+                >
+                  {isConnecting ? (
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <KeyRound className="h-3.5 w-3.5" />
+                  )}
+                  {isConnecting ? "Connecting..." : "Connect"}
+                </Button>
 
-          <label className="mt-3 block space-y-1">
-            <span className="text-xs font-medium text-slate-200">API Key</span>
-            <input
-              type="password"
-              autoComplete="off"
-              value={llmApiKeyInput}
-              onChange={(event) => setLlmApiKeyInput(event.target.value)}
-              placeholder={
-                llmProvider === "anthropic" ? "sk-ant-..." : "sk-..."
-              }
-              className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none transition focus:border-orange-300"
-            />
-            <p className="text-[11px] text-slate-400">
-              Stored encrypted at rest. Uses Blob storage when configured,
-              otherwise falls back to an encrypted `httpOnly` cookie.
-            </p>
-          </label>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void connectLlmProvider();
-              }}
-              disabled={
-                isLlmConnecting ||
-                isLlmDisconnecting ||
-                !llmApiKeyInput.trim()
-              }
-              className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-orange-300 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isLlmConnecting ? (
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <KeyRound className="h-3.5 w-3.5" />
-              )}
-              {isLlmConnecting ? "Connecting..." : "Connect Provider"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                void disconnectLlmProvider();
-              }}
-              disabled={
-                isLlmDisconnecting || llmAuthStatus.source !== "connection"
-              }
-              className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isLlmDisconnecting ? (
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              ) : null}
-              Disconnect Saved Key
-            </button>
-          </div>
-
-          {llmMessage ? (
-            <p className="mt-3 text-xs text-emerald-200">{llmMessage}</p>
-          ) : null}
-          {llmError ? (
-            <p className="mt-2 text-xs text-red-300">{llmError}</p>
-          ) : null}
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setLlmApiKeyInput("");
+                  }}
+                  disabled={isConnecting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

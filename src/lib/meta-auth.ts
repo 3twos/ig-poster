@@ -235,7 +235,7 @@ const saveMetaConnection = async (params: {
   const encryptedInline = encryptString(JSON.stringify(inline), secret);
   if (encryptedInline.length > 3500) {
     throw new Error(
-      "OAuth payload is too large for cookie fallback. Configure DATABASE_URL for private persistent OAuth storage.",
+      "OAuth payload is too large for cookie fallback. Configure POSTGRES_URL or DATABASE_URL for private persistent OAuth storage.",
     );
   }
 

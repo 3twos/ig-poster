@@ -55,7 +55,7 @@ Output:
 
 5. Intelligent IG Poster LLM architecture
 - User can connect OpenAI or Anthropic subscription key (BYOK)
-- BYOK stores encrypted provider keys in private Postgres (`DATABASE_URL`); browser only keeps a short connection-id cookie
+- BYOK stores encrypted provider keys in private Postgres (`POSTGRES_URL` or `DATABASE_URL`); browser only keeps a short connection-id cookie
 - Env fallback still supported (`OPENAI_*` or `ANTHROPIC_*`)
 - Generation uses explicit system prompt + customizable prompt addendum/instructions
 
@@ -83,7 +83,7 @@ Create `.env.local` from `.env.example`:
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-4-20250514
+ANTHROPIC_MODEL=claude-sonnet-4-6
 GOOGLE_WORKSPACE_DOMAIN=3twos.com
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
@@ -92,6 +92,7 @@ WORKSPACE_AUTH_PRODUCTION_HOST=
 WORKSPACE_AUTH_PREVIEW_HOST=
 WORKSPACE_AUTH_SECRET=
 DATABASE_URL=
+POSTGRES_URL=
 BLOB_READ_WRITE_TOKEN=
 INSTAGRAM_ACCESS_TOKEN=
 INSTAGRAM_BUSINESS_ID=
@@ -105,9 +106,9 @@ CRON_SECRET=
 
 Notes:
 - Without a connected provider key (or env fallback key), generation falls back to deterministic local concepts.
-- `POST /api/auth/llm/connect` uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` for encryption. If `DATABASE_URL` is configured, BYOK credentials are stored encrypted in private Postgres; otherwise they are stored in an encrypted `httpOnly` cookie fallback.
+- `POST /api/auth/llm/connect` uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` for encryption. If `POSTGRES_URL` or `DATABASE_URL` is configured, BYOK credentials are stored encrypted in private Postgres; otherwise they are stored in an encrypted `httpOnly` cookie fallback.
 - `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
-- `DATABASE_URL` is recommended for private persistent credential storage (LLM + Meta OAuth connection records).
+- `POSTGRES_URL` or `DATABASE_URL` is required for post creation/loading and recommended for private persistent credential storage (LLM + Meta OAuth connection records).
 - Provision DB schema before first credential write (recommended for least-privilege DB users):
   ```sql
   CREATE TABLE IF NOT EXISTS ig_poster_private_credentials (
@@ -123,7 +124,7 @@ Notes:
 - `WORKSPACE_AUTH_PRODUCTION_HOST` is optional and lets middleware redirect raw production deployment URLs to your stable production alias before auth.
 - `WORKSPACE_AUTH_PREVIEW_HOST` is optional and lets middleware redirect raw preview deployment URLs to a stable preview alias before auth.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads/share links/scheduling are unavailable.
-- For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`. `DATABASE_URL` is required for persistent OAuth connections and scheduled OAuth publishing.
+- For Meta OAuth connect, set `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI`. `POSTGRES_URL` or `DATABASE_URL` is required for persistent OAuth connections and scheduled OAuth publishing.
 - In production, set one of `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` to encrypt OAuth/BYOK tokens at rest.
 - In local/preview environments with no configured encryption secret, the app uses a process-scoped runtime fallback secret; restarting the server invalidates previously encrypted OAuth/BYOK credentials and you may need to reconnect.
 - `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` remain supported as env fallback credentials.

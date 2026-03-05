@@ -5,7 +5,7 @@
 - Keep the product usable even when optional integrations are missing.
 - Enforce strict input/output contracts for AI and publishing workflows.
 - Keep credential handling encrypted and server-side.
-- Avoid introducing a database until workload and query patterns require one.
+- Use Postgres (via Drizzle ORM) for relational app state (posts, brand kits, private credentials) while keeping Blob for binary assets and snapshots.
 
 ## System Overview
 
@@ -16,6 +16,8 @@ flowchart LR
   API --> CREATIVE["Creative + Prompt Pipeline (`src/lib/creative.ts`)"]
   API --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
   API --> META["Meta Publisher (`src/lib/meta.ts`)"]
+  API --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
+  API --> PG["Postgres (posts, brand_kits, credentials)"]
   API --> BLOB["Vercel Blob Storage"]
   CRON["Vercel Cron (`/api/cron/publish`)"] --> BLOB
   CRON --> META
@@ -28,12 +30,20 @@ flowchart LR
 - App framework: Next.js App Router (Node runtime for server routes that need Node APIs).
 - Next.js 16 auth gate entrypoint uses `src/proxy.ts` (Proxy file convention), which is executed as middleware.
 - UI layer:
-  - `src/app/page.tsx` is the primary interactive editor.
+  - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity or chat) using `react-resizable-panels`. The right panel has Agent/Chat tab switching.
+  - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-section.tsx`, `agent-activity-panel.tsx`.
+  - `src/components/chat/` contains the chat module: `chat-panel.tsx` (embeddable right-panel version), `chat-container.tsx` (full standalone with sidebar), message rendering, markdown, code blocks, and input components.
+  - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
+  - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
+  - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders and edits overlay layouts.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
   - Zod schemas enforce request and response validity.
+- Data layer:
+  - `src/db/schema.ts` defines relational post records.
+  - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
   - LLM provider abstraction
@@ -43,21 +53,35 @@ flowchart LR
 
 ## Request and Data Flows
 
-### 1) Generate Creative
+### 1) Post Workspace (Core App State)
+
+1. Client loads `GET /api/posts` to populate sidebar.
+2. Client creates/selects posts through `POST/GET /api/posts*`.
+3. Client autosaves edits with `PUT /api/posts/:id` (debounced + beforeunload keepalive).
+4. Server persists post state in Postgres.
+
+Why this shape:
+- Keeps long-lived drafts out of browser memory and enables multi-post workflow.
+- Supports reliable autosave and recent-post retrieval per authenticated workspace user.
+
+### 2) Generate Creative
 
 1. Client submits brand/post/assets to `POST /api/generate`.
 2. Request is validated with `GenerationRequestSchema`.
-3. Server resolves LLM auth from connected credential or env fallback.
+3. Server resolves all available LLM connections via `resolveAllLlmAuthFromRequest`, which merges BYOK connections with environment-configured models into a `ResolvedLlmAuthList`.
 4. Server optionally extracts website style context (`buildWebsiteStyleContext`).
-5. Structured JSON generation runs through provider adapter.
+5. Based on the user's selected `MultiModelMode`:
+   - **Fallback**: `generateWithFallback` tries each model in priority order; the first successful response is used.
+   - **Parallel**: all models are queried simultaneously, and results are merged and ranked.
+   LLM thinking/reasoning tokens are forwarded to the client as `llm-thinking` SSE events.
 6. Response is validated with `GenerationResponseSchema`.
-7. On auth/provider failure, fallback response generator returns deterministic variants.
+7. If all models fail, fallback response generator returns deterministic variants.
 
 Why this shape:
 - Schema-first contracts reduce malformed LLM output risk.
 - Fallback response keeps the core workflow available during outages or unconfigured environments.
 
-### 2) Share Project
+### 3) Share Project
 
 1. Client renders selected poster to PNG.
 2. `POST /api/projects/save` stores validated payload as `projects/<id>.json` in Blob.
@@ -68,7 +92,7 @@ Why this shape:
 - Blob-backed JSON is enough for immutable share snapshots.
 - No relational DB needed for current lookup pattern (`id -> single project`).
 
-### 3) Publish / Schedule
+### 4) Publish / Schedule
 
 1. Client submits caption + media payload to `POST /api/meta/schedule`.
 2. Route resolves auth context (OAuth connection first, env fallback second).
@@ -79,6 +103,18 @@ Why this shape:
 Why this shape:
 - Separates interactive request latency from scheduled execution.
 - Keeps scheduling stateless beyond durable queue records in Blob.
+
+### 4) Chat Conversations
+
+1. Client sends a message to `POST /api/chat` with conversation history and model config.
+2. Server streams the response as SSE events (`token`, `done`, `error`, `heartbeat`) using the same LLM auth resolution as generation.
+3. Conversation CRUD is handled by `/api/chat/conversations` (list/create) and `/api/chat/conversations/[id]` (get/update/delete).
+4. `POST /api/chat/title` auto-generates a short title for new conversations.
+5. Conversations are persisted to Blob at `chat/<ownerHash>/conversations/<id>.json` with a summary index at `chat/<ownerHash>/index.json` for fast sidebar listing.
+
+Why this shape:
+- Client-sends-history pattern keeps the streaming API stateless and avoids blob read latency on every message.
+- Summary index blob prevents N+1 fetches when listing conversations.
 
 ## Authentication and Authorization Model
 
@@ -99,22 +135,31 @@ Why this shape:
 - Fallback path: env credentials (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ID`).
 - Runtime resolver returns a uniform `MetaAuthContext` to publishing code.
 
-### LLM Auth
+### LLM Auth (Multi-Model)
 
-- Preferred path: connected BYOK via `/api/auth/llm/connect`.
+- Users can connect multiple BYOK credentials via `/api/auth/llm/connect`, each identified by a unique `connectionId`.
+- Model priority order and execution mode (Fallback or Parallel) are saved via `PUT /api/auth/llm/reorder`.
+- The disconnect endpoint (`/api/auth/llm/disconnect`) accepts a `connectionId` to remove a specific model.
+- The status endpoint (`/api/auth/llm/status`) returns a multi-model response (`LlmMultiAuthStatus`) containing `connections[]`, `mode`, and ordering info.
 - Stored encrypted:
-  - Blob-backed record when Blob is enabled.
-  - Encrypted cookie payload fallback when Blob is not enabled.
-- Fallback path: env credentials (`OPENAI_*` or `ANTHROPIC_*`).
+  - DB-backed records (via `listCredentialRecords`) when `DATABASE_URL` is configured.
+  - Encrypted cookie payload fallback when the database is not available.
+- Environment-configured models (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) auto-appear in the resolved model list alongside BYOK connections.
+- Key types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
+- Key functions: `resolveAllLlmAuthFromRequest` (merges all sources into a prioritized list), `generateWithFallback` (tries models in order), `listCredentialRecords` (enumerates stored connections).
 
 ## Storage Model
 
-- Primary persistence: Vercel Blob.
+- Primary relational persistence: Postgres via Drizzle ORM (`posts`, `brand_kits`, private credentials).
+  - `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`).
+  - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, logo URL, and default flag.
+- Blob persistence: binary media, shared project snapshots, scheduled publish queue, and chat conversation blobs.
 - Typical paths:
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`
   - shared projects: `projects/<id>.json`
   - schedule queue: `schedules/<publishAt>-<id>.json`
-  - OAuth/LLM connection records: `auth/...`
+  - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
+  - chat index: `chat/<ownerHash>/index.json`
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 
 ## Security Posture
@@ -134,9 +179,10 @@ Why this shape:
 
 ## Reliability and Failure Handling
 
-- Generation: provider errors degrade to deterministic fallback output.
+- Generation: in Fallback mode, provider errors cascade to the next model in priority order before degrading to deterministic fallback output. In Parallel mode, partial model failures are tolerated as long as at least one model succeeds.
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
 - Scheduling: successful jobs are deleted; failed jobs remain for retry/inspection.
+- Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
 - Blob-dependent features return clear 503 errors when storage is not configured.
 
 ## Deployment and Operations
@@ -150,10 +196,9 @@ Why this shape:
 
 ## Tradeoffs and Future Work
 
-- Blob-as-store is simple and low-overhead, but job querying/analytics are limited at scale.
+- Blob-as-store is simple and low-overhead for media and snapshots, but job querying/analytics are limited at scale.
 - Scheduling scans recent blobs; high-volume workloads may need a dedicated queue.
 - Share artifacts are immutable snapshots; future requirements may need versioned edits.
 - As usage grows, consider introducing:
-  - typed persistence layer (SQL + migrations)
   - background workers with dead-letter handling
   - observability around generation/publish success rates

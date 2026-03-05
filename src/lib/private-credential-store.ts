@@ -4,15 +4,18 @@ export type CredentialNamespace = "llm" | "meta";
 
 type SqlClient = ReturnType<typeof neon>;
 
-const getDatabaseUrl = () => process.env.DATABASE_URL?.trim() || "";
+const getDatabaseUrl = () =>
+  process.env.POSTGRES_URL?.trim() ||
+  process.env.DATABASE_URL?.trim() ||
+  "";
+
+let cachedSqlClient: SqlClient | null | undefined;
 
 const createSqlClient = (): SqlClient | null => {
+  if (cachedSqlClient !== undefined) return cachedSqlClient;
   const url = getDatabaseUrl();
-  if (!url) {
-    return null;
-  }
-
-  return neon(url);
+  cachedSqlClient = url ? neon(url) : null;
+  return cachedSqlClient;
 };
 
 let initializePromise: Promise<void> | null = null;
@@ -60,7 +63,7 @@ const requireSqlClient = () => {
   const sql = createSqlClient();
   if (!sql) {
     throw new Error(
-      "Missing DATABASE_URL. Configure a private Postgres database for credential storage.",
+      "Missing POSTGRES_URL or DATABASE_URL. Configure a private Postgres database for credential storage.",
     );
   }
 
@@ -105,6 +108,28 @@ export const readCredentialRecord = async <T>(
   `) as Array<{ payload: T }>;
 
   return rows[0]?.payload ?? null;
+};
+
+export const listCredentialRecords = async <T>(
+  namespace: CredentialNamespace,
+): Promise<Array<{ credentialId: string; payload: T }>> => {
+  const sql = createSqlClient();
+  if (!sql) {
+    return [];
+  }
+
+  await ensureTableReady(sql);
+  const rows = (await sql`
+    SELECT credential_id, payload
+    FROM ig_poster_private_credentials
+    WHERE namespace = ${namespace}
+    ORDER BY created_at ASC
+  `) as Array<{ credential_id: string; payload: T }>;
+
+  return rows.map((row) => ({
+    credentialId: row.credential_id,
+    payload: row.payload,
+  }));
 };
 
 export const deleteCredentialRecord = async (

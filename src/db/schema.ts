@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   jsonb,
   pgTable,
@@ -29,6 +30,7 @@ export const posts = pgTable(
     brief: jsonb("brief").$type<Partial<PostState>>(),
     assets: jsonb("assets").$type<StoredAsset[]>().notNull().default([]),
     logoUrl: text("logo_url"),
+    brandKitId: varchar("brand_kit_id", { length: 18 }),
     promptConfig: jsonb("prompt_config").$type<Partial<PromptConfigState>>(),
 
     result: jsonb("result").$type<GenerationResponse>(),
@@ -65,3 +67,27 @@ export const posts = pgTable(
 );
 
 export type PostRow = typeof posts.$inferSelect;
+
+export const brandKits = pgTable(
+  "brand_kits",
+  {
+    id: varchar("id", { length: 18 }).primaryKey(),
+    ownerHash: varchar("owner_hash", { length: 64 }).notNull(),
+    name: varchar("name", { length: 80 }).notNull().default("Default"),
+    brand: jsonb("brand").$type<Partial<BrandState>>(),
+    promptConfig: jsonb("prompt_config").$type<Partial<PromptConfigState>>(),
+    logoUrl: text("logo_url"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("brand_kits_owner_idx").on(table.ownerHash),
+  ],
+);
+
+export type BrandKitRow = typeof brandKits.$inferSelect;
