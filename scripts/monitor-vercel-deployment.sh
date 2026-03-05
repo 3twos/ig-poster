@@ -1335,7 +1335,8 @@ start_event_stream_worker() {
   (
     set +e
     while true; do
-      curl --silent --show-error --no-buffer --location \
+      # Stream disconnects and downstream pipe resets are expected; keep reconnecting quietly.
+      curl --silent --no-buffer --location \
         --header "Authorization: Bearer ${TOKEN}" \
         --header "Accept: application/json" \
         "$stream_url" |
