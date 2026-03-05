@@ -165,6 +165,7 @@ psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
 - Preserve fallback behavior so generation still works without provider credentials.
 - Chat and generation share the same LLM auth resolution (`resolveAllLlmAuthFromRequest`); both use SSE streaming patterns.
 - For security-sensitive features, use existing encryption helpers and auth resolvers.
+- For list-heavy UI state (for example `PostSummary[]`), preserve item identity during refreshes to reduce unnecessary re-renders/flicker.
 
 ## Troubleshooting for Developers
 

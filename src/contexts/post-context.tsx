@@ -50,6 +50,54 @@ type PostContextValue = {
 
 const PostContext = createContext<PostContextValue | null>(null);
 
+function summariesEqual(a: PostSummary, b: PostSummary): boolean {
+  // Keep this in sync with PostSummary fields to avoid stale comparisons.
+  return (
+    a.id === b.id &&
+    a.title === b.title &&
+    a.status === b.status &&
+    a.createdAt === b.createdAt &&
+    a.updatedAt === b.updatedAt &&
+    a.assetCount === b.assetCount &&
+    a.variantCount === b.variantCount &&
+    a.thumbnail === b.thumbnail
+  );
+}
+
+function reconcilePostSummaries(
+  prev: PostSummary[],
+  incoming: PostSummary[],
+): PostSummary[] {
+  let changed = prev.length !== incoming.length;
+  const prevById = new Map(prev.map((post) => [post.id, post]));
+
+  const next = incoming.map((post) => {
+    const current = prevById.get(post.id);
+    if (!current) {
+      changed = true;
+      return post;
+    }
+
+    if (summariesEqual(current, post)) {
+      return current;
+    }
+
+    changed = true;
+    return post;
+  });
+
+  if (!changed) {
+    for (let index = 0; index < next.length; index += 1) {
+      if (next[index] !== prev[index]) {
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  return changed ? next : prev;
+}
+
 export function usePostContext() {
   const ctx = useContext(PostContext);
   if (!ctx) throw new Error("usePostContext must be used within PostProvider");
@@ -71,6 +119,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
   const saveNowRef = useRef(saveNow);
   const markSavedRef = useRef(markSaved);
   const activePostIdRef = useRef<string | null>(null);
+  const selectRequestSeqRef = useRef(0);
 
   useEffect(() => {
     saveNowRef.current = saveNow;
@@ -88,7 +137,8 @@ export function PostProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/posts", { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
-      setPosts(json.posts ?? []);
+      const incoming = (json.posts ?? []) as PostSummary[];
+      setPosts((current) => reconcilePostSummaries(current, incoming));
       didInitialLoadRef.current = true;
     } catch {
       // Silently fail — sidebar will show empty
@@ -123,12 +173,20 @@ export function PostProvider({ children }: { children: ReactNode }) {
 
   const selectPost = useCallback(
     async (id: string) => {
+      if (activePostIdRef.current === id) {
+        return;
+      }
+
+      const requestSeq = ++selectRequestSeqRef.current;
       await saveNowRef.current();
 
       try {
         const res = await fetch(`/api/posts/${id}`, { cache: "no-store" });
         if (!res.ok) return;
         const row = await res.json();
+        if (requestSeq !== selectRequestSeqRef.current) {
+          return;
+        }
         dispatch({ type: "LOAD_POST", row });
         // markSaved is called in a separate effect that fires after LOAD_POST
         // updates the draft, ensuring the snapshot matches the loaded state
@@ -144,6 +202,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
   );
 
   const createNewPost = useCallback(async (): Promise<string> => {
+    selectRequestSeqRef.current += 1;
     await saveNowRef.current();
 
     // Fetch default brand from settings to pre-fill
@@ -258,13 +317,13 @@ export function PostProvider({ children }: { children: ReactNode }) {
     draftRef.current = activePost;
   });
   useEffect(() => {
-      const handler = () => {
-        const d = draftRef.current;
-        if (!d) return;
-        const rest = { ...d };
-        delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
-        const body = JSON.stringify(rest);
-        fetch(`/api/posts/${d.id}`, {
+    const handler = () => {
+      const d = draftRef.current;
+      if (!d) return;
+      const rest = { ...d };
+      delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
+      const body = JSON.stringify(rest);
+      fetch(`/api/posts/${d.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body,
