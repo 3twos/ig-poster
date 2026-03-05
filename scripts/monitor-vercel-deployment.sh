@@ -955,10 +955,137 @@ duration_seconds_for_record() {
   echo $(( end_seconds - start_seconds ))
 }
 
+ensure_runtime_dir() {
+  if [[ -n "${RUNTIME_DIR:-}" && -d "${RUNTIME_DIR}" ]]; then
+    return 0
+  fi
+
+  if ! RUNTIME_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vercel-deploy-monitor.XXXXXX" 2>/dev/null)"; then
+    return 1
+  fi
+
+  return 0
+}
+
+play_production_beat_sync() {
+  local deployment_target="$1"
+
+  if [[ "$deployment_target" != "production" && "$deployment_target" != "PRODUCTION" ]]; then
+    return
+  fi
+
+  if command -v afplay >/dev/null 2>&1 && [[ -f "/System/Library/Sounds/Pop.aiff" ]]; then
+    afplay "/System/Library/Sounds/Pop.aiff" >/dev/null 2>&1
+    sleep 0.12
+    afplay "/System/Library/Sounds/Pop.aiff" >/dev/null 2>&1
+  else
+    printf '\a'
+    sleep 0.12
+    printf '\a'
+  fi
+}
+
+start_audio_queue_worker() {
+  local event_kind event_payload
+
+  if (( ENABLE_SPEAK == 0 )); then
+    return
+  fi
+  if [[ -z "$SPEAKER_CMD" ]]; then
+    return
+  fi
+  if (( AUDIO_QUEUE_ENABLED == 1 )); then
+    return
+  fi
+
+  if ! ensure_runtime_dir; then
+    warn_line "Failed to create runtime dir for audio queue. Voice alerts may overlap."
+    return
+  fi
+
+  AUDIO_QUEUE_PIPE="${RUNTIME_DIR}/audio.queue"
+  rm -f "${AUDIO_QUEUE_PIPE}" >/dev/null 2>&1 || true
+  if ! mkfifo "${AUDIO_QUEUE_PIPE}"; then
+    warn_line "Failed to initialize audio queue FIFO. Voice alerts may overlap."
+    AUDIO_QUEUE_PIPE=""
+    return
+  fi
+
+  (
+    while IFS=$'\x1f' read -r event_kind event_payload; do
+      case "$event_kind" in
+        beat)
+          play_production_beat_sync "$event_payload"
+          ;;
+        speak)
+          if [[ -n "$event_payload" && -n "$SPEAKER_CMD" ]]; then
+            "$SPEAKER_CMD" "$event_payload" >/dev/null 2>&1 || true
+          fi
+          ;;
+        stop)
+          break
+          ;;
+      esac
+    done < "${AUDIO_QUEUE_PIPE}"
+  ) &
+  AUDIO_QUEUE_PID="$!"
+
+  if ! exec 9> "${AUDIO_QUEUE_PIPE}"; then
+    warn_line "Failed to open audio queue writer. Voice alerts may overlap."
+    kill "${AUDIO_QUEUE_PID}" >/dev/null 2>&1 || true
+    wait "${AUDIO_QUEUE_PID}" >/dev/null 2>&1 || true
+    AUDIO_QUEUE_PID=""
+    rm -f "${AUDIO_QUEUE_PIPE}" >/dev/null 2>&1 || true
+    AUDIO_QUEUE_PIPE=""
+    return
+  fi
+
+  AUDIO_QUEUE_ENABLED=1
+}
+
+stop_audio_queue_worker() {
+  if (( AUDIO_QUEUE_ENABLED == 0 )); then
+    return
+  fi
+
+  printf 'stop\x1f\n' >&9 || true
+  exec 9>&- || true
+
+  if [[ "${AUDIO_QUEUE_PID:-}" =~ ^[0-9]+$ ]]; then
+    wait "${AUDIO_QUEUE_PID}" >/dev/null 2>&1 || true
+  fi
+
+  AUDIO_QUEUE_ENABLED=0
+  AUDIO_QUEUE_PID=""
+  AUDIO_QUEUE_PIPE=""
+}
+
+enqueue_audio_event() {
+  local event_kind="$1"
+  local event_payload="${2:-}"
+
+  if (( AUDIO_QUEUE_ENABLED == 0 )); then
+    return 1
+  fi
+
+  event_kind="$(sanitize_field "$event_kind")"
+  event_payload="$(sanitize_field "$event_payload")"
+  if [[ -z "$event_kind" ]]; then
+    return 1
+  fi
+
+  printf '%s\x1f%s\n' "$event_kind" "$event_payload" >&9
+}
+
 speak_alert() {
   local message="$1"
 
   if [[ -z "$SPEAKER_CMD" ]]; then
+    return
+  fi
+
+  if (( AUDIO_QUEUE_ENABLED == 1 )); then
+    enqueue_audio_event "speak" "$message" || true
     return
   fi
 
@@ -981,16 +1108,13 @@ play_production_beat() {
     return
   fi
 
+  if (( AUDIO_QUEUE_ENABLED == 1 )); then
+    enqueue_audio_event "beat" "$deployment_target" || true
+    return
+  fi
+
   (
-    if command -v afplay >/dev/null 2>&1 && [[ -f "/System/Library/Sounds/Pop.aiff" ]]; then
-      afplay "/System/Library/Sounds/Pop.aiff" >/dev/null 2>&1
-      sleep 0.12
-      afplay "/System/Library/Sounds/Pop.aiff" >/dev/null 2>&1
-    else
-      printf '\a'
-      sleep 0.12
-      printf '\a'
-    fi
+    play_production_beat_sync "$deployment_target"
   ) &
 }
 
@@ -1085,8 +1209,16 @@ remove_stream_worker_by_index() {
     next_pids+=("${STREAM_PIDS[i]}")
   done
 
-  STREAM_IDS=("${next_ids[@]}")
-  STREAM_PIDS=("${next_pids[@]}")
+  if (( ${#next_ids[@]} > 0 )); then
+    STREAM_IDS=("${next_ids[@]}")
+  else
+    STREAM_IDS=()
+  fi
+  if (( ${#next_pids[@]} > 0 )); then
+    STREAM_PIDS=("${next_pids[@]}")
+  else
+    STREAM_PIDS=()
+  fi
 }
 
 stop_stream_worker_by_index() {
@@ -1393,21 +1525,39 @@ refresh_project_deployments() {
     next_project_name+=("$project_name")
   done <<<"$parsed"
 
-  DEP_IDS=("${next_ids[@]}")
-  DEP_STATUS=("${next_status[@]}")
-  DEP_URL=("${next_url[@]}")
-  DEP_CREATED_AT_MS=("${next_created_at[@]}")
-  DEP_READY_AT_MS=("${next_ready_at[@]}")
-  DEP_TARGET=("${next_target[@]}")
-  DEP_BRANCH=("${next_branch[@]}")
-  DEP_ERROR_MESSAGE=("${next_error[@]}")
-  DEP_FIRST_SEEN_EPOCH=("${next_first_seen[@]}")
-  DEP_LAST_STATUS=("${next_last_status[@]}")
-  DEP_TERMINAL_ANNOUNCED=("${next_announced[@]}")
-  DEP_STEP=("${next_step[@]}")
-  DEP_LAST_EVENT_MS=("${next_last_event_ms[@]}")
-  DEP_LAST_EVENT_TEXT=("${next_last_event_text[@]}")
-  DEP_PROJECT_NAME=("${next_project_name[@]}")
+  if (( ${#next_ids[@]} > 0 )); then
+    DEP_IDS=("${next_ids[@]}")
+    DEP_STATUS=("${next_status[@]}")
+    DEP_URL=("${next_url[@]}")
+    DEP_CREATED_AT_MS=("${next_created_at[@]}")
+    DEP_READY_AT_MS=("${next_ready_at[@]}")
+    DEP_TARGET=("${next_target[@]}")
+    DEP_BRANCH=("${next_branch[@]}")
+    DEP_ERROR_MESSAGE=("${next_error[@]}")
+    DEP_FIRST_SEEN_EPOCH=("${next_first_seen[@]}")
+    DEP_LAST_STATUS=("${next_last_status[@]}")
+    DEP_TERMINAL_ANNOUNCED=("${next_announced[@]}")
+    DEP_STEP=("${next_step[@]}")
+    DEP_LAST_EVENT_MS=("${next_last_event_ms[@]}")
+    DEP_LAST_EVENT_TEXT=("${next_last_event_text[@]}")
+    DEP_PROJECT_NAME=("${next_project_name[@]}")
+  else
+    DEP_IDS=()
+    DEP_STATUS=()
+    DEP_URL=()
+    DEP_CREATED_AT_MS=()
+    DEP_READY_AT_MS=()
+    DEP_TARGET=()
+    DEP_BRANCH=()
+    DEP_ERROR_MESSAGE=()
+    DEP_FIRST_SEEN_EPOCH=()
+    DEP_LAST_STATUS=()
+    DEP_TERMINAL_ANNOUNCED=()
+    DEP_STEP=()
+    DEP_LAST_EVENT_MS=()
+    DEP_LAST_EVENT_TEXT=()
+    DEP_PROJECT_NAME=()
+  fi
 
   return 0
 }
@@ -1733,6 +1883,7 @@ render_dashboard() {
 
 cleanup_runtime() {
   stop_all_event_stream_workers
+  stop_audio_queue_worker
 
   if [[ -n "${RUNTIME_DIR:-}" && -d "${RUNTIME_DIR}" ]]; then
     rm -rf "${RUNTIME_DIR}" >/dev/null 2>&1 || true
@@ -2005,10 +2156,13 @@ STREAM_PIDS=()
 EVENT_BUS_OFFSET=0
 RUNTIME_DIR=""
 EVENT_BUS_FILE=""
+AUDIO_QUEUE_ENABLED=0
+AUDIO_QUEUE_PIPE=""
+AUDIO_QUEUE_PID=""
 ACTIVE_SINGLE_TARGET=""
 
 if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
-  if RUNTIME_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vercel-deploy-monitor.XXXXXX" 2>/dev/null)"; then
+  if ensure_runtime_dir; then
     EVENT_BUS_FILE="${RUNTIME_DIR}/events.log"
     : >"$EVENT_BUS_FILE"
   else
@@ -2017,6 +2171,8 @@ if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
     DASH_FEED_LABEL="Event polling"
   fi
 fi
+
+start_audio_queue_worker
 
 if [[ "$WATCH_MODE" == "deployment" ]]; then
   log_line "Monitoring deployment '${TARGET}' every ${INTERVAL_SECONDS}s (Ctrl+C to stop)..."
@@ -2030,6 +2186,9 @@ fi
 
 if [[ -n "$SPEAKER_CMD" ]]; then
   log_line "Spoken alerts enabled via '${SPEAKER_CMD}'."
+  if (( AUDIO_QUEUE_ENABLED == 1 )); then
+    log_line "Voice alerts are serialized via audio queue."
+  fi
 fi
 if [[ -n "$PROJECT_SHORT_NAME" ]]; then
   log_line "Using spoken project name: ${PROJECT_SHORT_NAME}"

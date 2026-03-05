@@ -255,6 +255,7 @@ The monitor announces completion/failure in the terminal and uses spoken alerts 
 In an interactive terminal it uses a non-scrolling dashboard view by default; use `--plain` for line-by-line logs.
 Dashboard view includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and richer per-deployment progress bars.
 Project mode now tracks multiple deployments in parallel, with separate status, step, timing, and error details per deployment.
+Voice alerts are queued so multiple deployment events do not speak over each other.
 Preview vs Production and branch name are explicitly labeled in the dashboard and alerts.
 Production voice alerts include a subtle two-hit beat before speech.
 

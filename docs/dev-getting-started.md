@@ -127,6 +127,7 @@ The script emits spoken alerts when possible (`say`, `spd-say`, or `espeak`). Co
 Interactive runs use a non-scrolling dashboard by default; pass `--plain` for line-by-line log output.
 Dashboard view includes visual status/alert icons, friendly relative timestamps (for example `3m ago`), and richer per-deployment progress bars.
 Project mode now tracks multiple deployments in parallel, with separate status, step, timing, and error details per deployment.
+Voice alerts are queued so multiple deployment events do not speak over each other.
 Dashboard and alerts explicitly distinguish Preview vs Production deployments and include the branch name.
 Production voice alerts include a subtle two-hit beat before speech.
 
