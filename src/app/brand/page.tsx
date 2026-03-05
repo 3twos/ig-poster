@@ -4,8 +4,11 @@ import {
   ImagePlus,
   LoaderCircle,
   Palette,
+  Plus,
   Save,
   Sparkles,
+  Trash2,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
@@ -14,8 +17,16 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import type { BrandKitRow } from "@/db/schema";
 import { DEFAULT_GENERATION_SYSTEM_PROMPT } from "@/lib/creative";
 import {
   type BrandState,
@@ -38,8 +49,32 @@ export default function BrandPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [lastAutofilledWebsite, setLastAutofilledWebsite] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
+  const savedSnapshotRef = useRef<string>("");
+
+  // Multi-kit state
+  const [kits, setKits] = useState<BrandKitRow[]>([]);
+  const [activeKitId, setActiveKitId] = useState<string | null>(null);
+  const [kitName, setKitName] = useState("Default");
 
   const logoCleanupRef = useRef<LocalAsset | null>(null);
+
+  const computeSnapshot = useCallback(() => {
+    return JSON.stringify({ brand, promptConfig, logoUrl: logo?.storageUrl });
+  }, [brand, promptConfig, logo?.storageUrl]);
+
+  // Reset snapshot whenever the active kit changes or settings finish loading
+  // This runs after React state updates from loadKitData have been applied
+  const prevKitIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isLoaded) return;
+    // Reset snapshot on initial load or when switching kits
+    if (prevKitIdRef.current !== activeKitId) {
+      prevKitIdRef.current = activeKitId;
+      savedSnapshotRef.current = computeSnapshot();
+    }
+  }, [isLoaded, activeKitId, computeSnapshot]);
+
+  const isDirty = isLoaded && computeSnapshot() !== savedSnapshotRef.current;
 
   useEffect(() => {
     logoCleanupRef.current = logo;
@@ -53,32 +88,68 @@ export default function BrandPage() {
     };
   }, []);
 
-  // Load saved settings on mount
+  const loadKitData = useCallback((kit: BrandKitRow) => {
+    setActiveKitId(kit.id);
+    setKitName(kit.name);
+    if (kit.brand) setBrand((current) => ({ ...current, ...kit.brand }));
+    if (kit.promptConfig) setPromptConfig((current) => ({ ...current, ...kit.promptConfig }));
+    if (kit.logoUrl) {
+      setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
+    } else {
+      setLogo(null);
+    }
+  }, []);
+
+  // Load kits and settings on mount
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadAll = async () => {
       try {
-        const response = await fetch("/api/settings", { cache: "no-store" });
-        if (!response.ok) {
-          setIsLoaded(true);
-          return;
+        // Load kits first
+        const kitsRes = await fetch("/api/brand-kits", { cache: "no-store" });
+        let loadedKits: BrandKitRow[] = [];
+        if (kitsRes.ok) {
+          const kitsJson = await kitsRes.json();
+          loadedKits = kitsJson.kits ?? [];
         }
 
-        const json = await response.json();
-        if (json?.brand) {
-          setBrand((current) => ({ ...current, ...json.brand }));
-        }
-        if (json?.promptConfig) {
-          setPromptConfig((current) => ({ ...current, ...json.promptConfig }));
-        }
-        if (json?.logoUrl) {
-          setLogo({
-            id: "saved-logo",
-            name: "Saved logo",
-            mediaType: "image",
-            previewUrl: json.logoUrl,
-            storageUrl: json.logoUrl,
-            status: "uploaded",
-          });
+        if (loadedKits.length > 0) {
+          setKits(loadedKits);
+          // Load the default kit, or the first one
+          const defaultKit = loadedKits.find((k) => k.isDefault) ?? loadedKits[0];
+          loadKitData(defaultKit);
+        } else {
+          // No kits exist — fall back to settings and auto-create a kit
+          const response = await fetch("/api/settings", { cache: "no-store" });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let settingsJson: any = null;
+          if (response.ok) {
+            settingsJson = await response.json();
+            if (settingsJson?.brand) setBrand((current) => ({ ...current, ...settingsJson.brand }));
+            if (settingsJson?.promptConfig) setPromptConfig((current) => ({ ...current, ...settingsJson.promptConfig }));
+            if (settingsJson?.logoUrl) {
+              setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: settingsJson.logoUrl, storageUrl: settingsJson.logoUrl, status: "uploaded" });
+            }
+          }
+
+          // Auto-create "Default" kit from loaded settings (not stale React state)
+          const loadedBrand = settingsJson?.brand ? { ...INITIAL_BRAND, ...settingsJson.brand } : brand;
+          const loadedPromptConfig = settingsJson?.promptConfig ? { ...promptConfig, ...settingsJson.promptConfig } : promptConfig;
+          const loadedLogoUrl = settingsJson?.logoUrl ?? logo?.storageUrl;
+          try {
+            const createRes = await fetch("/api/brand-kits", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: "Default", brand: loadedBrand, promptConfig: loadedPromptConfig, logoUrl: loadedLogoUrl, isDefault: true }),
+            });
+            if (createRes.ok) {
+              const createJson = await createRes.json();
+              setKits([createJson.kit]);
+              setActiveKitId(createJson.kit.id);
+              setKitName("Default");
+            }
+          } catch {
+            // Best effort — page still works without a kit row
+          }
         }
       } catch {
         // Settings may not be available
@@ -87,13 +158,14 @@ export default function BrandPage() {
       }
     };
 
-    void loadSettings();
-  }, []);
+    void loadAll();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveSettings = async () => {
     setIsSaving(true);
 
     try {
+      // Save to global settings (backwards compat)
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -108,6 +180,25 @@ export default function BrandPage() {
         throw new Error(await parseApiError(response));
       }
 
+      // Also save to the active brand kit row
+      if (activeKitId) {
+        const kitRes = await fetch(`/api/brand-kits/${activeKitId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: kitName,
+            brand,
+            promptConfig,
+            logoUrl: logo?.storageUrl,
+          }),
+        });
+        if (kitRes.ok) {
+          const updatedKit = await kitRes.json();
+          setKits((prev) => prev.map((k) => (k.id === activeKitId ? updatedKit : k)));
+        }
+      }
+
+      savedSnapshotRef.current = computeSnapshot();
       toast.success("Brand kit saved.");
     } catch (saveError) {
       toast.error(
@@ -284,22 +375,142 @@ export default function BrandPage() {
             onClick={() => {
               void saveSettings();
             }}
-            disabled={isSaving}
+            disabled={isSaving || !isDirty}
           >
             {isSaving ? (
               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Save className="h-3.5 w-3.5" />
             )}
-            {isSaving ? "Saving..." : "Save Brand Kit"}
+            {isSaving ? "Saving..." : "Save"}
           </Button>
         </div>
+
+        {/* Kit selector */}
+        {kits.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Select
+              value={activeKitId ?? ""}
+              onValueChange={(id) => {
+                const kit = kits.find((k) => k.id === id);
+                if (kit) {
+                  loadKitData(kit);
+                }
+              }}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Select kit" />
+              </SelectTrigger>
+              <SelectContent>
+                {kits.map((kit) => (
+                  <SelectItem key={kit.id} value={kit.id}>
+                    {kit.name}{kit.isDefault ? " (Default)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={kitName}
+              onChange={(e) => setKitName(e.target.value)}
+              className="w-[160px]"
+              placeholder="Kit name"
+            />
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/brand-kits", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: "New Kit" }),
+                  });
+                  if (!res.ok) throw new Error(await parseApiError(res));
+                  const json = await res.json();
+                  setKits((prev) => [json.kit, ...prev]);
+                  loadKitData(json.kit);
+                  toast.success("New kit created.");
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Could not create kit");
+                }
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Kit
+            </Button>
+            {kits.length > 1 && activeKitId && (
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={async () => {
+                  if (!activeKitId) return;
+                  try {
+                    const res = await fetch(`/api/brand-kits/${activeKitId}`, { method: "DELETE" });
+                    if (!res.ok) throw new Error(await parseApiError(res));
+                    const remaining = kits.filter((k) => k.id !== activeKitId);
+                    setKits(remaining);
+                    if (remaining.length > 0) loadKitData(remaining[0]);
+                    toast.success("Kit deleted.");
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Could not delete kit");
+                  }
+                }}
+                className="text-red-400 hover:text-red-300"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        )}
 
         <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
             <Palette className="h-4 w-4 text-orange-300" />
             Brand Identity
           </div>
+
+          {/* Logo — first field */}
+          <div className="mb-5">
+            <Label className="mb-1.5 block">Logo</Label>
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/30 bg-white/5 p-4 text-xs font-medium text-slate-200 transition hover:border-orange-300">
+              {logo ? (
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logo.previewUrl}
+                    alt="Logo preview"
+                    className="h-16 max-w-[10rem] object-contain"
+                  />
+                  <div className="text-left">
+                    <span
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-[11px] font-medium",
+                        statusChip(logo.status),
+                      )}
+                    >
+                      {logo.name}
+                      {logo.status === "uploading" ? " (syncing)" : ""}
+                    </span>
+                    <p className="mt-1 text-[11px] text-slate-400">Click to replace</p>
+                  </div>
+                </div>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <ImagePlus className="h-4 w-4 text-orange-300" />
+                  Upload Logo
+                </span>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  void handleLogoUpload(event);
+                }}
+              />
+            </label>
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="brand-name">Brand Name</Label>
@@ -432,19 +643,94 @@ export default function BrandPage() {
                 rows={2}
               />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="brand-palette">Palette (hex list)</Label>
+
+            {/* Color Palette Picker */}
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>Palette</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                {(() => {
+                  const colors = brand.palette
+                    .split(",")
+                    .map((c) => c.trim())
+                    .filter(Boolean);
+                  return colors.map((hex, i) => (
+                    <div key={i} className="group relative">
+                      <button
+                        type="button"
+                        className="h-9 w-9 rounded-lg border border-white/20 transition hover:scale-110"
+                        style={{ backgroundColor: hex }}
+                        onClick={() => {
+                          const picker = document.getElementById(`color-picker-${i}`) as HTMLInputElement;
+                          picker?.click();
+                        }}
+                        aria-label={`Color ${hex}`}
+                      />
+                      <input
+                        id={`color-picker-${i}`}
+                        type="color"
+                        value={hex.startsWith("#") ? hex : `#${hex}`}
+                        className="invisible absolute inset-0 h-0 w-0"
+                        onChange={(e) => {
+                          const updated = [...colors];
+                          updated[i] = e.target.value;
+                          setBrand((current) => ({
+                            ...current,
+                            palette: updated.join(", "),
+                          }));
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="absolute -top-1.5 -right-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white group-hover:flex"
+                        onClick={() => {
+                          const updated = colors.filter((_, j) => j !== i);
+                          setBrand((current) => ({
+                            ...current,
+                            palette: updated.join(", "),
+                          }));
+                        }}
+                        aria-label="Remove color"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ));
+                })()}
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-white/30 text-slate-400 transition hover:border-orange-300 hover:text-orange-300"
+                  onClick={() => {
+                    setBrand((current) => ({
+                      ...current,
+                      palette: current.palette
+                        ? `${current.palette}, #888888`
+                        : "#888888",
+                    }));
+                  }}
+                  aria-label="Add color"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">Click a swatch to pick a color. Click + to add.</p>
+            </div>
+
+            {/* Fonts */}
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="brand-fonts">Fonts</Label>
               <Input
-                id="brand-palette"
-                value={brand.palette}
+                id="brand-fonts"
+                value={brand.fonts}
+                placeholder="e.g. Inter, Playfair Display"
                 onChange={(event) =>
                   setBrand((current) => ({
                     ...current,
-                    palette: event.target.value,
+                    fonts: event.target.value,
                   }))
                 }
               />
             </div>
+
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="brand-logo-notes">Logo Notes</Label>
               <Input
@@ -458,42 +744,6 @@ export default function BrandPage() {
                 }
               />
             </div>
-          </div>
-
-          <div className="mt-5">
-            <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
-              <span className="inline-flex items-center gap-2">
-                <ImagePlus className="h-4 w-4 text-orange-300" />
-                Upload Logo
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  void handleLogoUpload(event);
-                }}
-              />
-            </label>
-            {logo ? (
-              <div className="mt-2 flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={logo.previewUrl}
-                  alt="Logo preview"
-                  className="h-10 max-w-[6rem] object-contain"
-                />
-                <span
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-[11px] font-medium",
-                    statusChip(logo.status),
-                  )}
-                >
-                  {logo.name}
-                  {logo.status === "uploading" ? " (syncing)" : ""}
-                </span>
-              </div>
-            ) : null}
           </div>
         </div>
 

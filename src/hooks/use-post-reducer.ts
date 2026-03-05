@@ -12,6 +12,7 @@ export type PostDraft = {
   brief: Partial<PostState> | null;
   assets: StoredAsset[];
   logoUrl: string | null;
+  brandKitId: string | null;
   promptConfig: Partial<PromptConfigState> | null;
   result: GenerationResponse | null;
   activeVariantId: string | null;
@@ -48,7 +49,8 @@ export type PostAction =
   | { type: "SET_SHARE"; shareUrl: string; shareProjectId?: string }
   | { type: "SET_RENDERED_POSTER"; url: string }
   | { type: "ADD_PUBLISH"; entry: PublishHistoryEntry }
-  | { type: "SET_STATUS"; status: string };
+  | { type: "SET_STATUS"; status: string }
+  | { type: "SET_BRAND_KIT"; brandKitId: string; brand: Partial<BrandState>; logoUrl?: string | null; promptConfig?: Partial<PromptConfigState> | null };
 
 export function rowToDraft(row: PostRow): PostDraft {
   return {
@@ -59,6 +61,7 @@ export function rowToDraft(row: PostRow): PostDraft {
     brief: row.brief ?? null,
     assets: row.assets ?? [],
     logoUrl: row.logoUrl,
+    brandKitId: row.brandKitId ?? null,
     promptConfig: row.promptConfig ?? null,
     result: row.result ?? null,
     activeVariantId: row.activeVariantId,
@@ -165,6 +168,21 @@ export function postReducer(
     case "SET_STATUS":
       if (!state) return state;
       return { ...state, status: action.status };
+
+    case "SET_BRAND_KIT":
+      if (!state) return state;
+      return {
+        ...state,
+        brandKitId: action.brandKitId,
+        brand: { ...(state.brand ?? {}), ...action.brand },
+        logoUrl: action.logoUrl !== undefined ? action.logoUrl : state.logoUrl,
+        promptConfig:
+          action.promptConfig !== undefined
+            ? (action.promptConfig === null
+                ? null
+                : { ...(state.promptConfig ?? {}), ...action.promptConfig })
+            : state.promptConfig,
+      };
 
     default:
       return state;

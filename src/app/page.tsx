@@ -97,6 +97,7 @@ export default function Home() {
   const [mobileAgentSheetOpen, setMobileAgentSheetOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<"agent" | "chat">("agent");
+  const [brandKitOptions, setBrandKitOptions] = useState<Array<{ id: string; name: string }>>([]);
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
@@ -206,16 +207,48 @@ export default function Home() {
     } catch { setLlmAuthStatus({ connected: false, source: null, detail: "Could not load LLM provider status." }); }
   }, []);
 
+  const loadBrandKits = useCallback(async () => {
+    try {
+      const r = await fetch("/api/brand-kits", { cache: "no-store" });
+      if (r.ok) {
+        const j = await r.json();
+        const kits = (j.kits ?? []) as Array<{ id: string; name: string }>;
+        setBrandKitOptions(kits.map((k) => ({ id: k.id, name: k.name })));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleSelectBrandKit = useCallback(async (kitId: string) => {
+    try {
+      const r = await fetch(`/api/brand-kits/${kitId}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const kit = await r.json();
+      dispatch({
+        type: "SET_BRAND_KIT",
+        brandKitId: kitId,
+        brand: kit.brand ?? {},
+        logoUrl: kit.logoUrl ?? null,
+        promptConfig: kit.promptConfig ?? null,
+      });
+      if (kit.logoUrl) {
+        setLocalLogo({ id: "kit-logo", name: "Kit logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
+      } else {
+        setLocalLogo(null);
+      }
+    } catch { /* ignore */ }
+  }, [dispatch]);
+
   useEffect(() => {
     void loadAuthStatus();
     void loadLlmStatus();
+    void loadBrandKits();
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
     const detail = params.get("detail");
     if (auth === "connected") { setPublishMessage("Instagram account connected."); toast.success("Instagram account connected."); }
     if (auth === "error" && detail) { const s = detail.slice(0, 200).replace(/[<>"']/g, ""); generation.setError(s); toast.error(s); }
     if (auth) { params.delete("auth"); params.delete("detail"); const n = params.toString(); window.history.replaceState({}, "", n ? `${window.location.pathname}?${n}` : window.location.pathname); }
-  }, [loadAuthStatus, loadLlmStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadAuthStatus, loadLlmStatus, loadBrandKits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeVariant = useMemo(() => {
     if (!result?.variants.length) return null;
@@ -466,7 +499,7 @@ export default function Home() {
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} isUploadingLogo={isUploadingLogo} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} />
+                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
                     </section>
                     <section className="border-b border-white/10 pb-6">
                       <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
@@ -519,7 +552,7 @@ export default function Home() {
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} isUploadingLogo={isUploadingLogo} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} />
+            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}

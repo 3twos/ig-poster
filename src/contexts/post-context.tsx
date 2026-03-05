@@ -23,8 +23,10 @@ import { useAutoSave, type SaveStatus } from "@/hooks/use-auto-save";
 type PostContextValue = {
   // Sidebar
   posts: PostSummary[];
+  archivedPosts: PostSummary[];
   isLoadingPosts: boolean;
   refreshPosts: () => Promise<void>;
+  refreshArchivedPosts: () => Promise<void>;
 
   // Active post
   activePost: PostDraft | null;
@@ -56,6 +58,7 @@ export function usePostContext() {
 
 export function PostProvider({ children }: { children: ReactNode }) {
   const [posts, setPosts] = useState<PostSummary[]>([]);
+  const [archivedPosts, setArchivedPosts] = useState<PostSummary[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
   const [activePost, dispatch] = useReducer(postReducer, null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -75,17 +78,34 @@ export function PostProvider({ children }: { children: ReactNode }) {
     activePostIdRef.current = activePost?.id ?? null;
   });
 
+  const didInitialLoadRef = useRef(false);
+
   const refreshPosts = useCallback(async () => {
-    setIsLoadingPosts(true);
+    // Only show skeletons on the very first load
+    const isInitial = !didInitialLoadRef.current;
+    if (isInitial) setIsLoadingPosts(true);
     try {
       const res = await fetch("/api/posts", { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
       setPosts(json.posts ?? []);
+      didInitialLoadRef.current = true;
     } catch {
       // Silently fail — sidebar will show empty
     } finally {
-      setIsLoadingPosts(false);
+      if (isInitial) setIsLoadingPosts(false);
+    }
+  }, []);
+
+  const refreshArchivedPosts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/posts?archived=true", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      const all: PostSummary[] = json.posts ?? [];
+      setArchivedPosts(all.filter((p) => p.status === "archived"));
+    } catch {
+      // Silently fail
     }
   }, []);
 
@@ -169,6 +189,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       await fetch(`/api/posts/${id}/archive`, { method: "POST" });
       await refreshPosts();
+      void refreshArchivedPosts();
 
       if (activePostIdRef.current === id) {
         dispatch({ type: "SET_DRAFT", draft: null });
@@ -177,7 +198,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
         window.history.replaceState({}, "", url.toString());
       }
     },
-    [refreshPosts],
+    [refreshPosts, refreshArchivedPosts],
   );
 
   const deletePost = useCallback(
@@ -245,8 +266,10 @@ export function PostProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PostContextValue>(
     () => ({
       posts,
+      archivedPosts,
       isLoadingPosts,
       refreshPosts,
+      refreshArchivedPosts,
       activePost,
       dispatch,
       selectPost,
@@ -261,8 +284,10 @@ export function PostProvider({ children }: { children: ReactNode }) {
     }),
     [
       posts,
+      archivedPosts,
       isLoadingPosts,
       refreshPosts,
+      refreshArchivedPosts,
       activePost,
       selectPost,
       createNewPost,

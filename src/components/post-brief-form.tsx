@@ -27,19 +27,25 @@ import type { PostState, LlmAuthStatus } from "@/lib/types";
 import { RATIO_OPTIONS } from "@/lib/types";
 import { toast } from "sonner";
 
+export type BrandKitOption = {
+  id: string;
+  name: string;
+};
+
 type Props = {
   post: PostState;
   llmAuthStatus: LlmAuthStatus;
   isGenerating: boolean;
   isUploadingAssets: boolean;
-  isUploadingLogo: boolean;
   hasAssets: boolean;
   hasResult: boolean;
+  brandKits?: BrandKitOption[];
+  activeBrandKitId?: string | null;
   dispatch: (action: Record<string, unknown>) => void;
   onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
-  onLogoUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onGenerate: () => void;
   onExportPoster: () => void;
+  onSelectBrandKit?: (kitId: string) => void;
 };
 
 export function PostBriefForm({
@@ -47,14 +53,15 @@ export function PostBriefForm({
   llmAuthStatus,
   isGenerating,
   isUploadingAssets,
-  isUploadingLogo,
   hasAssets,
   hasResult,
+  brandKits,
+  activeBrandKitId,
   dispatch,
   onAssetUpload,
-  onLogoUpload,
   onGenerate,
   onExportPoster,
+  onSelectBrandKit,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -71,35 +78,42 @@ export function PostBriefForm({
         />
       </div>
 
-      {/* Asset Upload */}
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
-          <span className="inline-flex items-center gap-2">
-            <ImagePlus className="h-4 w-4 text-orange-300" />
-            Upload Post Assets
-          </span>
-          <input
-            type="file"
-            accept="image/*,video/*"
-            multiple
-            className="hidden"
-            onChange={onAssetUpload}
-          />
-        </label>
+      {/* Brand Kit selector */}
+      {brandKits && brandKits.length > 0 && onSelectBrandKit && (
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-200">Brand Kit</Label>
+          <Select
+            value={activeBrandKitId ?? ""}
+            onValueChange={onSelectBrandKit}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select brand kit" />
+            </SelectTrigger>
+            <SelectContent>
+              {brandKits.map((kit) => (
+                <SelectItem key={kit.id} value={kit.id}>
+                  {kit.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-        <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
-          <span className="inline-flex items-center gap-2">
-            <ImagePlus className="h-4 w-4 text-orange-300" />
-            Upload Logo
-          </span>
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={onLogoUpload}
-          />
-        </label>
-      </div>
+      {/* Asset Upload */}
+      <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
+        <span className="inline-flex items-center gap-2">
+          <ImagePlus className="h-4 w-4 text-orange-300" />
+          Upload Post Assets
+        </span>
+        <input
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          className="hidden"
+          onChange={onAssetUpload}
+        />
+      </label>
 
       {/* Theme + Subject */}
       <div className="grid gap-3 md:grid-cols-2">
@@ -190,14 +204,14 @@ export function PostBriefForm({
       <div className="flex flex-wrap items-center gap-3">
         <Button
           onClick={onGenerate}
-          disabled={isGenerating || !hasAssets || isUploadingAssets || isUploadingLogo}
+          disabled={isGenerating || !hasAssets || isUploadingAssets}
         >
           {isGenerating ? (
             <LoaderCircle className="h-4 w-4 animate-spin" />
           ) : (
             <Sparkles className="h-4 w-4" />
           )}
-          {isGenerating ? "Generating..." : "Generate SOTA Concepts"}
+          {isGenerating ? "Generating..." : "Generate"}
         </Button>
 
         <Button
@@ -218,7 +232,7 @@ export function PostBriefForm({
           </p>
         ) : null}
 
-        {isUploadingAssets || isUploadingLogo ? (
+        {isUploadingAssets ? (
           <p className="text-xs text-blue-200">
             Uploading assets to persistent storage...
           </p>
