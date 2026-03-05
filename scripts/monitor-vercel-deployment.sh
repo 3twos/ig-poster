@@ -39,8 +39,8 @@ normalize_target() {
     target="${target##*/}"
   fi
 
-  # When given a deployment URL, keep only the host.
-  if [[ "$target" == *.vercel.app/* ]]; then
+  # When given a deployment/custom-domain URL, keep only the host.
+  if [[ "$target" == */* ]]; then
     target="${target%%/*}"
   fi
 
@@ -200,9 +200,37 @@ fi
 START_EPOCH="$(date +%s)"
 LAST_STATUS=""
 
+sleep_for_next_poll() {
+  if (( TIMEOUT_SECONDS == 0 )); then
+    sleep "${INTERVAL_SECONDS}"
+    return
+  fi
+
+  local now_epoch elapsed_seconds remaining_seconds sleep_seconds now_utc
+  now_epoch="$(date +%s)"
+  elapsed_seconds=$(( now_epoch - START_EPOCH ))
+  if (( elapsed_seconds >= TIMEOUT_SECONDS )); then
+    now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "[${now_utc}] Timeout reached after ${TIMEOUT_SECONDS}s without terminal status." >&2
+    exit 124
+  fi
+
+  remaining_seconds=$(( TIMEOUT_SECONDS - elapsed_seconds ))
+  sleep_seconds="${INTERVAL_SECONDS}"
+  if (( remaining_seconds < sleep_seconds )); then
+    sleep_seconds="${remaining_seconds}"
+  fi
+
+  sleep "${sleep_seconds}"
+}
+
 while true; do
   NOW_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   ELAPSED_SECONDS=$(( $(date +%s) - START_EPOCH ))
+  if (( TIMEOUT_SECONDS > 0 && ELAPSED_SECONDS >= TIMEOUT_SECONDS )); then
+    echo "[${NOW_UTC}] Timeout reached after ${TIMEOUT_SECONDS}s without terminal status." >&2
+    exit 124
+  fi
 
   if ! RESPONSE="$(
     curl --silent --show-error --location \
@@ -211,11 +239,7 @@ while true; do
       "${API_URL}"
   )"; then
     echo "[${NOW_UTC}] Request failed. Retrying in ${INTERVAL_SECONDS}s..." >&2
-    if (( TIMEOUT_SECONDS > 0 && ELAPSED_SECONDS >= TIMEOUT_SECONDS )); then
-      echo "[${NOW_UTC}] Timeout reached after ${TIMEOUT_SECONDS}s." >&2
-      exit 124
-    fi
-    sleep "${INTERVAL_SECONDS}"
+    sleep_for_next_poll
     continue
   fi
 
@@ -230,6 +254,7 @@ while true; do
   fi
 
   IFS=$'\x1f' read -r STATUS DEPLOYMENT_ID DEPLOYMENT_URL CREATED_AT READY_AT ERROR_MESSAGE <<<"${PARSED}"
+  ELAPSED_SECONDS=$(( $(date +%s) - START_EPOCH ))
 
   if [[ -n "${LAST_STATUS}" && "${STATUS}" != "${LAST_STATUS}" ]]; then
     echo "[${NOW_UTC}] Transition: ${LAST_STATUS} -> ${STATUS}"
@@ -257,11 +282,5 @@ while true; do
   esac
 
   LAST_STATUS="${STATUS}"
-
-  if (( TIMEOUT_SECONDS > 0 && ELAPSED_SECONDS >= TIMEOUT_SECONDS )); then
-    echo "[${NOW_UTC}] Timeout reached after ${TIMEOUT_SECONDS}s without terminal status." >&2
-    exit 124
-  fi
-
-  sleep "${INTERVAL_SECONDS}"
+  sleep_for_next_poll
 done
