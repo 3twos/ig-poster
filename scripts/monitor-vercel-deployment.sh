@@ -117,18 +117,6 @@ derive_short_project_name() {
   printf '%s' "$short_name"
 }
 
-spoken_project_name() {
-  local project_name="$1"
-
-  if [[ -z "$project_name" ]]; then
-    printf '%s' "deployment"
-    return
-  fi
-
-  # Make slug-like names easier to hear.
-  printf '%s' "${project_name//-/ }"
-}
-
 parse_deployment_payload() {
   node -e '
 const fs = require("node:fs");
@@ -160,10 +148,11 @@ const deploymentId = text(payload.id || payload.uid);
 const deploymentUrl = text(payload.url) ? `https://${payload.url}` : "";
 const createdAtMs = intMs(payload.createdAt);
 const readyAtMs = intMs(payload.ready);
+const target = text(payload.target).toLowerCase();
 const errorMessage = text(payload.errorMessage || payload.errorCode);
 
 process.stdout.write(
-  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, errorMessage].join("\u001f"),
+  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, errorMessage].join("\u001f"),
 );
 '
 }
@@ -201,8 +190,9 @@ const text = (value) => (typeof value === "string" ? value : "");
 const id = text(latest.uid || latest.id);
 const state = text(latest.readyState || latest.state).toUpperCase() || "UNKNOWN";
 const url = text(latest.url) ? `https://${latest.url}` : "";
+const target = text(latest.target).toLowerCase();
 
-process.stdout.write([id, state, url].join("\u001f"));
+process.stdout.write([id, state, url, target].join("\u001f"));
 '
 }
 
@@ -270,6 +260,19 @@ friendly_mode_label() {
   fi
 }
 
+friendly_environment_label() {
+  local target="$1"
+
+  case "$target" in
+    production|PRODUCTION) printf '%s' "Production" ;;
+    preview|PREVIEW|"") printf '%s' "Preview" ;;
+    *)
+      # Keep unknown targets visible instead of collapsing them.
+      printf '%s' "$target"
+      ;;
+  esac
+}
+
 friendly_host() {
   local deployment_url="$1"
   local host
@@ -318,6 +321,7 @@ render_dashboard() {
   printf '=====================\n'
   printf 'Project      : %s\n' "${DASH_PROJECT_NAME:-n/a}"
   printf 'Mode         : %s\n' "${DASH_MODE_LABEL:-n/a}"
+  printf 'Environment  : %s\n' "${DASH_ENV_LABEL:-Preview}"
   printf 'Status       : %s\n' "${DASH_STATUS_LABEL:-Unknown}"
   printf 'Deployment   : %s\n' "${DASH_DEPLOYMENT_LABEL:-n/a}"
   printf 'URL          : %s\n' "${DASH_URL_LABEL:-n/a}"
@@ -433,6 +437,7 @@ TARGET=""
 DASH_PROJECT_NAME="n/a"
 DASH_MODE_LABEL="n/a"
 DASH_STATUS_LABEL="Waiting"
+DASH_ENV_LABEL="Preview"
 DASH_DEPLOYMENT_LABEL="n/a"
 DASH_URL_LABEL="n/a"
 DASH_STARTED_LABEL="n/a"
@@ -615,6 +620,7 @@ ACTIVE_LAST_STATUS=""
 ACTIVE_TERMINAL_ANNOUNCED=0
 ACTIVE_FIRST_SEEN_EPOCH="$(date +%s)"
 ACTIVE_PROJECT_SHORT_NAME=""
+ACTIVE_TARGET_KIND=""
 NO_DEPLOYMENTS_REPORTED=0
 
 while true; do
@@ -653,7 +659,7 @@ while true; do
     fi
 
     NO_DEPLOYMENTS_REPORTED=0
-    IFS=$'\x1f' read -r LATEST_ID LATEST_STATE LATEST_URL <<<"${LATEST_PARSED}"
+    IFS=$'\x1f' read -r LATEST_ID LATEST_STATE LATEST_URL LATEST_TARGET <<<"${LATEST_PARSED}"
 
     if [[ -z "$LATEST_ID" ]]; then
       warn_line "Latest deployment payload did not include a deployment id. Retrying..."
@@ -669,8 +675,10 @@ while true; do
       ACTIVE_TERMINAL_ANNOUNCED=0
       ACTIVE_FIRST_SEEN_EPOCH="$(date +%s)"
       ACTIVE_PROJECT_SHORT_NAME="$(derive_short_project_name "${LATEST_URL}" "${ACTIVE_TARGET}")"
+      ACTIVE_TARGET_KIND="$LATEST_TARGET"
       DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
       DASH_STATUS_LABEL="$(friendly_status "${LATEST_STATE}")"
+      DASH_ENV_LABEL="$(friendly_environment_label "${LATEST_TARGET}")"
       DASH_DEPLOYMENT_LABEL="$(short_deployment_label "${ACTIVE_TARGET}")"
       DASH_URL_LABEL="$(friendly_host "${LATEST_URL}")"
       DASH_STARTED_LABEL="n/a"
@@ -703,19 +711,21 @@ while true; do
     continue
   fi
 
-  IFS=$'\x1f' read -r STATUS DEPLOYMENT_ID DEPLOYMENT_URL CREATED_AT_MS READY_AT_MS ERROR_MESSAGE <<<"${PARSED}"
+  IFS=$'\x1f' read -r STATUS DEPLOYMENT_ID DEPLOYMENT_URL CREATED_AT_MS READY_AT_MS DEPLOYMENT_TARGET ERROR_MESSAGE <<<"${PARSED}"
   if [[ -n "$DEPLOYMENT_ID" ]]; then
     ACTIVE_TARGET="$DEPLOYMENT_ID"
   else
     DEPLOYMENT_ID="$ACTIVE_TARGET"
   fi
   ACTIVE_PROJECT_SHORT_NAME="$(derive_short_project_name "${DEPLOYMENT_URL}" "${ACTIVE_TARGET}")"
-  ACTIVE_SPOKEN_PROJECT_NAME="$(spoken_project_name "${ACTIVE_PROJECT_SHORT_NAME}")"
+  ACTIVE_TARGET_KIND="$DEPLOYMENT_TARGET"
+  ACTIVE_ENV_LABEL="$(friendly_environment_label "${ACTIVE_TARGET_KIND}")"
   DURATION_SECONDS="$(duration_seconds_for_active "$CREATED_AT_MS" "$READY_AT_MS")"
   DURATION_TEXT="$(format_duration "$DURATION_SECONDS")"
 
   DASH_PROJECT_NAME="$ACTIVE_PROJECT_SHORT_NAME"
   DASH_STATUS_LABEL="$(friendly_status "$STATUS")"
+  DASH_ENV_LABEL="$ACTIVE_ENV_LABEL"
   DASH_DEPLOYMENT_LABEL="$(short_deployment_label "$DEPLOYMENT_ID")"
   DASH_URL_LABEL="$(friendly_host "$DEPLOYMENT_URL")"
   DASH_STARTED_LABEL="$(format_ms_local "$CREATED_AT_MS")"
@@ -725,12 +735,12 @@ while true; do
     log_line "Transition: ${ACTIVE_LAST_STATUS} -> ${STATUS} (id=${DEPLOYMENT_ID})"
   fi
 
-  log_line "Status ${DASH_STATUS_LABEL} for ${DASH_PROJECT_NAME} (${DASH_DEPLOYMENT_LABEL})"
+  log_line "Status ${DASH_STATUS_LABEL} for ${DASH_PROJECT_NAME} ${DASH_ENV_LABEL} (${DASH_DEPLOYMENT_LABEL})"
 
   case "$STATUS" in
     READY)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
-        ALERT_MESSAGE="${ACTIVE_SPOKEN_PROJECT_NAME} deployment completed in ${DURATION_TEXT}."
+        ALERT_MESSAGE="${ACTIVE_ENV_LABEL} deployment completed in ${DURATION_TEXT}."
         LAST_ALERT_MESSAGE="$ALERT_MESSAGE"
         log_line "Alert: ${ALERT_MESSAGE}"
         speak_alert "$ALERT_MESSAGE"
@@ -739,7 +749,7 @@ while true; do
       ;;
     ERROR|CANCELED)
       if (( ACTIVE_TERMINAL_ANNOUNCED == 0 )); then
-        ALERT_MESSAGE="${ACTIVE_SPOKEN_PROJECT_NAME} deployment ended with ${STATUS} after ${DURATION_TEXT}."
+        ALERT_MESSAGE="${ACTIVE_ENV_LABEL} deployment ended with ${STATUS} after ${DURATION_TEXT}."
         if [[ -n "$ERROR_MESSAGE" ]]; then
           ALERT_MESSAGE="${ALERT_MESSAGE} ${ERROR_MESSAGE}"
         fi
