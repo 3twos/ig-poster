@@ -39,31 +39,13 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Install dependencies
-        if: steps.preflight.outputs.configured == 'true'
-        run: npm ci
-
-      - name: Ensure Linux optional native deps
-        if: steps.preflight.outputs.configured == 'true'
-        run: |
-          mapfile -t LINUX_OPTIONAL_PKGS < <(
-            node -e "const lock=require('./package-lock.json');const out=[];for(const pkg of Object.values(lock.packages||{})){for(const [name,version] of Object.entries(pkg.optionalDependencies||{})){if(name.endsWith('-linux-x64-gnu'))out.push(name+'@'+version)}};console.log([...new Set(out)].join('\n'));"
-          )
-          if [ "${#LINUX_OPTIONAL_PKGS[@]}" -gt 0 ]; then
-            npm install --no-save "${LINUX_OPTIONAL_PKGS[@]}"
-          fi
-
       - name: Pull Vercel Environment (Preview)
         if: steps.preflight.outputs.configured == 'true'
         run: npx vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
 
-      - name: Build Preview Artifacts
-        if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel build --token=$VERCEL_TOKEN
-
       - name: Deploy Preview
         if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel deploy --prebuilt --token=$VERCEL_TOKEN
+        run: npx vercel deploy --token=$VERCEL_TOKEN
 
   deploy-production:
     if: github.event_name == 'push'
@@ -97,28 +79,10 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Install dependencies
-        if: steps.preflight.outputs.configured == 'true'
-        run: npm ci
-
-      - name: Ensure Linux optional native deps
-        if: steps.preflight.outputs.configured == 'true'
-        run: |
-          mapfile -t LINUX_OPTIONAL_PKGS < <(
-            node -e "const lock=require('./package-lock.json');const out=[];for(const pkg of Object.values(lock.packages||{})){for(const [name,version] of Object.entries(pkg.optionalDependencies||{})){if(name.endsWith('-linux-x64-gnu'))out.push(name+'@'+version)}};console.log([...new Set(out)].join('\n'));"
-          )
-          if [ "${#LINUX_OPTIONAL_PKGS[@]}" -gt 0 ]; then
-            npm install --no-save "${LINUX_OPTIONAL_PKGS[@]}"
-          fi
-
       - name: Pull Vercel Environment (Production)
         if: steps.preflight.outputs.configured == 'true'
         run: npx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
 
-      - name: Build Production Artifacts
-        if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel build --prod --token=$VERCEL_TOKEN
-
       - name: Deploy Production
         if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+        run: npx vercel deploy --prod --token=$VERCEL_TOKEN
