@@ -73,6 +73,12 @@ import { withPerf } from "@/lib/perf";
 import { cn, slugify } from "@/lib/utils";
 import { toast } from "sonner";
 
+const revokeObjectUrlIfNeeded = (url: string) => {
+  if (url.startsWith("blob:")) {
+    URL.revokeObjectURL(url);
+  }
+};
+
 export default function Home() {
   const {
     activePost,
@@ -165,7 +171,7 @@ export default function Home() {
     }));
     setLocalAssets(hydrated);
     if (activePost.logoUrl) {
-      setLocalLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: activePost.logoUrl, storageUrl: activePost.logoUrl, status: "uploaded" });
+      setLocalLogo({ id: "saved-logo", name: "Logo", mediaType: "image", previewUrl: activePost.logoUrl, storageUrl: activePost.logoUrl, status: "uploaded" });
     } else {
       setLocalLogo(null);
     }
@@ -188,8 +194,15 @@ export default function Home() {
   useEffect(() => { logoCleanupRef.current = localLogo; }, [localLogo]);
   useEffect(() => {
     return () => {
-      assetCleanupRef.current.forEach((a) => URL.revokeObjectURL(a.previewUrl));
-      if (logoCleanupRef.current) URL.revokeObjectURL(logoCleanupRef.current.previewUrl);
+      assetCleanupRef.current.forEach((a) => {
+        revokeObjectUrlIfNeeded(a.previewUrl);
+        if (a.posterUrl) {
+          revokeObjectUrlIfNeeded(a.posterUrl);
+        }
+      });
+      if (logoCleanupRef.current) {
+        revokeObjectUrlIfNeeded(logoCleanupRef.current.previewUrl);
+      }
     };
   }, []);
 
@@ -235,7 +248,7 @@ export default function Home() {
         promptConfig: kit.promptConfig ?? null,
       });
       if (kit.logoUrl) {
-        setLocalLogo({ id: "kit-logo", name: "Kit logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
+        setLocalLogo({ id: "kit-logo", name: "Logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
       } else {
         setLocalLogo(null);
       }
@@ -341,7 +354,7 @@ export default function Home() {
     if (!file) return;
     generation.setError(null); setPublishMessage(null);
     const next: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
-    setLocalLogo((c) => { if (c) URL.revokeObjectURL(c.previewUrl); return next; });
+    setLocalLogo((c) => { if (c) revokeObjectUrlIfNeeded(c.previewUrl); return next; });
     setIsUploadingLogo(true);
     try { const url = await uploadFileToStorage(file, "logos"); setLocalLogo((c) => c ? { ...c, status: "uploaded", storageUrl: url } : null); dispatch({ type: "SET_LOGO", logoUrl: url }); }
     catch (e) { setLocalLogo((c) => c ? { ...c, status: "local", error: e instanceof Error ? e.message : "Upload failed" } : null); }
@@ -349,12 +362,33 @@ export default function Home() {
   };
 
   const removeAsset = useCallback((id: string) => {
-    setLocalAssets((c) => { const r = c.find((a) => a.id === id); if (r) URL.revokeObjectURL(r.previewUrl); const n = c.filter((a) => a.id !== id); syncAssetsToPost(n); return n; });
+    setLocalAssets((current) => {
+      const removing = current.find((asset) => asset.id === id);
+      if (removing) {
+        revokeObjectUrlIfNeeded(removing.previewUrl);
+        if (removing.posterUrl) {
+          revokeObjectUrlIfNeeded(removing.posterUrl);
+        }
+      }
+      const next = current.filter((asset) => asset.id !== id);
+      syncAssetsToPost(next);
+      return next;
+    });
   }, [syncAssetsToPost]);
 
   const reorderAssets = useCallback((reordered: LocalAsset[]) => {
     setLocalAssets(reordered); syncAssetsToPost(reordered);
   }, [syncAssetsToPost]);
+
+  const removeLogo = useCallback(() => {
+    setLocalLogo((current) => {
+      if (current) {
+        revokeObjectUrlIfNeeded(current.previewUrl);
+      }
+      return null;
+    });
+    dispatch({ type: "SET_LOGO", logoUrl: null });
+  }, [dispatch]);
 
   const generateRef = useRef<(() => Promise<void>) | null>(null);
   const isAgentBusyRef = useRef(isAgentBusy);
@@ -514,10 +548,10 @@ export default function Home() {
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
                     </section>
                     <section className="border-b border-white/10 pb-6">
-                      <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
+                      <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
                     </section>
                     <section className="border-b border-white/10 pb-6">
                       <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
@@ -567,8 +601,8 @@ export default function Home() {
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onAssetUpload={(e) => void handleAssetUpload(e)} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
-            <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
+            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+            <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
             {activeVariant && <PublishSection activeVariant={activeVariant} authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} dispatch={typedDispatch} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPublishToInstagram={(e, s) => void publishToInstagram(e, s)} />}

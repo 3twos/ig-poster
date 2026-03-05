@@ -37,7 +37,7 @@
 1. Create a new post concept from a brief
    - Use the 3-column layout: browse posts (left), edit brief and preview (center), agent activity or chat (right).
    - Switch between Agent and Chat tabs in the right panel to monitor generation or converse with the AI assistant.
-   - Select a brand kit (or use the default), upload assets, fill post inputs, generate variants, pick one, and export.
+   - Select a brand kit (or use the default), use the Asset Manager controls to attach assets/logo (replace/remove supported for logo), fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
    - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, and iterate prompts.

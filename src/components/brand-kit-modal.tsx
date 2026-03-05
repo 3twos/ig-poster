@@ -83,7 +83,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     setBrand(kit.brand ? { ...INITIAL_BRAND, ...kit.brand } : INITIAL_BRAND);
     setPromptConfig(kit.promptConfig ? { systemPrompt: "", customInstructions: "", ...kit.promptConfig } : { systemPrompt: "", customInstructions: "" });
     if (kit.logoUrl) {
-      setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
+      setLogo({ id: "saved-logo", name: "Logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
     } else {
       setLogo(null);
     }
@@ -358,7 +358,8 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                         <img src={logo.previewUrl} alt="Logo preview" className="h-16 max-w-[10rem] object-contain" />
                         <div className="text-left">
                           <span className={cn("rounded-full border px-3 py-1 text-[11px] font-medium", statusChip(logo.status))}>
-                            {logo.name}{logo.status === "uploading" ? " (syncing)" : ""}
+                            {logo.name === "Logo" ? "Logo ready" : logo.name}
+                            {logo.status === "uploading" ? " (syncing)" : ""}
                           </span>
                           <p className="mt-1 text-[11px] text-slate-400">Click to replace</p>
                         </div>
@@ -366,7 +367,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                     ) : (
                       <span className="inline-flex items-center gap-2">
                         <ImagePlus className="h-4 w-4 text-orange-300" />
-                        Upload Logo
+                        Attach logo
                       </span>
                     )}
                     <input type="file" accept="image/*" className="hidden" onChange={(event) => void handleLogoUpload(event)} />
