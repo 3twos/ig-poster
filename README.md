@@ -108,7 +108,8 @@ Notes:
 - Without a connected provider key (or env fallback key), generation falls back to deterministic local concepts.
 - `POST /api/auth/llm/connect` uses `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` for encryption. If `POSTGRES_URL` or `DATABASE_URL` is configured, BYOK credentials are stored encrypted in private Postgres; otherwise they are stored in an encrypted `httpOnly` cookie fallback.
 - `GOOGLE_WORKSPACE_DOMAIN`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `WORKSPACE_AUTH_SECRET` are required for app login.
-- `POSTGRES_URL` or `DATABASE_URL` is required for post creation/loading and recommended for private persistent credential storage (LLM + Meta OAuth connection records).
+- `DATABASE_URL` is recommended for private persistent credential storage (LLM + Meta OAuth connection records).
+- `POSTGRES_URL` is required for post draft persistence (`/api/posts*`) and should point to the same private Postgres instance.
 - Provision DB schema before first credential write (recommended for least-privilege DB users):
   ```sql
   CREATE TABLE IF NOT EXISTS ig_poster_private_credentials (
@@ -128,6 +129,29 @@ Notes:
 - In production, set one of `APP_ENCRYPTION_SECRET`, `META_APP_SECRET`, or `WORKSPACE_AUTH_SECRET` to encrypt OAuth/BYOK tokens at rest.
 - In local/preview environments with no configured encryption secret, the app uses a process-scoped runtime fallback secret; restarting the server invalidates previously encrypted OAuth/BYOK credentials and you may need to reconnect.
 - `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` remain supported as env fallback credentials.
+
+Fast local iteration:
+
+```bash
+npm run test:watch
+# or quick gate
+npm run check
+```
+
+Full validation before PR:
+
+```bash
+npm run lint
+npm run typecheck
+npm run test:coverage
+npm run build
+```
+
+Breaking DB migration in this branch:
+
+```bash
+psql "$POSTGRES_URL" -f drizzle/0001_post_status_enum.sql
+```
 
 ## API Endpoints
 
@@ -163,7 +187,7 @@ Comprehensive research notes for Instagram growth mechanics + vineyard/wine comp
 
 ### GitHub CI (quality gates)
 - Workflow: `.github/workflows/ci.yml`
-- Runs lint + build on PRs and pushes
+- Runs lint + typecheck + test coverage + build on PRs and pushes
 
 ### Vercel deployment workflow
 - Workflow: `.github/workflows/vercel.yml`

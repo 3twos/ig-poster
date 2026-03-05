@@ -1,9 +1,11 @@
 import { desc, eq, ne, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
 import { toSummary } from "@/lib/post";
+import { PostCreateRequestSchema } from "@/lib/post-schemas";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
     }
 
     const ownerHash = hashEmail(session.email);
-    const body = await req.json().catch(() => ({}));
+    const body = PostCreateRequestSchema.parse(await req.json().catch(() => ({})));
     const id = randomId();
     const now = new Date();
 
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
         brief: body.brief ?? null,
         assets: body.assets ?? [],
         logoUrl: body.logoUrl ?? null,
+        brandKitId: body.brandKitId ?? null,
         promptConfig: body.promptConfig ?? null,
         createdAt: now,
         updatedAt: now,
@@ -79,8 +82,15 @@ export async function POST(req: Request) {
       .returning();
 
     return NextResponse.json({ id: row.id, post: row });
-  } catch (err) {
-    console.error("[api/posts]", err);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 },
+      );
+    }
+
+    console.error("[api/posts]", error);
     return NextResponse.json(
       { error: "Failed to create post" },
       { status: 500 },

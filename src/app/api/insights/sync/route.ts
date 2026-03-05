@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { isBlobEnabled, listBlobs, putJson } from "@/lib/blob-store";
+import { isBlobEnabled, listBlobsPaginated, putJson } from "@/lib/blob-store";
 import { PublishOutcomeSchema, type PublishOutcome } from "@/lib/creative";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { getMediaInsights } from "@/lib/meta";
@@ -34,7 +34,10 @@ export async function POST(req: Request) {
       .update(session.email.trim().toLowerCase())
       .digest("hex");
 
-    const blobs = await listBlobs(`outcomes/${emailHash}/`, 100);
+    const blobs = await listBlobsPaginated(`outcomes/${emailHash}/`, {
+      pageSize: 500,
+      maxResults: 2000,
+    });
     const now = Date.now();
 
     let synced = 0;

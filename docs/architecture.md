@@ -6,6 +6,8 @@
 - Enforce strict input/output contracts for AI and publishing workflows.
 - Keep credential handling encrypted and server-side.
 - Use Postgres (via Drizzle ORM) for relational app state (posts, brand kits, private credentials) while keeping Blob for binary assets and snapshots.
+- Preserve data integrity across auth, generation, and publishing workflows.
+- Use Postgres (via Drizzle ORM) for relational app state (posts, brand kits, private credentials) while keeping Blob for binary assets and snapshots.
 
 ## System Overview
 
@@ -161,6 +163,7 @@ Why this shape:
   - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
   - chat index: `chat/<ownerHash>/index.json`
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
+- `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `generated`, `published`, `scheduled`, `archived`).
 
 ## Security Posture
 
@@ -181,13 +184,14 @@ Why this shape:
 
 - Generation: in Fallback mode, provider errors cascade to the next model in priority order before degrading to deterministic fallback output. In Parallel mode, partial model failures are tolerated as long as at least one model succeeds.
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
-- Scheduling: successful jobs are deleted; failed jobs remain for retry/inspection.
+- Scheduling: cron paginates schedule blobs (up to configured max), sorts by timestamped pathname, publishes due jobs, and deletes successful jobs.
+- Failed jobs remain for retry/inspection.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
 - Blob-dependent features return clear 503 errors when storage is not configured.
 
 ## Deployment and Operations
 
-- CI checks: lint + build.
+- CI checks: lint + typecheck + test coverage + build.
 - Hosting: Vercel deployment + Vercel cron.
 - Cron endpoint auth: `Authorization: Bearer <CRON_SECRET>`.
 - Canonical host redirect controls:

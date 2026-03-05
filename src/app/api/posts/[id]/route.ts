@@ -1,8 +1,10 @@
 import { eq, and } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
+import { PostUpdateRequestSchema } from "@/lib/post-schemas";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
@@ -50,7 +52,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 
     const { id } = await ctx.params;
     const ownerHash = hashEmail(session.email);
-    const body = await req.json();
+    const body = PostUpdateRequestSchema.parse(await req.json());
     const db = getDb();
 
     // Fetch existing row to merge JSONB fields
@@ -132,8 +134,15 @@ export async function PUT(req: Request, ctx: Ctx) {
       .returning();
 
     return NextResponse.json(updated);
-  } catch (err) {
-    console.error("[api/posts/id]", err);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 },
+      );
+    }
+
+    console.error("[api/posts/id]", error);
     return NextResponse.json(
       { error: "Failed to update post" },
       { status: 500 },

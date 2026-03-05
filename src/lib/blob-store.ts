@@ -47,6 +47,31 @@ export const listBlobs = async (prefix: string, limit = 100): Promise<ListBlobRe
   return blobs;
 };
 
+export const listBlobsPaginated = async (
+  prefix: string,
+  options?: { pageSize?: number; maxResults?: number },
+): Promise<ListBlobResultBlob[]> => {
+  const pageSize = Math.max(1, Math.min(options?.pageSize ?? 1000, 1000));
+  const maxResults = Math.max(1, options?.maxResults ?? 5000);
+
+  const collected: ListBlobResultBlob[] = [];
+  let cursor: string | undefined;
+  let hasMore = true;
+
+  while (hasMore && collected.length < maxResults) {
+    const { blobs, hasMore: nextHasMore, cursor: nextCursor } = await list({
+      prefix,
+      limit: Math.min(pageSize, maxResults - collected.length),
+      cursor,
+    });
+    collected.push(...blobs);
+    hasMore = nextHasMore;
+    cursor = nextCursor;
+  }
+
+  return collected;
+};
+
 export const deleteBlob = async (url: string) => del(url);
 
 export const deleteBlobByPath = async (pathname: string) => {

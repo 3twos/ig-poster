@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -18,13 +19,21 @@ export type PublishHistoryEntry = {
   igPermalink?: string;
 };
 
+export const postStatusEnum = pgEnum("post_status", [
+  "draft",
+  "generated",
+  "published",
+  "scheduled",
+  "archived",
+]);
+
 export const posts = pgTable(
   "posts",
   {
     id: varchar("id", { length: 18 }).primaryKey(),
     ownerHash: varchar("owner_hash", { length: 64 }).notNull(),
     title: varchar("title", { length: 120 }).notNull().default(""),
-    status: varchar("status", { length: 20 }).notNull().default("draft"),
+    status: postStatusEnum("status").notNull().default("draft"),
 
     brand: jsonb("brand").$type<Partial<BrandState>>(),
     brief: jsonb("brief").$type<Partial<PostState>>(),

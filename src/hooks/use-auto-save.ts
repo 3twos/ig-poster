@@ -7,7 +7,8 @@ export type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 
 /** Strips transient fields before comparing / sending to API */
 function serializeDraft(draft: PostDraft): string {
-  const { activeSlideIndex: _, ...rest } = draft;
+  const rest = { ...draft };
+  delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
   return JSON.stringify(rest);
 }
 

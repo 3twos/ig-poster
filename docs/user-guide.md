@@ -85,6 +85,7 @@
 - `reel` variant requires at least one uploaded video.
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.
 - Scheduled posts are processed by `/api/cron/publish` (every 15 minutes in Vercel cron config).
+- Scheduled queue processing now walks paginated schedule blobs to reduce missed publishes under larger backlogs.
 
 ## Managing Connections
 
@@ -107,6 +108,9 @@
 
 - Main page is empty and "New Post" does nothing:
   - Verify `POSTGRES_URL` or `DATABASE_URL` is configured for the running environment.
+
+- "Invalid request body" responses on post create/update APIs:
+  - Check field formats (URLs, status values, and structured payload shape) before retrying.
 
 - Upload/share/schedule errors mentioning Blob:
   - Configure `BLOB_READ_WRITE_TOKEN`.
