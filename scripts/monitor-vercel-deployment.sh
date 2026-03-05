@@ -414,7 +414,22 @@ format_ms_local() {
     return
   fi
   epoch_seconds=$(( epoch_ms / 1000 ))
-  date -r "$epoch_seconds" '+%H:%M:%S'
+
+  # Prefer BSD/macOS `date -r`, then GNU `date -d`.
+  if date -r 0 '+%s' >/dev/null 2>&1; then
+    if ! date -r "$epoch_seconds" '+%H:%M:%S'; then
+      printf '%s' "n/a"
+    fi
+    return
+  fi
+  if date -d "@0" '+%s' >/dev/null 2>&1; then
+    if ! date -d "@$epoch_seconds" '+%H:%M:%S'; then
+      printf '%s' "n/a"
+    fi
+    return
+  fi
+
+  printf '%s' "n/a"
 }
 
 render_dashboard() {
@@ -483,6 +498,9 @@ play_production_beat() {
   local deployment_target="$1"
 
   if (( ENABLE_SPEAK == 0 )); then
+    return
+  fi
+  if [[ -z "$SPEAKER_CMD" ]]; then
     return
   fi
   if [[ "$deployment_target" != "production" && "$deployment_target" != "PRODUCTION" ]]; then
