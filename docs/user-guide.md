@@ -25,7 +25,10 @@
    - If you skip this and no env keys are set, generation uses deterministic fallback concepts.
 
 3. Navigate the 3-column layout
-   - Left panel: posts list with thumbnails — browse, select, archive, or delete posts. Filter by All, Drafts, or Archived tabs.
+   - Left panel: posts list with thumbnails — browse, select, post now/schedule, archive, or delete posts.
+   - Each post row is fully clickable (title, thumbnail, and metadata), and hover on a thumbnail shows a larger preview.
+   - Post rows show visual state chips (`Unposted`, `Dirty`, `Posted`, plus `Scheduled`/`Archived` where applicable).
+   - Filter tabs include All, Drafts, Scheduled, Published, and Archived.
    - Center panel: post brief, asset manager, preview, strategy, and publish sections.
    - Right panel: switch between **Agent** and **Chat** tabs.
      - Agent tab: real-time generation progress and LLM reasoning.
@@ -37,6 +40,7 @@
    - Brand fields: name, values, principles, story, voice, visual direction, palette (color picker swatches), fonts, logo notes.
    - Post fields: theme, subject, thought, objective, audience, mood, aspect ratio.
    - Select a brand kit from the dropdown in the post brief form to pre-fill brand fields and logo.
+   - New posts default to the first available brand kit in the database when one exists.
    - The post subject field is used as the post title in the sidebar list, falling back to theme or the first generated variant headline.
 
 5. (Optional) Autofill brand from website
@@ -46,7 +50,7 @@
    - Use the Asset Manager `Attach assets` control to upload images and/or videos (up to 20 assets).
    - Reorder assets by dragging in the asset manager; each item shows a thumbnail, file size, and media type.
    - Remove individual assets with the X button.
-   - Use `Attach logo` to add a logo, then `Replace logo` or `Remove` as needed.
+   - Use one-click icon controls in the logo panel to upload/replace or remove the logo.
 
 7. Generate creative variants
    - Click generate to create 3 variants with:
@@ -69,7 +73,8 @@
 
 11. Publish or schedule to Instagram
    - Connect Instagram via Meta OAuth (if not already connected).
-   - Publish now, or set a future date/time to schedule.
+   - Use `Post now` or `Post at` (date/time picker) in the publish section.
+   - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
