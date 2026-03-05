@@ -597,14 +597,86 @@ friendly_environment_label() {
   esac
 }
 
+normalize_branch_context() {
+  local branch="$1"
+  local lowered
+
+  branch="$(sanitize_field "$branch")"
+  if [[ -z "$branch" ]]; then
+    printf '%s' ""
+    return
+  fi
+  if [[ "$branch" == refs/heads/* ]]; then
+    branch="${branch#refs/heads/}"
+  fi
+
+  lowered="$(printf '%s' "$branch" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    head|detached|unknown|n/a|null|none)
+      printf '%s' ""
+      return
+      ;;
+  esac
+
+  # Sometimes providers return raw commit SHAs instead of branch refs.
+  if [[ "$branch" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+    printf '%s' ""
+    return
+  fi
+
+  printf '%s' "$branch"
+}
+
+infer_branch_from_deployment_url() {
+  local deployment_url="$1"
+  local host slug tail guessed_branch
+
+  host="$(normalize_target "$deployment_url")"
+  host="${host%%/*}"
+  if [[ -z "$host" ]]; then
+    printf '%s' ""
+    return
+  fi
+
+  slug="${host%.vercel.app}"
+  if [[ "$slug" != *-git-* ]]; then
+    printf '%s' ""
+    return
+  fi
+
+  tail="${slug#*-git-}"
+  if [[ "$tail" == "$slug" || -z "$tail" ]]; then
+    printf '%s' ""
+    return
+  fi
+
+  # Typical preview host shape: <project>-git-<branch>-<scope>.
+  guessed_branch="${tail%-*}"
+  if [[ -z "$guessed_branch" || "$guessed_branch" == "$tail" ]]; then
+    guessed_branch="$tail"
+  fi
+
+  printf '%s' "$(normalize_branch_context "$guessed_branch")"
+}
+
 friendly_branch_label() {
   local branch="$1"
   local target="$2"
+  local deployment_url="${3:-}"
+  local normalized inferred
 
-  if [[ -n "$branch" ]]; then
-    printf '%s' "$branch"
+  normalized="$(normalize_branch_context "$branch")"
+  if [[ -n "$normalized" ]]; then
+    printf '%s' "$normalized"
     return
   fi
+
+  inferred="$(infer_branch_from_deployment_url "$deployment_url")"
+  if [[ -n "$inferred" ]]; then
+    printf '%s' "$inferred"
+    return
+  fi
+
   if [[ "$target" == "production" || "$target" == "PRODUCTION" ]]; then
     printf '%s' "main"
     return
@@ -1695,7 +1767,7 @@ process_deployment_transitions_and_alerts() {
     fi
 
     env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
-    branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}")"
+    branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
     spoken_branch="$(spoken_branch_name "$branch_label")"
 
     duration_seconds="$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$(date +%s)}")"
@@ -1844,7 +1916,7 @@ render_dashboard() {
       status="${DEP_STATUS[i]:-UNKNOWN}"
       row_status_icon="$(status_icon "$status")"
       env_mark="$(environment_icon "${DEP_TARGET[i]:-preview}")"
-      branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}")"
+      branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
       branch_label="$(truncate_text "$branch_label" 24)"
       status_label="$(friendly_status "$status")"
 
@@ -1928,7 +2000,7 @@ DASH_PROJECT_NAME="n/a"
 DASH_MODE_LABEL="n/a"
 DASH_STATUS_LABEL="Waiting"
 DASH_STATUS_RAW="WAITING"
-DASH_FEED_LABEL="Polling"
+DASH_FEED_LABEL="Polling events"
 DASH_UPDATED_AT_LABEL="n/a"
 DASH_DEPLOYMENTS_TOTAL=0
 DASH_DEPLOYMENTS_ACTIVE=0
@@ -2122,9 +2194,9 @@ elif [[ -n "$TARGET" ]]; then
 fi
 
 if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
-  DASH_FEED_LABEL="Stream events + poll fallback"
+  DASH_FEED_LABEL="Streaming events"
 else
-  DASH_FEED_LABEL="Event polling"
+  DASH_FEED_LABEL="Polling events"
 fi
 
 MAX_STREAM_WORKERS=4
@@ -2168,7 +2240,7 @@ if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
   else
     warn_line "Failed to create runtime dir for event streaming. Falling back to polling mode."
     EVENT_MODE_ACTIVE="poll"
-    DASH_FEED_LABEL="Event polling"
+    DASH_FEED_LABEL="Polling events"
   fi
 fi
 
