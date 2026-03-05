@@ -71,7 +71,12 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
   }, []);
 
   useEffect(() => {
-    if (open) void loadStatus();
+    if (open) {
+      void loadStatus();
+    } else {
+      setLlmApiKeyInput("");
+      setShowAddForm(false);
+    }
   }, [open, loadStatus]);
 
   const saveOrder = useCallback(
@@ -166,10 +171,20 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
 
   const providerLabel = (provider: LlmProvider) => provider === "openai" ? "OpenAI" : "Anthropic";
 
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKeyDown);
+    modalRef.current?.focus();
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white">
+    <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Settings" tabIndex={-1} className="fixed inset-0 z-[60] flex flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white outline-none">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <h1 className="text-lg font-semibold text-white">Settings</h1>

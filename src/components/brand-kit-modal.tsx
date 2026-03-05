@@ -79,8 +79,8 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
   const loadKitData = useCallback((kit: BrandKitRow) => {
     setActiveKitId(kit.id);
     setKitName(kit.name);
-    if (kit.brand) setBrand((current) => ({ ...current, ...kit.brand }));
-    if (kit.promptConfig) setPromptConfig((current) => ({ ...current, ...kit.promptConfig }));
+    setBrand(kit.brand ? { ...INITIAL_BRAND, ...kit.brand } : INITIAL_BRAND);
+    setPromptConfig(kit.promptConfig ? { systemPrompt: "", customInstructions: "", ...kit.promptConfig } : { systemPrompt: "", customInstructions: "" });
     if (kit.logoUrl) {
       setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
     } else {
@@ -152,10 +152,9 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: kitName, brand, promptConfig, logoUrl: logo?.storageUrl }),
         });
-        if (kitRes.ok) {
+        if (!kitRes.ok) throw new Error(await parseApiError(kitRes));
           const updatedKit = await kitRes.json();
           setKits((prev) => prev.map((k) => (k.id === activeKitId ? updatedKit : k)));
-        }
       }
       savedSnapshotRef.current = computeSnapshot();
       toast.success("Brand kit saved.");
@@ -252,10 +251,20 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     }
   };
 
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKeyDown);
+    modalRef.current?.focus();
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white">
+    <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Brand Kits" tabIndex={-1} className="fixed inset-0 z-[70] flex flex-col bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] text-white outline-none">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <div className="flex items-center gap-3">
