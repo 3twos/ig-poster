@@ -25,7 +25,7 @@
    - If you skip this and no env keys are set, generation uses deterministic fallback concepts.
 
 3. Navigate the 3-column layout
-   - Left panel: posts list with thumbnails — browse, select, archive, or delete posts.
+   - Left panel: posts list with thumbnails — browse, select, archive, or delete posts. Filter by All, Drafts, or Archived tabs.
    - Center panel: post brief, asset manager, preview, strategy, and publish sections.
    - Right panel: switch between **Agent** and **Chat** tabs.
      - Agent tab: real-time generation progress and LLM reasoning.
@@ -34,12 +34,13 @@
    - On mobile, Agent Activity and Chat are available as slide-out drawers via buttons below the main content.
 
 4. Fill brand and post details
-   - Brand fields: name, values, principles, story, voice, visual direction, palette, logo notes.
+   - Brand fields: name, values, principles, story, voice, visual direction, palette (color picker swatches), fonts, logo notes.
    - Post fields: theme, subject, thought, objective, audience, mood, aspect ratio.
+   - Select a brand kit from the dropdown in the post brief form to pre-fill brand fields and logo.
    - The post subject field is used as the post title in the sidebar list, falling back to theme or the first generated variant headline.
 
 5. (Optional) Autofill brand from website
-   - Enter website URL and use autofill to populate brand fields from website cues.
+   - Enter website URL and use autofill to populate brand fields (including fonts) from website cues.
 
 6. Upload assets and logo
    - Upload images and/or videos (up to 20 assets).

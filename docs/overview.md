@@ -11,6 +11,7 @@
 
 - Generates exactly 3 creative variants per request, including strategy rationale, caption, hashtags, and format-aware plans (single image, carousel, reel).
 - Accepts mixed media assets (images + short videos), with drag-and-drop reorderable asset management and automatic video metadata extraction for better planning.
+- Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
 - Supports drag-and-resize text overlay editing on the poster canvas, then PNG export.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
@@ -33,7 +34,7 @@
 1. Create a new post concept from a brief
    - Use the 3-column layout: browse posts (left), edit brief and preview (center), agent activity or chat (right).
    - Switch between Agent and Chat tabs in the right panel to monitor generation or converse with the AI assistant.
-   - Upload assets and logo, fill brand/post inputs, generate variants, pick one, and export.
+   - Select a brand kit (or use the default), upload assets, fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
    - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, and iterate prompts.
