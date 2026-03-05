@@ -18,6 +18,8 @@
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed queue.
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.
 - Provides an AI chat assistant panel for real-time conversation about content strategy, captions, and creative direction, with SSE-streamed responses and persistent conversation history.
+- Enforces stricter API payload contracts for persisted post drafts/updates.
+- Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
 
 ## Key Features
@@ -28,6 +30,7 @@
 - Deterministic fallback generation when no LLM credentials are available or all models fail.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
 - Blob-backed storage for uploads, shared project snapshots, and scheduled publish jobs.
+- Postgres-backed post drafts with enum-constrained workflow status (`draft/generated/published/scheduled/archived`).
 
 ## Primary User Scenarios
 

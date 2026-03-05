@@ -62,8 +62,20 @@ Open `http://localhost:3000`.
 
 ## Local Validation
 
+Fast inner loop during implementation:
+
+```bash
+npm run test:watch
+# or quick one-shot checks
+npm run check
+```
+
+Full pre-PR validation:
+
 ```bash
 npm run lint
+npm run typecheck
+npm run test:coverage
 npm run build
 ```
 
@@ -91,6 +103,17 @@ The script emits spoken alerts when possible (`say`, `spd-say`, or `espeak`). Co
 Interactive runs use a non-scrolling dashboard by default; pass `--plain` for line-by-line log output.
 Dashboard and alerts explicitly distinguish Preview vs Production deployments and include the branch name.
 Production voice alerts include a subtle two-hit beat before speech.
+
+## Database Migration (Breaking)
+
+- Post status is now backed by a PostgreSQL enum type (`post_status`).
+- Apply migration SQL before deploying this branch:
+
+```bash
+psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
+```
+
+- If existing rows contain non-standard `posts.status` values, migration will fail until those rows are corrected.
 
 ## Project Map
 
@@ -129,7 +152,7 @@ Production voice alerts include a subtle two-hit beat before speech.
 2. Run pre-flight `git status --short`.
 3. Use `AGENTS.md` command permissions: common read/search/web commands are pre-approved, and write/update commands must stay inside the active repo/worktree. Shared Claude Code hooks and settings are tracked in `.claude/`.
 4. Implement changes.
-5. Run `npm run lint` and `npm run build`.
+5. Run `npm run lint`, `npm run typecheck`, `npm run test:coverage`, and `npm run build`.
 6. Update docs when behavior/architecture/dev workflow changes.
 7. Commit, push, and open PR.
 8. Wait for automatic Copilot review, address all comments, resolve all conversations, and clear merge conflicts before asking for merge approval.

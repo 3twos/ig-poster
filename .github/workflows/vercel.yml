@@ -39,21 +39,13 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Install dependencies
-        if: steps.preflight.outputs.configured == 'true'
-        run: npm ci
-
       - name: Pull Vercel Environment (Preview)
         if: steps.preflight.outputs.configured == 'true'
         run: npx vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
 
-      - name: Build Preview Artifacts
-        if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel build --token=$VERCEL_TOKEN
-
       - name: Deploy Preview
         if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel deploy --prebuilt --token=$VERCEL_TOKEN
+        run: npx vercel deploy --token=$VERCEL_TOKEN
 
   deploy-production:
     if: github.event_name == 'push'
@@ -87,18 +79,10 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Install dependencies
-        if: steps.preflight.outputs.configured == 'true'
-        run: npm ci
-
       - name: Pull Vercel Environment (Production)
         if: steps.preflight.outputs.configured == 'true'
         run: npx vercel pull --yes --environment=production --token=$VERCEL_TOKEN
 
-      - name: Build Production Artifacts
-        if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel build --prod --token=$VERCEL_TOKEN
-
       - name: Deploy Production
         if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+        run: npx vercel deploy --prod --token=$VERCEL_TOKEN

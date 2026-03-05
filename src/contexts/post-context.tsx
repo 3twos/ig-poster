@@ -258,12 +258,13 @@ export function PostProvider({ children }: { children: ReactNode }) {
     draftRef.current = activePost;
   });
   useEffect(() => {
-    const handler = () => {
-      const d = draftRef.current;
-      if (!d) return;
-      const { activeSlideIndex: _, ...rest } = d;
-      const body = JSON.stringify(rest);
-      fetch(`/api/posts/${d.id}`, {
+      const handler = () => {
+        const d = draftRef.current;
+        if (!d) return;
+        const rest = { ...d };
+        delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
+        const body = JSON.stringify(rest);
+        fetch(`/api/posts/${d.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body,

@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { apiErrorResponse } from "@/lib/api-error";
-import { deleteBlob, isBlobEnabled, listBlobs } from "@/lib/blob-store";
+import { deleteBlob, isBlobEnabled, listBlobsPaginated } from "@/lib/blob-store";
 import { requireAppEncryptionSecret } from "@/lib/app-encryption";
 import { getMetaConnection } from "@/lib/meta-auth";
 import {
@@ -40,7 +40,11 @@ export async function GET(req: Request) {
       );
     }
 
-    const blobs = await listBlobs("schedules/", 100);
+    const blobs = await listBlobsPaginated("schedules/", {
+      pageSize: 1000,
+      maxResults: 5000,
+    });
+    blobs.sort((a, b) => a.pathname.localeCompare(b.pathname));
     const now = Date.now();
 
     let published = 0;
