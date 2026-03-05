@@ -54,10 +54,16 @@ Output JSON only.`,
         source: "model",
         variant: { ...refined, id: variant.id },
       });
-    } catch {
+    } catch (refinementError) {
+      const detail =
+        refinementError instanceof z.ZodError
+          ? `LLM returned invalid variant structure: ${refinementError.issues.map((i) => i.message).join(", ")}`
+          : refinementError instanceof Error
+            ? refinementError.message
+            : "Failed to refine variant";
       return NextResponse.json(
         {
-          error: "Failed to refine variant",
+          error: detail,
           source: "error",
           variant,
         },
@@ -65,9 +71,13 @@ Output JSON only.`,
       );
     }
   } catch (error) {
+    const detail =
+      error instanceof z.ZodError
+        ? `Invalid request: ${error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ")}`
+        : "Could not refine variant";
     const status = error instanceof z.ZodError ? 400 : 500;
     return NextResponse.json(
-      { error: "Could not refine variant" },
+      { error: detail },
       { status },
     );
   }

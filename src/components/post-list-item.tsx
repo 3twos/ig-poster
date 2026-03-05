@@ -114,7 +114,7 @@ export function PostListItem({
 
         {/* Content */}
         <div className="relative z-10 min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white">
+          <p className="line-clamp-2 text-sm font-medium text-white">
             {post.title || "Untitled Post"}
           </p>
           <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">

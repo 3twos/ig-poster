@@ -1,7 +1,7 @@
 "use client";
 
 import { Cloud, CloudOff, Loader2, Plus } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PostListItem } from "@/components/post-list-item";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,6 @@ import { cn } from "@/lib/utils";
 const FILTERS: Array<{ label: string; value: "all" | PostStatus }> = [
   { label: "All", value: "all" },
   { label: "Drafts", value: "draft" },
-  { label: "Generated", value: "generated" },
   { label: "Published", value: "published" },
   { label: "Archived", value: "archived" },
 ];
@@ -32,22 +31,34 @@ const FILTERS: Array<{ label: string; value: "all" | PostStatus }> = [
 export function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
   const {
     posts,
+    archivedPosts,
     isLoadingPosts,
     activePost,
     selectPost,
     createNewPost,
     archivePost,
     deletePost,
+    refreshArchivedPosts,
     saveStatus,
   } = usePostContext();
 
   const [filter, setFilter] = useState<"all" | PostStatus>("all");
   const [isCreating, setIsCreating] = useState(false);
 
+  // Lazy-load archived posts when switching to Archived tab
+  const didLoadArchivedRef = useRef(false);
+  useEffect(() => {
+    if (filter === "archived" && !didLoadArchivedRef.current) {
+      didLoadArchivedRef.current = true;
+      void refreshArchivedPosts();
+    }
+  }, [filter, refreshArchivedPosts]);
+
   const filtered = useMemo(() => {
+    if (filter === "archived") return archivedPosts;
     if (filter === "all") return posts;
     return posts.filter((p) => p.status === filter);
-  }, [posts, filter]);
+  }, [posts, archivedPosts, filter]);
 
   const handleNewPost = async () => {
     setIsCreating(true);

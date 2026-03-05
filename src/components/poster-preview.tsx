@@ -340,6 +340,7 @@ export const PosterPreview = memo(forwardRef<HTMLDivElement, PosterPreviewProps>
 
         {canEdit && overlayLayout && onOverlayLayoutChange && frameSize.width > 0 ? (
           <EditorOverlay
+            key={`editor-${variant.id}-${frameSize.width}-${frameSize.height}`}
             variant={variant}
             layout={overlayLayout}
             onChange={onOverlayLayoutChange}

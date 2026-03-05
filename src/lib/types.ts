@@ -28,6 +28,7 @@ export type BrandState = {
   voice: string;
   visualDirection: string;
   palette: string;
+  fonts: string;
   logoNotes: string;
 };
 
@@ -110,6 +111,7 @@ export const INITIAL_BRAND: BrandState = {
   visualDirection:
     "Bold editorial layouts, high contrast, cinematic shadows, kinetic angles, premium texture",
   palette: "#0F172A, #F97316, #F8FAFC, #22C55E",
+  fonts: "",
   logoNotes: "Keep logo visible but subtle, preferably top-left chip",
 };
 

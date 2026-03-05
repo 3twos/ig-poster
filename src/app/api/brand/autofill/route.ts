@@ -247,10 +247,14 @@ export async function POST(request: Request) {
       }
     }
 
+    const brandResult = model ?? fallback;
+    // Attach extracted fonts from website
+    const fontsValue = parsed.fonts.length ? parsed.fonts.join(", ") : "";
+
     return NextResponse.json({
       source: model ? "model" : "heuristic",
       website: parsed.websiteUrl || payload.website,
-      brand: model ?? fallback,
+      brand: { ...brandResult, fonts: fontsValue },
     });
   } catch (error) {
     const status = error instanceof z.ZodError ? 400 : 500;
