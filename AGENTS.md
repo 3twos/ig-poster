@@ -71,6 +71,16 @@ Use this flow for every non-trivial change:
 - After creating or editing a PR body, verify it with `gh pr view <number> --json body --jq .body`.
 - If formatting is corrupted, immediately fix it with `gh pr edit <number> --body-file <file>` and post a corrected follow-up comment if needed.
 
+## GitHub API Reference (Mandatory)
+
+When interacting with PR review comments via `gh api`, use these exact endpoints:
+
+- **Reply to a review comment**: `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies -f body="..."`
+  - WRONG: `gh api repos/{owner}/{repo}/pulls/comments/{id}/replies` (missing PR number — returns 404)
+- **List review comments**: `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments`
+- **Resolve review threads**: use GraphQL `resolveReviewThread` mutation with the thread's node ID
+- **Get thread node IDs**: query `reviewThreads` on the `pullRequest` object via GraphQL
+
 ## Command Permissions (Default Allowlist)
 
 To reduce approval interruptions, the following commands are pre-approved by default.
