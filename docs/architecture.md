@@ -5,7 +5,7 @@
 - Keep the product usable even when optional integrations are missing.
 - Enforce strict input/output contracts for AI and publishing workflows.
 - Keep credential handling encrypted and server-side.
-- Avoid introducing a database until workload and query patterns require one.
+- Use a relational database (PostgreSQL via Drizzle ORM) for structured data that benefits from querying and relationships (posts, brand kits).
 
 ## System Overview
 
@@ -17,6 +17,7 @@ flowchart LR
   API --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
   API --> META["Meta Publisher (`src/lib/meta.ts`)"]
   API --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
+  API --> DB["PostgreSQL (posts, brand_kits)"]
   API --> BLOB["Vercel Blob Storage"]
   CRON["Vercel Cron (`/api/cron/publish`)"] --> BLOB
   CRON --> META
@@ -135,8 +136,10 @@ Why this shape:
 
 ## Storage Model
 
-- Primary persistence: Vercel Blob.
-- Typical paths:
+- Relational data (PostgreSQL via Drizzle ORM):
+  - `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`).
+  - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, logo URL, and default flag.
+- Blob persistence (Vercel Blob):
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`
   - shared projects: `projects/<id>.json`
   - schedule queue: `schedules/<publishAt>-<id>.json`
@@ -178,10 +181,9 @@ Why this shape:
 
 ## Tradeoffs and Future Work
 
-- Blob-as-store is simple and low-overhead, but job querying/analytics are limited at scale.
+- Blob-as-store is simple and low-overhead for media and snapshots, but job querying/analytics are limited at scale.
 - Scheduling scans recent blobs; high-volume workloads may need a dedicated queue.
 - Share artifacts are immutable snapshots; future requirements may need versioned edits.
 - As usage grows, consider introducing:
-  - typed persistence layer (SQL + migrations)
   - background workers with dead-letter handling
   - observability around generation/publish success rates
