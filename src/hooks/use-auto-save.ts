@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { withPerfSync } from "@/lib/perf";
 import type { PostDraft } from "./use-post-reducer";
 
 export type SaveStatus = "saved" | "saving" | "unsaved" | "error";
@@ -16,24 +17,29 @@ export function useAutoSave(
 ) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const lastSavedRef = useRef<string | null>(null);
+  const lastSerializedRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const onSavedRef = useRef(options?.onSaved);
   onSavedRef.current = options?.onSaved;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
   // Mark saved (called externally after load)
   const markSaved = useCallback(() => {
-    if (draft) {
-      lastSavedRef.current = serializeDraft(draft);
+    const d = draftRef.current;
+    if (d) {
+      lastSavedRef.current = withPerfSync("autoSave:serialize", () => serializeDraft(d));
     }
     setSaveStatus("saved");
-  }, [draft]);
+  }, []);
 
   // Immediate save
   const saveNow = useCallback(async () => {
-    if (!draft) return;
+    const d = draftRef.current;
+    if (!d) return;
 
-    const serialized = serializeDraft(draft);
+    const serialized = lastSerializedRef.current ?? withPerfSync("autoSave:serialize", () => serializeDraft(d));
     if (serialized === lastSavedRef.current) return;
 
     // Cancel any pending debounce
@@ -53,7 +59,7 @@ export function useAutoSave(
     setSaveStatus("saving");
 
     try {
-      const res = await fetch(`/api/posts/${draft.id}`, {
+      const res = await fetch(`/api/posts/${d.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: serialized,
@@ -76,13 +82,14 @@ export function useAutoSave(
         controllerRef.current = null;
       }
     }
-  }, [draft]);
+  }, []);
 
   // Debounced auto-save effect
   useEffect(() => {
     if (!draft) return;
 
-    const serialized = serializeDraft(draft);
+    const serialized = withPerfSync("autoSave:serialize", () => serializeDraft(draft));
+    lastSerializedRef.current = serialized;
     if (serialized === lastSavedRef.current) {
       // Draft reverted to saved state (e.g. undo) — clear pending timer
       if (timerRef.current) clearTimeout(timerRef.current);

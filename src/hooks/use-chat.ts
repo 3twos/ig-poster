@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import type { ChatMessage, ChatStreamingStatus } from "@/lib/chat-types";
+import { perfMark, perfMeasure } from "@/lib/perf";
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -123,19 +124,55 @@ export function useChat(options: UseChatOptions) {
   const messagesRef = useRef(state.messages);
   messagesRef.current = state.messages;
 
+  // rAF handle for token batching cleanup
+  const rafRef = useRef<number | null>(null);
+
+  // Cleanup rAF on unmount
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
   /**
    * Shared streaming logic used by both `send` and `regenerate`.
    * Handles fetch, SSE parsing, dispatch, abort, and onStreamComplete callback.
+   * Batches token dispatches via requestAnimationFrame for smooth rendering.
    */
   const streamChat = useCallback(async (
     message: string,
     history: Array<{ role: string; content: string }>,
   ) => {
     dispatch({ type: "START_STREAMING" });
+    perfMark("chat:stream:start");
 
     const controller = new AbortController();
     abortRef.current = controller;
     let accumulated = "";
+    let tokenBuffer = "";
+
+    const flushTokens = () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (tokenBuffer) {
+        dispatch({ type: "APPEND_STREAMING", content: tokenBuffer });
+        tokenBuffer = "";
+      }
+    };
+
+    const scheduleFlush = () => {
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          if (tokenBuffer) {
+            dispatch({ type: "APPEND_STREAMING", content: tokenBuffer });
+            tokenBuffer = "";
+          }
+        });
+      }
+    };
 
     try {
       const res = await fetch("/api/chat", {
@@ -171,10 +208,12 @@ export function useChat(options: UseChatOptions) {
         for (const event of events) {
           if (event.type === "token" && event.content) {
             accumulated += event.content;
-            dispatch({ type: "APPEND_STREAMING", content: event.content });
+            tokenBuffer += event.content;
+            scheduleFlush();
           } else if (event.type === "done") {
             tokenCount = event.tokenCount;
           } else if (event.type === "error") {
+            flushTokens();
             dispatch({ type: "STREAM_ERROR", error: event.detail ?? "Stream error" });
             return false; // signal early exit
           }
@@ -199,6 +238,8 @@ export function useChat(options: UseChatOptions) {
         if (!processEvents(events)) return;
       }
 
+      flushTokens();
+
       if (accumulated) {
         const assistantMsg: ChatMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -213,6 +254,7 @@ export function useChat(options: UseChatOptions) {
         dispatch({ type: "RESET_STATUS" });
       }
     } catch (error) {
+      flushTokens();
       if (error instanceof Error && error.name === "AbortError") {
         if (accumulated) {
           dispatch({ type: "FINALIZE_STREAMING", message: {
@@ -229,6 +271,7 @@ export function useChat(options: UseChatOptions) {
       }
     } finally {
       abortRef.current = null;
+      perfMeasure("chat:stream:total", "chat:stream:start");
     }
   }, []);
 
@@ -242,24 +285,25 @@ export function useChat(options: UseChatOptions) {
 
     dispatch({ type: "ADD_USER_MESSAGE", message: userMsg });
 
-    const history = state.messages.map((m) => ({
+    const history = messagesRef.current.map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
     await streamChat(content, history);
-  }, [state.messages, streamChat]);
+  }, [streamChat]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
   const regenerate = useCallback(async () => {
-    const lastUserIdx = [...state.messages].reverse().findIndex((m) => m.role === "user");
+    const msgs = messagesRef.current;
+    const lastUserIdx = [...msgs].reverse().findIndex((m) => m.role === "user");
     if (lastUserIdx === -1) return;
-    const idx = state.messages.length - 1 - lastUserIdx;
-    const lastUserMsg = state.messages[idx];
-    const messagesBeforeUser = state.messages.slice(0, idx);
+    const idx = msgs.length - 1 - lastUserIdx;
+    const lastUserMsg = msgs[idx];
+    const messagesBeforeUser = msgs.slice(0, idx);
 
     dispatch({ type: "LOAD_MESSAGES", messages: [...messagesBeforeUser, lastUserMsg] });
 
@@ -269,7 +313,7 @@ export function useChat(options: UseChatOptions) {
     }));
 
     await streamChat(lastUserMsg.content, history);
-  }, [state.messages, streamChat]);
+  }, [streamChat]);
 
   const editMessage = useCallback(async (id: string, content: string) => {
     // Edit first, then remove messages after — so the edited message is kept
