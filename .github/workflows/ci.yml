@@ -23,7 +23,9 @@ jobs:
         run: npm ci
 
       - name: Ensure lightningcss Linux binary
-        run: npm install --no-save "lightningcss-linux-x64-gnu@$(node -p \"require('lightningcss/package.json').version\")"
+        run: |
+          LIGHTNINGCSS_VERSION=$(node -p "require('lightningcss/package.json').version")
+          npm install --no-save "lightningcss-linux-x64-gnu@${LIGHTNINGCSS_VERSION}"
 
       - name: Check DB migrations
         run: npm run db:check
