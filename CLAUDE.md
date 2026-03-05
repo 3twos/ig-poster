@@ -8,10 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Start dev server on localhost:3000
 npm run build        # Production build (also used as CI quality gate)
 npm run lint         # ESLint check
+npm run test         # Run Vitest tests
+npm run test:watch   # Run Vitest in watch mode
 npm install          # Install dependencies
 ```
 
-There are no tests configured. CI runs `lint` then `build` only.
+CI runs `lint`, `test`, then `build`.
 
 ## Architecture
 
