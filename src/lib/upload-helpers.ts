@@ -18,6 +18,12 @@ export const parseApiError = async (response: Response) => {
   }
 };
 
+export const revokeObjectUrlIfNeeded = (url: string) => {
+  if (url.startsWith("blob:")) {
+    URL.revokeObjectURL(url);
+  }
+};
+
 export const statusChip = (status: UploadStatus) => {
   if (status === "uploaded") {
     return "border-emerald-300/40 bg-emerald-400/10 text-emerald-200";

@@ -24,9 +24,10 @@ import {
   Film,
   Image as ImageIcon,
   ImagePlus,
+  Trash2,
   X,
 } from "lucide-react";
-import { useState, type ChangeEvent } from "react";
+import { useId, useRef, useState, type ChangeEvent } from "react";
 
 import type { LocalAsset } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,8 @@ type Props = {
   onRemove: (id: string) => void;
   onReorder: (reordered: LocalAsset[]) => void;
   onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onLogoUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemoveLogo: () => void;
 };
 
 export function AssetManager({
@@ -53,8 +56,14 @@ export function AssetManager({
   onRemove,
   onReorder,
   onAssetUpload,
+  onLogoUpload,
+  onRemoveLogo,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const addAssetInputId = useId();
+  const addAssetInputRef = useRef<HTMLInputElement>(null);
+  const logoInputId = useId();
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -79,80 +88,129 @@ export function AssetManager({
     onReorder(arrayMove(assets, idx, target));
   };
 
-  if (assets.length === 0 && !logo) {
-    return null;
-  }
-
   const activeAsset = activeId ? assets.find((a) => a.id === activeId) : null;
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
-        Assets
-      </p>
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={(e) => setActiveId(String(e.active.id))}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveId(null)}
-      >
-        <SortableContext
-          items={assets.map((a) => a.id)}
-          strategy={rectSortingStrategy}
-        >
-          <div className="grid grid-cols-3 gap-2">
-            {assets.map((asset, idx) => (
-              <SortableAssetTile
-                key={asset.id}
-                asset={asset}
-                index={idx}
-                total={assets.length}
-                onRemove={() => onRemove(asset.id)}
-                onMove={(dir) => moveAsset(asset.id, dir)}
-              />
-            ))}
-
-            {/* Add more assets tile */}
-            <label className="group flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 bg-white/5 text-slate-400 transition hover:border-orange-300 hover:text-slate-200">
-              <ImagePlus className="h-5 w-5" />
-              <span className="text-[10px] font-medium">Add</span>
-              <input
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                className="hidden"
-                onChange={onAssetUpload}
-              />
-            </label>
-          </div>
-        </SortableContext>
-
-        <DragOverlay>
-          {activeAsset ? <AssetTileContent asset={activeAsset} isDragOverlay /> : null}
-        </DragOverlay>
-      </DndContext>
-
-      {/* Logo (not sortable) */}
-      {logo ? (
-        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2 py-1.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={logo.previewUrl}
-            alt="Logo"
-            className="h-10 w-10 rounded object-cover"
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
+            Assets
+          </p>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300"
+            onClick={() => addAssetInputRef.current?.click()}
+          >
+            <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
+            {assets.length > 0 ? "Add assets" : "Attach assets"}
+          </button>
+          <input
+            id={addAssetInputId}
+            ref={addAssetInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            className="sr-only"
+            onChange={onAssetUpload}
           />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-slate-200">
-              Logo: {logo.name}
-            </p>
-            <p className="text-[10px] text-slate-500">
-              {logo.status === "uploading" ? "syncing..." : logo.status}
-            </p>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Upload images and short videos for generation.
+        </p>
+
+        {assets.length > 0 ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={(e) => setActiveId(String(e.active.id))}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
+            <SortableContext
+              items={assets.map((a) => a.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {assets.map((asset, idx) => (
+                  <SortableAssetTile
+                    key={asset.id}
+                    asset={asset}
+                    index={idx}
+                    total={assets.length}
+                    onRemove={() => onRemove(asset.id)}
+                    onMove={(dir) => moveAsset(asset.id, dir)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+
+            <DragOverlay>
+              {activeAsset ? <AssetTileContent asset={activeAsset} isDragOverlay /> : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <p className="mt-2 text-[11px] text-slate-400">No assets attached.</p>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
+            Logo
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/20 bg-black/20 text-slate-200 transition hover:border-orange-300 hover:text-white"
+              aria-label={logo ? "Replace logo" : "Attach logo"}
+            >
+              <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
+            </button>
+            <input
+              id={logoInputId}
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={onLogoUpload}
+            />
+            <button
+              type="button"
+              onClick={onRemoveLogo}
+              disabled={!logo}
+              aria-label="Remove logo"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/20 bg-black/20 text-slate-300 transition hover:border-red-300 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
-      ) : null}
+
+        {logo ? (
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/15 bg-black/30 p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logo.previewUrl}
+                alt="Logo preview"
+                className="max-h-full max-w-full object-contain"
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-slate-200">
+                {logo.name}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {logo.status === "uploading" ? "syncing..." : logo.error || "ready"}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] text-slate-500">No logo selected.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -264,14 +322,14 @@ function SortableAssetTile({
         type="button"
         onClick={onRemove}
         aria-label="Remove"
-        className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-0 shadow transition hover:bg-red-400 group-hover:opacity-100"
+        className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white opacity-100 shadow transition hover:bg-red-400 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
       >
         <X className="h-3 w-3" />
       </button>
 
       {/* Reorder arrows — bottom corners, one-click */}
       {total > 1 && (
-        <div className="absolute inset-x-0 bottom-1 z-10 flex justify-between px-1 opacity-0 transition group-hover:opacity-100">
+        <div className="absolute inset-x-0 bottom-1 z-10 flex justify-between px-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
           <button
             type="button"
             onClick={() => onMove(-1)}
@@ -295,7 +353,7 @@ function SortableAssetTile({
 
       {/* Position badge */}
       {total > 1 && (
-        <span className="absolute left-1.5 top-1.5 z-[5] flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-[9px] font-bold text-white group-hover:opacity-0 transition">
+        <span className="absolute left-1.5 top-1.5 z-[5] flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-[9px] font-bold text-white transition md:group-hover:opacity-0 md:group-focus-within:opacity-0">
           {index + 1}
         </span>
       )}

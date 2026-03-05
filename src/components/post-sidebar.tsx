@@ -24,11 +24,23 @@ import { cn } from "@/lib/utils";
 const FILTERS: Array<{ label: string; value: "all" | PostStatus }> = [
   { label: "All", value: "all" },
   { label: "Drafts", value: "draft" },
+  { label: "Generated", value: "generated" },
+  { label: "Scheduled", value: "scheduled" },
   { label: "Published", value: "published" },
   { label: "Archived", value: "archived" },
 ];
 
-export function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) {
+type SidebarContentProps = {
+  onPostSelect?: () => void;
+  onPostNow?: (postId: string) => void;
+  onSchedulePost?: (postId: string, scheduleAt: string) => void;
+};
+
+export function SidebarContent({
+  onPostSelect,
+  onPostNow,
+  onSchedulePost,
+}: SidebarContentProps) {
   const {
     posts,
     archivedPosts,
@@ -147,7 +159,18 @@ export function SidebarContent({ onPostSelect }: { onPostSelect?: () => void }) 
                 key={post.id}
                 post={post}
                 isActive={post.id === activePost?.id}
+                // Dirty state is client-side/transient for the currently loaded draft.
+                isDirty={
+                  post.id === activePost?.id &&
+                  (saveStatus === "unsaved" ||
+                    saveStatus === "saving" ||
+                    saveStatus === "error")
+                }
                 onSelect={() => handleSelect(post.id)}
+                onPostNow={() => onPostNow?.(post.id)}
+                onSchedulePost={(scheduleAt) =>
+                  onSchedulePost?.(post.id, scheduleAt)
+                }
                 onArchive={() => void archivePost(post.id)}
                 onDelete={() => void deletePost(post.id)}
               />
@@ -206,7 +229,13 @@ export function PostSidebar() {
 }
 
 /** Mobile slide-over drawer using shadcn Sheet */
-export function MobileSidebarDrawer() {
+export function MobileSidebarDrawer({
+  onPostNow,
+  onSchedulePost,
+}: {
+  onPostNow?: (postId: string) => void;
+  onSchedulePost?: (postId: string, scheduleAt: string) => void;
+}) {
   const { isSidebarOpen, closeSidebar } = usePostContext();
 
   return (
@@ -221,7 +250,11 @@ export function MobileSidebarDrawer() {
           </SheetTitle>
         </SheetHeader>
         <div className="flex h-[calc(100%-3.5rem)] flex-col">
-          <SidebarContent onPostSelect={closeSidebar} />
+          <SidebarContent
+            onPostSelect={closeSidebar}
+            onPostNow={onPostNow}
+            onSchedulePost={onSchedulePost}
+          />
         </div>
       </SheetContent>
     </Sheet>

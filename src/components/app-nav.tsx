@@ -75,9 +75,7 @@ export function AppNav() {
           variant="outline"
           size="xs"
           onClick={() => {
-            window.dispatchEvent(
-              new KeyboardEvent("keydown", { key: "k", metaKey: true }),
-            );
+            window.dispatchEvent(new CustomEvent("ig:open-command-palette"));
           }}
           className="hidden gap-1.5 text-[11px] text-slate-400 md:inline-flex"
           aria-label="Open command palette (⌘K)"

@@ -46,9 +46,14 @@ export function CommandPalette() {
         setOpen((o) => !o);
       }
     };
+    const openFromEvent = () => setOpen(true);
 
     document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
+    window.addEventListener("ig:open-command-palette", openFromEvent);
+    return () => {
+      document.removeEventListener("keydown", down);
+      window.removeEventListener("ig:open-command-palette", openFromEvent);
+    };
   }, []);
 
   const runAction = useCallback(

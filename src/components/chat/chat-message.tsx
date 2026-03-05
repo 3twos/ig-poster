@@ -184,7 +184,7 @@ export const ChatMessage = memo(function ChatMessage({
 
         {/* Meta row: timestamp + actions */}
         {!isEditing && !isStreaming && (
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="cursor-default text-[10px] text-slate-500">

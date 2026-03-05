@@ -34,6 +34,7 @@ type Props = {
   isRefining: boolean;
   dispatch: (action: Record<string, unknown>) => void;
   setEditorMode: (v: boolean) => void;
+  onResetTextLayout: () => void;
   onRefineVariant: (instruction?: string) => void;
   onCopyCaption: () => void;
   copyState: "idle" | "done";
@@ -46,6 +47,7 @@ export function StrategySection({
   isRefining,
   dispatch,
   setEditorMode,
+  onResetTextLayout,
   onRefineVariant,
   onCopyCaption,
   copyState,
@@ -58,18 +60,29 @@ export function StrategySection({
         <p className="text-xs font-semibold tracking-[0.2em] text-orange-200 uppercase">
           Strategy
         </p>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => setEditorMode(!editorMode)}
-          className={cn(
-            "uppercase",
-            editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100",
-          )}
-        >
-          <LayoutTemplate className="h-3.5 w-3.5" />
-          {editorMode ? "Editor On" : "Editor Off"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => setEditorMode(!editorMode)}
+            className={cn(
+              "uppercase",
+              editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100",
+            )}
+          >
+            <LayoutTemplate className="h-3.5 w-3.5" />
+            {editorMode ? "Editor On" : "Editor Off"}
+          </Button>
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={!activeVariant}
+            onClick={onResetTextLayout}
+          >
+            <LayoutTemplate className="h-3.5 w-3.5" />
+            Reset Text Layout
+          </Button>
+        </div>
       </div>
 
       <p className="text-sm leading-relaxed text-slate-200">

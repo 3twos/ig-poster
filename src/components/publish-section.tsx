@@ -1,22 +1,19 @@
 "use client";
 
 import {
-  LayoutTemplate,
+  CalendarClock,
   Link2,
   LoaderCircle,
   Send,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { CreativeVariant } from "@/lib/creative";
 import type { InstagramAuthStatus } from "@/lib/types";
-import { createDefaultOverlayLayout } from "@/lib/creative";
 
 type Props = {
-  activeVariant: CreativeVariant | null;
   authStatus: InstagramAuthStatus;
   isAuthLoading: boolean;
   isDisconnecting: boolean;
@@ -24,14 +21,14 @@ type Props = {
   isPublishing: boolean;
   shareUrl: string | null;
   shareCopyState: "idle" | "done";
-  dispatch: (action: Record<string, unknown>) => void;
+  localTimeZone: string;
   onDisconnectInstagram: () => void;
   onCreateShareLink: () => void;
-  onPublishToInstagram: (event: FormEvent, scheduleAt: string) => void;
+  onPostNow: () => void;
+  onSchedulePost: (scheduleAt: string) => void;
 };
 
 export function PublishSection({
-  activeVariant,
   authStatus,
   isAuthLoading,
   isDisconnecting,
@@ -39,10 +36,11 @@ export function PublishSection({
   isPublishing,
   shareUrl,
   shareCopyState,
-  dispatch,
+  localTimeZone,
   onDisconnectInstagram,
   onCreateShareLink,
-  onPublishToInstagram,
+  onPostNow,
+  onSchedulePost,
 }: Props) {
   const [scheduleAt, setScheduleAt] = useState("");
 
@@ -132,23 +130,6 @@ export function PublishSection({
           )}
           Create Share Link
         </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!activeVariant}
-          onClick={() => {
-            if (!activeVariant) return;
-            dispatch({
-              type: "UPDATE_OVERLAY",
-              variantId: activeVariant.id,
-              layout: createDefaultOverlayLayout(activeVariant.layout),
-            });
-          }}
-        >
-          <LayoutTemplate className="h-3.5 w-3.5" />
-          Reset Text Layout
-        </Button>
       </div>
 
       {shareUrl ? (
@@ -163,22 +144,11 @@ export function PublishSection({
         </div>
       ) : null}
 
-      <form onSubmit={(e) => { onPublishToInstagram(e, scheduleAt); }} className="grid gap-2">
-        <div className="space-y-1">
-          <Label className="text-[11px] text-slate-300">
-            Schedule (optional)
-          </Label>
-          <Input
-            type="datetime-local"
-            value={scheduleAt}
-            onChange={(event) => setScheduleAt(event.target.value)}
-            className="text-xs"
-          />
-        </div>
-
+      <div className="grid gap-2">
         <Button
-          type="submit"
+          type="button"
           disabled={isPublishing}
+          onClick={onPostNow}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
           {isPublishing ? (
@@ -186,9 +156,34 @@ export function PublishSection({
           ) : (
             <Send className="h-3.5 w-3.5" />
           )}
-          {scheduleAt ? "Schedule Instagram Publish" : "Publish to Instagram"}
+          Post now
         </Button>
-      </form>
+
+        <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
+          <Label className="text-[11px] text-slate-300">Post at</Label>
+          <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+            <Input
+              type="datetime-local"
+              value={scheduleAt}
+              onChange={(event) => setScheduleAt(event.target.value)}
+              className="text-xs"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPublishing || !scheduleAt}
+              onClick={() => onSchedulePost(scheduleAt)}
+              className="sm:min-w-[135px]"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+              Schedule
+            </Button>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Time uses your local timezone: {localTimeZone}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

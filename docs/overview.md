@@ -12,9 +12,12 @@
 - Generates exactly 3 creative variants per request, including strategy rationale, caption, hashtags, and format-aware plans (single image, carousel, reel).
 - Accepts mixed media assets (images + short videos), with drag-and-drop reorderable asset management and automatic video metadata extraction for better planning.
 - Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
+- New posts default to the first available brand kit for that user (when one exists), so brand/prompt/logo context is prefilled consistently.
 - Supports drag-and-resize text overlay editing on the poster canvas, then PNG export.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
+- Sidebar post rows expose quick publish actions (`Post now`, `Post at`) in the context menu, in addition to archive/delete controls.
+- Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed queue.
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.
@@ -37,8 +40,9 @@
 
 1. Create a new post concept from a brief
    - Use the 3-column layout: browse posts (left), edit brief and preview (center), agent activity or chat (right).
+   - Open Settings/Brand Kits from the top-right controls without leaving the editor.
    - Switch between Agent and Chat tabs in the right panel to monitor generation or converse with the AI assistant.
-   - Select a brand kit (or use the default), upload assets, fill post inputs, generate variants, pick one, and export.
+   - Select a brand kit (or use the default), use the Asset Manager controls to attach assets/logo (replace/remove supported for logo), fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
    - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, and iterate prompts.
