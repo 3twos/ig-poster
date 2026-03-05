@@ -73,7 +73,20 @@ All pages share `<AppShell>` (`src/components/app-shell.tsx`) which wraps conten
 
 ### Storage
 
-All persistence uses Vercel Blob (no database). Projects, schedules, and media are stored as blobs with structured JSON. Requires `BLOB_READ_WRITE_TOKEN`.
+Structured data (posts, brand kits) is stored in Neon Postgres via Drizzle ORM. Media, project snapshots, and schedules use Vercel Blob. Requires `POSTGRES_URL` (or `DATABASE_URL`) and `BLOB_READ_WRITE_TOKEN`.
+
+### Database workflow
+
+Schema is defined in `src/db/schema.ts` using Drizzle ORM. Migrations live in `drizzle/`.
+
+```bash
+npm run db:generate  # Generate migration after changing schema.ts
+npm run db:push      # Push schema directly to DB (dev shortcut)
+npm run db:check     # CI check: fails if schema.ts changed without a committed migration
+npm run db:studio    # Open Drizzle Studio
+```
+
+**When changing the schema**: edit `src/db/schema.ts`, run `npm run db:generate`, commit the new migration file, then apply it to the DB with `npm run db:push`. CI runs `db:check` to catch uncommitted migrations.
 
 ### Environment
 
