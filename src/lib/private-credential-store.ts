@@ -4,7 +4,10 @@ export type CredentialNamespace = "llm" | "meta";
 
 type SqlClient = ReturnType<typeof neon>;
 
-const getDatabaseUrl = () => process.env.DATABASE_URL?.trim() || "";
+const getDatabaseUrl = () =>
+  process.env.POSTGRES_URL?.trim() ||
+  process.env.DATABASE_URL?.trim() ||
+  "";
 
 let cachedSqlClient: SqlClient | null | undefined;
 
@@ -60,7 +63,7 @@ const requireSqlClient = () => {
   const sql = createSqlClient();
   if (!sql) {
     throw new Error(
-      "Missing DATABASE_URL. Configure a private Postgres database for credential storage.",
+      "Missing POSTGRES_URL or DATABASE_URL. Configure a private Postgres database for credential storage.",
     );
   }
 

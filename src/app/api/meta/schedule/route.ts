@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
       if (resolvedAuth.source === "oauth" && !resolvedAuth.account.connectionId) {
         throw new MetaScheduleClientError(
-          "OAuth scheduling requires private persistent credential storage. Configure DATABASE_URL and reconnect Meta OAuth.",
+          "OAuth scheduling requires private persistent credential storage. Configure POSTGRES_URL or DATABASE_URL and reconnect Meta OAuth.",
         );
       }
 
