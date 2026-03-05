@@ -81,6 +81,28 @@ npm run build
 
 Run these before opening or updating a PR.
 
+## Monitor CI Timings
+
+Use the CI timing monitor to keep GitHub Actions fast and catch regressions against baseline:
+
+```bash
+# monitor PR CI timings for current branch and compare against main push runs
+./scripts/monitor-ci-timing.sh --event pull_request --interval 20
+
+# optional: monitor a specific workflow/branch with stricter regression threshold
+./scripts/monitor-ci-timing.sh --workflow CI --branch main --regression-threshold 15
+```
+
+Useful options:
+- `--repo <owner/repo>` (defaults from `origin`)
+- `--workflow <name|id|file>` (default: `CI`)
+- `--branch <branch>` and optional `--event <event>`
+- `--baseline-branch <branch>` + `--baseline-event <event>` (defaults: `main`, `push`)
+- `--window <count>` (default: 20)
+- `--top-jobs <count>` (default: 6)
+- `--regression-threshold <pct>` (default: 20)
+- `--plain` for non-dashboard output
+
 ## Monitor Vercel Deployments
 
 Use the monitor script for continuous status/alert monitoring while you work (stop with `Ctrl+C`):

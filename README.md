@@ -189,6 +189,27 @@ Comprehensive research notes for Instagram growth mechanics + vineyard/wine comp
 - Workflow: `.github/workflows/ci.yml`
 - Runs lint + typecheck + test coverage + build on PRs and pushes
 
+### CI timing monitor
+Use the CI timing monitor to watch queue/exec/total durations and detect regressions against `main`:
+
+```bash
+# monitor current branch PR runs and compare to main push baseline
+./scripts/monitor-ci-timing.sh --event pull_request --interval 20
+
+# monitor a specific branch/workflow and tighten regression threshold
+./scripts/monitor-ci-timing.sh --workflow CI --branch main --regression-threshold 15
+```
+
+Key options:
+- `--repo <owner/repo>` (defaults from `origin` remote)
+- `--workflow <name|id|file>` (default: `CI`)
+- `--branch <branch>` + optional `--event <event>`
+- `--baseline-branch <branch>` + `--baseline-event <event>` (defaults: `main`, `push`)
+- `--window <count>` (default: 20 recent runs)
+- `--top-jobs <count>` (default: 6 slowest jobs shown)
+- `--regression-threshold <pct>` (default: 20)
+- `--plain` for line-by-line logs instead of dashboard
+
 ### Vercel deployment workflow
 - Workflow: `.github/workflows/vercel.yml`
 - PRs deploy Preview
