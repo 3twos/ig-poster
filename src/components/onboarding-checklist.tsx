@@ -11,7 +11,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import Link from "next/link";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ type Step = {
   label: string;
   description: string;
   icon: React.ReactNode;
-  href?: string;
+  action?: string; // custom event name to dispatch
   checkFn?: string; // key to check dynamically
 };
 
@@ -40,21 +40,21 @@ const STEPS: Step[] = [
     label: "Connect AI provider",
     description: "Set up OpenAI or Anthropic for content generation.",
     icon: <BrainCircuit className="h-4 w-4" />,
-    href: "/settings",
+    action: "ig:open-settings",
   },
   {
     id: "brand",
     label: "Set up brand kit",
     description: "Define your brand voice, colors, and style.",
     icon: <Palette className="h-4 w-4" />,
-    href: "/brand",
+    action: "ig:open-brand-kits",
   },
   {
     id: "logo",
     label: "Upload your logo",
     description: "Add a logo for poster overlays.",
     icon: <ImagePlus className="h-4 w-4" />,
-    href: "/brand",
+    action: "ig:open-brand-kits",
   },
   {
     id: "post",
@@ -246,13 +246,14 @@ export function OnboardingChecklist() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  {step.href && !done ? (
-                    <Link
-                      href={step.href}
+                  {step.action && !done ? (
+                    <button
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent(step.action!))}
                       className="text-xs font-medium text-white hover:text-orange-200"
                     >
                       {step.label}
-                    </Link>
+                    </button>
                   ) : (
                     <p
                       className={`text-xs font-medium ${done ? "text-slate-400 line-through" : "text-white"}`}
