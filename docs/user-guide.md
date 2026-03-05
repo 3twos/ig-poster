@@ -43,10 +43,10 @@
    - Enter website URL and use autofill to populate brand fields (including fonts) from website cues.
 
 6. Upload assets and logo
-   - Upload images and/or videos (up to 20 assets).
+   - Use the Asset Manager `Attach assets` control to upload images and/or videos (up to 20 assets).
    - Reorder assets by dragging in the asset manager; each item shows a thumbnail, file size, and media type.
    - Remove individual assets with the X button.
-   - Upload a logo if needed for final poster composition.
+   - Use `Attach logo` to add a logo, then `Replace logo` or `Remove` as needed.
 
 7. Generate creative variants
    - Click generate to create 3 variants with:

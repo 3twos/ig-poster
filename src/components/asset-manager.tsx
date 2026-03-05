@@ -24,6 +24,7 @@ import {
   Film,
   Image as ImageIcon,
   ImagePlus,
+  Trash2,
   X,
 } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
@@ -45,6 +46,8 @@ type Props = {
   onRemove: (id: string) => void;
   onReorder: (reordered: LocalAsset[]) => void;
   onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onLogoUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemoveLogo: () => void;
 };
 
 export function AssetManager({
@@ -53,6 +56,8 @@ export function AssetManager({
   onRemove,
   onReorder,
   onAssetUpload,
+  onLogoUpload,
+  onRemoveLogo,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -79,80 +84,118 @@ export function AssetManager({
     onReorder(arrayMove(assets, idx, target));
   };
 
-  if (assets.length === 0 && !logo) {
-    return null;
-  }
-
   const activeAsset = activeId ? assets.find((a) => a.id === activeId) : null;
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
-        Assets
-      </p>
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
+            Assets
+          </p>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300">
+            <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
+            {assets.length > 0 ? "Add assets" : "Attach assets"}
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={onAssetUpload}
+            />
+          </label>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Upload images and short videos for generation.
+        </p>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={(e) => setActiveId(String(e.active.id))}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveId(null)}
-      >
-        <SortableContext
-          items={assets.map((a) => a.id)}
-          strategy={rectSortingStrategy}
-        >
-          <div className="grid grid-cols-3 gap-2">
-            {assets.map((asset, idx) => (
-              <SortableAssetTile
-                key={asset.id}
-                asset={asset}
-                index={idx}
-                total={assets.length}
-                onRemove={() => onRemove(asset.id)}
-                onMove={(dir) => moveAsset(asset.id, dir)}
-              />
-            ))}
+        {assets.length > 0 ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={(e) => setActiveId(String(e.active.id))}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
+            <SortableContext
+              items={assets.map((a) => a.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {assets.map((asset, idx) => (
+                  <SortableAssetTile
+                    key={asset.id}
+                    asset={asset}
+                    index={idx}
+                    total={assets.length}
+                    onRemove={() => onRemove(asset.id)}
+                    onMove={(dir) => moveAsset(asset.id, dir)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
 
-            {/* Add more assets tile */}
-            <label className="group flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/20 bg-white/5 text-slate-400 transition hover:border-orange-300 hover:text-slate-200">
-              <ImagePlus className="h-5 w-5" />
-              <span className="text-[10px] font-medium">Add</span>
+            <DragOverlay>
+              {activeAsset ? <AssetTileContent asset={activeAsset} isDragOverlay /> : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <p className="mt-2 text-[11px] text-slate-400">No assets attached.</p>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
+            Logo
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300">
+              <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
+              {logo ? "Replace logo" : "Attach logo"}
               <input
                 type="file"
-                accept="image/*,video/*"
-                multiple
+                accept="image/*"
                 className="hidden"
-                onChange={onAssetUpload}
+                onChange={onLogoUpload}
               />
             </label>
-          </div>
-        </SortableContext>
-
-        <DragOverlay>
-          {activeAsset ? <AssetTileContent asset={activeAsset} isDragOverlay /> : null}
-        </DragOverlay>
-      </DndContext>
-
-      {/* Logo (not sortable) */}
-      {logo ? (
-        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2 py-1.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={logo.previewUrl}
-            alt="Logo"
-            className="h-10 w-10 rounded object-cover"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-slate-200">
-              Logo: {logo.name}
-            </p>
-            <p className="text-[10px] text-slate-500">
-              {logo.status === "uploading" ? "syncing..." : logo.status}
-            </p>
+            {logo ? (
+              <button
+                type="button"
+                onClick={onRemoveLogo}
+                className="inline-flex items-center gap-1 rounded-lg border border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-black/35"
+              >
+                <Trash2 className="h-3 w-3" />
+                Remove
+              </button>
+            ) : null}
           </div>
         </div>
-      ) : null}
+
+        {logo ? (
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/15 bg-black/30 p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logo.previewUrl}
+                alt="Logo preview"
+                className="max-h-full max-w-full object-contain"
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-slate-200">
+                {logo.name === "Logo" ? "Logo ready" : logo.name}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {logo.status === "uploading" ? "Syncing logo..." : logo.error || "Ready"}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] text-slate-400">No logo attached.</p>
+        )}
+      </div>
     </div>
   );
 }

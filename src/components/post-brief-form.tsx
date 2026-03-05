@@ -2,12 +2,10 @@
 
 import {
   Download,
-  ImagePlus,
   LoaderCircle,
   Sparkles,
   WandSparkles,
 } from "lucide-react";
-import type { ChangeEvent } from "react";
 
 import { TemplateGallery } from "@/components/template-gallery";
 import { Button } from "@/components/ui/button";
@@ -41,7 +39,6 @@ type Props = {
   brandKits?: BrandKitOption[];
   activeBrandKitId?: string | null;
   dispatch: (action: Record<string, unknown>) => void;
-  onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onGenerate: () => void;
   onExportPoster: () => void;
   onSelectBrandKit?: (kitId: string) => void;
@@ -57,7 +54,6 @@ export function PostBriefForm({
   brandKits,
   activeBrandKitId,
   dispatch,
-  onAssetUpload,
   onGenerate,
   onExportPoster,
   onSelectBrandKit,
@@ -98,21 +94,6 @@ export function PostBriefForm({
           </Select>
         </div>
       )}
-
-      {/* Asset Upload */}
-      <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-white/30 bg-white/5 px-3 py-3 text-xs font-medium text-slate-200 transition hover:border-orange-300">
-        <span className="inline-flex items-center gap-2">
-          <ImagePlus className="h-4 w-4 text-orange-300" />
-          Upload Post Assets
-        </span>
-        <input
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          className="hidden"
-          onChange={onAssetUpload}
-        />
-      </label>
 
       {/* Theme + Subject */}
       <div className="grid gap-3 md:grid-cols-2">

@@ -28,7 +28,11 @@ import {
   type PromptConfigState,
   INITIAL_BRAND,
 } from "@/lib/types";
-import { parseApiError, statusChip } from "@/lib/upload-helpers";
+import {
+  parseApiError,
+  revokeObjectUrlIfNeeded,
+  statusChip,
+} from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
 
 interface BrandKitModalProps {
@@ -74,7 +78,11 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
 
   useEffect(() => { logoCleanupRef.current = logo; }, [logo]);
   useEffect(() => {
-    return () => { if (logoCleanupRef.current) URL.revokeObjectURL(logoCleanupRef.current.previewUrl); };
+    return () => {
+      if (logoCleanupRef.current) {
+        revokeObjectUrlIfNeeded(logoCleanupRef.current.previewUrl);
+      }
+    };
   }, []);
 
   const loadKitData = useCallback((kit: BrandKitRow) => {
@@ -83,7 +91,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     setBrand(kit.brand ? { ...INITIAL_BRAND, ...kit.brand } : INITIAL_BRAND);
     setPromptConfig(kit.promptConfig ? { systemPrompt: "", customInstructions: "", ...kit.promptConfig } : { systemPrompt: "", customInstructions: "" });
     if (kit.logoUrl) {
-      setLogo({ id: "saved-logo", name: "Saved logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
+      setLogo({ id: "saved-logo", name: "Logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
     } else {
       setLogo(null);
     }
@@ -161,7 +169,12 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     event.target.value = "";
     if (!file) return;
     const nextLogo: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
-    setLogo((current) => { if (current) URL.revokeObjectURL(current.previewUrl); return nextLogo; });
+    setLogo((current) => {
+      if (current) {
+        revokeObjectUrlIfNeeded(current.previewUrl);
+      }
+      return nextLogo;
+    });
     try {
       const url = await uploadFileToStorage(file, "logos");
       setLogo((current) => current ? { ...current, status: "uploaded", storageUrl: url } : null);
@@ -358,7 +371,8 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                         <img src={logo.previewUrl} alt="Logo preview" className="h-16 max-w-[10rem] object-contain" />
                         <div className="text-left">
                           <span className={cn("rounded-full border px-3 py-1 text-[11px] font-medium", statusChip(logo.status))}>
-                            {logo.name}{logo.status === "uploading" ? " (syncing)" : ""}
+                            {logo.name === "Logo" ? "Logo ready" : logo.name}
+                            {logo.status === "uploading" ? " (syncing)" : ""}
                           </span>
                           <p className="mt-1 text-[11px] text-slate-400">Click to replace</p>
                         </div>
@@ -366,7 +380,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                     ) : (
                       <span className="inline-flex items-center gap-2">
                         <ImagePlus className="h-4 w-4 text-orange-300" />
-                        Upload Logo
+                        Attach logo
                       </span>
                     )}
                     <input type="file" accept="image/*" className="hidden" onChange={(event) => void handleLogoUpload(event)} />
