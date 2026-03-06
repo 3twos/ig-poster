@@ -32,12 +32,14 @@ const FILTERS: Array<{ label: string; value: "all" | PostStatus }> = [
 
 type SidebarContentProps = {
   onPostSelect?: () => void;
+  onGenerate?: (postId: string) => void;
   onPostNow?: (postId: string) => void;
   onSchedulePost?: (postId: string, scheduleAt: string) => void;
 };
 
 export function SidebarContent({
   onPostSelect,
+  onGenerate,
   onPostNow,
   onSchedulePost,
 }: SidebarContentProps) {
@@ -167,6 +169,7 @@ export function SidebarContent({
                     saveStatus === "error")
                 }
                 onSelect={() => handleSelect(post.id)}
+                onGenerate={() => onGenerate?.(post.id)}
                 onPostNow={() => onPostNow?.(post.id)}
                 onSchedulePost={(scheduleAt) =>
                   onSchedulePost?.(post.id, scheduleAt)
@@ -230,9 +233,11 @@ export function PostSidebar() {
 
 /** Mobile slide-over drawer using shadcn Sheet */
 export function MobileSidebarDrawer({
+  onGenerate,
   onPostNow,
   onSchedulePost,
 }: {
+  onGenerate?: (postId: string) => void;
   onPostNow?: (postId: string) => void;
   onSchedulePost?: (postId: string, scheduleAt: string) => void;
 }) {
@@ -252,6 +257,7 @@ export function MobileSidebarDrawer({
         <div className="flex h-[calc(100%-3.5rem)] flex-col">
           <SidebarContent
             onPostSelect={closeSidebar}
+            onGenerate={onGenerate}
             onPostNow={onPostNow}
             onSchedulePost={onSchedulePost}
           />

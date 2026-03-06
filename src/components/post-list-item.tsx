@@ -146,6 +146,7 @@ type Props = {
   isActive: boolean;
   isDirty?: boolean;
   onSelect: () => void;
+  onGenerate?: () => void;
   onPostNow?: () => void;
   onSchedulePost?: (scheduleAt: string) => void;
   onArchive: () => void;
@@ -157,6 +158,7 @@ export function PostListItem({
   isActive,
   isDirty = false,
   onSelect,
+  onGenerate,
   onPostNow,
   onSchedulePost,
   onArchive,
@@ -268,6 +270,10 @@ export function PostListItem({
                       }
                       if (action.id === "post-at") {
                         setScheduleDialogOpen(true);
+                        return;
+                      }
+                      if (onGenerate) {
+                        onGenerate();
                         return;
                       }
                       onSelect();
