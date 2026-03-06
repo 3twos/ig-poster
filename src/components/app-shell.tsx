@@ -18,7 +18,7 @@ export function AppShell({
       >
         Skip to main content
       </a>
-      <div className="px-4 py-6 md:px-8 md:py-8">
+      <div className="px-4 py-3 md:px-8 md:py-4">
         <div className="mx-auto max-w-[1440px]">
           <AppNav />
         </div>
