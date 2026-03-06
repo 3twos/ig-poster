@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
-import type { MetaScheduleRequest } from "@/lib/meta-schemas";
+import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
 import type { StoredAsset } from "@/lib/project";
 import type { BrandState, PostState, PromptConfigState } from "@/lib/types";
 
@@ -19,20 +19,6 @@ export type PublishHistoryEntry = {
   publishedAt: string;
   igMediaId?: string;
   igPermalink?: string;
-};
-
-export type PublishJobEvent = {
-  at: string;
-  type:
-    | "created"
-    | "processing"
-    | "retry-scheduled"
-    | "published"
-    | "failed"
-    | "canceled"
-    | "updated";
-  detail?: string;
-  attempt?: number;
 };
 
 export const postStatusEnum = pgEnum("post_status", [

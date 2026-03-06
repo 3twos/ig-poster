@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { getDb } from "@/db";
 import { posts, publishJobs } from "@/db/schema";
@@ -12,6 +13,14 @@ import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+const raceConflictResponse = () =>
+  NextResponse.json(
+    {
+      error: "Publish job state changed concurrently. Refresh and try again.",
+    },
+    { status: 409 },
+  );
 
 export async function PATCH(req: Request, ctx: Ctx) {
   try {
@@ -63,6 +72,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
         .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, ownerHash)))
         .returning();
 
+      if (!updated) {
+        return raceConflictResponse();
+      }
+
       if (existing.postId) {
         const [post] = await db
           .select({ result: posts.result })
@@ -102,6 +115,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
         .set({
           status: "queued",
           publishAt: new Date(payload.publishAt),
+          attempts: 0,
+          lastAttemptAt: null,
           completedAt: null,
           lastError: null,
           updatedAt: new Date(),
@@ -112,6 +127,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
         })
         .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, ownerHash)))
         .returning();
+
+      if (!updated) {
+        return raceConflictResponse();
+      }
 
       if (existing.postId) {
         await markPostScheduled(db, ownerHash, existing.postId);
@@ -133,6 +152,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
           payload.outcomeContext !== undefined
             ? payload.outcomeContext
             : existing.outcomeContext,
+        attempts: 0,
+        lastAttemptAt: null,
         completedAt: null,
         lastError: null,
         updatedAt: new Date(),
@@ -144,15 +165,20 @@ export async function PATCH(req: Request, ctx: Ctx) {
       .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, ownerHash)))
       .returning();
 
+    if (!updated) {
+      return raceConflictResponse();
+    }
+
     if (existing.postId) {
       await markPostScheduled(db, ownerHash, existing.postId);
     }
 
     return NextResponse.json(updated);
   } catch (error) {
+    const isClientError = error instanceof z.ZodError;
     return apiErrorResponse(error, {
       fallback: "Could not update publish job",
-      status: 400,
+      status: isClientError ? 400 : 500,
     });
   }
 }

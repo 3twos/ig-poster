@@ -2,8 +2,8 @@ import { and, asc, eq, inArray, lte } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 
 import * as schema from "@/db/schema";
-import { posts, publishJobs, type PublishJobEvent, type PublishJobRow } from "@/db/schema";
-import type { MetaScheduleRequest } from "@/lib/meta-schemas";
+import { posts, publishJobs, type PublishJobRow } from "@/db/schema";
+import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
 
 export type AppDb = NeonHttpDatabase<typeof schema>;
 

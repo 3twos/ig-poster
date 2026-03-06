@@ -18,7 +18,7 @@ export const OutcomeContextSchema = z.object({
 });
 
 export const MetaScheduleRequestSchema = z.object({
-  postId: z.string().trim().max(18).optional(),
+  postId: z.string().trim().min(1).max(18).optional(),
   caption: z.string().trim().min(1).max(2200),
   publishAt: z.string().datetime().optional(),
   media: z.discriminatedUnion("mode", [

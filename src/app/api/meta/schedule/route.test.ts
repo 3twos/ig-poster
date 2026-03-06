@@ -87,6 +87,22 @@ describe("POST /api/meta/schedule", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 400 for blank postId", async () => {
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        postId: "   ",
+        caption: "Scheduled caption",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockedGetDb).not.toHaveBeenCalled();
+  });
+
   it("queues a scheduled publish job", async () => {
     const publishAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     mockedCreatePublishJob.mockResolvedValue({
