@@ -185,6 +185,12 @@ if (payload && payload.error) {
 const text = (value) => (typeof value === "string" ? value : "");
 const intMs = (value) =>
   typeof value === "number" && Number.isFinite(value) ? String(Math.trunc(value)) : "";
+const sanitize = (value) =>
+  String(value ?? "")
+    .replace(/\u001f/g, " ")
+    .replace(/[\n\r\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 const pick = (...values) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
 const normalizeBranch = (value) => {
@@ -197,13 +203,13 @@ const normalizeBranch = (value) => {
   return branch;
 };
 
-const status = text(payload.readyState || payload.state).toUpperCase() || "UNKNOWN";
-const deploymentId = text(payload.id || payload.uid);
-const deploymentUrl = text(payload.url) ? `https://${payload.url}` : "";
+const status = sanitize(text(payload.readyState || payload.state).toUpperCase() || "UNKNOWN");
+const deploymentId = sanitize(text(payload.id || payload.uid));
+const deploymentUrl = sanitize(text(payload.url) ? `https://${payload.url}` : "");
 const createdAtMs = intMs(payload.createdAt);
 const readyAtMs = intMs(payload.ready);
-const target = text(payload.target).toLowerCase();
-const branch = normalizeBranch(
+const target = sanitize(text(payload.target).toLowerCase());
+const branch = sanitize(normalizeBranch(
   pick(
     payload?.meta?.githubCommitRef,
     payload?.meta?.gitlabCommitRef,
@@ -213,25 +219,25 @@ const branch = normalizeBranch(
     payload?.meta?.commitRef,
     payload?.gitSource?.ref,
   ),
-);
-const errorMessage = text(payload.errorMessage || payload.errorCode);
-const source = text(
+));
+const errorMessage = sanitize(text(payload.errorMessage || payload.errorCode));
+const source = sanitize(text(
   payload.source || payload?.meta?.deploymentSource || payload?.meta?.source || payload?.gitSource?.type,
-);
-const actor = pick(
+));
+const actor = sanitize(pick(
   payload?.creator?.username,
   payload?.creator?.name,
   payload?.creator?.email,
   payload?.creator?.id,
-);
-const commitSha = pick(
+));
+const commitSha = sanitize(pick(
   payload?.meta?.githubCommitSha,
   payload?.meta?.gitlabCommitSha,
   payload?.meta?.bitbucketCommitSha,
   payload?.meta?.gitCommitSha,
   payload?.meta?.commitSha,
   payload?.meta?.commit,
-);
+));
 
 process.stdout.write(
   [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha].join("\u001f"),
@@ -265,6 +271,12 @@ const deployments = Array.isArray(payload.deployments) ? payload.deployments : [
 const text = (value) => (typeof value === "string" ? value : "");
 const intMs = (value) =>
   typeof value === "number" && Number.isFinite(value) ? String(Math.trunc(value)) : "";
+const sanitize = (value) =>
+  String(value ?? "")
+    .replace(/\u001f/g, " ")
+    .replace(/[\n\r\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 const pick = (...values) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
 const normalizeBranch = (value) => {
@@ -279,13 +291,13 @@ const normalizeBranch = (value) => {
 
 const rows = [];
 for (const item of deployments) {
-  const id = text(item.uid || item.id);
+  const id = sanitize(text(item.uid || item.id));
   if (!id) continue;
 
-  const state = text(item.readyState || item.state).toUpperCase() || "UNKNOWN";
-  const deploymentUrl = text(item.url) ? `https://${item.url}` : "";
-  const target = text(item.target).toLowerCase();
-  const branch = normalizeBranch(
+  const state = sanitize(text(item.readyState || item.state).toUpperCase() || "UNKNOWN");
+  const deploymentUrl = sanitize(text(item.url) ? `https://${item.url}` : "");
+  const target = sanitize(text(item.target).toLowerCase());
+  const branch = sanitize(normalizeBranch(
     pick(
       item?.meta?.githubCommitRef,
       item?.meta?.gitlabCommitRef,
@@ -295,20 +307,20 @@ for (const item of deployments) {
       item?.meta?.commitRef,
       item?.gitSource?.ref,
     ),
-  );
+  ));
   const createdAtMs = intMs(item.createdAt);
   const readyAtMs = intMs(item.ready);
-  const errorMessage = text(item.errorMessage || item.errorCode);
-  const source = text(item.source || item?.meta?.deploymentSource || item?.meta?.source || item?.gitSource?.type);
-  const actor = pick(item?.creator?.username, item?.creator?.name, item?.creator?.email, item?.creator?.id);
-  const commitSha = pick(
+  const errorMessage = sanitize(text(item.errorMessage || item.errorCode));
+  const source = sanitize(text(item.source || item?.meta?.deploymentSource || item?.meta?.source || item?.gitSource?.type));
+  const actor = sanitize(pick(item?.creator?.username, item?.creator?.name, item?.creator?.email, item?.creator?.id));
+  const commitSha = sanitize(pick(
     item?.meta?.githubCommitSha,
     item?.meta?.gitlabCommitSha,
     item?.meta?.bitbucketCommitSha,
     item?.meta?.gitCommitSha,
     item?.meta?.commitSha,
     item?.meta?.commit,
-  );
+  ));
 
   rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha].join("\u001f"));
 }
@@ -792,10 +804,10 @@ branch_context_hint() {
   local deployment_url="$3"
   local source="$4"
   local commit_sha="$5"
-  local effective_branch inferred
+  local normalized inferred
 
-  effective_branch="$(friendly_branch_label "$branch" "$target" "$deployment_url")"
-  if [[ "$effective_branch" != "unknown" ]]; then
+  normalized="$(normalize_branch_context "$branch")"
+  if [[ -n "$normalized" ]]; then
     printf '%s' "n/a"
     return
   fi
@@ -803,6 +815,11 @@ branch_context_hint() {
   inferred="$(infer_branch_from_deployment_url "$deployment_url")"
   if [[ -n "$inferred" ]]; then
     printf '%s (from URL)' "$inferred"
+    return
+  fi
+
+  if [[ "$target" == "production" || "$target" == "PRODUCTION" ]]; then
+    printf '%s' "n/a"
     return
   fi
 
