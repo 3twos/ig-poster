@@ -519,22 +519,38 @@ export default function Home() {
   const publishToInstagramRef = useRef<(scheduleAt?: string) => Promise<void>>(async () => {});
   publishToInstagramRef.current = publishToInstagram;
 
-  const requestGenerateForPost = useCallback(async (postId: string) => {
-    if (!postId) return;
-    if (activePost?.id !== postId) {
-      setPendingGenerateRequest({ postId });
-      await selectPost(postId);
-      return;
-    }
-    if (isAgentBusyRef.current) return;
+  const runGenerateFromQuickAction = useCallback(async (): Promise<"started" | "busy" | "missing-assets"> => {
+    if (isAgentBusyRef.current) return "busy";
     if (localAssetsRef.current.length === 0) {
       const m = "Upload assets before generating concepts.";
       generation.setError(m);
       toast.error(m);
-      return;
+      return "missing-assets";
     }
     await generateRef.current?.();
-  }, [activePost?.id, generation, selectPost]);
+    return "started";
+  }, [generation]);
+
+  const requestGenerateForPost = useCallback(async (postId: string) => {
+    if (!postId) return;
+    const needsSelection = activePost?.id !== postId;
+    const needsHydration = hydratedAssetsPostId !== postId;
+
+    if (needsSelection || needsHydration) {
+      setPendingGenerateRequest({ postId });
+      if (needsSelection) {
+        await selectPost(postId);
+      }
+      return;
+    }
+
+    const outcome = await runGenerateFromQuickAction();
+    if (outcome === "busy") {
+      setPendingGenerateRequest({ postId });
+      return;
+    }
+    setPendingGenerateRequest(null);
+  }, [activePost?.id, hydratedAssetsPostId, runGenerateFromQuickAction, selectPost]);
 
   const requestPublishForPost = useCallback(async (postId: string, scheduleAt?: string) => {
     if (!postId) return;
@@ -556,16 +572,24 @@ export default function Home() {
       return;
     }
 
-    setPendingGenerateRequest(null);
-    if (isAgentBusyRef.current) return;
-    if (localAssetsRef.current.length === 0) {
-      const m = "Upload assets before generating concepts.";
-      generation.setError(m);
-      toast.error(m);
+    if (isAgentBusy) {
       return;
     }
-    void generateRef.current?.();
-  }, [activePost?.id, generation, hydratedAssetsPostId, pendingGenerateRequest]);
+
+    let cancelled = false;
+    const run = async () => {
+      const outcome = await runGenerateFromQuickAction();
+      if (cancelled) return;
+      if (outcome !== "busy") {
+        setPendingGenerateRequest(null);
+      }
+    };
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePost?.id, hydratedAssetsPostId, isAgentBusy, pendingGenerateRequest, runGenerateFromQuickAction]);
 
   useEffect(() => {
     if (!pendingPublishRequest || activePost?.id !== pendingPublishRequest.postId) {
