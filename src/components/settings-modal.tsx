@@ -47,7 +47,7 @@ interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   onOpenBrandKits: () => void;
-  onMetaAuthChanged?: () => void;
+  onMetaAuthChanged?: (nextStatus: InstagramAuthStatus) => void;
 }
 
 export function SettingsModal({
@@ -218,8 +218,12 @@ export function SettingsModal({
     try {
       const response = await fetch("/api/auth/meta/disconnect", { method: "POST" });
       if (!response.ok) throw new Error(await parseApiError(response));
-      await loadMetaStatus();
-      onMetaAuthChanged?.();
+      const nextStatus: InstagramAuthStatus = {
+        connected: false,
+        source: null,
+      };
+      setMetaStatus(nextStatus);
+      onMetaAuthChanged?.(nextStatus);
       toast.success("Instagram OAuth disconnected.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not disconnect Instagram OAuth");

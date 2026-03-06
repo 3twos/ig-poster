@@ -15,6 +15,7 @@ import type { InstagramAuthStatus } from "@/lib/types";
 
 type Props = {
   authStatus: InstagramAuthStatus;
+  isAuthLoading: boolean;
   isSharing: boolean;
   isPublishing: boolean;
   shareUrl: string | null;
@@ -28,6 +29,7 @@ type Props = {
 
 export function PublishSection({
   authStatus,
+  isAuthLoading,
   isSharing,
   isPublishing,
   shareUrl,
@@ -49,11 +51,15 @@ export function PublishSection({
       {/* Instagram Account */}
       <div className="rounded-xl border border-white/15 bg-white/5 p-3 text-xs text-slate-200">
         <p className="font-semibold text-slate-100">Instagram Publishing Account</p>
-        <p className="mt-1 text-slate-300">
-          {authStatus.connected
-            ? `Connected via ${(authStatus.source ?? "oauth").toUpperCase()}${authStatus.account?.instagramUsername ? ` as @${authStatus.account.instagramUsername}` : ""}${authStatus.account?.pageName ? ` (${authStatus.account.pageName})` : ""}.`
-            : "No account connected. Configure Meta publishing access from Settings."}
-        </p>
+        {isAuthLoading ? (
+          <p className="mt-1 text-slate-300">Checking connection...</p>
+        ) : (
+          <p className="mt-1 text-slate-300">
+            {authStatus.connected
+              ? `Connected via ${(authStatus.source ?? "oauth").toUpperCase()}${authStatus.account?.instagramUsername ? ` as @${authStatus.account.instagramUsername}` : ""}${authStatus.account?.pageName ? ` (${authStatus.account.pageName})` : ""}.`
+              : "No account connected. Configure Meta publishing access from Settings."}
+          </p>
+        )}
         {authStatus.account?.tokenExpiresAt ? (
           <p className="mt-1 text-slate-300">
             Token expiry: {new Date(authStatus.account.tokenExpiresAt).toLocaleString()}
@@ -95,7 +101,7 @@ export function PublishSection({
       <div className="grid gap-2">
         <Button
           type="button"
-          disabled={isPublishing || !authStatus.connected}
+          disabled={isPublishing || isAuthLoading || !authStatus.connected}
           onClick={onPostNow}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
@@ -119,7 +125,7 @@ export function PublishSection({
             <Button
               type="button"
               variant="outline"
-              disabled={isPublishing || !scheduleAt || !authStatus.connected}
+              disabled={isPublishing || isAuthLoading || !scheduleAt || !authStatus.connected}
               onClick={() => onSchedulePost(scheduleAt)}
               className="sm:min-w-[135px]"
             >
