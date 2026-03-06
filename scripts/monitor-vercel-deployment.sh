@@ -872,6 +872,21 @@ deployment_identity_label() {
   printf '%s' "unlabeled"
 }
 
+normalize_spoken_context() {
+  local text="$1"
+
+  text="$(sanitize_field "$text")"
+  if [[ "$text" == *... ]]; then
+    text="${text%...}"
+  fi
+  text="${text//\// }"
+  text="${text//-/ }"
+  text="${text//_/ }"
+  text="${text#${text%%[![:space:]]*}}"
+  text="${text%${text##*[![:space:]]}}"
+  printf '%s' "$text"
+}
+
 spoken_deployment_identity() {
   local identity="$1"
   local payload
@@ -884,14 +899,14 @@ spoken_deployment_identity() {
 
   if [[ "$identity" == actor:* ]]; then
     payload="${identity#actor:}"
-    payload="$(spoken_branch_name "$payload")"
+    payload="$(normalize_spoken_context "$payload")"
     printf '%s' "$payload"
     return
   fi
 
   if [[ "$identity" == source:* ]]; then
     payload="${identity#source:}"
-    payload="$(spoken_branch_name "$payload")"
+    payload="$(normalize_spoken_context "$payload")"
     printf 'source %s' "$payload"
     return
   fi
@@ -2064,7 +2079,7 @@ process_deployment_transitions_and_alerts() {
             ;;
           *)
             alert_message="${env_label} ${identity_label} deployment ended with ${status} after ${duration_text}."
-            spoken_alert="$alert_message"
+            spoken_alert="${env_label} ${spoken_identity} deployment ended with ${status} after ${spoken_duration}."
             LAST_ALERT_LEVEL="warning"
             log_line "Alert: ${alert_message}"
             ;;
