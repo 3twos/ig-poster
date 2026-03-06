@@ -236,7 +236,9 @@ export function PostListItem({
                 )}
               />
             </TooltipTrigger>
-            <TooltipContent side="right">{displayStatus.tooltipLabel}</TooltipContent>
+            <TooltipContent side="right">
+              {displayStatus.tooltipLabel}
+            </TooltipContent>
           </Tooltip>
         </div>
 
