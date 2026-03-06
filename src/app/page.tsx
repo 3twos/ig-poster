@@ -519,17 +519,23 @@ export default function Home() {
   const publishToInstagramRef = useRef<(scheduleAt?: string) => Promise<void>>(async () => {});
   publishToInstagramRef.current = publishToInstagram;
 
-  const runGenerateFromQuickAction = useCallback(async (): Promise<"started" | "busy" | "missing-assets"> => {
-    if (isAgentBusyRef.current) return "busy";
-    if (localAssetsRef.current.length === 0) {
-      const m = "Upload assets before generating concepts.";
-      generation.setError(m);
-      toast.error(m);
-      return "missing-assets";
-    }
-    await generateRef.current?.();
-    return "started";
-  }, [generation]);
+  const runGenerateFromQuickAction = useCallback(
+    async (options?: { notifyOnMissingAssets?: boolean }): Promise<"started" | "busy" | "missing-assets"> => {
+      const notifyOnMissingAssets = options?.notifyOnMissingAssets ?? true;
+      if (isAgentBusyRef.current) return "busy";
+      if (localAssetsRef.current.length === 0) {
+        if (notifyOnMissingAssets) {
+          const m = "Upload assets before generating concepts.";
+          generation.setError(m);
+          toast.error(m);
+        }
+        return "missing-assets";
+      }
+      await generateRef.current?.();
+      return "started";
+    },
+    [generation],
+  );
 
   const requestGenerateForPost = useCallback(async (postId: string) => {
     if (!postId) return;
@@ -545,11 +551,13 @@ export default function Home() {
     }
 
     const outcome = await runGenerateFromQuickAction();
-    if (outcome === "busy") {
-      setPendingGenerateRequest({ postId });
+    if (outcome === "started") {
+      setPendingGenerateRequest(null);
       return;
     }
-    setPendingGenerateRequest(null);
+
+    // Keep request queued while waiting for assets or busy state to clear.
+    setPendingGenerateRequest({ postId });
   }, [activePost?.id, hydratedAssetsPostId, runGenerateFromQuickAction, selectPost]);
 
   const requestPublishForPost = useCallback(async (postId: string, scheduleAt?: string) => {
@@ -578,9 +586,9 @@ export default function Home() {
 
     let cancelled = false;
     const run = async () => {
-      const outcome = await runGenerateFromQuickAction();
+      const outcome = await runGenerateFromQuickAction({ notifyOnMissingAssets: false });
       if (cancelled) return;
-      if (outcome !== "busy") {
+      if (outcome === "started") {
         setPendingGenerateRequest(null);
       }
     };
@@ -589,7 +597,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [activePost?.id, hydratedAssetsPostId, isAgentBusy, pendingGenerateRequest, runGenerateFromQuickAction]);
+  }, [activePost?.id, hydratedAssetsPostId, isAgentBusy, localAssets.length, pendingGenerateRequest, runGenerateFromQuickAction]);
 
   useEffect(() => {
     if (!pendingPublishRequest || activePost?.id !== pendingPublishRequest.postId) {
