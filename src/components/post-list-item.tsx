@@ -179,7 +179,9 @@ export function PostListItem({
   const statusKey = `${post.id}:${post.status}:${isDirty ? "dirty" : "clean"}`;
   const quickActionsId = `post-status-actions-${post.id}`;
   const showQuickActions = hasQuickActions && expandedStatusKey === statusKey;
-  const canQuickPublish = Boolean(onPostNow && onSchedulePost);
+  const canPostNow = Boolean(onPostNow);
+  const canSchedulePost = Boolean(onSchedulePost);
+  const hasPublishMenuActions = canPostNow || canSchedulePost;
 
   useEffect(() => {
     if (!showQuickActions) return;
@@ -361,26 +363,32 @@ export function PostListItem({
               className="w-[182px]"
               onClick={(event) => event.stopPropagation()}
             >
-              {canQuickPublish ? (
+              {hasPublishMenuActions ? (
                 <>
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.stopPropagation();
-                      setPostNowDialogOpen(true);
-                    }}
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Post now
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.stopPropagation();
-                      setScheduleDialogOpen(true);
-                    }}
-                  >
-                    <CalendarClock className="h-3.5 w-3.5" />
-                    Post at...
-                  </DropdownMenuItem>
+                  {canPostNow ? (
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.stopPropagation();
+                        setExpandedStatusKey(null);
+                        setPostNowDialogOpen(true);
+                      }}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      Post now
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canSchedulePost ? (
+                    <DropdownMenuItem
+                      onSelect={(event) => {
+                        event.stopPropagation();
+                        setExpandedStatusKey(null);
+                        setScheduleDialogOpen(true);
+                      }}
+                    >
+                      <CalendarClock className="h-3.5 w-3.5" />
+                      Post at...
+                    </DropdownMenuItem>
+                  ) : null}
                   <DropdownMenuSeparator />
                 </>
               ) : null}
