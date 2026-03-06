@@ -221,7 +221,7 @@ export function SidebarContent({
 export function PostSidebar() {
   return (
     <aside aria-label="Post list" className="hidden w-[280px] shrink-0 lg:block">
-      <div className="sticky top-6 flex max-h-[calc(100vh-120px)] flex-col rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl">
+      <div className="sticky top-6 flex max-h-[calc(100vh-120px)] flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl">
         <SidebarContent />
       </div>
     </aside>
