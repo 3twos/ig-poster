@@ -169,7 +169,7 @@ export function OnboardingChecklist() {
   if (state.dismissed || allDone) return null;
 
   return (
-    <section aria-label="Getting started checklist" className="mb-4 animate-fade-in-up rounded-2xl border border-white/10 bg-slate-900/60 p-4 backdrop-blur-xl">
+    <section aria-label="Getting started checklist" className="mb-4 animate-fade-in-up rounded-xl border border-white/10 bg-slate-900/60 p-4 backdrop-blur-xl">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-orange-300" />

@@ -574,7 +574,7 @@ export default function Home() {
           <div className="hidden lg:block" style={{ height: "calc(100vh - 140px)" }}>
             <ResizablePanelGroup orientation="horizontal" className="h-full">
               <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} collapsible collapsedSize={0} onResize={(size) => setLeftCollapsed(size.asPercentage === 0)} className="flex flex-col">
-                <div className="flex h-full flex-col rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl ml-4">
+                <div className="flex h-full flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl ml-4">
                   <SidebarContent
                     onPostNow={(postId) => void requestPublishForPost(postId)}
                     onSchedulePost={(postId, scheduleAt) =>
@@ -611,7 +611,7 @@ export default function Home() {
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
               <ResizablePanel panelRef={rightPanelRef} defaultSize={30} minSize={18} collapsible collapsedSize={0} onResize={(size) => setRightCollapsed(size.asPercentage === 0)} className="flex flex-col">
-                <div className="flex h-full flex-col rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl mr-4 overflow-hidden">
+                <div className="flex h-full flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl mr-4 overflow-hidden">
                   {/* Agent / Chat tab switcher */}
                   <div className="flex shrink-0 border-b border-white/10" role="tablist" aria-label="Right panel tabs">
                     <button type="button" role="tab" aria-selected={rightPanelTab === "agent"} onClick={() => setRightPanelTab("agent")} className={cn("flex-1 px-3 py-2 text-xs font-semibold transition", rightPanelTab === "agent" ? "border-b-2 border-orange-400 text-orange-200" : "text-slate-400 hover:text-white")}>Agent</button>

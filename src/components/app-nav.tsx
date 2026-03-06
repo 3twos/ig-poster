@@ -51,8 +51,8 @@ export function AppNav() {
   };
 
   return (
-    <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-xl">
-      <div className="flex items-center gap-3">
+    <div className="mb-4 flex items-center justify-between gap-2.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 backdrop-blur-xl">
+      <div className="flex items-center gap-2.5">
         {/* Mobile sidebar toggle (post list drawer) */}
         <Button
           variant="ghost"

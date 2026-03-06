@@ -132,7 +132,7 @@ export function ChatContainer() {
       ?.title ?? "New conversation";
 
   return (
-    <div className="flex h-full w-full overflow-hidden rounded-2xl border border-white/15 bg-slate-900/55 backdrop-blur-xl">
+    <div className="flex h-full w-full overflow-hidden rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl">
       {/* Sidebar */}
       <ChatSidebar
         conversations={conversations.conversations}
