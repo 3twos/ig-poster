@@ -1,7 +1,7 @@
 "use client";
 
 import { Archive, CalendarClock, ImageIcon, MoreHorizontal, Send, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -165,9 +165,11 @@ export function PostListItem({
   onDelete,
 }: Props) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [postNowDialogOpen, setPostNowDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [scheduleAt, setScheduleAt] = useState("");
   const [expandedStatusKey, setExpandedStatusKey] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const displayStatus = useMemo(
     () => getDisplayStatus(post.status, isDirty),
@@ -179,9 +181,26 @@ export function PostListItem({
   const showQuickActions = hasQuickActions && expandedStatusKey === statusKey;
   const canQuickPublish = Boolean(onPostNow && onSchedulePost);
 
+  useEffect(() => {
+    if (!showQuickActions) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (cardRef.current?.contains(target)) return;
+      setExpandedStatusKey(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [showQuickActions]);
+
   return (
     <>
       <div
+        ref={cardRef}
         role="button"
         tabIndex={0}
         onClick={onSelect}
@@ -258,8 +277,10 @@ export function PostListItem({
                 className="flex items-center gap-1"
               >
                 {displayStatus.actions.map((action) => {
-                  const isGenerateAction = action.id === "generate";
-                  const isDisabled = isGenerateAction && !onGenerate;
+                  const isDisabled =
+                    (action.id === "generate" && !onGenerate) ||
+                    (action.id === "post" && !onPostNow) ||
+                    (action.id === "post-at" && !onSchedulePost);
                   return (
                     <button
                       key={action.id}
@@ -271,7 +292,7 @@ export function PostListItem({
                         if (isDisabled) return;
                         setExpandedStatusKey(null);
                         if (action.id === "post") {
-                          onPostNow?.();
+                          setPostNowDialogOpen(true);
                           return;
                         }
                         if (action.id === "post-at") {
@@ -345,7 +366,7 @@ export function PostListItem({
                   <DropdownMenuItem
                     onSelect={(event) => {
                       event.stopPropagation();
-                      onPostNow?.();
+                      setPostNowDialogOpen(true);
                     }}
                   >
                     <Send className="h-3.5 w-3.5" />
@@ -407,6 +428,30 @@ export function PostListItem({
               className="bg-destructive text-white hover:bg-destructive/90"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Post now confirmation dialog */}
+      <AlertDialog open={postNowDialogOpen} onOpenChange={setPostNowDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Post now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will immediately publish this post to Instagram.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                onPostNow?.();
+                setPostNowDialogOpen(false);
+              }}
+              className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+            >
+              Post now
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
