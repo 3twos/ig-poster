@@ -36,16 +36,26 @@ import {
   type LlmProvider,
   type MultiModelMode,
 } from "@/lib/llm-constants";
-import type { LlmConnectionStatus, LlmMultiAuthStatus } from "@/lib/types";
+import type {
+  InstagramAuthStatus,
+  LlmConnectionStatus,
+  LlmMultiAuthStatus,
+} from "@/lib/types";
 import { parseApiError } from "@/lib/upload-helpers";
 
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   onOpenBrandKits: () => void;
+  onMetaAuthChanged?: () => void;
 }
 
-export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalProps) {
+export function SettingsModal({
+  open,
+  onClose,
+  onOpenBrandKits,
+  onMetaAuthChanged,
+}: SettingsModalProps) {
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
   const [llmApiKeyInput, setLlmApiKeyInput] = useState("");
   const [llmModelInput, setLlmModelInput] = useState(PROVIDER_DEFAULT_MODELS.openai);
@@ -57,6 +67,12 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [connections, setConnections] = useState<LlmConnectionStatus[]>([]);
   const [mode, setMode] = useState<MultiModelMode>("fallback");
+  const [metaStatus, setMetaStatus] = useState<InstagramAuthStatus>({
+    connected: false,
+    source: null,
+  });
+  const [isMetaLoading, setIsMetaLoading] = useState(true);
+  const [isMetaDisconnecting, setIsMetaDisconnecting] = useState(false);
 
   const dragItemRef = useRef<number | null>(null);
   const dragOverItemRef = useRef<number | null>(null);
@@ -75,14 +91,37 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
     }
   }, []);
 
+  const loadMetaStatus = useCallback(async () => {
+    setIsMetaLoading(true);
+    try {
+      const response = await fetch("/api/auth/meta/status", { cache: "no-store" });
+      const json = (await response.json()) as InstagramAuthStatus;
+      setMetaStatus({
+        connected: Boolean(json.connected),
+        source: json.source ?? null,
+        account: json.account,
+        detail: json.detail,
+      });
+    } catch {
+      setMetaStatus({
+        connected: false,
+        source: null,
+        detail: "Could not load Instagram auth status.",
+      });
+    } finally {
+      setIsMetaLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (open) {
       void loadStatus();
+      void loadMetaStatus();
     } else {
       setLlmApiKeyInput("");
       setShowAddForm(false);
     }
-  }, [open, loadStatus]);
+  }, [open, loadStatus, loadMetaStatus]);
 
   const saveOrder = useCallback(
     async (newConnections: LlmConnectionStatus[], newMode: MultiModelMode) => {
@@ -174,6 +213,21 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
     }
   };
 
+  const disconnectMeta = async () => {
+    setIsMetaDisconnecting(true);
+    try {
+      const response = await fetch("/api/auth/meta/disconnect", { method: "POST" });
+      if (!response.ok) throw new Error(await parseApiError(response));
+      await loadMetaStatus();
+      onMetaAuthChanged?.();
+      toast.success("Instagram OAuth disconnected.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not disconnect Instagram OAuth");
+    } finally {
+      setIsMetaDisconnecting(false);
+    }
+  };
+
   const providerLabel = (provider: LlmProvider) => provider === "openai" ? "OpenAI" : "Anthropic";
 
   return (
@@ -210,6 +264,73 @@ export function SettingsModal({ open, onClose, onOpenBrandKits }: SettingsModalP
                 </div>
                 <span className="text-slate-500">&rsaquo;</span>
               </button>
+
+              {/* Instagram Publishing */}
+              <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
+                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
+                  <KeyRound className="h-4 w-4 text-blue-300" />
+                  Instagram Publishing
+                </div>
+
+                {isMetaLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-14 w-full rounded-xl" />
+                  </div>
+                ) : metaStatus.connected ? (
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-200">
+                    <p>
+                      Connected via{" "}
+                      <span className="font-semibold uppercase">
+                        {metaStatus.source ?? "oauth"}
+                      </span>
+                      {metaStatus.account?.instagramUsername
+                        ? ` as @${metaStatus.account.instagramUsername}`
+                        : ""}
+                      {metaStatus.account?.pageName
+                        ? ` (${metaStatus.account.pageName})`
+                        : ""}
+                    </p>
+                    {metaStatus.account?.tokenExpiresAt ? (
+                      <p className="mt-1 text-slate-400">
+                        Token expiry: {new Date(metaStatus.account.tokenExpiresAt).toLocaleString()}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {metaStatus.source === "oauth" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void disconnectMeta()}
+                          disabled={isMetaDisconnecting}
+                        >
+                          {isMetaDisconnecting ? (
+                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          ) : null}
+                          Disconnect OAuth
+                        </Button>
+                      ) : null}
+
+                      <a
+                        href="/api/auth/meta/start"
+                        className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white/10"
+                      >
+                        Reconnect with OAuth
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
+                    <p>Connect a Meta account to publish and schedule to Instagram from this workspace.</p>
+                    <a
+                      href="/api/auth/meta/start"
+                      className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"
+                    >
+                      Connect with Meta OAuth
+                    </a>
+                  </div>
+                )}
+              </div>
 
               {/* LLM Providers */}
               <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">

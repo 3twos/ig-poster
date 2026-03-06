@@ -15,14 +15,12 @@ import type { InstagramAuthStatus } from "@/lib/types";
 
 type Props = {
   authStatus: InstagramAuthStatus;
-  isAuthLoading: boolean;
-  isDisconnecting: boolean;
   isSharing: boolean;
   isPublishing: boolean;
   shareUrl: string | null;
   shareCopyState: "idle" | "done";
   localTimeZone: string;
-  onDisconnectInstagram: () => void;
+  onOpenSettings: () => void;
   onCreateShareLink: () => void;
   onPostNow: () => void;
   onSchedulePost: (scheduleAt: string) => void;
@@ -30,14 +28,12 @@ type Props = {
 
 export function PublishSection({
   authStatus,
-  isAuthLoading,
-  isDisconnecting,
   isSharing,
   isPublishing,
   shareUrl,
   shareCopyState,
   localTimeZone,
-  onDisconnectInstagram,
+  onOpenSettings,
   onCreateShareLink,
   onPostNow,
   onSchedulePost,
@@ -52,68 +48,20 @@ export function PublishSection({
 
       {/* Instagram Account */}
       <div className="rounded-xl border border-white/15 bg-white/5 p-3 text-xs text-slate-200">
-        <p className="font-semibold text-slate-100">Instagram Account</p>
-
-        {isAuthLoading ? (
-          <p className="mt-1 text-slate-300">Checking connection...</p>
+        <p className="font-semibold text-slate-100">Instagram Publishing Account</p>
+        <p className="mt-1 text-slate-300">
+          {authStatus.connected
+            ? `Connected via ${(authStatus.source ?? "oauth").toUpperCase()}${authStatus.account?.instagramUsername ? ` as @${authStatus.account.instagramUsername}` : ""}${authStatus.account?.pageName ? ` (${authStatus.account.pageName})` : ""}.`
+            : "No account connected. Configure Meta publishing access from Settings."}
+        </p>
+        {authStatus.account?.tokenExpiresAt ? (
+          <p className="mt-1 text-slate-300">
+            Token expiry: {new Date(authStatus.account.tokenExpiresAt).toLocaleString()}
+          </p>
         ) : null}
-
-        {!isAuthLoading && authStatus.connected ? (
-          <div className="mt-1 space-y-1">
-            <p>
-              Connected via{" "}
-              <span className="font-semibold uppercase">{authStatus.source}</span>
-              {authStatus.account?.instagramUsername
-                ? ` as @${authStatus.account.instagramUsername}`
-                : ""}
-              {authStatus.account?.pageName
-                ? ` (${authStatus.account.pageName})`
-                : ""}
-            </p>
-            {authStatus.account?.tokenExpiresAt ? (
-              <p className="text-slate-300">
-                Token expiry:{" "}
-                {new Date(authStatus.account.tokenExpiresAt).toLocaleString()}
-              </p>
-            ) : null}
-
-            {authStatus.source === "oauth" ? (
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={onDisconnectInstagram}
-                disabled={isDisconnecting}
-                className="mt-2"
-              >
-                {isDisconnecting ? (
-                  <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                ) : null}
-                Disconnect OAuth
-              </Button>
-            ) : (
-              <a
-                href="/api/auth/meta/start"
-                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-white/10"
-              >
-                Reconnect with OAuth
-              </a>
-            )}
-          </div>
-        ) : null}
-
-        {!isAuthLoading && !authStatus.connected ? (
-          <div className="mt-2">
-            <p className="text-slate-300">
-              Connect your brand account to publish directly from this app.
-            </p>
-            <a
-              href="/api/auth/meta/start"
-              className="mt-2 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"
-            >
-              Connect with Meta OAuth
-            </a>
-          </div>
-        ) : null}
+        <Button variant="outline" size="xs" onClick={onOpenSettings} className="mt-2">
+          Manage in Settings
+        </Button>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -147,7 +95,7 @@ export function PublishSection({
       <div className="grid gap-2">
         <Button
           type="button"
-          disabled={isPublishing}
+          disabled={isPublishing || !authStatus.connected}
           onClick={onPostNow}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
@@ -171,7 +119,7 @@ export function PublishSection({
             <Button
               type="button"
               variant="outline"
-              disabled={isPublishing || !scheduleAt}
+              disabled={isPublishing || !scheduleAt || !authStatus.connected}
               onClick={() => onSchedulePost(scheduleAt)}
               className="sm:min-w-[135px]"
             >

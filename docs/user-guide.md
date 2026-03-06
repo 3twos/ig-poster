@@ -72,7 +72,7 @@
    - Create a share link to persist project state and open it later at `/share/<id>`.
 
 11. Publish or schedule to Instagram
-   - Connect Instagram via Meta OAuth (if not already connected).
+   - Connect Instagram via Meta OAuth in Settings (if not already connected).
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
@@ -108,7 +108,7 @@
   - Stored in the private credential store when `DATABASE_URL` is configured; otherwise stored in an encrypted cookie tied to your browser session.
   - Connected LLM providers are used by both generation and the AI chat assistant.
 - Instagram:
-  - Connect/disconnect in the Instagram publish section.
+  - Connect/disconnect in Settings under Instagram Publishing.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in Blob.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.
