@@ -76,6 +76,7 @@ import { toast } from "sonner";
 export default function Home() {
   const {
     activePost,
+    posts,
     dispatch,
     createNewPost,
     selectPost,
@@ -598,6 +599,14 @@ export default function Home() {
       cancelled = true;
     };
   }, [activePost?.id, hydratedAssetsPostId, isAgentBusy, localAssets.length, pendingGenerateRequest, runGenerateFromQuickAction]);
+
+  useEffect(() => {
+    if (!pendingGenerateRequest) return;
+    const postStillExists = posts.some((postSummary) => postSummary.id === pendingGenerateRequest.postId);
+    if (!postStillExists) {
+      setPendingGenerateRequest(null);
+    }
+  }, [pendingGenerateRequest, posts]);
 
   useEffect(() => {
     if (!pendingPublishRequest || activePost?.id !== pendingPublishRequest.postId) {
