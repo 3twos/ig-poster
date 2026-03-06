@@ -499,7 +499,7 @@ export default function Home() {
       }
       const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
       const publishAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caption, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: activePost?.id ?? undefined, caption, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as { status?: string; mode?: string; publishAt?: string; publishId?: string };
       if (j.status === "scheduled") {

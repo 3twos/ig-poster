@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   index,
   jsonb,
   pgEnum,
@@ -10,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
+import type { MetaScheduleRequest } from "@/lib/meta-schemas";
 import type { StoredAsset } from "@/lib/project";
 import type { BrandState, PostState, PromptConfigState } from "@/lib/types";
 
@@ -19,12 +21,34 @@ export type PublishHistoryEntry = {
   igPermalink?: string;
 };
 
+export type PublishJobEvent = {
+  at: string;
+  type:
+    | "created"
+    | "processing"
+    | "retry-scheduled"
+    | "published"
+    | "failed"
+    | "canceled"
+    | "updated";
+  detail?: string;
+  attempt?: number;
+};
+
 export const postStatusEnum = pgEnum("post_status", [
   "draft",
   "generated",
   "published",
   "scheduled",
   "archived",
+]);
+
+export const publishJobStatusEnum = pgEnum("publish_job_status", [
+  "queued",
+  "processing",
+  "published",
+  "failed",
+  "canceled",
 ]);
 
 export const posts = pgTable(
@@ -76,6 +100,48 @@ export const posts = pgTable(
 );
 
 export type PostRow = typeof posts.$inferSelect;
+
+export const publishJobs = pgTable(
+  "publish_jobs",
+  {
+    id: varchar("id", { length: 18 }).primaryKey(),
+    ownerHash: varchar("owner_hash", { length: 64 }).notNull(),
+    postId: varchar("post_id", { length: 18 }),
+    status: publishJobStatusEnum("status").notNull().default("queued"),
+    caption: varchar("caption", { length: 2200 }).notNull(),
+    media: jsonb("media").$type<MetaScheduleRequest["media"]>().notNull(),
+    publishAt: timestamp("publish_at", { withTimezone: true }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    authSource: varchar("auth_source", { length: 8 }).notNull().default("oauth"),
+    connectionId: varchar("connection_id", { length: 20 }),
+    outcomeContext: jsonb("outcome_context").$type<MetaScheduleRequest["outcomeContext"]>(),
+    publishId: varchar("publish_id", { length: 120 }),
+    creationId: varchar("creation_id", { length: 120 }),
+    children: jsonb("children").$type<string[]>(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    events: jsonb("events").$type<PublishJobEvent[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("publish_jobs_owner_status_publish_at_idx").on(
+      table.ownerHash,
+      table.status,
+      table.publishAt,
+    ),
+    index("publish_jobs_post_idx").on(table.postId),
+  ],
+);
+
+export type PublishJobRow = typeof publishJobs.$inferSelect;
 
 export const brandKits = pgTable(
   "brand_kits",

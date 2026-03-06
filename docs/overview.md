@@ -19,7 +19,7 @@
 - Sidebar post rows expose quick publish actions (`Post now`, `Post at`) in the context menu, in addition to archive/delete controls.
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
-- Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed queue.
+- Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed Postgres queue.
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.
 - Provides an AI chat assistant panel for real-time conversation about content strategy, captions, and creative direction, with SSE-streamed responses and persistent conversation history.
 - Enforces stricter API payload contracts for persisted post drafts/updates.
@@ -33,8 +33,8 @@
 - Multi-model LLM generation pipeline with strict schema validation, supporting prioritized model lists with Fallback and Parallel execution modes.
 - Deterministic fallback generation when no LLM credentials are available or all models fail.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
-- Blob-backed storage for uploads, shared project snapshots, and scheduled publish jobs.
-- Postgres-backed post drafts with enum-constrained workflow status (`draft/generated/published/scheduled/archived`).
+- Blob-backed storage for uploads, shared project snapshots, and outcome snapshots used for insights.
+- Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/generated/published/scheduled/archived` for posts).
 
 ## Primary User Scenarios
 
@@ -62,6 +62,6 @@
 ## Scope Boundaries
 
 - Without `POSTGRES_URL` or `DATABASE_URL`, private post creation/loading is unavailable.
-- Without `BLOB_READ_WRITE_TOKEN`, uploads, sharing, and scheduling are unavailable.
+- Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Instagram publishing is unavailable.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).

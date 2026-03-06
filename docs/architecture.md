@@ -5,7 +5,7 @@
 - Keep the product usable even when optional integrations are missing.
 - Enforce strict input/output contracts for AI and publishing workflows.
 - Keep credential handling encrypted and server-side.
-- Use Postgres (via Drizzle ORM) for relational app state (posts, brand kits, private credentials) while keeping Blob for binary assets and snapshots.
+- Use Postgres (via Drizzle ORM) for relational app state (posts, brand kits, private credentials, publish jobs) while keeping Blob for binary assets and snapshots.
 - Preserve data integrity across auth, generation, and publishing workflows.
 
 ## System Overview
@@ -20,7 +20,7 @@ flowchart LR
   API --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
   API --> PG["Postgres (posts, brand_kits, credentials)"]
   API --> BLOB["Vercel Blob Storage"]
-  CRON["Vercel Cron (`/api/cron/publish`)"] --> BLOB
+  CRON["Vercel Cron (`/api/cron/publish`)"] --> PG
   CRON --> META
   MW["Proxy Middleware (`src/proxy.ts`)"] --> U
   MW --> API
@@ -52,7 +52,7 @@ flowchart LR
   - creative generation schemas + prompt builders
   - LLM provider abstraction
   - auth/session/token helpers
-  - Meta Graph publish/schedule orchestration
+  - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
   - Blob storage wrappers
 
 ## Request and Data Flows
@@ -100,13 +100,13 @@ Why this shape:
 
 1. Client submits caption + media payload to `POST /api/meta/schedule`.
 2. Route resolves auth context (OAuth connection first, env fallback second).
-3. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Blob.
+3. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
 4. Otherwise route publishes immediately through Meta Graph API helpers.
-5. Cron route (`GET /api/cron/publish`) scans due jobs, resolves auth, publishes, and deletes successful jobs.
+5. Cron route (`GET /api/cron/publish`) claims due queued jobs, resolves auth, publishes, and transitions each job (`published` or retry/`failed`).
 
 Why this shape:
 - Separates interactive request latency from scheduled execution.
-- Keeps scheduling stateless beyond durable queue records in Blob.
+- Keeps scheduling durable and queryable via relational job records.
 
 ### 4) Chat Conversations
 
@@ -135,7 +135,7 @@ Why this shape:
 
 ### Instagram Auth
 
-- Preferred path: Meta OAuth (`/api/auth/meta/*`), storing encrypted access token in Blob.
+- Preferred path: Meta OAuth (`/api/auth/meta/*`), storing encrypted access token in the private credential store (DB) with encrypted cookie fallback.
 - Fallback path: env credentials (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ID`).
 - Runtime resolver returns a uniform `MetaAuthContext` to publishing code.
 
@@ -157,13 +157,15 @@ Why this shape:
 - Primary relational persistence: Postgres via Drizzle ORM (`posts`, `brand_kits`, private credentials).
   - `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`).
   - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, logo URL, and default flag.
-- Blob persistence: binary media, shared project snapshots, scheduled publish queue, and chat conversation blobs.
+- Blob persistence: binary media, shared project snapshots, publish outcomes, and chat conversation blobs.
 - Typical paths:
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`
   - shared projects: `projects/<id>.json`
-  - schedule queue: `schedules/<publishAt>-<id>.json`
+  - outcomes: `outcomes/<ownerHash>/<timestamp>-<id>.json`
   - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
   - chat index: `chat/<ownerHash>/index.json`
+- Postgres persistence now includes:
+  - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), attempts/retries, scheduling timestamp, and event timeline.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `generated`, `published`, `scheduled`, `archived`).
 
@@ -186,10 +188,10 @@ Why this shape:
 
 - Generation: in Fallback mode, provider errors cascade to the next model in priority order before degrading to deterministic fallback output. In Parallel mode, partial model failures are tolerated as long as at least one model succeeds.
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
-- Scheduling: cron paginates schedule blobs (up to configured max), sorts by timestamped pathname, publishes due jobs, and deletes successful jobs.
-- Failed jobs remain for retry/inspection.
+- Scheduling: cron claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
+- Failed jobs remain queryable in Postgres for inspection/recovery.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
-- Blob-dependent features return clear 503 errors when storage is not configured.
+- Blob-dependent features return clear 503 errors when storage is not configured (uploads, share snapshots, outcomes sync).
 - Post selection: stale async responses are ignored so rapid switching cannot overwrite the latest selected draft.
 - Sidebar refresh: summary reconciliation preserves stable list items to avoid unnecessary list re-renders.
 
@@ -204,8 +206,8 @@ Why this shape:
 
 ## Tradeoffs and Future Work
 
-- Blob-as-store is simple and low-overhead for media and snapshots, but job querying/analytics are limited at scale.
-- Scheduling scans recent blobs; high-volume workloads may need a dedicated queue.
+- Blob-as-store remains simple for media/snapshots, while publish-job querying now lives in Postgres for better operational control.
+- As scheduling volume grows, move cron claim logic to dedicated worker processes/queue consumers.
 - Share artifacts are immutable snapshots; future requirements may need versioned edits.
 - As usage grows, consider introducing:
   - background workers with dead-letter handling

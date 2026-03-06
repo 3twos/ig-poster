@@ -18,6 +18,7 @@ export const OutcomeContextSchema = z.object({
 });
 
 export const MetaScheduleRequestSchema = z.object({
+  postId: z.string().trim().max(18).optional(),
   caption: z.string().trim().min(1).max(2200),
   publishAt: z.string().datetime().optional(),
   media: z.discriminatedUnion("mode", [
@@ -38,6 +39,53 @@ export const MetaScheduleRequestSchema = z.object({
   outcomeContext: OutcomeContextSchema.optional(),
 });
 
+export const PublishJobStatusSchema = z.enum([
+  "queued",
+  "processing",
+  "published",
+  "failed",
+  "canceled",
+]);
+
+export const PublishJobEventSchema = z.object({
+  at: z.string().datetime(),
+  type: z.enum([
+    "created",
+    "processing",
+    "retry-scheduled",
+    "published",
+    "failed",
+    "canceled",
+    "updated",
+  ]),
+  detail: z.string().optional(),
+  attempt: z.number().int().positive().optional(),
+});
+
+export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("cancel"),
+  }),
+  z.object({
+    action: z.literal("reschedule"),
+    publishAt: z.string().datetime(),
+  }),
+  z.object({
+    action: z.literal("edit"),
+    caption: z.string().trim().min(1).max(2200).optional(),
+    publishAt: z.string().datetime().optional(),
+    media: MetaScheduleRequestSchema.shape.media.optional(),
+    outcomeContext: OutcomeContextSchema.optional(),
+  }).refine(
+    (value) =>
+      value.caption !== undefined ||
+      value.publishAt !== undefined ||
+      value.media !== undefined ||
+      value.outcomeContext !== undefined,
+    { message: "Provide at least one editable field for action=edit." },
+  ),
+]);
+
 export const ScheduledJobSchema = z.object({
   id: z.string(),
   caption: z.string().min(1).max(2200),
@@ -52,3 +100,6 @@ export const ScheduledJobSchema = z.object({
 export type MetaScheduleRequest = z.infer<typeof MetaScheduleRequestSchema>;
 export type CarouselItem = z.infer<typeof CarouselItemSchema>;
 export type ScheduledJob = z.infer<typeof ScheduledJobSchema>;
+export type PublishJobStatus = z.infer<typeof PublishJobStatusSchema>;
+export type PublishJobEvent = z.infer<typeof PublishJobEventSchema>;
+export type PublishJobUpdateRequest = z.infer<typeof PublishJobUpdateRequestSchema>;

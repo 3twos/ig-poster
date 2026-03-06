@@ -42,7 +42,7 @@ Open `http://localhost:3000`.
 
 - `POSTGRES_URL` -- PostgreSQL connection string used by the app DB layer (Drizzle ORM). Run `npx drizzle-kit push` after schema changes.
 
-### Required for upload/share/scheduling features
+### Required for upload/share/outcomes features
 
 - `BLOB_READ_WRITE_TOKEN`
 
@@ -134,16 +134,16 @@ Voice alerts are queued so multiple deployment events do not speak over each oth
 Dashboard and alerts explicitly distinguish Preview vs Production deployments and include the branch name.
 Production voice alerts include a subtle two-hit beat before speech.
 
-## Database Migration (Breaking)
+## Database Migration
 
-- Post status is now backed by a PostgreSQL enum type (`post_status`).
-- Apply migration SQL before deploying this branch:
+- Schema changes are tracked in `drizzle/*.sql`.
+- Generate migration files after schema edits:
 
 ```bash
-psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
+POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 ```
 
-- If existing rows contain non-standard `posts.status` values, migration will fail until those rows are corrected.
+- Apply migrations in your target environment before deploying app code that depends on them.
 
 ## Project Map
 
@@ -170,7 +170,7 @@ psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/settings/page.tsx` and `src/app/brand/page.tsx`: compatibility routes that redirect to `/` (settings and brand editing now live in modals from the main shell).
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing, and brand kit CRUD (`/api/brand-kits`).
-- `src/db/schema.ts`: Drizzle ORM schema for `posts` and `brand_kits` tables.
+- `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables.
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
@@ -208,7 +208,7 @@ psql "$POSTGRES_URL" -f drizzle/0001_blushing_zarda.sql
 - 401s on most routes:
   - Workspace session cookie missing/expired; re-run Google OAuth login.
 
-- Upload/share/schedule endpoints return 503:
+- Upload/share endpoints return 503:
   - Blob is not configured (`BLOB_READ_WRITE_TOKEN` missing).
 
 - LLM connect fails:
