@@ -146,6 +146,7 @@ type Props = {
   isActive: boolean;
   isDirty?: boolean;
   onSelect: () => void;
+  onGenerate?: () => void;
   onPostNow?: () => void;
   onSchedulePost?: (scheduleAt: string) => void;
   onArchive: () => void;
@@ -157,6 +158,7 @@ export function PostListItem({
   isActive,
   isDirty = false,
   onSelect,
+  onGenerate,
   onPostNow,
   onSchedulePost,
   onArchive,
@@ -255,28 +257,35 @@ export function PostListItem({
                 aria-label={`${displayStatus.label.toLowerCase()} actions`}
                 className="flex items-center gap-1"
               >
-                {displayStatus.actions.map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setExpandedStatusKey(null);
-                      if (action.id === "post") {
-                        onPostNow?.();
-                        return;
-                      }
-                      if (action.id === "post-at") {
-                        setScheduleDialogOpen(true);
-                        return;
-                      }
-                      onSelect();
-                    }}
-                    className="relative z-20 inline-flex items-center rounded-full border border-orange-300/45 bg-orange-400/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.03em] text-orange-100 transition hover:bg-orange-400/20"
-                  >
-                    {action.label}
-                  </button>
-                ))}
+                {displayStatus.actions.map((action) => {
+                  const isGenerateAction = action.id === "generate";
+                  const isDisabled = isGenerateAction && !onGenerate;
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      disabled={isDisabled}
+                      aria-disabled={isDisabled}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (isDisabled) return;
+                        setExpandedStatusKey(null);
+                        if (action.id === "post") {
+                          onPostNow?.();
+                          return;
+                        }
+                        if (action.id === "post-at") {
+                          setScheduleDialogOpen(true);
+                          return;
+                        }
+                        onGenerate?.();
+                      }}
+                      className="relative z-20 inline-flex items-center rounded-full border border-orange-300/45 bg-orange-400/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.03em] text-orange-100 transition hover:bg-orange-400/20 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      {action.label}
+                    </button>
+                  );
+                })}
               </div>
             ) : hasQuickActions ? (
               <button

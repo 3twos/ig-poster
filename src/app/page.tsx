@@ -101,6 +101,8 @@ export default function Home() {
   const [brandKitOptions, setBrandKitOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [brandKitsOpen, setBrandKitsOpen] = useState(false);
+  const [hydratedAssetsPostId, setHydratedAssetsPostId] = useState<string | null>(null);
+  const [pendingGenerateRequest, setPendingGenerateRequest] = useState<{ postId: string } | null>(null);
   const [pendingPublishRequest, setPendingPublishRequest] = useState<{ postId: string; scheduleAt?: string } | null>(null);
 
   const posterRef = useRef<HTMLDivElement>(null);
@@ -155,6 +157,7 @@ export default function Home() {
     if (!activePost) {
       setLocalAssets([]);
       setLocalLogo(null);
+      setHydratedAssetsPostId(null);
       return;
     }
     const hydrated: LocalAsset[] = (activePost.assets ?? []).map((a) => ({
@@ -173,6 +176,7 @@ export default function Home() {
     } else {
       setLocalLogo(null);
     }
+    setHydratedAssetsPostId(activePost.id);
     generation.setError(null);
     setPublishMessage(null);
     setEditorMode(false);
@@ -515,6 +519,39 @@ export default function Home() {
   const publishToInstagramRef = useRef<(scheduleAt?: string) => Promise<void>>(async () => {});
   publishToInstagramRef.current = publishToInstagram;
 
+  const runGenerateFromQuickAction = useCallback(async (): Promise<"started" | "busy" | "missing-assets"> => {
+    if (isAgentBusyRef.current) return "busy";
+    if (localAssetsRef.current.length === 0) {
+      const m = "Upload assets before generating concepts.";
+      generation.setError(m);
+      toast.error(m);
+      return "missing-assets";
+    }
+    await generateRef.current?.();
+    return "started";
+  }, [generation]);
+
+  const requestGenerateForPost = useCallback(async (postId: string) => {
+    if (!postId) return;
+    const needsSelection = activePost?.id !== postId;
+    const needsHydration = hydratedAssetsPostId !== postId;
+
+    if (needsSelection || needsHydration) {
+      setPendingGenerateRequest({ postId });
+      if (needsSelection) {
+        await selectPost(postId);
+      }
+      return;
+    }
+
+    const outcome = await runGenerateFromQuickAction();
+    if (outcome === "busy") {
+      setPendingGenerateRequest({ postId });
+      return;
+    }
+    setPendingGenerateRequest(null);
+  }, [activePost?.id, hydratedAssetsPostId, runGenerateFromQuickAction, selectPost]);
+
   const requestPublishForPost = useCallback(async (postId: string, scheduleAt?: string) => {
     if (!postId) return;
     if (activePost?.id !== postId) {
@@ -524,6 +561,35 @@ export default function Home() {
     }
     await publishToInstagramRef.current(scheduleAt);
   }, [activePost?.id, selectPost]);
+
+  useEffect(() => {
+    if (!pendingGenerateRequest || activePost?.id !== pendingGenerateRequest.postId) {
+      return;
+    }
+
+    // Wait until this post's assets are hydrated into local state.
+    if (hydratedAssetsPostId !== pendingGenerateRequest.postId) {
+      return;
+    }
+
+    if (isAgentBusy) {
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      const outcome = await runGenerateFromQuickAction();
+      if (cancelled) return;
+      if (outcome !== "busy") {
+        setPendingGenerateRequest(null);
+      }
+    };
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activePost?.id, hydratedAssetsPostId, isAgentBusy, pendingGenerateRequest, runGenerateFromQuickAction]);
 
   useEffect(() => {
     if (!pendingPublishRequest || activePost?.id !== pendingPublishRequest.postId) {
@@ -584,6 +650,7 @@ export default function Home() {
               <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} collapsible collapsedSize={0} onResize={(size) => setLeftCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div className="flex h-full flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl ml-4">
                   <SidebarContent
+                    onGenerate={(postId) => void requestGenerateForPost(postId)}
                     onPostNow={(postId) => void requestPublishForPost(postId)}
                     onSchedulePost={(postId, scheduleAt) =>
                       void requestPublishForPost(postId, scheduleAt)
@@ -663,6 +730,7 @@ export default function Home() {
       </AppShell>
 
       <MobileSidebarDrawer
+        onGenerate={(postId) => void requestGenerateForPost(postId)}
         onPostNow={(postId) => void requestPublishForPost(postId)}
         onSchedulePost={(postId, scheduleAt) =>
           void requestPublishForPost(postId, scheduleAt)
