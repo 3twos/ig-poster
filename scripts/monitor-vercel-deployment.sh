@@ -7,6 +7,8 @@ LAST_ALERT_MESSAGE="None"
 LAST_EVENT_EPOCH=0
 LAST_ALERT_EPOCH=0
 LAST_ALERT_LEVEL="info"
+DASHBOARD_LAST_RENDER_LINES=0
+DASHBOARD_CURRENT_RENDER_LINES=0
 
 usage() {
   cat <<'HELP'
@@ -183,6 +185,12 @@ if (payload && payload.error) {
 const text = (value) => (typeof value === "string" ? value : "");
 const intMs = (value) =>
   typeof value === "number" && Number.isFinite(value) ? String(Math.trunc(value)) : "";
+const sanitize = (value) =>
+  String(value ?? "")
+    .replace(/\u001f/g, " ")
+    .replace(/[\n\r\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 const pick = (...values) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
 const normalizeBranch = (value) => {
@@ -195,13 +203,13 @@ const normalizeBranch = (value) => {
   return branch;
 };
 
-const status = text(payload.readyState || payload.state).toUpperCase() || "UNKNOWN";
-const deploymentId = text(payload.id || payload.uid);
-const deploymentUrl = text(payload.url) ? `https://${payload.url}` : "";
+const status = sanitize(text(payload.readyState || payload.state).toUpperCase() || "UNKNOWN");
+const deploymentId = sanitize(text(payload.id || payload.uid));
+const deploymentUrl = sanitize(text(payload.url) ? `https://${payload.url}` : "");
 const createdAtMs = intMs(payload.createdAt);
 const readyAtMs = intMs(payload.ready);
-const target = text(payload.target).toLowerCase();
-const branch = normalizeBranch(
+const target = sanitize(text(payload.target).toLowerCase());
+const branch = sanitize(normalizeBranch(
   pick(
     payload?.meta?.githubCommitRef,
     payload?.meta?.gitlabCommitRef,
@@ -211,11 +219,28 @@ const branch = normalizeBranch(
     payload?.meta?.commitRef,
     payload?.gitSource?.ref,
   ),
-);
-const errorMessage = text(payload.errorMessage || payload.errorCode);
+));
+const errorMessage = sanitize(text(payload.errorMessage || payload.errorCode));
+const source = sanitize(text(
+  payload.source || payload?.meta?.deploymentSource || payload?.meta?.source || payload?.gitSource?.type,
+));
+const actor = sanitize(pick(
+  payload?.creator?.username,
+  payload?.creator?.name,
+  payload?.creator?.email,
+  payload?.creator?.id,
+));
+const commitSha = sanitize(pick(
+  payload?.meta?.githubCommitSha,
+  payload?.meta?.gitlabCommitSha,
+  payload?.meta?.bitbucketCommitSha,
+  payload?.meta?.gitCommitSha,
+  payload?.meta?.commitSha,
+  payload?.meta?.commit,
+));
 
 process.stdout.write(
-  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage].join("\u001f"),
+  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha].join("\u001f"),
 );
 '
 }
@@ -246,6 +271,12 @@ const deployments = Array.isArray(payload.deployments) ? payload.deployments : [
 const text = (value) => (typeof value === "string" ? value : "");
 const intMs = (value) =>
   typeof value === "number" && Number.isFinite(value) ? String(Math.trunc(value)) : "";
+const sanitize = (value) =>
+  String(value ?? "")
+    .replace(/\u001f/g, " ")
+    .replace(/[\n\r\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 const pick = (...values) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
 const normalizeBranch = (value) => {
@@ -260,13 +291,13 @@ const normalizeBranch = (value) => {
 
 const rows = [];
 for (const item of deployments) {
-  const id = text(item.uid || item.id);
+  const id = sanitize(text(item.uid || item.id));
   if (!id) continue;
 
-  const state = text(item.readyState || item.state).toUpperCase() || "UNKNOWN";
-  const deploymentUrl = text(item.url) ? `https://${item.url}` : "";
-  const target = text(item.target).toLowerCase();
-  const branch = normalizeBranch(
+  const state = sanitize(text(item.readyState || item.state).toUpperCase() || "UNKNOWN");
+  const deploymentUrl = sanitize(text(item.url) ? `https://${item.url}` : "");
+  const target = sanitize(text(item.target).toLowerCase());
+  const branch = sanitize(normalizeBranch(
     pick(
       item?.meta?.githubCommitRef,
       item?.meta?.gitlabCommitRef,
@@ -276,12 +307,22 @@ for (const item of deployments) {
       item?.meta?.commitRef,
       item?.gitSource?.ref,
     ),
-  );
+  ));
   const createdAtMs = intMs(item.createdAt);
   const readyAtMs = intMs(item.ready);
-  const errorMessage = text(item.errorMessage || item.errorCode);
+  const errorMessage = sanitize(text(item.errorMessage || item.errorCode));
+  const source = sanitize(text(item.source || item?.meta?.deploymentSource || item?.meta?.source || item?.gitSource?.type));
+  const actor = sanitize(pick(item?.creator?.username, item?.creator?.name, item?.creator?.email, item?.creator?.id));
+  const commitSha = sanitize(pick(
+    item?.meta?.githubCommitSha,
+    item?.meta?.gitlabCommitSha,
+    item?.meta?.bitbucketCommitSha,
+    item?.meta?.gitCommitSha,
+    item?.meta?.commitSha,
+    item?.meta?.commit,
+  ));
 
-  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage].join("\u001f"));
+  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha].join("\u001f"));
 }
 
 process.stdout.write(rows.join("\n"));
@@ -707,6 +748,94 @@ friendly_branch_label() {
   printf '%s' "unknown"
 }
 
+friendly_source_label() {
+  local source="$1"
+  local lowered
+
+  source="$(sanitize_field "$source")"
+  if [[ -z "$source" ]]; then
+    printf '%s' "unknown"
+    return
+  fi
+
+  lowered="$(printf '%s' "$source" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    github|gitlab|bitbucket|git)
+      printf '%s' "git"
+      ;;
+    *)
+      printf '%s' "$lowered"
+      ;;
+  esac
+}
+
+friendly_actor_label() {
+  local actor="$1"
+
+  actor="$(sanitize_field "$actor")"
+  if [[ -z "$actor" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  printf '%s' "$(truncate_text "$actor" 22)"
+}
+
+friendly_commit_label() {
+  local commit_sha="$1"
+
+  commit_sha="$(sanitize_field "$commit_sha")"
+  if [[ -z "$commit_sha" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  if [[ "$commit_sha" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+    printf '%s' "${commit_sha:0:8}"
+    return
+  fi
+
+  printf '%s' "$(truncate_text "$commit_sha" 12)"
+}
+
+branch_context_hint() {
+  local branch="$1"
+  local target="$2"
+  local deployment_url="$3"
+  local source="$4"
+  local commit_sha="$5"
+  local normalized inferred
+
+  normalized="$(normalize_branch_context "$branch")"
+  if [[ -n "$normalized" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  inferred="$(infer_branch_from_deployment_url "$deployment_url")"
+  if [[ -n "$inferred" ]]; then
+    printf '%s (from URL)' "$inferred"
+    return
+  fi
+
+  if [[ "$target" == "production" || "$target" == "PRODUCTION" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  if [[ -n "$commit_sha" && "$commit_sha" != "n/a" ]]; then
+    printf '%s (commit-only deployment)' "$commit_sha"
+    return
+  fi
+
+  if [[ -n "$source" && "$source" != "unknown" ]]; then
+    printf 'no git branch metadata (source: %s)' "$source"
+    return
+  fi
+
+  printf '%s' "no git branch metadata"
+}
+
 spoken_branch_name() {
   local branch="$1"
   local normalized leaf
@@ -1023,6 +1152,44 @@ render_progress_bar() {
   fi
 }
 
+begin_dashboard_render() {
+  DASHBOARD_CURRENT_RENDER_LINES=0
+  if (( DASHBOARD_LAST_RENDER_LINES > 0 )); then
+    printf '\033[%dA' "$DASHBOARD_LAST_RENDER_LINES"
+  fi
+}
+
+print_dashboard_line() {
+  local line="$1"
+
+  printf '\r\033[2K%s\n' "$line"
+  DASHBOARD_CURRENT_RENDER_LINES=$(( DASHBOARD_CURRENT_RENDER_LINES + 1 ))
+}
+
+print_dashboard_linef() {
+  local format="$1"
+  shift || true
+
+  printf '\r\033[2K'
+  printf "$format" "$@"
+  printf '\n'
+  DASHBOARD_CURRENT_RENDER_LINES=$(( DASHBOARD_CURRENT_RENDER_LINES + 1 ))
+}
+
+end_dashboard_render() {
+  local extra_lines i
+
+  if (( DASHBOARD_LAST_RENDER_LINES > DASHBOARD_CURRENT_RENDER_LINES )); then
+    extra_lines=$(( DASHBOARD_LAST_RENDER_LINES - DASHBOARD_CURRENT_RENDER_LINES ))
+    for (( i = 0; i < extra_lines; i++ )); do
+      printf '\r\033[2K\n'
+    done
+    printf '\033[%dA' "$extra_lines"
+  fi
+
+  DASHBOARD_LAST_RENDER_LINES="$DASHBOARD_CURRENT_RENDER_LINES"
+}
+
 duration_seconds_for_record() {
   local created_at_ms="$1"
   local ready_at_ms="$2"
@@ -1304,16 +1471,8 @@ remove_stream_worker_by_index() {
     next_pids+=("${STREAM_PIDS[i]}")
   done
 
-  if (( ${#next_ids[@]} > 0 )); then
-    STREAM_IDS=("${next_ids[@]}")
-  else
-    STREAM_IDS=()
-  fi
-  if (( ${#next_pids[@]} > 0 )); then
-    STREAM_PIDS=("${next_pids[@]}")
-  else
-    STREAM_PIDS=()
-  fi
+  STREAM_IDS=("${next_ids[@]-}")
+  STREAM_PIDS=("${next_pids[@]-}")
 }
 
 stop_stream_worker_by_index() {
@@ -1540,8 +1699,8 @@ reconcile_event_stream_workers() {
 
 refresh_project_deployments() {
   local response parsed record
-  local dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error
-  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name
+  local dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha
+  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name source_label actor_label commit_label
   local -a next_ids=()
   local -a next_status=()
   local -a next_url=()
@@ -1550,6 +1709,9 @@ refresh_project_deployments() {
   local -a next_target=()
   local -a next_branch=()
   local -a next_error=()
+  local -a next_source=()
+  local -a next_actor=()
+  local -a next_commit_sha=()
   local -a next_first_seen=()
   local -a next_last_status=()
   local -a next_announced=()
@@ -1577,6 +1739,9 @@ refresh_project_deployments() {
     DEP_TARGET=()
     DEP_BRANCH=()
     DEP_ERROR_MESSAGE=()
+    DEP_SOURCE=()
+    DEP_ACTOR=()
+    DEP_COMMIT_SHA=()
     DEP_FIRST_SEEN_EPOCH=()
     DEP_LAST_STATUS=()
     DEP_TERMINAL_ANNOUNCED=()
@@ -1592,7 +1757,7 @@ refresh_project_deployments() {
       continue
     fi
 
-    IFS=$'\x1f' read -r dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error <<<"$record"
+    IFS=$'\x1f' read -r dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha <<<"$record"
 
     if [[ -z "$dep_id" ]]; then
       continue
@@ -1619,6 +1784,10 @@ refresh_project_deployments() {
 
     dep_status="${dep_status:-UNKNOWN}"
 
+    source_label="$(friendly_source_label "$dep_source")"
+    actor_label="$(friendly_actor_label "$dep_actor")"
+    commit_label="$(friendly_commit_label "$dep_commit_sha")"
+
     next_ids+=("$dep_id")
     next_status+=("$dep_status")
     next_url+=("$dep_url")
@@ -1627,6 +1796,9 @@ refresh_project_deployments() {
     next_target+=("$dep_target")
     next_branch+=("$dep_branch")
     next_error+=("$dep_error")
+    next_source+=("$source_label")
+    next_actor+=("$actor_label")
+    next_commit_sha+=("$commit_label")
     next_first_seen+=("$first_seen")
     next_last_status+=("$last_status")
     next_announced+=("$announced")
@@ -1636,46 +1808,31 @@ refresh_project_deployments() {
     next_project_name+=("$project_name")
   done <<<"$parsed"
 
-  if (( ${#next_ids[@]} > 0 )); then
-    DEP_IDS=("${next_ids[@]}")
-    DEP_STATUS=("${next_status[@]}")
-    DEP_URL=("${next_url[@]}")
-    DEP_CREATED_AT_MS=("${next_created_at[@]}")
-    DEP_READY_AT_MS=("${next_ready_at[@]}")
-    DEP_TARGET=("${next_target[@]}")
-    DEP_BRANCH=("${next_branch[@]}")
-    DEP_ERROR_MESSAGE=("${next_error[@]}")
-    DEP_FIRST_SEEN_EPOCH=("${next_first_seen[@]}")
-    DEP_LAST_STATUS=("${next_last_status[@]}")
-    DEP_TERMINAL_ANNOUNCED=("${next_announced[@]}")
-    DEP_STEP=("${next_step[@]}")
-    DEP_LAST_EVENT_MS=("${next_last_event_ms[@]}")
-    DEP_LAST_EVENT_TEXT=("${next_last_event_text[@]}")
-    DEP_PROJECT_NAME=("${next_project_name[@]}")
-  else
-    DEP_IDS=()
-    DEP_STATUS=()
-    DEP_URL=()
-    DEP_CREATED_AT_MS=()
-    DEP_READY_AT_MS=()
-    DEP_TARGET=()
-    DEP_BRANCH=()
-    DEP_ERROR_MESSAGE=()
-    DEP_FIRST_SEEN_EPOCH=()
-    DEP_LAST_STATUS=()
-    DEP_TERMINAL_ANNOUNCED=()
-    DEP_STEP=()
-    DEP_LAST_EVENT_MS=()
-    DEP_LAST_EVENT_TEXT=()
-    DEP_PROJECT_NAME=()
-  fi
+  DEP_IDS=("${next_ids[@]-}")
+  DEP_STATUS=("${next_status[@]-}")
+  DEP_URL=("${next_url[@]-}")
+  DEP_CREATED_AT_MS=("${next_created_at[@]-}")
+  DEP_READY_AT_MS=("${next_ready_at[@]-}")
+  DEP_TARGET=("${next_target[@]-}")
+  DEP_BRANCH=("${next_branch[@]-}")
+  DEP_ERROR_MESSAGE=("${next_error[@]-}")
+  DEP_SOURCE=("${next_source[@]-}")
+  DEP_ACTOR=("${next_actor[@]-}")
+  DEP_COMMIT_SHA=("${next_commit_sha[@]-}")
+  DEP_FIRST_SEEN_EPOCH=("${next_first_seen[@]-}")
+  DEP_LAST_STATUS=("${next_last_status[@]-}")
+  DEP_TERMINAL_ANNOUNCED=("${next_announced[@]-}")
+  DEP_STEP=("${next_step[@]-}")
+  DEP_LAST_EVENT_MS=("${next_last_event_ms[@]-}")
+  DEP_LAST_EVENT_TEXT=("${next_last_event_text[@]-}")
+  DEP_PROJECT_NAME=("${next_project_name[@]-}")
 
   return 0
 }
 
 refresh_single_deployment() {
   local response parsed
-  local dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error
+  local dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha
   local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name
 
   if [[ -z "$ACTIVE_SINGLE_TARGET" ]]; then
@@ -1692,7 +1849,7 @@ refresh_single_deployment() {
     return 1
   fi
 
-  IFS=$'\x1f' read -r dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error <<<"$parsed"
+  IFS=$'\x1f' read -r dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha <<<"$parsed"
   if [[ -n "$dep_id" ]]; then
     ACTIVE_SINGLE_TARGET="$dep_id"
   else
@@ -1728,6 +1885,9 @@ refresh_single_deployment() {
   DEP_TARGET=("$dep_target")
   DEP_BRANCH=("$dep_branch")
   DEP_ERROR_MESSAGE=("$dep_error")
+  DEP_SOURCE=("$(friendly_source_label "$dep_source")")
+  DEP_ACTOR=("$(friendly_actor_label "$dep_actor")")
+  DEP_COMMIT_SHA=("$(friendly_commit_label "$dep_commit_sha")")
   DEP_FIRST_SEEN_EPOCH=("$first_seen")
   DEP_LAST_STATUS=("$last_status")
   DEP_TERMINAL_ANNOUNCED=("$announced")
@@ -1915,8 +2075,9 @@ update_dashboard_overview() {
 
 render_dashboard() {
   local status_mark alert_mark event_time_display alert_time_display
-  local i status env_mark branch_label status_label step_label progress_percent progress_bar
+  local i status env_mark raw_branch_label branch_label status_label step_label progress_percent progress_bar
   local id_label url_label started_display duration_text event_display error_text row_status_icon
+  local source_label actor_label commit_label branch_hint_label
 
   if (( DASHBOARD_ENABLED == 0 )); then
     return
@@ -1927,36 +2088,39 @@ render_dashboard() {
   event_time_display="$(format_epoch_with_relative "$LAST_EVENT_EPOCH")"
   alert_time_display="$(format_epoch_with_relative "$LAST_ALERT_EPOCH")"
 
-  printf '\033[H\033[2J'
-  printf 'Vercel Deploy Monitor\n'
-  printf '=====================\n'
-  printf 'Project      : %s\n' "${DASH_PROJECT_NAME:-n/a}"
-  printf 'Mode         : %s\n' "${DASH_MODE_LABEL:-n/a}"
-  printf 'Event Feed   : %s\n' "${DASH_FEED_LABEL:-polling}"
-  printf 'Last Update  : %s\n' "${DASH_UPDATED_AT_LABEL:-n/a}"
+  begin_dashboard_render
 
-  printf '\nCurrent Status\n'
-  printf '%s\n' '--------------'
-  printf 'Overall      : %s %s\n' "$status_mark" "${DASH_STATUS_LABEL:-Unknown}"
-  printf 'Deployments  : %s total | %s active | %s ready | %s failed\n' \
+  print_dashboard_line "Vercel Deploy Monitor"
+  print_dashboard_line "====================="
+  print_dashboard_linef 'Project      : %s' "${DASH_PROJECT_NAME:-n/a}"
+  print_dashboard_linef 'Mode         : %s' "${DASH_MODE_LABEL:-n/a}"
+  print_dashboard_linef 'Event Feed   : %s' "${DASH_FEED_LABEL:-polling}"
+  print_dashboard_linef 'Last Update  : %s' "${DASH_UPDATED_AT_LABEL:-n/a}"
+
+  print_dashboard_line ""
+  print_dashboard_line "Current Status"
+  print_dashboard_line "--------------"
+  print_dashboard_linef 'Overall      : %s %s' "$status_mark" "${DASH_STATUS_LABEL:-Unknown}"
+  print_dashboard_linef 'Deployments  : %s total | %s active | %s ready | %s failed' \
     "${DASH_DEPLOYMENTS_TOTAL:-0}" "${DASH_DEPLOYMENTS_ACTIVE:-0}" "${DASH_DEPLOYMENTS_READY:-0}" "${DASH_DEPLOYMENTS_FAILED:-0}"
-  printf 'Last Event   : %s\n' "${LAST_EVENT_MESSAGE:-Starting...}"
-  printf 'Event Time   : %s\n' "$event_time_display"
-  printf 'Last Alert   : %s %s\n' "$alert_mark" "${LAST_ALERT_MESSAGE:-None}"
-  printf 'Alert Time   : %s\n' "$alert_time_display"
+  print_dashboard_linef 'Last Event   : %s' "${LAST_EVENT_MESSAGE:-Starting...}"
+  print_dashboard_linef 'Event Time   : %s' "$event_time_display"
+  print_dashboard_linef 'Last Alert   : %s %s' "$alert_mark" "${LAST_ALERT_MESSAGE:-None}"
+  print_dashboard_linef 'Alert Time   : %s' "$alert_time_display"
 
-  printf '\nDeployment Details\n'
-  printf '%s\n' '------------------'
+  print_dashboard_line ""
+  print_dashboard_line "Deployment Details"
+  print_dashboard_line "------------------"
 
   if (( ${#DEP_IDS[@]} == 0 )); then
-    printf 'No deployments detected yet.\n'
+    print_dashboard_line "No deployments detected yet."
   else
     for (( i = 0; i < ${#DEP_IDS[@]}; i++ )); do
       status="${DEP_STATUS[i]:-UNKNOWN}"
       row_status_icon="$(status_icon "$status")"
       env_mark="$(environment_icon "${DEP_TARGET[i]:-preview}")"
-      branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-      branch_label="$(truncate_text "$branch_label" 24)"
+      raw_branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
+      branch_label="$(truncate_text "$raw_branch_label" 24)"
       status_label="$(friendly_status "$status")"
 
       step_label="$(deployment_step_label "$i")"
@@ -1972,24 +2136,43 @@ render_dashboard() {
       started_display="$(format_ms_with_relative "${DEP_CREATED_AT_MS[i]:-}")"
       duration_text="$(format_duration "$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$(date +%s)}")")"
       event_display="$(format_ms_with_relative "${DEP_LAST_EVENT_MS[i]:-0}")"
+      source_label="$(sanitize_field "${DEP_SOURCE[i]:-unknown}")"
+      if [[ -z "$source_label" ]]; then
+        source_label="unknown"
+      fi
+      actor_label="$(sanitize_field "${DEP_ACTOR[i]:-n/a}")"
+      if [[ -z "$actor_label" ]]; then
+        actor_label="n/a"
+      fi
+      commit_label="$(sanitize_field "${DEP_COMMIT_SHA[i]:-n/a}")"
+      if [[ -z "$commit_label" ]]; then
+        commit_label="n/a"
+      fi
+      branch_hint_label="$(branch_context_hint "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "$source_label" "$commit_label")"
+      branch_hint_label="$(truncate_text "$branch_hint_label" 90)"
 
-      printf '%2d. %s %s %-24s %-12s %s %3d%%\n' \
+      print_dashboard_linef '%2d. %s %s %-24s %-12s %s %3d%%' \
         "$(( i + 1 ))" "$env_mark" "$row_status_icon" "$branch_label" "$status_label" "$progress_bar" "$progress_percent"
-      printf '    step     : %s\n' "$step_label"
-      printf '    id / url : %s | %s\n' "$id_label" "$url_label"
-      printf '    started  : %s | elapsed %s | last event %s\n' "$started_display" "$duration_text" "$event_display"
+      print_dashboard_linef '    step     : %s' "$step_label"
+      print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
+      print_dashboard_linef '    context  : source %s | actor %s | commit %s' "$source_label" "$actor_label" "$commit_label"
+      if [[ "$raw_branch_label" == "unknown" ]]; then
+        print_dashboard_linef '    branch   : %s' "$branch_hint_label"
+      fi
+      print_dashboard_linef '    started  : %s | elapsed %s | last event %s' "$started_display" "$duration_text" "$event_display"
 
       error_text="$(sanitize_field "${DEP_ERROR_MESSAGE[i]:-}")"
       if [[ -n "$error_text" && ( "$status" == "ERROR" || "$status" == "FAILED" || "$status" == "CANCELED" ) ]]; then
         error_text="$(truncate_text "$error_text" 90)"
-        printf '    error    : %s\n' "$error_text"
+        print_dashboard_linef '    error    : %s' "$error_text"
       fi
 
-      printf '\n'
+      print_dashboard_line ""
     done
   fi
 
-  printf 'Press Ctrl+C to stop.\n'
+  print_dashboard_line "Press Ctrl+C to stop."
+  end_dashboard_render
 }
 
 cleanup_runtime() {
@@ -2039,7 +2222,7 @@ DASH_PROJECT_NAME="n/a"
 DASH_MODE_LABEL="n/a"
 DASH_STATUS_LABEL="Waiting"
 DASH_STATUS_RAW="WAITING"
-DASH_FEED_LABEL="Polling events"
+DASH_FEED_LABEL="Polling"
 DASH_UPDATED_AT_LABEL="n/a"
 DASH_DEPLOYMENTS_TOTAL=0
 DASH_DEPLOYMENTS_ACTIVE=0
@@ -2233,9 +2416,9 @@ elif [[ -n "$TARGET" ]]; then
 fi
 
 if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
-  DASH_FEED_LABEL="Streaming events"
+  DASH_FEED_LABEL="Streaming"
 else
-  DASH_FEED_LABEL="Polling events"
+  DASH_FEED_LABEL="Polling"
 fi
 
 MAX_STREAM_WORKERS=4
@@ -2254,6 +2437,9 @@ DEP_READY_AT_MS=()
 DEP_TARGET=()
 DEP_BRANCH=()
 DEP_ERROR_MESSAGE=()
+DEP_SOURCE=()
+DEP_ACTOR=()
+DEP_COMMIT_SHA=()
 DEP_FIRST_SEEN_EPOCH=()
 DEP_LAST_STATUS=()
 DEP_TERMINAL_ANNOUNCED=()
@@ -2282,7 +2468,7 @@ if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
   else
     warn_line "Failed to create runtime dir for event streaming. Falling back to polling mode."
     EVENT_MODE_ACTIVE="poll"
-    DASH_FEED_LABEL="Polling events"
+    DASH_FEED_LABEL="Polling"
   fi
 fi
 
