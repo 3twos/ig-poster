@@ -91,7 +91,6 @@ export default function Home() {
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [authStatus, setAuthStatus] = useState<InstagramAuthStatus>({ connected: false, source: null });
   const [llmAuthStatus, setLlmAuthStatus] = useState<LlmAuthStatus>({ connected: false, source: null });
   const [isCreatingPost, setIsCreatingPost] = useState(false);
@@ -213,6 +212,11 @@ export default function Home() {
       setAuthStatus({ connected: Boolean(j.connected), source: j.source ?? null, account: j.account, detail: j.detail });
     } catch { setAuthStatus({ connected: false, source: null, detail: "Could not load Instagram auth status." }); }
     finally { setIsAuthLoading(false); }
+  }, []);
+
+  const handleMetaAuthChanged = useCallback((nextStatus: InstagramAuthStatus) => {
+    setAuthStatus(nextStatus);
+    setIsAuthLoading(false);
   }, []);
 
   const loadLlmStatus = useCallback(async () => {
@@ -465,13 +469,6 @@ export default function Home() {
     finally { setIsSharing(false); }
   };
 
-  const disconnectInstagram = async () => {
-    generation.setError(null); setPublishMessage(null); setIsDisconnecting(true);
-    try { const r = await fetch("/api/auth/meta/disconnect", { method: "POST" }); if (!r.ok) throw new Error(await parseApiError(r)); await loadAuthStatus(); setPublishMessage("Instagram OAuth disconnected."); toast.success("Instagram OAuth disconnected."); }
-    catch (e) { const m = e instanceof Error ? e.message : "Could not disconnect"; generation.setError(m); toast.error(m); }
-    finally { setIsDisconnecting(false); }
-  };
-
   const publishToInstagram = async (scheduleAt?: string) => {
     if (!activeVariant) {
       const m = "Generate and select a variant before posting.";
@@ -562,7 +559,7 @@ export default function Home() {
             </div>
           </div>
         </AppShell>
-        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} />
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} onMetaAuthChanged={handleMetaAuthChanged} />
         <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); }} />
       </>
     );
@@ -614,7 +611,7 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
+                        <PublishSection authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
                       </section>
                     )}
                   </div>
@@ -656,7 +653,7 @@ export default function Home() {
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection authStatus={authStatus} isAuthLoading={isAuthLoading} isDisconnecting={isDisconnecting} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onDisconnectInstagram={() => void disconnectInstagram()} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
+            {activeVariant && <PublishSection authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>
@@ -709,7 +706,7 @@ export default function Home() {
         </div>
       </div>
 
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} onMetaAuthChanged={handleMetaAuthChanged} />
       <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); }} />
     </>
   );
