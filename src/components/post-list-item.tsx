@@ -1,7 +1,7 @@
 "use client";
 
 import { Archive, CalendarClock, ImageIcon, MoreHorizontal, Send, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   AlertDialog,
@@ -46,24 +46,6 @@ const STATUS_DOT: Record<string, string> = {
   archived: "bg-slate-600",
 };
 
-type VisualState = "dirty" | "unposted" | "posted" | "scheduled" | "archived";
-
-const STATE_LABEL: Record<VisualState, string> = {
-  dirty: "Dirty",
-  unposted: "Unposted",
-  posted: "Posted",
-  scheduled: "Scheduled",
-  archived: "Archived",
-};
-
-const STATE_CHIP: Record<VisualState, string> = {
-  dirty: "border-orange-300/45 bg-orange-400/10 text-orange-100",
-  unposted: "border-slate-400/45 bg-slate-500/10 text-slate-200",
-  posted: "border-emerald-300/45 bg-emerald-400/10 text-emerald-100",
-  scheduled: "border-amber-300/45 bg-amber-400/10 text-amber-100",
-  archived: "border-slate-500/40 bg-slate-700/20 text-slate-300",
-};
-
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
@@ -76,18 +58,93 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-function resolveState(status: string, isDirty: boolean): VisualState {
-  if (isDirty) return "dirty";
-  if (status === "published") return "posted";
-  if (status === "scheduled") return "scheduled";
-  if (status === "archived") return "archived";
-  return "unposted";
+type QuickAction = "post" | "post-at" | "generate";
+
+type DisplayStatus = {
+  label: string;
+  tone: string;
+  dotTone: string;
+  tooltipLabel: string;
+  actions: Array<{ id: QuickAction; label: string }>;
+};
+
+function getDisplayStatus(status: string, isDirty: boolean): DisplayStatus {
+  if (isDirty) {
+    return {
+      label: "DIRTY",
+      tone: "border-orange-300/45 bg-orange-400/10 text-orange-100",
+      dotTone: "bg-orange-400",
+      tooltipLabel: "dirty",
+      actions: [{ id: "generate", label: "GENERATE" }],
+    };
+  }
+
+  if (status === "draft") {
+    return {
+      label: "DRAFT",
+      tone: "border-slate-300/35 bg-slate-500/10 text-slate-100",
+      dotTone: STATUS_DOT.draft,
+      tooltipLabel: "draft",
+      actions: [{ id: "generate", label: "GENERATE" }],
+    };
+  }
+
+  if (status === "generated") {
+    return {
+      label: "UNPOSTED",
+      tone: "border-blue-300/45 bg-blue-400/10 text-blue-100",
+      dotTone: STATUS_DOT.generated,
+      tooltipLabel: "unposted",
+      actions: [
+        { id: "post", label: "POST" },
+        { id: "post-at", label: "POST AT" },
+      ],
+    };
+  }
+
+  if (status === "scheduled") {
+    return {
+      label: "POST AT",
+      tone: "border-amber-300/45 bg-amber-400/10 text-amber-100",
+      dotTone: STATUS_DOT.scheduled,
+      tooltipLabel: "scheduled",
+      actions: [],
+    };
+  }
+
+  if (status === "published") {
+    return {
+      label: "POSTED",
+      tone: "border-emerald-300/45 bg-emerald-400/10 text-emerald-100",
+      dotTone: STATUS_DOT.published,
+      tooltipLabel: "posted",
+      actions: [],
+    };
+  }
+
+  if (status === "archived") {
+    return {
+      label: "ARCHIVED",
+      tone: "border-slate-400/35 bg-slate-500/10 text-slate-200",
+      dotTone: STATUS_DOT.archived,
+      tooltipLabel: "archived",
+      actions: [],
+    };
+  }
+
+  return {
+    label: status.toUpperCase(),
+    tone: "border-slate-400/35 bg-slate-500/10 text-slate-200",
+    dotTone: STATUS_DOT[status] ?? "bg-slate-400",
+    tooltipLabel: status,
+    actions: [],
+  };
 }
 
 type Props = {
   post: PostSummary;
   isActive: boolean;
-  isDirty: boolean;
+  isDirty?: boolean;
   onSelect: () => void;
   onPostNow?: () => void;
   onSchedulePost?: (scheduleAt: string) => void;
@@ -98,7 +155,7 @@ type Props = {
 export function PostListItem({
   post,
   isActive,
-  isDirty,
+  isDirty = false,
   onSelect,
   onPostNow,
   onSchedulePost,
@@ -108,7 +165,16 @@ export function PostListItem({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [scheduleAt, setScheduleAt] = useState("");
-  const state = resolveState(post.status, isDirty);
+  const [expandedStatusKey, setExpandedStatusKey] = useState<string | null>(null);
+
+  const displayStatus = useMemo(
+    () => getDisplayStatus(post.status, isDirty),
+    [post.status, isDirty],
+  );
+  const hasQuickActions = displayStatus.actions.length > 0;
+  const statusKey = `${post.id}:${post.status}:${isDirty ? "dirty" : "clean"}`;
+  const quickActionsId = `post-status-actions-${post.id}`;
+  const showQuickActions = hasQuickActions && expandedStatusKey === statusKey;
   const canQuickPublish = Boolean(onPostNow && onSchedulePost);
 
   return (
@@ -125,14 +191,14 @@ export function PostListItem({
         }}
         aria-label={`Select post: ${post.title || "Untitled Post"}`}
         className={cn(
-          "group relative flex cursor-pointer items-start gap-3 rounded-xl px-3 py-2.5 pr-12 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/60",
+          "group relative flex cursor-pointer items-start gap-1.5 rounded-xl px-2.5 py-2 pr-9 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300/60",
           isActive
             ? "border border-orange-400/30 bg-orange-400/10"
             : "hover:bg-white/5",
         )}
       >
         {/* Thumbnail */}
-        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-white/10">
+        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-white/10">
           {post.thumbnail ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -166,35 +232,81 @@ export function PostListItem({
               <span
                 className={cn(
                   "absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full ring-1 ring-slate-900",
-                  isDirty
-                    ? "bg-orange-400"
-                    : STATUS_DOT[post.status] ?? "bg-slate-400",
+                  displayStatus.dotTone,
                 )}
               />
             </TooltipTrigger>
-            <TooltipContent side="right" className="capitalize">
-              {STATE_LABEL[state]}
-            </TooltipContent>
+            <TooltipContent side="right">{displayStatus.tooltipLabel}</TooltipContent>
           </Tooltip>
         </div>
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-sm leading-snug font-medium text-white">
+          <p className="line-clamp-2 text-sm font-medium leading-[1.22] text-white">
             {post.title || "Untitled Post"}
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
-            <span
-              className={cn(
-                "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase",
-                STATE_CHIP[state],
-              )}
-            >
-              {STATE_LABEL[state]}
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {showQuickActions && hasQuickActions ? (
+              <div
+                id={quickActionsId}
+                role="group"
+                aria-label={`${displayStatus.label.toLowerCase()} actions`}
+                className="flex items-center gap-1"
+              >
+                {displayStatus.actions.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setExpandedStatusKey(null);
+                      if (action.id === "post") {
+                        onPostNow?.();
+                        return;
+                      }
+                      if (action.id === "post-at") {
+                        setScheduleDialogOpen(true);
+                        return;
+                      }
+                      onSelect();
+                    }}
+                    className="relative z-20 inline-flex items-center rounded-full border border-orange-300/45 bg-orange-400/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.03em] text-orange-100 transition hover:bg-orange-400/20"
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            ) : hasQuickActions ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedStatusKey((current) =>
+                    current === statusKey ? null : statusKey,
+                  );
+                }}
+                aria-expanded={showQuickActions}
+                aria-controls={quickActionsId}
+                className={cn(
+                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.03em] transition",
+                  displayStatus.tone,
+                )}
+              >
+                {displayStatus.label}
+              </button>
+            ) : (
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.03em]",
+                  displayStatus.tone,
+                )}
+              >
+                {displayStatus.label}
+              </span>
+            )}
+            <span className="text-[12px] text-slate-500">
+              {relativeTime(post.updatedAt)}
             </span>
-            <span>{relativeTime(post.updatedAt)}</span>
-            {post.assetCount > 0 && <span>{post.assetCount} assets</span>}
-            {post.variantCount > 0 && <span>{post.variantCount} variants</span>}
           </div>
         </div>
 
