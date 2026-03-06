@@ -836,6 +836,89 @@ branch_context_hint() {
   printf '%s' "no git branch metadata"
 }
 
+deployment_identity_label() {
+  local branch="$1"
+  local target="$2"
+  local deployment_url="$3"
+  local commit_sha="$4"
+  local source="$5"
+  local actor="$6"
+  local resolved_branch commit_label source_label actor_label
+
+  resolved_branch="$(friendly_branch_label "$branch" "$target" "$deployment_url")"
+  if [[ "$resolved_branch" != "unknown" ]]; then
+    printf '%s' "$resolved_branch"
+    return
+  fi
+
+  commit_label="$(friendly_commit_label "$commit_sha")"
+  if [[ "$commit_label" != "n/a" ]]; then
+    printf 'commit:%s' "$commit_label"
+    return
+  fi
+
+  actor_label="$(friendly_actor_label "$actor")"
+  if [[ "$actor_label" != "n/a" ]]; then
+    printf 'actor:%s' "$actor_label"
+    return
+  fi
+
+  source_label="$(friendly_source_label "$source")"
+  if [[ "$source_label" != "unknown" ]]; then
+    printf 'source:%s' "$source_label"
+    return
+  fi
+
+  printf '%s' "unlabeled"
+}
+
+normalize_spoken_context() {
+  local text="$1"
+
+  text="$(sanitize_field "$text")"
+  if [[ "$text" == *... ]]; then
+    text="${text%...}"
+  fi
+  text="${text//\// }"
+  text="${text//-/ }"
+  text="${text//_/ }"
+  text="${text#${text%%[![:space:]]*}}"
+  text="${text%${text##*[![:space:]]}}"
+  printf '%s' "$text"
+}
+
+spoken_deployment_identity() {
+  local identity="$1"
+  local payload
+
+  if [[ "$identity" == commit:* ]]; then
+    payload="${identity#commit:}"
+    printf 'commit %s' "$payload"
+    return
+  fi
+
+  if [[ "$identity" == actor:* ]]; then
+    payload="${identity#actor:}"
+    payload="$(normalize_spoken_context "$payload")"
+    printf '%s' "$payload"
+    return
+  fi
+
+  if [[ "$identity" == source:* ]]; then
+    payload="${identity#source:}"
+    payload="$(normalize_spoken_context "$payload")"
+    printf 'source %s' "$payload"
+    return
+  fi
+
+  if [[ "$identity" == "unlabeled" || -z "$identity" ]]; then
+    printf '%s' "unlabeled"
+    return
+  fi
+
+  printf '%s' "$(spoken_branch_name "$identity")"
+}
+
 spoken_branch_name() {
   local branch="$1"
   local normalized leaf
@@ -1951,7 +2034,7 @@ deployment_step_label() {
 }
 
 process_deployment_transitions_and_alerts() {
-  local i status old_status dep_id env_label branch_label spoken_branch duration_seconds duration_text spoken_duration
+  local i status old_status dep_id env_label identity_label spoken_identity duration_seconds duration_text spoken_duration
   local alert_message spoken_alert error_message
 
   for (( i = 0; i < ${#DEP_IDS[@]}; i++ )); do
@@ -1966,8 +2049,8 @@ process_deployment_transitions_and_alerts() {
     fi
 
     env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
-    branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-    spoken_branch="$(spoken_branch_name "$branch_label")"
+    identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
+    spoken_identity="$(spoken_deployment_identity "$identity_label")"
 
     duration_seconds="$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$(date +%s)}")"
     duration_text="$(format_duration "$duration_seconds")"
@@ -1979,14 +2062,14 @@ process_deployment_transitions_and_alerts() {
 
         case "$status" in
           READY)
-            alert_message="${env_label} ${spoken_branch} deployment completed in ${duration_text}."
-            spoken_alert="${env_label} ${spoken_branch} deployment completed in ${spoken_duration}."
+            alert_message="${env_label} ${identity_label} deployment completed in ${duration_text}."
+            spoken_alert="${env_label} ${spoken_identity} deployment completed in ${spoken_duration}."
             LAST_ALERT_LEVEL="success"
             log_line "Alert: ${alert_message}"
             ;;
           ERROR|CANCELED|FAILED)
-            alert_message="${env_label} ${spoken_branch} deployment ended with ${status} after ${duration_text}."
-            spoken_alert="${env_label} ${spoken_branch} deployment ended with ${status} after ${spoken_duration}."
+            alert_message="${env_label} ${identity_label} deployment ended with ${status} after ${duration_text}."
+            spoken_alert="${env_label} ${spoken_identity} deployment ended with ${status} after ${spoken_duration}."
             if [[ -n "$error_message" ]]; then
               alert_message="${alert_message} ${error_message}"
               spoken_alert="${spoken_alert} ${error_message}"
@@ -1995,8 +2078,8 @@ process_deployment_transitions_and_alerts() {
             warn_line "Alert: ${alert_message}"
             ;;
           *)
-            alert_message="${env_label} ${spoken_branch} deployment ended with ${status} after ${duration_text}."
-            spoken_alert="$alert_message"
+            alert_message="${env_label} ${identity_label} deployment ended with ${status} after ${duration_text}."
+            spoken_alert="${env_label} ${spoken_identity} deployment ended with ${status} after ${spoken_duration}."
             LAST_ALERT_LEVEL="warning"
             log_line "Alert: ${alert_message}"
             ;;
@@ -2075,7 +2158,7 @@ update_dashboard_overview() {
 
 render_dashboard() {
   local status_mark alert_mark event_time_display alert_time_display
-  local i status env_mark raw_branch_label branch_label status_label step_label progress_percent progress_bar
+  local i status env_mark raw_branch_label identity_label branch_label status_label step_label progress_percent progress_bar
   local id_label url_label started_display duration_text event_display error_text row_status_icon
   local source_label actor_label commit_label branch_hint_label
 
@@ -2120,7 +2203,8 @@ render_dashboard() {
       row_status_icon="$(status_icon "$status")"
       env_mark="$(environment_icon "${DEP_TARGET[i]:-preview}")"
       raw_branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-      branch_label="$(truncate_text "$raw_branch_label" 24)"
+      identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
+      branch_label="$(truncate_text "$identity_label" 24)"
       status_label="$(friendly_status "$status")"
 
       step_label="$(deployment_step_label "$i")"
@@ -2156,7 +2240,7 @@ render_dashboard() {
       print_dashboard_linef '    step     : %s' "$step_label"
       print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
       print_dashboard_linef '    context  : source %s | actor %s | commit %s' "$source_label" "$actor_label" "$commit_label"
-      if [[ "$raw_branch_label" == "unknown" ]]; then
+      if [[ "$raw_branch_label" == "unknown" && "$identity_label" == "unlabeled" ]]; then
         print_dashboard_linef '    branch   : %s' "$branch_hint_label"
       fi
       print_dashboard_linef '    started  : %s | elapsed %s | last event %s' "$started_display" "$duration_text" "$event_display"
