@@ -76,6 +76,8 @@
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
+   - The publish section also shows a workspace queue for queued, processing, and failed jobs.
+   - Use the queue controls to cancel a scheduled publish or reschedule a queued/failed job without leaving the editor.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -98,6 +100,7 @@
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.
 - Scheduled posts are processed by `/api/cron/publish` (every 15 minutes in Vercel cron config).
 - Scheduled queue processing claims due jobs from Postgres-backed publish jobs.
+- Failed jobs stay visible in the publish queue with their latest error so they can be retried or rescheduled.
 
 ## Managing Connections
 

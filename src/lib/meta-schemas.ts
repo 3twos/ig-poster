@@ -86,6 +86,34 @@ export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
   ),
 ]);
 
+export const PublishJobClientSchema = z.object({
+  id: z.string(),
+  postId: z.string().nullable().optional(),
+  status: PublishJobStatusSchema,
+  caption: z.string(),
+  media: MetaScheduleRequestSchema.shape.media,
+  publishAt: z.string().datetime(),
+  attempts: z.number().int().nonnegative(),
+  maxAttempts: z.number().int().positive(),
+  lastAttemptAt: z.string().datetime().nullable().optional(),
+  lastError: z.string().nullable().optional(),
+  authSource: z.enum(["oauth", "env"]),
+  connectionId: z.string().nullable().optional(),
+  outcomeContext: OutcomeContextSchema.nullable().optional(),
+  publishId: z.string().nullable().optional(),
+  creationId: z.string().nullable().optional(),
+  children: z.array(z.string()).nullable().optional(),
+  completedAt: z.string().datetime().nullable().optional(),
+  canceledAt: z.string().datetime().nullable().optional(),
+  events: z.array(PublishJobEventSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const PublishJobListResponseSchema = z.object({
+  jobs: z.array(PublishJobClientSchema),
+});
+
 export const ScheduledJobSchema = z.object({
   id: z.string(),
   caption: z.string().min(1).max(2200),
@@ -103,3 +131,4 @@ export type ScheduledJob = z.infer<typeof ScheduledJobSchema>;
 export type PublishJobStatus = z.infer<typeof PublishJobStatusSchema>;
 export type PublishJobEvent = z.infer<typeof PublishJobEventSchema>;
 export type PublishJobUpdateRequest = z.infer<typeof PublishJobUpdateRequestSchema>;
+export type PublishJobClient = z.infer<typeof PublishJobClientSchema>;
