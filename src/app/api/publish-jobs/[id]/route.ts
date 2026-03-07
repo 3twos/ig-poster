@@ -5,6 +5,10 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { posts, publishJobs } from "@/db/schema";
 import { apiErrorResponse } from "@/lib/api-error";
+import {
+  MetaMediaPreflightError,
+  preflightMetaMediaForPublish,
+} from "@/lib/meta-media-preflight";
 import { PublishJobUpdateRequestSchema } from "@/lib/meta-schemas";
 import { appendPublishJobEvent, markPostScheduled } from "@/lib/publish-jobs";
 import { hashEmail } from "@/lib/server-utils";
@@ -176,6 +180,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json(updated);
     }
 
+    if (payload.media) {
+      await preflightMetaMediaForPublish(payload.media);
+    }
+
     const [updated] = await db
       .update(publishJobs)
       .set({
@@ -212,7 +220,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    const isClientError = error instanceof z.ZodError;
+    const isClientError = error instanceof z.ZodError ||
+      (error instanceof MetaMediaPreflightError);
     return apiErrorResponse(error, {
       fallback: "Could not update publish job",
       status: isClientError ? 400 : 500,

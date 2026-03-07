@@ -98,6 +98,7 @@
 - `carousel` variant uses uploaded media sequence (minimum 2 items, up to 10).
 - `reel` variant requires at least one uploaded video.
 - Instagram API throughput is capped at 50 published posts per rolling 24-hour window per account.
+- Media URL preflight runs before scheduling/publishing and queue media edits: URLs must be public HTTPS and must probe as the expected media type (`image/*` or `video/*`).
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.
 - Scheduled posts are processed by `/api/cron/publish` (every 15 minutes in Vercel cron config).
 - Scheduled queue processing claims due jobs from Postgres-backed publish jobs.

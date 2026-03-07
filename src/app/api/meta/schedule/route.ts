@@ -9,6 +9,10 @@ import { posts } from "@/db/schema";
 import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
+import {
+  MetaMediaPreflightError,
+  preflightMetaMediaForPublish,
+} from "@/lib/meta-media-preflight";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
 import {
   completePublishJobFailure,
@@ -60,6 +64,7 @@ export async function POST(req: Request) {
     const publishAt = payload.publishAt ? new Date(payload.publishAt).getTime() : undefined;
 
     const shouldSchedule = Boolean(publishAt && publishAt - now > 2 * 60 * 1000);
+    await preflightMetaMediaForPublish(payload.media);
 
     if (shouldSchedule && publishAt) {
       if (resolvedAuth.source === "oauth" && !resolvedAuth.account.connectionId) {
@@ -172,7 +177,8 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     const isClientError = error instanceof z.ZodError ||
-      (error instanceof MetaScheduleClientError);
+      (error instanceof MetaScheduleClientError) ||
+      (error instanceof MetaMediaPreflightError);
     return apiErrorResponse(error, {
       fallback: "Could not publish to Instagram",
       status: isClientError ? 400 : 502,
