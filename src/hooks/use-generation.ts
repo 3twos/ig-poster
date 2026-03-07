@@ -534,17 +534,33 @@ export function useGeneration({
           }
         };
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        const INACTIVITY_TIMEOUT_MS = 90_000;
+        let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+        const resetInactivityTimer = () => {
+          clearTimeout(inactivityTimer);
+          if (finalResult) return;
+          inactivityTimer = setTimeout(() => {
+            abortController.abort("inactivity-timeout");
+          }, INACTIVITY_TIMEOUT_MS);
+        };
+        resetInactivityTimer();
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            resetInactivityTimer();
 
-          for (const line of lines) {
-            processDataLine(line);
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              processDataLine(line);
+            }
           }
+        } finally {
+          clearTimeout(inactivityTimer);
         }
 
         const trailing = `${buffer}${decoder.decode()}`;
@@ -604,6 +620,13 @@ export function useGeneration({
         generationError instanceof Error &&
         generationError.name === "AbortError"
       ) {
+        const isTimeout = abortController.signal.reason === "inactivity-timeout";
+        const summary = isTimeout
+          ? "Generation timed out — no data received for 90 seconds."
+          : "Generation stopped by user.";
+        const detail = isTimeout ? "Timed out." : "Cancelled by user.";
+        const status = isTimeout ? "error" as const : "cancelled" as const;
+
         setAgentRun((current) => {
           if (!current || current.status !== "running") {
             return current;
@@ -612,23 +635,28 @@ export function useGeneration({
           const now = Date.now();
           return {
             ...current,
-            status: "cancelled",
+            status,
             endedAt: now,
             currentStepId: undefined,
-            summary: "Generation stopped by user.",
+            summary,
+            error: isTimeout ? summary : undefined,
             steps: current.steps.map((step) =>
               step.status === "active"
                 ? {
                     ...step,
-                    status: "cancelled",
-                    detail: "Cancelled by user.",
+                    status,
+                    detail,
                     endedAt: now,
                   }
                 : step,
             ),
-            logLines: [...current.logLines, "Run cancelled by user."],
+            logLines: [...current.logLines, isTimeout ? `Run timed out: ${summary}` : "Run cancelled by user."],
           };
         });
+        if (isTimeout) {
+          setError(summary);
+          toast.error(summary);
+        }
         return;
       }
 
