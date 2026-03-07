@@ -21,9 +21,10 @@ import type { PostState } from "@/lib/types";
 
 type Props = {
   onApply: (brief: Partial<PostState>) => void;
+  disabled?: boolean;
 };
 
-export function TemplateGallery({ onApply }: Props) {
+export function TemplateGallery({ onApply, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<PromptTemplate | null>(null);
 
@@ -38,7 +39,7 @@ export function TemplateGallery({ onApply }: Props) {
       <Tooltip>
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
-            <Button variant="outline" size="xs">
+            <Button variant="outline" size="xs" disabled={disabled}>
               <BookTemplate className="h-3.5 w-3.5" />
               Templates
             </Button>

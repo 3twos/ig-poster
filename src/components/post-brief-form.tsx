@@ -40,7 +40,7 @@ type Props = {
   activeBrandKitId?: string | null;
   dispatch: (action: Record<string, unknown>) => void;
   onGenerate: () => void;
-  onCancelGenerate?: () => void;
+  onCancelGenerate: () => void;
   onExportPoster: () => void;
   onSelectBrandKit?: (kitId: string) => void;
 };
@@ -68,6 +68,7 @@ export function PostBriefForm({
           Post Brief
         </div>
         <TemplateGallery
+          disabled={isGenerating}
           onApply={(brief) => {
             dispatch({ type: "UPDATE_BRIEF", brief });
             toast.success("Template applied to brief.");
