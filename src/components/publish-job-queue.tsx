@@ -169,13 +169,8 @@ export function PublishJobQueue({
       return;
     }
 
-    const parsedPublishAt = new Date(editPublishAt);
-    if (Number.isNaN(parsedPublishAt.getTime())) {
-      toast.error("Choose a valid publish time.");
-      return;
-    }
-
-    const nextPublishAt = parsedPublishAt.toISOString();
+    const currentPublishAtInput = toInputValue(job.publishAt);
+    const publishAtChanged = editPublishAt !== currentPublishAtInput;
     const body: {
       action: "edit";
       caption?: string;
@@ -187,8 +182,14 @@ export function PublishJobQueue({
     if (normalizedCaption !== job.caption) {
       body.caption = normalizedCaption;
     }
-    if (nextPublishAt !== job.publishAt) {
-      body.publishAt = nextPublishAt;
+
+    if (publishAtChanged) {
+      const parsedPublishAt = new Date(editPublishAt);
+      if (Number.isNaN(parsedPublishAt.getTime())) {
+        toast.error("Choose a valid publish time.");
+        return;
+      }
+      body.publishAt = parsedPublishAt.toISOString();
     }
 
     if (!body.caption && !body.publishAt) {
@@ -209,7 +210,7 @@ export function PublishJobQueue({
         throw new Error(await parseApiError(response));
       }
 
-      toast.success("Scheduled publish updated.");
+      toast.success("Publish job updated.");
       setEditingJobId(null);
       setEditPublishAt("");
       setEditCaption("");
@@ -218,7 +219,7 @@ export function PublishJobQueue({
     } catch (error) {
       const message = error instanceof Error
         ? error.message
-        : "Could not update scheduled publish.";
+        : "Could not update publish job.";
       toast.error(message);
     } finally {
       setActiveJobId(null);

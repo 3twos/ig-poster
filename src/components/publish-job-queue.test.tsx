@@ -228,6 +228,48 @@ describe("PublishJobQueue", () => {
     });
   });
 
+  it("does not send publishAt for caption-only edits when stored time has seconds", async () => {
+    mockQueueLoad([
+      makeJob({
+        publishAt: "2026-03-10T18:30:42.123Z",
+      }),
+    ]);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [makeJob({ caption: "Refined caption" })] }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText(/Launch A/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.change(
+      screen.getByLabelText("Edit caption for job-1"),
+      { target: { value: "Refined caption" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    const patchCall = fetchMock.mock.calls[2];
+    expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
+    const payload = JSON.parse(String(patchCall?.[1]?.body));
+    expect(payload).toMatchObject({
+      action: "edit",
+      caption: "Refined caption",
+    });
+    expect(payload.publishAt).toBeUndefined();
+  });
+
   it("shows a load error state instead of the empty-state copy after initial fetch failure", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ error: "Database unavailable" }, 500),
