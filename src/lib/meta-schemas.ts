@@ -67,6 +67,9 @@ export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
     action: z.literal("cancel"),
   }),
   z.object({
+    action: z.literal("retry-now"),
+  }),
+  z.object({
     action: z.literal("reschedule"),
     publishAt: z.string().datetime(),
   }),
