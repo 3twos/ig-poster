@@ -126,7 +126,7 @@ export const PublishJobListResponseSchema = z.object({
 export const ScheduledJobSchema = z.object({
   id: z.string(),
   caption: z.string().min(1).max(2200),
-  firstComment: z.string().min(1).max(2200).optional(),
+  firstComment: FirstCommentSchema.optional(),
   media: MetaScheduleRequestSchema.shape.media,
   publishAt: z.string().datetime(),
   createdAt: z.string().datetime(),

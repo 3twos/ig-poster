@@ -6,7 +6,7 @@ import {
   LoaderCircle,
   Send,
 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,7 @@ export function PublishSection({
   const [scheduleAt, setScheduleAt] = useState("");
   const [firstComment, setFirstComment] = useState("");
   const normalizedFirstComment = firstComment.trim() || undefined;
+  const firstCommentInputId = useId();
 
   return (
     <div className="space-y-3">
@@ -112,8 +113,12 @@ export function PublishSection({
       ) : null}
 
       <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
-        <Label className="text-[11px] text-slate-300">First comment (optional)</Label>
+        <Label htmlFor={firstCommentInputId} className="text-[11px] text-slate-300">
+          First comment (optional)
+        </Label>
         <Textarea
+          id={firstCommentInputId}
+          aria-label="First comment (optional)"
           value={firstComment}
           onChange={(event) => setFirstComment(event.target.value)}
           className="min-h-[76px] text-xs"
