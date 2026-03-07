@@ -79,13 +79,43 @@ const toInputValue = (iso: string) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+type EditableCarouselItem = {
+  clientId: string;
+  mediaType: "image" | "video";
+  url: string;
+};
+
+type EditableMedia =
+  | {
+      mode: "image";
+      imageUrl: string;
+    }
+  | {
+      mode: "reel";
+      videoUrl: string;
+      coverUrl?: string;
+    }
+  | {
+      mode: "carousel";
+      items: EditableCarouselItem[];
+    };
+
+const createClientId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2, 12);
+
 const cloneMedia = (
   media: MetaScheduleRequest["media"],
-): MetaScheduleRequest["media"] => {
+): EditableMedia => {
   if (media.mode === "carousel") {
     return {
       mode: "carousel",
-      items: media.items.map((item) => ({ ...item })),
+      items: media.items.map((item) => ({
+        clientId: createClientId(),
+        mediaType: item.mediaType,
+        url: item.url,
+      })),
     };
   }
 
@@ -93,7 +123,7 @@ const cloneMedia = (
 };
 
 const normalizeMedia = (
-  media: MetaScheduleRequest["media"],
+  media: EditableMedia,
 ): MetaScheduleRequest["media"] => {
   if (media.mode === "image") {
     return {
@@ -159,6 +189,32 @@ const validateMedia = (media: MetaScheduleRequest["media"]): string | null => {
   return null;
 };
 
+const isSameMedia = (
+  left: MetaScheduleRequest["media"],
+  right: MetaScheduleRequest["media"],
+) => {
+  if (left.mode !== right.mode) return false;
+
+  if (left.mode === "image" && right.mode === "image") {
+    return left.imageUrl === right.imageUrl;
+  }
+
+  if (left.mode === "reel" && right.mode === "reel") {
+    return left.videoUrl === right.videoUrl &&
+      (left.coverUrl ?? "") === (right.coverUrl ?? "");
+  }
+
+  if (left.mode === "carousel" && right.mode === "carousel") {
+    if (left.items.length !== right.items.length) return false;
+    return left.items.every((item, index) =>
+      item.mediaType === right.items[index]?.mediaType &&
+      item.url === right.items[index]?.url
+    );
+  }
+
+  return false;
+};
+
 export function PublishJobQueue({
   activePostId,
   localTimeZone,
@@ -173,7 +229,7 @@ export function PublishJobQueue({
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editPublishAt, setEditPublishAt] = useState("");
   const [editCaption, setEditCaption] = useState("");
-  const [editMedia, setEditMedia] = useState<MetaScheduleRequest["media"] | null>(null);
+  const [editMedia, setEditMedia] = useState<EditableMedia | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
   const resetEditState = () => {
@@ -293,6 +349,7 @@ export function PublishJobQueue({
     }
 
     const normalizedMedia = normalizeMedia(editMedia);
+    const normalizedExistingMedia = normalizeMedia(cloneMedia(job.media));
     const mediaValidationError = validateMedia(normalizedMedia);
     if (mediaValidationError) {
       toast.error(mediaValidationError);
@@ -322,7 +379,7 @@ export function PublishJobQueue({
       }
       body.publishAt = parsedPublishAt.toISOString();
     }
-    if (JSON.stringify(normalizedMedia) !== JSON.stringify(job.media)) {
+    if (!isSameMedia(normalizedMedia, normalizedExistingMedia)) {
       body.media = normalizedMedia;
     }
 
@@ -576,7 +633,7 @@ export function PublishJobQueue({
                           <div className="mt-2 space-y-2">
                             {editMedia.items.map((item, index) => (
                               <div
-                                key={`${job.id}-carousel-item-${index}`}
+                                key={item.clientId}
                                 className="rounded-md border border-white/10 bg-slate-950/40 p-2"
                               >
                                 <div className="flex flex-wrap items-center gap-2">
@@ -611,8 +668,8 @@ export function PublishJobQueue({
                                         if (current.items.length <= 2) return current;
                                         return {
                                           mode: "carousel",
-                                          items: current.items.filter((_, entryIndex) =>
-                                            entryIndex !== index
+                                          items: current.items.filter((entry) =>
+                                            entry.clientId !== item.clientId
                                           ),
                                         };
                                       });
@@ -655,7 +712,11 @@ export function PublishJobQueue({
                                       mode: "carousel",
                                       items: [
                                         ...current.items,
-                                        { mediaType: "image", url: "" },
+                                        {
+                                          clientId: createClientId(),
+                                          mediaType: "image",
+                                          url: "",
+                                        },
                                       ],
                                     };
                                   });
