@@ -15,11 +15,14 @@ import {
   claimDuePublishJobs,
   completePublishJobFailure,
   completePublishJobSuccess,
+  deferProcessingPublishJob,
+  getPublishWindowUsage,
   markPostPublished,
 } from "@/lib/publish-jobs";
 import { decryptString } from "@/lib/secure";
 
 export const runtime = "nodejs";
+const QUOTA_DEFER_MINUTES = 15;
 
 export async function GET(req: Request) {
   try {
@@ -45,10 +48,34 @@ export async function GET(req: Request) {
     let published = 0;
     let retried = 0;
     let failed = 0;
+    let deferred = 0;
     const errors: Array<{ id: string; detail: string }> = [];
+    const ownerUsage = new Map<string, Awaited<ReturnType<typeof getPublishWindowUsage>>>();
 
     for (const job of claimed) {
       try {
+        const usage = ownerUsage.get(job.ownerHash) ??
+          await getPublishWindowUsage(db, job.ownerHash);
+        ownerUsage.set(job.ownerHash, usage);
+
+        if (usage.remaining <= 0) {
+          const detail =
+            `Deferred by publish window limit (${usage.used}/${usage.limit} in last 24h).`;
+          const deferTo = new Date(Date.now() + QUOTA_DEFER_MINUTES * 60 * 1000);
+          const updated = await deferProcessingPublishJob(
+            db,
+            job,
+            deferTo,
+            detail,
+          );
+          if (updated) {
+            retried += 1;
+            deferred += 1;
+            continue;
+          }
+          throw new Error("Could not defer publish job after quota check.");
+        }
+
         let auth = job.authSource === "env" ? getEnvMetaAuth() : null;
 
         if (job.authSource === "oauth") {
@@ -86,6 +113,8 @@ export async function GET(req: Request) {
           creationId: publish.creationId,
           children: "children" in publish ? publish.children : undefined,
         });
+        usage.used += 1;
+        usage.remaining = Math.max(usage.limit - usage.used, 0);
         if (job.postId) {
           await markPostPublished(db, job.ownerHash, job.postId, publish.publishId);
         }
@@ -130,6 +159,7 @@ export async function GET(req: Request) {
       published,
       retried,
       failed,
+      deferred,
       errorCount: errors.length,
       errors: errors.slice(0, 20),
       ranAt: new Date().toISOString(),

@@ -14,7 +14,9 @@ vi.mock("@/lib/meta-auth", () => ({
 
 vi.mock("@/lib/publish-jobs", () => ({
   createPublishJob: vi.fn(),
+  getPublishWindowUsage: vi.fn(),
   markPostPublished: vi.fn(),
+  recordPublishedJob: vi.fn(),
 }));
 
 vi.mock("@/lib/blob-store", () => ({
@@ -34,15 +36,22 @@ import { POST } from "@/app/api/meta/schedule/route";
 import { getDb } from "@/db";
 import { publishInstagramContent } from "@/lib/meta";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
-import { createPublishJob, markPostPublished } from "@/lib/publish-jobs";
+import {
+  createPublishJob,
+  getPublishWindowUsage,
+  markPostPublished,
+  recordPublishedJob,
+} from "@/lib/publish-jobs";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
 const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthFromRequest);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
+const mockedGetPublishWindowUsage = vi.mocked(getPublishWindowUsage);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
+const mockedRecordPublishedJob = vi.mocked(recordPublishedJob);
 
 const session = {
   sub: "user-1",
@@ -69,6 +78,15 @@ describe("POST /api/meta/schedule", () => {
       },
     });
     mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
+    mockedGetPublishWindowUsage.mockResolvedValue({
+      limit: 50,
+      used: 0,
+      remaining: 50,
+      windowStart: new Date("2026-03-06T00:00:00.000Z"),
+    });
+    mockedRecordPublishedJob.mockResolvedValue(
+      {} as Awaited<ReturnType<typeof recordPublishedJob>>,
+    );
   });
 
   it("returns 401 when workspace auth is missing", async () => {
@@ -128,6 +146,7 @@ describe("POST /api/meta/schedule", () => {
     });
     expect(mockedCreatePublishJob).toHaveBeenCalledTimes(1);
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+    expect(mockedGetPublishWindowUsage).not.toHaveBeenCalled();
   });
 
   it("publishes immediately and updates linked post", async () => {
@@ -161,7 +180,32 @@ describe("POST /api/meta/schedule", () => {
       status: "published",
       publishId: "publish_1",
     });
+    expect(mockedGetPublishWindowUsage).toHaveBeenCalledTimes(1);
     expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(1);
     expect(mockedMarkPostPublished).toHaveBeenCalledTimes(1);
+    expect(mockedRecordPublishedJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 400 when the account hits the 24h publish limit", async () => {
+    mockedGetPublishWindowUsage.mockResolvedValue({
+      limit: 50,
+      used: 50,
+      remaining: 0,
+      windowStart: new Date("2026-03-06T00:00:00.000Z"),
+    });
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Now",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+    expect(mockedRecordPublishedJob).not.toHaveBeenCalled();
   });
 });

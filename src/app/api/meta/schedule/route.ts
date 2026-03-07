@@ -10,7 +10,12 @@ import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
-import { createPublishJob, markPostPublished } from "@/lib/publish-jobs";
+import {
+  createPublishJob,
+  getPublishWindowUsage,
+  markPostPublished,
+  recordPublishedJob,
+} from "@/lib/publish-jobs";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
@@ -80,6 +85,13 @@ export async function POST(req: Request) {
       });
     }
 
+    const publishUsage = await getPublishWindowUsage(db, ownerHash);
+    if (publishUsage.remaining <= 0) {
+      throw new MetaScheduleClientError(
+        `Instagram publishing limit reached (${publishUsage.used}/${publishUsage.limit} posts in the last 24 hours). Try again once the rolling window advances.`,
+      );
+    }
+
     const publish = await publishInstagramContent(
       {
         ...payload.media,
@@ -91,6 +103,19 @@ export async function POST(req: Request) {
     if (payload.postId) {
       await markPostPublished(db, ownerHash, payload.postId, publish.publishId);
     }
+
+    await recordPublishedJob(db, {
+      ownerHash,
+      postId: payload.postId,
+      caption: payload.caption,
+      media: payload.media,
+      authSource: resolvedAuth.source,
+      connectionId: resolvedAuth.account.connectionId,
+      outcomeContext: payload.outcomeContext,
+      publishId: publish.publishId,
+      creationId: publish.creationId,
+      children: "children" in publish ? publish.children : undefined,
+    });
 
     // Record publish outcome (best-effort)
     if (isBlobEnabled() && payload.outcomeContext && publish.publishId) {

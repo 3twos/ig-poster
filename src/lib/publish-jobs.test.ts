@@ -5,6 +5,8 @@ import {
   appendPublishJobEvent,
   completePublishJobFailure,
   completePublishJobSuccess,
+  deferProcessingPublishJob,
+  getPublishWindowUsage,
   type AppDb,
 } from "@/lib/publish-jobs";
 
@@ -23,6 +25,20 @@ const makeUpdateDb = <T>(rows: T[]) => {
   } as unknown as AppDb;
 
   return { db, chain };
+};
+
+const makeSelectDb = <T>(rows: T[]) => {
+  const fromChain = {
+    where: vi.fn().mockResolvedValue(rows),
+  };
+  const selectChain = {
+    from: vi.fn().mockReturnValue(fromChain),
+  };
+  const db = {
+    select: vi.fn().mockReturnValue(selectChain),
+  } as unknown as AppDb;
+
+  return { db, selectChain, fromChain };
 };
 
 const baseJob = (): PublishJobRow => ({
@@ -62,6 +78,22 @@ describe("appendPublishJobEvent", () => {
       detail: "Changed by user.",
     });
     expect(typeof events[1]?.at).toBe("string");
+  });
+});
+
+describe("getPublishWindowUsage", () => {
+  it("calculates remaining 24h publish capacity", async () => {
+    const now = new Date("2026-03-07T21:00:00.000Z");
+    const { db } = makeSelectDb([{ publishedCount: 12 }]);
+
+    const usage = await getPublishWindowUsage(db, "owner_hash", now);
+
+    expect(usage).toMatchObject({
+      limit: 50,
+      used: 12,
+      remaining: 38,
+      windowStart: new Date("2026-03-06T21:00:00.000Z"),
+    });
   });
 });
 
@@ -148,6 +180,42 @@ describe("completePublishJobSuccess", () => {
     });
     expect(setPayload.events.at(-1)).toMatchObject({
       type: "published",
+      attempt: 1,
+    });
+  });
+});
+
+describe("deferProcessingPublishJob", () => {
+  it("requeues processing job without consuming an attempt", async () => {
+    const job = {
+      ...baseJob(),
+      attempts: 2,
+    };
+    const { db, chain } = makeUpdateDb([{ ...job, status: "queued" as const }]);
+    const nextPublishAt = new Date("2026-03-06T21:30:00.000Z");
+
+    await deferProcessingPublishJob(
+      db,
+      job,
+      nextPublishAt,
+      "Deferred by publish window limit (50/50 in last 24h).",
+    );
+
+    const setPayload = chain.set.mock.calls[0]?.[0] as {
+      status: string;
+      publishAt: Date;
+      attempts: number;
+      lastAttemptAt: Date | null;
+      completedAt: Date | null;
+      events: Array<{ type: string; detail?: string; attempt?: number }>;
+    };
+    expect(setPayload.status).toBe("queued");
+    expect(setPayload.publishAt.toISOString()).toBe("2026-03-06T21:30:00.000Z");
+    expect(setPayload.attempts).toBe(1);
+    expect(setPayload.lastAttemptAt).toBeNull();
+    expect(setPayload.completedAt).toBeNull();
+    expect(setPayload.events.at(-1)).toMatchObject({
+      type: "retry-scheduled",
       attempt: 1,
     });
   });

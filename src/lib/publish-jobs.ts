@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 
 import * as schema from "@/db/schema";
@@ -8,6 +8,8 @@ import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
 export type AppDb = NeonHttpDatabase<typeof schema>;
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
+export const PUBLISH_WINDOW_LIMIT = 50;
+const PUBLISH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const buildJobId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(9)))
@@ -131,6 +133,63 @@ export const createPublishJob = async (
   return row;
 };
 
+export const recordPublishedJob = async (
+  db: AppDb,
+  input: {
+    ownerHash: string;
+    postId?: string;
+    caption: string;
+    media: MetaScheduleRequest["media"];
+    authSource: "oauth" | "env";
+    connectionId?: string;
+    outcomeContext?: MetaScheduleRequest["outcomeContext"];
+    publishId?: string;
+    creationId?: string;
+    children?: string[];
+  },
+) => {
+  const now = new Date();
+  const [row] = await db
+    .insert(publishJobs)
+    .values({
+      id: buildJobId(),
+      ownerHash: input.ownerHash,
+      postId: input.postId,
+      status: "published",
+      caption: input.caption,
+      media: input.media,
+      publishAt: now,
+      attempts: 1,
+      maxAttempts: DEFAULT_MAX_ATTEMPTS,
+      lastAttemptAt: now,
+      authSource: input.authSource,
+      connectionId: input.connectionId,
+      outcomeContext: input.outcomeContext,
+      publishId: input.publishId,
+      creationId: input.creationId,
+      children: input.children,
+      completedAt: now,
+      events: appendPublishJobEvent(
+        appendPublishJobEvent([], {
+          type: "created",
+          detail: "Published immediately.",
+        }),
+        {
+          type: "published",
+          attempt: 1,
+          detail: input.publishId
+            ? `Published as ${input.publishId}.`
+            : "Published immediately.",
+        },
+      ),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+
+  return row ?? null;
+};
+
 export const listPublishJobsForOwner = (
   db: AppDb,
   ownerHash: string,
@@ -150,6 +209,34 @@ export const listPublishJobsForOwner = (
     .where(whereClause)
     .orderBy(asc(publishJobs.publishAt))
     .limit(Math.min(Math.max(options?.limit ?? 100, 1), 250));
+};
+
+export const getPublishWindowUsage = async (
+  db: AppDb,
+  ownerHash: string,
+  now = new Date(),
+) => {
+  const windowStart = new Date(now.getTime() - PUBLISH_WINDOW_MS);
+  const [usage] = await db
+    .select({
+      publishedCount: sql<number>`count(*)`,
+    })
+    .from(publishJobs)
+    .where(
+      and(
+        eq(publishJobs.ownerHash, ownerHash),
+        eq(publishJobs.status, "published"),
+        gte(publishJobs.completedAt, windowStart),
+      ),
+    );
+
+  const used = Number(usage?.publishedCount ?? 0);
+  return {
+    limit: PUBLISH_WINDOW_LIMIT,
+    used,
+    remaining: Math.max(PUBLISH_WINDOW_LIMIT - used, 0),
+    windowStart,
+  };
 };
 
 export const claimDuePublishJobs = async (
@@ -218,6 +305,36 @@ export const completePublishJobSuccess = async (
         detail: publish.publishId
           ? `Published as ${publish.publishId}.`
           : "Published successfully.",
+      }),
+    })
+    .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "processing")))
+    .returning();
+
+  return updated ?? null;
+};
+
+export const deferProcessingPublishJob = async (
+  db: AppDb,
+  job: PublishJobRow,
+  nextPublishAt: Date,
+  detail: string,
+) => {
+  const now = new Date();
+  const restoredAttempts = Math.max(job.attempts - 1, 0);
+  const [updated] = await db
+    .update(publishJobs)
+    .set({
+      status: "queued",
+      publishAt: nextPublishAt,
+      attempts: restoredAttempts,
+      lastAttemptAt: null,
+      lastError: null,
+      completedAt: null,
+      updatedAt: now,
+      events: appendPublishJobEvent(job.events, {
+        type: "retry-scheduled",
+        attempt: restoredAttempts || undefined,
+        detail: `${detail} Next retry at ${nextPublishAt.toISOString()}.`,
       }),
     })
     .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "processing")))
