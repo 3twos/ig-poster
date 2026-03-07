@@ -98,6 +98,8 @@ Why this shape:
 
 ### 4) Publish / Schedule
 
+Before submit, single-image clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`.
+
 1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment and image metadata).
 2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
 3. Route resolves auth context (OAuth connection first, env fallback second).
@@ -109,6 +111,7 @@ Why this shape:
 Why this shape:
 - Separates interactive request latency from scheduled execution.
 - Keeps scheduling durable and queryable via relational job records.
+- Keeps Meta-only lookup logic server-side while the UI stays lightweight for location search and visual tag authoring.
 
 ### 4) Chat Conversations
 
@@ -192,6 +195,7 @@ Why this shape:
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
 - First-comment posting failures are captured as publish warnings/events and do not roll back successful media publishes.
 - Location/user-tag metadata is validated as image-only across schedule, queue-edit, and publish runtime paths.
+- Location search uses the same Meta auth context as publish requests, so suggestions reflect the connected account/token path.
 - Scheduling: cron claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
 - Failed jobs remain queryable in Postgres for inspection/recovery.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.

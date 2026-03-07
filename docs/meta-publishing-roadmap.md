@@ -4,7 +4,7 @@ Last updated: 2026-03-07
 
 This document tracks the Meta/Instagram content publishing rollout in this repo so the plan is not trapped in PR history or chat context.
 
-## Completed on `main`
+## Completed
 
 1. Meta account setup moved into Settings
    - User-facing account connect/disconnect flow lives in Settings instead of the main publish panel.
@@ -30,24 +30,23 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
    - Added `locationId` and `userTags` across schedule, immediate publish, cron publish, queue edit, DB persistence, tests, and docs.
    - Reference: merged in PR `#76`.
 
-## In Progress
+7. Guided user-tag editor UX
+   - Replaced raw line-based tag text entry with structured `username/x/y` rows in the publish form and queue editor.
+   - Normalizes usernames before submission and blocks incomplete tag rows client-side.
+   - Reference: merged in PR `#77`.
 
-1. Guided user-tag editor UX
-   - Replace raw line-based tag text entry with structured `username/x/y` rows in the publish form and queue editor.
-   - Normalize usernames before submission and block incomplete tag rows client-side.
-   - Reference: PR `#77`.
+8. Visual coordinate picker and location assist
+   - Added click-to-place user tagging on the rendered poster preview in the main publish form and on stored image URLs in queue edits.
+   - Added Meta place search that fills the existing `locationId` field while preserving manual ID entry as fallback.
+   - Reference: PR `#79`.
 
 ## Remaining phases
 
-1. Visual coordinate picker and location assist
-   - Replace numeric-only placement with image-based tag placement and reduce manual location ID entry.
-   - Goal: faster, less error-prone metadata authoring.
-
-2. Additional Meta publishing controls
+1. Additional Meta publishing controls
    - Expand support for other content-publishing options that materially improve authoring power or operational flexibility.
    - Candidate areas: collaborator workflows, richer reel-specific controls, and other Graph API publish metadata worth exposing.
 
-3. Operational hardening
+2. Operational hardening
    - Strengthen idempotency, diagnostics, and publish-history observability around retries, deferred jobs, and downstream failures.
    - Goal: make the queue safer and easier to operate under real publishing load.
 

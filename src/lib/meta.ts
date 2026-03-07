@@ -2,11 +2,17 @@ export {
   CarouselItemSchema,
   MetaScheduleRequestSchema,
   type CarouselItem,
+  type MetaLocationSearchResult,
   type MetaUserTag,
   type MetaScheduleRequest,
 } from "@/lib/meta-schemas";
 
-import type { CarouselItem, MetaScheduleRequest, MetaUserTag } from "@/lib/meta-schemas";
+import type {
+  CarouselItem,
+  MetaLocationSearchResult,
+  MetaScheduleRequest,
+  MetaUserTag,
+} from "@/lib/meta-schemas";
 
 export type MetaAuthContext = {
   accessToken: string;
@@ -69,17 +75,33 @@ const callGraphPost = async (
   return json;
 };
 
-const callGraphGet = async (path: string, auth: MetaAuthContext, fields?: string[]) => {
+const callGraphGetWithParams = async <
+  T extends GraphResponse = GraphResponse,
+>(
+  path: string,
+  auth: MetaAuthContext,
+  options: {
+    fields?: string[];
+    params?: Record<string, string | undefined>;
+  } = {},
+) => {
   const url = new URL(`https://graph.facebook.com/${auth.graphVersion}/${path}`);
   url.searchParams.set("access_token", auth.accessToken);
-  if (fields?.length) {
-    url.searchParams.set("fields", fields.join(","));
+  if (options.fields?.length) {
+    url.searchParams.set("fields", options.fields.join(","));
+  }
+  if (options.params) {
+    for (const [key, value] of Object.entries(options.params)) {
+      if (value !== undefined) {
+        url.searchParams.set(key, value);
+      }
+    }
   }
 
   const response = await fetch(url, { cache: "no-store" });
-  let json: GraphResponse;
+  let json: T;
   try {
-    json = (await response.json()) as GraphResponse;
+    json = (await response.json()) as T;
   } catch {
     throw new Error(`Meta API returned non-JSON response on ${path} (${response.status})`);
   }
@@ -90,6 +112,12 @@ const callGraphGet = async (path: string, auth: MetaAuthContext, fields?: string
 
   return json;
 };
+
+const callGraphGet = async (
+  path: string,
+  auth: MetaAuthContext,
+  fields?: string[],
+) => callGraphGetWithParams(path, auth, { fields });
 
 const createMediaContainer = (params: URLSearchParams, auth: MetaAuthContext) =>
   callGraphPost(`${auth.instagramUserId}/media`, params, auth);
@@ -342,6 +370,65 @@ export const publishInstagramFirstComment = async (
   }
 
   return response.id;
+};
+
+type LocationSearchGraphResponse = GraphResponse & {
+  data?: Array<{
+    id?: string;
+    name?: string;
+    location?: {
+      city?: string;
+      state?: string;
+      country?: string;
+      street?: string;
+      zip?: string;
+    };
+  }>;
+};
+
+export const searchMetaLocations = async (
+  query: string,
+  auth?: MetaAuthContext,
+): Promise<MetaLocationSearchResult[]> => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Instagram publishing credentials");
+  }
+
+  const trimmed = query.trim();
+  if (trimmed.length < 2) {
+    throw new Error("Search query must be at least 2 characters.");
+  }
+
+  const response = await callGraphGetWithParams<LocationSearchGraphResponse>(
+    "search",
+    resolvedAuth,
+    {
+      fields: ["name", "location"],
+      params: {
+        type: "place",
+        q: trimmed,
+        limit: "8",
+      },
+    },
+  );
+
+  return (response.data ?? [])
+    .flatMap((item) => {
+      if (!item.id || !item.name) {
+        return [];
+      }
+
+      return [{
+        id: item.id,
+        name: item.name,
+        city: item.location?.city,
+        state: item.location?.state,
+        country: item.location?.country,
+        street: item.location?.street,
+        zip: item.location?.zip,
+      }];
+    });
 };
 
 type MediaInsights = {
