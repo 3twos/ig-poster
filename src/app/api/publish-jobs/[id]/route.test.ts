@@ -44,6 +44,7 @@ const baseJob = {
   postId: null,
   status: "failed" as const,
   caption: "Caption",
+  firstComment: null,
   media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date("2026-03-06T21:00:00.000Z"),
   attempts: 3,
@@ -298,6 +299,42 @@ describe("PATCH /api/publish-jobs/:id", () => {
         lastAttemptAt: null,
         lastError: null,
         completedAt: null,
+      }),
+    );
+  });
+
+  it("allows clearing first comment during edit", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ ...baseJob, firstComment: "Old comment" }]),
+    };
+    const updated = {
+      ...baseJob,
+      status: "queued" as const,
+      firstComment: null,
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([updated]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "edit", firstComment: null }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(200);
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        firstComment: null,
       }),
     );
   });

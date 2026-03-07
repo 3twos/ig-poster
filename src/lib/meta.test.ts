@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getEnvMetaAuth, getMediaInsights } from "@/lib/meta";
+import {
+  getEnvMetaAuth,
+  getMediaInsights,
+  publishInstagramFirstComment,
+} from "@/lib/meta";
 
 describe("meta auth/env helpers", () => {
   beforeEach(() => {
@@ -80,5 +84,55 @@ describe("getMediaInsights", () => {
     });
 
     expect(result).toBeNull();
+  });
+});
+
+describe("publishInstagramFirstComment", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts a first comment and returns the comment id", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: "comment_1" }),
+      }),
+    );
+
+    const result = await publishInstagramFirstComment(
+      "media_1",
+      "First!",
+      {
+        accessToken: "token",
+        instagramUserId: "id",
+        graphVersion: "v22.0",
+      },
+    );
+
+    expect(result).toBe("comment_1");
+  });
+
+  it("throws when meta does not return a comment id", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+      }),
+    );
+
+    await expect(
+      publishInstagramFirstComment(
+        "media_1",
+        "First!",
+        {
+          accessToken: "token",
+          instagramUserId: "id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).rejects.toThrow("Meta API did not return comment id");
   });
 });

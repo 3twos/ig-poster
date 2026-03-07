@@ -1,0 +1,1 @@
+ALTER TABLE "publish_jobs" ADD COLUMN "first_comment" varchar(2200);

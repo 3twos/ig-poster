@@ -12,6 +12,7 @@ vi.mock("@/lib/blob-store", () => ({
 vi.mock("@/lib/meta", () => ({
   getEnvMetaAuth: vi.fn(),
   publishInstagramContent: vi.fn(),
+  publishInstagramFirstComment: vi.fn(),
 }));
 
 vi.mock("@/lib/meta-auth", () => ({
@@ -38,7 +39,11 @@ vi.mock("@/lib/secure", () => ({
 import { GET } from "@/app/api/cron/publish/route";
 import { getDb } from "@/db";
 import { isBlobEnabled } from "@/lib/blob-store";
-import { getEnvMetaAuth, publishInstagramContent } from "@/lib/meta";
+import {
+  getEnvMetaAuth,
+  publishInstagramContent,
+  publishInstagramFirstComment,
+} from "@/lib/meta";
 import {
   claimDuePublishJobs,
   completePublishJobFailure,
@@ -52,6 +57,7 @@ const mockedGetDb = vi.mocked(getDb);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
 const mockedGetEnvMetaAuth = vi.mocked(getEnvMetaAuth);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
+const mockedPublishInstagramFirstComment = vi.mocked(publishInstagramFirstComment);
 const mockedClaimDuePublishJobs = vi.mocked(claimDuePublishJobs);
 const mockedCompletePublishJobFailure = vi.mocked(completePublishJobFailure);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
@@ -65,6 +71,7 @@ const baseJob = {
   postId: "post_1",
   status: "processing" as const,
   caption: "Caption",
+  firstComment: null,
   media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date(),
   attempts: 1,
@@ -91,6 +98,7 @@ describe("GET /api/cron/publish", () => {
     vi.stubEnv("CRON_SECRET", "cron-secret");
     mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
     mockedIsBlobEnabled.mockReturnValue(false);
+    mockedPublishInstagramFirstComment.mockResolvedValue("comment_1");
     mockedGetPublishWindowUsage.mockResolvedValue({
       limit: 50,
       used: 0,
@@ -139,6 +147,7 @@ describe("GET /api/cron/publish", () => {
     });
 
     expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(1);
+    expect(mockedPublishInstagramFirstComment).not.toHaveBeenCalled();
     expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
     expect(mockedGetPublishWindowUsage).toHaveBeenCalledTimes(1);
     expect(mockedMarkPostPublished).toHaveBeenCalledWith(
@@ -146,6 +155,72 @@ describe("GET /api/cron/publish", () => {
       baseJob.ownerHash,
       baseJob.postId,
       "publish_1",
+    );
+  });
+
+  it("posts first comment for jobs that include one", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([
+      { ...baseJob, firstComment: "First comment" },
+    ]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      graphVersion: "v22.0",
+    });
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+    mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(mockedPublishInstagramFirstComment).toHaveBeenCalledWith(
+      "publish_1",
+      "First comment",
+      expect.objectContaining({ accessToken: "token" }),
+    );
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_1" }),
+      expect.not.objectContaining({ warningDetail: expect.any(String) }),
+    );
+  });
+
+  it("marks publish success with warning when first comment fails", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([
+      { ...baseJob, firstComment: "First comment" },
+    ]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      graphVersion: "v22.0",
+    });
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+    mockedPublishInstagramFirstComment.mockRejectedValue(
+      new Error("comment denied"),
+    );
+    mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_1" }),
+      expect.objectContaining({ warningDetail: "comment denied" }),
     );
   });
 

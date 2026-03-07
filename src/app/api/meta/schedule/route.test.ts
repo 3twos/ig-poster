@@ -40,6 +40,7 @@ vi.mock("@/lib/meta", async () => {
   return {
     ...actual,
     publishInstagramContent: vi.fn(),
+    publishInstagramFirstComment: vi.fn(),
   };
 });
 
@@ -49,7 +50,7 @@ import {
   MetaMediaPreflightError,
   preflightMetaMediaForPublish,
 } from "@/lib/meta-media-preflight";
-import { publishInstagramContent } from "@/lib/meta";
+import { publishInstagramContent, publishInstagramFirstComment } from "@/lib/meta";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import {
   completePublishJobFailure,
@@ -67,6 +68,7 @@ const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
+const mockedPublishInstagramFirstComment = vi.mocked(publishInstagramFirstComment);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
 const mockedCompletePublishJobFailure = vi.mocked(completePublishJobFailure);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
@@ -85,6 +87,7 @@ const reservedJob = {
   postId: "post_1",
   status: "processing",
   caption: "Now",
+  firstComment: null,
   media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date("2026-03-07T16:00:00.000Z"),
   attempts: 1,
@@ -125,6 +128,7 @@ describe("POST /api/meta/schedule", () => {
     mockedReserveImmediatePublishJob.mockResolvedValue(
       reservedJob as Awaited<ReturnType<typeof reserveImmediatePublishJob>>,
     );
+    mockedPublishInstagramFirstComment.mockResolvedValue("comment_1");
     mockedCompletePublishJobSuccess.mockResolvedValue(
       { ...reservedJob, status: "published" } as Awaited<
         ReturnType<typeof completePublishJobSuccess>
@@ -194,6 +198,12 @@ describe("POST /api/meta/schedule", () => {
     });
     expect(mockedPreflightMetaMedia).toHaveBeenCalledTimes(1);
     expect(mockedCreatePublishJob).toHaveBeenCalledTimes(1);
+    expect(mockedCreatePublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        firstComment: undefined,
+      }),
+    );
     expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
   });
@@ -232,9 +242,76 @@ describe("POST /api/meta/schedule", () => {
     expect(mockedPreflightMetaMedia).toHaveBeenCalledTimes(1);
     expect(mockedReserveImmediatePublishJob).toHaveBeenCalledTimes(1);
     expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(1);
+    expect(mockedPublishInstagramFirstComment).not.toHaveBeenCalled();
     expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
     expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
     expect(mockedMarkPostPublished).toHaveBeenCalledTimes(1);
+  });
+
+  it("posts first comment after immediate publish when provided", async () => {
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Now",
+        firstComment: "First comment",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      status: "published",
+      firstCommentStatus: "posted",
+    });
+    expect(mockedPublishInstagramFirstComment).toHaveBeenCalledWith(
+      "publish_1",
+      "First comment",
+      expect.objectContaining({ accessToken: "token" }),
+    );
+  });
+
+  it("returns publish success when first comment publish fails", async () => {
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+    mockedPublishInstagramFirstComment.mockRejectedValue(
+      new Error("comment denied"),
+    );
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Now",
+        firstComment: "First comment",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      status: "published",
+      firstCommentStatus: "failed",
+      firstCommentWarning: "comment denied",
+    });
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_1" }),
+      expect.objectContaining({
+        warningDetail: "comment denied",
+      }),
+    );
   });
 
   it("returns 400 when the account hits the 24h publish limit", async () => {

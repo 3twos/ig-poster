@@ -189,6 +189,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
       .set({
         status: "queued",
         caption: payload.caption ?? existing.caption,
+        firstComment:
+          payload.firstComment !== undefined
+            ? payload.firstComment
+            : existing.firstComment,
         media: payload.media ?? existing.media,
         publishAt: payload.publishAt
           ? new Date(payload.publishAt)
