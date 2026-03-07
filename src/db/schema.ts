@@ -96,6 +96,8 @@ export const publishJobs = pgTable(
     status: publishJobStatusEnum("status").notNull().default("queued"),
     caption: varchar("caption", { length: 2200 }).notNull(),
     firstComment: varchar("first_comment", { length: 2200 }),
+    locationId: varchar("location_id", { length: 64 }),
+    userTags: jsonb("user_tags").$type<MetaScheduleRequest["userTags"]>(),
     media: jsonb("media").$type<MetaScheduleRequest["media"]>().notNull(),
     publishAt: timestamp("publish_at", { withTimezone: true }).notNull(),
     attempts: integer("attempts").notNull().default(0),

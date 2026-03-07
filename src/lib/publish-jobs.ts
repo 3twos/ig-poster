@@ -94,6 +94,8 @@ export const createPublishJob = async (
     postId?: string;
     caption: string;
     firstComment?: string;
+    locationId?: string;
+    userTags?: MetaScheduleRequest["userTags"];
     media: MetaScheduleRequest["media"];
     publishAt: string;
     authSource: "oauth" | "env";
@@ -112,6 +114,8 @@ export const createPublishJob = async (
       status: "queued",
       caption: input.caption,
       firstComment: input.firstComment,
+      locationId: input.locationId,
+      userTags: input.userTags,
       media: input.media,
       publishAt: new Date(input.publishAt),
       attempts: 0,
@@ -167,6 +171,8 @@ export const reserveImmediatePublishJob = async (
     postId?: string;
     caption: string;
     firstComment?: string;
+    locationId?: string;
+    userTags?: MetaScheduleRequest["userTags"];
     media: MetaScheduleRequest["media"];
     authSource: "oauth" | "env";
     connectionId?: string;
@@ -192,6 +198,8 @@ export const reserveImmediatePublishJob = async (
         status: "processing",
         caption: input.caption,
         firstComment: input.firstComment,
+        locationId: input.locationId,
+        userTags: input.userTags,
         media: input.media,
         publishAt: now,
         attempts: 1,

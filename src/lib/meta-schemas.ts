@@ -3,6 +3,21 @@ import { z } from "zod";
 import { PostTypeSchema } from "@/lib/creative";
 
 const FirstCommentSchema = z.string().trim().min(1).max(2200);
+const LocationIdSchema = z.string().trim().min(1).max(64);
+const InstagramUsernameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(30)
+  .regex(/^@?[A-Za-z0-9._]+$/, "Tag usernames may only contain letters, numbers, underscore, dot, and optional leading @.")
+  .transform((value) => value.replace(/^@/, ""));
+
+export const MetaUserTagSchema = z.object({
+  username: InstagramUsernameSchema,
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+const UserTagsSchema = z.array(MetaUserTagSchema).min(1).max(20);
 
 export const CarouselItemSchema = z.object({
   mediaType: z.enum(["image", "video"]),
@@ -19,28 +34,53 @@ export const OutcomeContextSchema = z.object({
   score: z.number().optional(),
 });
 
-export const MetaScheduleRequestSchema = z.object({
-  postId: z.string().trim().min(1).max(18).optional(),
-  caption: z.string().trim().min(1).max(2200),
-  firstComment: FirstCommentSchema.optional(),
-  publishAt: z.string().datetime().optional(),
-  media: z.discriminatedUnion("mode", [
-    z.object({
-      mode: z.literal("image"),
-      imageUrl: z.string().url(),
-    }),
-    z.object({
-      mode: z.literal("reel"),
-      videoUrl: z.string().url(),
-      coverUrl: z.string().url().optional(),
-    }),
-    z.object({
-      mode: z.literal("carousel"),
-      items: z.array(CarouselItemSchema).min(2).max(10),
-    }),
-  ]),
-  outcomeContext: OutcomeContextSchema.optional(),
-});
+export const MetaScheduleRequestSchema = z
+  .object({
+    postId: z.string().trim().min(1).max(18).optional(),
+    caption: z.string().trim().min(1).max(2200),
+    firstComment: FirstCommentSchema.optional(),
+    locationId: LocationIdSchema.optional(),
+    userTags: UserTagsSchema.optional(),
+    publishAt: z.string().datetime().optional(),
+    media: z.discriminatedUnion("mode", [
+      z.object({
+        mode: z.literal("image"),
+        imageUrl: z.string().url(),
+      }),
+      z.object({
+        mode: z.literal("reel"),
+        videoUrl: z.string().url(),
+        coverUrl: z.string().url().optional(),
+      }),
+      z.object({
+        mode: z.literal("carousel"),
+        items: z.array(CarouselItemSchema).min(2).max(10),
+      }),
+    ]),
+    outcomeContext: OutcomeContextSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const hasLocation = value.locationId !== undefined;
+    const hasUserTags = value.userTags !== undefined;
+
+    if (value.media.mode !== "image" && (hasLocation || hasUserTags)) {
+      if (hasLocation) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Location and user tags are currently supported only for image posts.",
+          path: ["locationId"],
+        });
+      }
+
+      if (hasUserTags) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Location and user tags are currently supported only for image posts.",
+          path: ["userTags"],
+        });
+      }
+    }
+  });
 
 export const PublishJobStatusSchema = z.enum([
   "queued",
@@ -80,6 +120,8 @@ export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
     action: z.literal("edit"),
     caption: z.string().trim().min(1).max(2200).optional(),
     firstComment: z.union([FirstCommentSchema, z.null()]).optional(),
+    locationId: z.union([LocationIdSchema, z.null()]).optional(),
+    userTags: z.union([UserTagsSchema, z.null()]).optional(),
     publishAt: z.string().datetime().optional(),
     media: MetaScheduleRequestSchema.shape.media.optional(),
     outcomeContext: OutcomeContextSchema.optional(),
@@ -87,6 +129,8 @@ export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
     (value) =>
       value.caption !== undefined ||
       value.firstComment !== undefined ||
+      value.locationId !== undefined ||
+      value.userTags !== undefined ||
       value.publishAt !== undefined ||
       value.media !== undefined ||
       value.outcomeContext !== undefined,
@@ -100,6 +144,8 @@ export const PublishJobClientSchema = z.object({
   status: PublishJobStatusSchema,
   caption: z.string(),
   firstComment: z.string().nullable().optional(),
+  locationId: z.string().nullable().optional(),
+  userTags: z.array(MetaUserTagSchema).nullable().optional(),
   media: MetaScheduleRequestSchema.shape.media,
   publishAt: z.string().datetime(),
   attempts: z.number().int().nonnegative(),
@@ -127,6 +173,8 @@ export const ScheduledJobSchema = z.object({
   id: z.string(),
   caption: z.string().min(1).max(2200),
   firstComment: FirstCommentSchema.optional(),
+  locationId: LocationIdSchema.optional(),
+  userTags: UserTagsSchema.optional(),
   media: MetaScheduleRequestSchema.shape.media,
   publishAt: z.string().datetime(),
   createdAt: z.string().datetime(),
@@ -137,6 +185,7 @@ export const ScheduledJobSchema = z.object({
 
 export type MetaScheduleRequest = z.infer<typeof MetaScheduleRequestSchema>;
 export type CarouselItem = z.infer<typeof CarouselItemSchema>;
+export type MetaUserTag = z.infer<typeof MetaUserTagSchema>;
 export type ScheduledJob = z.infer<typeof ScheduledJobSchema>;
 export type PublishJobStatus = z.infer<typeof PublishJobStatusSchema>;
 export type PublishJobEvent = z.infer<typeof PublishJobEventSchema>;

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getEnvMetaAuth,
   getMediaInsights,
+  publishInstagramContent,
   publishInstagramFirstComment,
 } from "@/lib/meta";
 
@@ -84,6 +85,77 @@ describe("getMediaInsights", () => {
     });
 
     expect(result).toBeNull();
+  });
+});
+
+describe("publishInstagramContent", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("passes location id and user tags for single-image publish", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "creation_1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "publish_1" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishInstagramContent(
+        {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+          caption: "Caption",
+          locationId: "12345",
+          userTags: [{ username: "handle", x: 0.5, y: 0.5 }],
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toMatchObject({
+      mode: "image",
+      creationId: "creation_1",
+      publishId: "publish_1",
+    });
+
+    const createCall = fetchMock.mock.calls[0];
+    const createBody = createCall?.[1]?.body as URLSearchParams;
+    expect(createCall?.[0]).toBe("https://graph.facebook.com/v22.0/ig-id/media");
+    expect(createBody.get("image_url")).toBe("https://cdn.example.com/image.jpg");
+    expect(createBody.get("caption")).toBe("Caption");
+    expect(createBody.get("location_id")).toBe("12345");
+    expect(createBody.get("user_tags")).toBe(
+      JSON.stringify([{ username: "handle", x: 0.5, y: 0.5 }]),
+    );
+    expect(createBody.get("access_token")).toBe("token");
+  });
+
+  it("rejects location metadata for non-image modes", async () => {
+    await expect(
+      publishInstagramContent(
+        {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/reel.mp4",
+          caption: "Caption",
+          locationId: "12345",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).rejects.toThrow(
+      "Location and user tags are currently supported only for image posts.",
+    );
   });
 });
 

@@ -86,6 +86,8 @@ const baseJob = (): PublishJobRow => ({
   status: "processing",
   caption: "Caption",
   firstComment: null,
+  locationId: null,
+  userTags: null,
   media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date("2026-03-06T21:00:00.000Z"),
   attempts: 1,

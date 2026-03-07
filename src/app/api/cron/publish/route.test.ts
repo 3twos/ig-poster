@@ -72,6 +72,8 @@ const baseJob = {
   status: "processing" as const,
   caption: "Caption",
   firstComment: null,
+  locationId: null,
+  userTags: null,
   media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date(),
   attempts: 1,
@@ -155,6 +157,39 @@ describe("GET /api/cron/publish", () => {
       baseJob.ownerHash,
       baseJob.postId,
       "publish_1",
+    );
+  });
+
+  it("passes image metadata fields when present on queued jobs", async () => {
+    const userTags = [{ username: "handle", x: 0.4, y: 0.6 }];
+    mockedClaimDuePublishJobs.mockResolvedValue([
+      { ...baseJob, locationId: "12345", userTags },
+    ]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      graphVersion: "v22.0",
+    });
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+    mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    expect(mockedPublishInstagramContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        locationId: "12345",
+        userTags,
+      }),
+      expect.objectContaining({ accessToken: "token" }),
     );
   });
 

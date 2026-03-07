@@ -20,7 +20,7 @@
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed Postgres queue.
-- Surfaces a publish queue in the publish section so users can review queued/processing/failed jobs, cancel jobs, retry failed jobs immediately, and edit queued/failed publish details (caption, first comment, publish time, media URLs) without leaving the editor.
+- Surfaces a publish queue in the publish section so users can review queued/processing/failed jobs, cancel jobs, retry failed jobs immediately, and edit queued/failed publish details (caption, first comment, publish time, media URLs, image metadata) without leaving the editor.
 - Enforces Meta Content Publishing throughput guardrails (50 published posts per rolling 24-hour window) for immediate publishes, and automatically defers queued jobs when the window is saturated.
 - Runs media preflight checks before scheduling or publishing (public HTTPS URL requirement + remote content-type probing for image/video compatibility).
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.
@@ -55,6 +55,7 @@
 
 4. Publish immediately
    - Connect Instagram via OAuth (or env credentials), then publish selected concept directly.
+   - Optional metadata for image posts: location ID and user tags (`username,x,y`).
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.

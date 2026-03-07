@@ -82,6 +82,8 @@ export async function POST(req: Request) {
         postId: payload.postId,
         caption: payload.caption,
         firstComment: payload.firstComment,
+        locationId: payload.locationId,
+        userTags: payload.userTags,
         media: payload.media,
         publishAt: new Date(publishAt).toISOString(),
         authSource: resolvedAuth.source,
@@ -101,6 +103,8 @@ export async function POST(req: Request) {
       postId: payload.postId,
       caption: payload.caption,
       firstComment: payload.firstComment,
+      locationId: payload.locationId,
+      userTags: payload.userTags,
       media: payload.media,
       authSource: resolvedAuth.source,
       connectionId: resolvedAuth.account.connectionId,
@@ -119,6 +123,8 @@ export async function POST(req: Request) {
         {
           ...payload.media,
           caption: payload.caption,
+          locationId: payload.locationId,
+          userTags: payload.userTags,
         },
         resolvedAuth.auth,
       );

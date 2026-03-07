@@ -88,6 +88,8 @@ const reservedJob = {
   status: "processing",
   caption: "Now",
   firstComment: null,
+  locationId: null,
+  userTags: null,
   media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date("2026-03-07T16:00:00.000Z"),
   attempts: 1,
@@ -173,6 +175,24 @@ describe("POST /api/meta/schedule", () => {
     expect(mockedGetDb).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when image-only metadata is provided for non-image media", async () => {
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Invalid",
+        locationId: "12345",
+        media: { mode: "reel", videoUrl: "https://cdn.example.com/reel.mp4" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockedPreflightMetaMedia).not.toHaveBeenCalled();
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+  });
+
   it("queues a scheduled publish job", async () => {
     const publishAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     mockedCreatePublishJob.mockResolvedValue({
@@ -202,10 +222,50 @@ describe("POST /api/meta/schedule", () => {
       expect.anything(),
       expect.objectContaining({
         firstComment: undefined,
+        locationId: undefined,
+        userTags: undefined,
       }),
     );
     expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+  });
+
+  it("passes location and user tags for immediate image publish", async () => {
+    const userTags = [{ username: "handle", x: 0.25, y: 0.75 }];
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Now",
+        locationId: "12345",
+        userTags,
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockedReserveImmediatePublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        locationId: "12345",
+        userTags,
+      }),
+    );
+    expect(mockedPublishInstagramContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        locationId: "12345",
+        userTags,
+      }),
+      expect.objectContaining({ accessToken: "token" }),
+    );
   });
 
   it("publishes immediately and updates linked post", async () => {

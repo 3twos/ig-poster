@@ -2,10 +2,11 @@ export {
   CarouselItemSchema,
   MetaScheduleRequestSchema,
   type CarouselItem,
+  type MetaUserTag,
   type MetaScheduleRequest,
 } from "@/lib/meta-schemas";
 
-import type { CarouselItem, MetaScheduleRequest } from "@/lib/meta-schemas";
+import type { CarouselItem, MetaScheduleRequest, MetaUserTag } from "@/lib/meta-schemas";
 
 export type MetaAuthContext = {
   accessToken: string;
@@ -129,14 +130,27 @@ const waitForContainerReady = async (creationId: string, auth: MetaAuthContext) 
 };
 
 const publishSingleImage = async (
-  payload: { imageUrl: string; caption: string },
+  payload: {
+    imageUrl: string;
+    caption: string;
+    locationId?: string;
+    userTags?: MetaUserTag[];
+  },
   auth: MetaAuthContext,
 ) => {
+  const params = new URLSearchParams({
+    image_url: payload.imageUrl,
+    caption: payload.caption,
+  });
+  if (payload.locationId) {
+    params.set("location_id", payload.locationId);
+  }
+  if (payload.userTags?.length) {
+    params.set("user_tags", JSON.stringify(payload.userTags));
+  }
+
   const createMedia = await createMediaContainer(
-    new URLSearchParams({
-      image_url: payload.imageUrl,
-      caption: payload.caption,
-    }),
+    params,
     auth,
   );
 
@@ -252,7 +266,11 @@ const publishCarousel = async (
 };
 
 export const publishInstagramContent = async (
-  payload: MetaScheduleRequest["media"] & { caption: string },
+  payload: MetaScheduleRequest["media"] & {
+    caption: string;
+    locationId?: string;
+    userTags?: MetaUserTag[];
+  },
   auth?: MetaAuthContext,
 ) => {
   const resolvedAuth = auth ?? getEnvMetaAuth();
@@ -262,9 +280,18 @@ export const publishInstagramContent = async (
 
   if (payload.mode === "image") {
     return publishSingleImage(
-      { imageUrl: payload.imageUrl, caption: payload.caption },
+      {
+        imageUrl: payload.imageUrl,
+        caption: payload.caption,
+        locationId: payload.locationId,
+        userTags: payload.userTags,
+      },
       resolvedAuth,
     );
+  }
+
+  if (payload.locationId || payload.userTags?.length) {
+    throw new Error("Location and user tags are currently supported only for image posts.");
   }
 
   if (payload.mode === "reel") {
