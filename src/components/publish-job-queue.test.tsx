@@ -146,6 +146,44 @@ describe("PublishJobQueue", () => {
     ).not.toBeNull();
   });
 
+  it("retries a failed job immediately", async () => {
+    mockQueueLoad(
+      [],
+      [
+        makeJob({
+          status: "failed",
+          lastError: "Temporary error",
+          attempts: 3,
+        }),
+      ],
+    );
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [makeJob()] }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText("Temporary error")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /retry now/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    const patchCall = fetchMock.mock.calls[2];
+    expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      action: "retry-now",
+    });
+  });
+
   it("edits a failed job and sends the updated publish timestamp", async () => {
     mockQueueLoad(
       [],

@@ -109,6 +109,43 @@ export async function PATCH(req: Request, ctx: Ctx) {
       );
     }
 
+    if (payload.action === "retry-now") {
+      if (existing.status !== "failed") {
+        return NextResponse.json(
+          { error: "Retry now is only available for failed jobs." },
+          { status: 409 },
+        );
+      }
+
+      const [updated] = await db
+        .update(publishJobs)
+        .set({
+          status: "queued",
+          publishAt: new Date(),
+          attempts: 0,
+          lastAttemptAt: null,
+          completedAt: null,
+          lastError: null,
+          updatedAt: new Date(),
+          events: appendPublishJobEvent(existing.events, {
+            type: "updated",
+            detail: "Retry requested by user.",
+          }),
+        })
+        .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, ownerHash)))
+        .returning();
+
+      if (!updated) {
+        return raceConflictResponse();
+      }
+
+      if (existing.postId) {
+        await markPostScheduled(db, ownerHash, existing.postId);
+      }
+
+      return NextResponse.json(updated);
+    }
+
     if (payload.action === "reschedule") {
       const [updated] = await db
         .update(publishJobs)

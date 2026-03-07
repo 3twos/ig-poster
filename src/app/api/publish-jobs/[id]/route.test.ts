@@ -160,6 +160,76 @@ describe("PATCH /api/publish-jobs/:id", () => {
     );
   });
 
+  it("queues immediate retry for failed jobs", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([baseJob]),
+    };
+    const updated = {
+      ...baseJob,
+      status: "queued" as const,
+      attempts: 0,
+      lastAttemptAt: null,
+      lastError: null,
+      completedAt: null,
+      publishAt: new Date(),
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([updated]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "retry-now",
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(200);
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "queued",
+        attempts: 0,
+        lastAttemptAt: null,
+        lastError: null,
+        completedAt: null,
+        publishAt: expect.any(Date),
+      }),
+    );
+  });
+
+  it("returns 409 when retry-now is used on non-failed job", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ ...baseJob, status: "queued" }]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn(),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "retry-now",
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(409);
+  });
+
   it("returns 400 for invalid payload", async () => {
     mockedReadWorkspace.mockResolvedValue(session);
 

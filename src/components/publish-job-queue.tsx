@@ -5,6 +5,7 @@ import {
   CalendarClock,
   LoaderCircle,
   RefreshCw,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -25,7 +26,7 @@ type Props = {
   localTimeZone: string;
   onJobsMutated?: (
     postId: string | undefined,
-    action: "cancel" | "reschedule" | "edit",
+    action: "cancel" | "reschedule" | "edit" | "retry-now",
   ) => Promise<void> | void;
   refreshKey: number;
 };
@@ -152,6 +153,36 @@ export function PublishJobQueue({
       const message = error instanceof Error
         ? error.message
         : "Could not cancel scheduled publish.";
+      toast.error(message);
+    } finally {
+      setActiveJobId(null);
+    }
+  };
+
+  const handleRetryNow = async (job: PublishJobClient) => {
+    setActiveJobId(job.id);
+    try {
+      const response = await fetch(`/api/publish-jobs/${job.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "retry-now" }),
+      });
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      toast.success("Retry queued.");
+      if (editingJobId === job.id) {
+        setEditingJobId(null);
+        setEditPublishAt("");
+        setEditCaption("");
+      }
+      await onJobsMutated?.(job.postId ?? undefined, "retry-now");
+      await loadJobs(true);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : "Could not queue retry.";
       toast.error(message);
     } finally {
       setActiveJobId(null);
@@ -321,6 +352,22 @@ export function PublishJobQueue({
 
                     {job.status === "processing" ? null : (
                       <div className="flex shrink-0 items-center gap-1">
+                        {job.status === "failed" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            disabled={isBusy}
+                            onClick={() => void handleRetryNow(job)}
+                          >
+                            {isBusy ? (
+                              <LoaderCircle className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-3 w-3" />
+                            )}
+                            Retry now
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           variant="outline"
