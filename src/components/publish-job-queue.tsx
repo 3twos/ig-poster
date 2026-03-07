@@ -7,7 +7,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -66,12 +66,13 @@ export function PublishJobQueue({
   const [jobs, setJobs] = useState<PublishJobClient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [rescheduleAt, setRescheduleAt] = useState("");
   const hasLoadedOnceRef = useRef(false);
 
-  const loadJobs = async (background = false) => {
+  const loadJobs = useCallback(async (background = false) => {
     if (background) {
       setIsRefreshing(true);
     } else {
@@ -88,22 +89,24 @@ export function PublishJobQueue({
 
       const json = PublishJobListResponseSchema.parse(await response.json());
       setJobs(json.jobs);
+      setLoadError(null);
+      hasLoadedOnceRef.current = true;
     } catch (error) {
       const message = error instanceof Error
         ? error.message
         : "Could not load scheduled publish jobs.";
+      setLoadError(message);
       toast.error(message);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
-      hasLoadedOnceRef.current = true;
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadJobs(hasLoadedOnceRef.current);
     // refreshKey is the external invalidation signal after new schedules are created.
-  }, [refreshKey]);
+  }, [loadJobs, refreshKey]);
 
   const handleCancel = async (jobId: string) => {
     setActiveJobId(jobId);
@@ -191,6 +194,19 @@ export function PublishJobQueue({
         <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
           <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
           Loading publish queue...
+        </div>
+      ) : loadError && jobs.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-red-300/25 bg-red-400/10 p-3 text-xs text-red-100">
+          <p>{loadError}</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="mt-2"
+            onClick={() => void loadJobs(false)}
+          >
+            Retry
+          </Button>
         </div>
       ) : jobs.length === 0 ? (
         <p className="mt-3 text-xs text-slate-400">

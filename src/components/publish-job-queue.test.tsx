@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PublishJobClient } from "@/lib/meta-schemas";
 
@@ -59,6 +59,10 @@ describe("PublishJobQueue", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("renders queued and failed publish jobs for the workspace", async () => {
@@ -176,5 +180,25 @@ describe("PublishJobQueue", () => {
       action: "reschedule",
       publishAt: new Date("2026-03-11T09:45").toISOString(),
     });
+  });
+
+  it("shows a load error state instead of the empty-state copy after initial fetch failure", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: "Database unavailable" }, 500),
+    );
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText("Database unavailable")).not.toBeNull();
+    expect(
+      screen.queryByText("No queued, processing, or failed publish jobs right now."),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
   });
 });
