@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 
 import type { MetaScheduleRequest } from "@/lib/meta-schemas";
+import { isAbortError } from "@/lib/server-utils";
 
 type MediaTarget = {
   label: string;
@@ -15,6 +16,8 @@ type MediaPreflightOptions = {
 
 const DEFAULT_TIMEOUT_MS = 8_000;
 const HEAD_FALLBACK_STATUSES = new Set([400, 403, 405, 406, 415, 500, 501]);
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 5;
 
 export class MetaMediaPreflightError extends Error {
   constructor(message: string) {
@@ -37,8 +40,42 @@ const isPrivateIpv4 = (hostname: string) => {
   return false;
 };
 
+const mappedIpv4FromIpv6 = (hostname: string) => {
+  const normalized = hostname.toLowerCase();
+  if (!normalized.startsWith("::ffff:")) {
+    return null;
+  }
+
+  const suffix = normalized.slice("::ffff:".length);
+  if (isIP(suffix) === 4) {
+    return suffix;
+  }
+
+  const hexPair = suffix.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!hexPair) {
+    return null;
+  }
+
+  const left = Number.parseInt(hexPair[1], 16);
+  const right = Number.parseInt(hexPair[2], 16);
+  if (Number.isNaN(left) || Number.isNaN(right)) {
+    return null;
+  }
+
+  return [
+    (left >> 8) & 0xff,
+    left & 0xff,
+    (right >> 8) & 0xff,
+    right & 0xff,
+  ].join(".");
+};
+
 const isPrivateIpv6 = (hostname: string) => {
   const normalized = hostname.toLowerCase();
+  const mappedIpv4 = mappedIpv4FromIpv6(normalized);
+  if (mappedIpv4 && isPrivateIpv4(mappedIpv4)) {
+    return true;
+  }
   if (normalized === "::1" || normalized === "::") return true;
   if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
   if (
@@ -53,7 +90,7 @@ const isPrivateIpv6 = (hostname: string) => {
 };
 
 const isPrivateHost = (hostname: string) => {
-  const normalized = hostname.trim().toLowerCase();
+  const normalized = hostname.trim().toLowerCase().replace(/^\[(.*)\]$/, "$1");
   if (!normalized) return true;
   if (
     normalized === "localhost" ||
@@ -98,13 +135,18 @@ const collectMediaTargets = (media: MetaScheduleRequest["media"]): MediaTarget[]
 };
 
 const assertPublicHttpsUrl = (target: MediaTarget) => {
-  let parsed: URL;
+  assertPublicHttpsParsedUrl(target, parseTargetUrl(target));
+};
+
+const parseTargetUrl = (target: MediaTarget) => {
   try {
-    parsed = new URL(target.url);
+    return new URL(target.url);
   } catch {
     throw new MetaMediaPreflightError(`${target.label} is not a valid URL.`);
   }
+};
 
+const assertPublicHttpsParsedUrl = (target: MediaTarget, parsed: URL) => {
   if (parsed.protocol !== "https:") {
     throw new MetaMediaPreflightError(`${target.label} must use HTTPS.`);
   }
@@ -116,25 +158,79 @@ const assertPublicHttpsUrl = (target: MediaTarget) => {
   }
 };
 
+const closeResponseBody = async (response: Response | null | undefined) => {
+  if (!response?.body) return;
+  try {
+    await response.body.cancel();
+  } catch {
+    // Best-effort connection cleanup.
+  }
+};
+
+const fetchWithValidatedRedirects = async (
+  target: MediaTarget,
+  method: "HEAD" | "GET",
+  signal: AbortSignal,
+) => {
+  let currentUrl = target.url;
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const response = await fetch(currentUrl, {
+      method,
+      cache: "no-store",
+      redirect: "manual",
+      headers: method === "GET" ? { Range: "bytes=0-0" } : undefined,
+      signal,
+    });
+
+    if (!REDIRECT_STATUSES.has(response.status)) {
+      return response;
+    }
+
+    if (hop === MAX_REDIRECTS) {
+      await closeResponseBody(response);
+      throw new MetaMediaPreflightError(
+        `${target.label} redirected too many times.`,
+      );
+    }
+
+    const location = response.headers.get("location");
+    await closeResponseBody(response);
+    if (!location) {
+      throw new MetaMediaPreflightError(
+        `${target.label} redirect response was missing a location header.`,
+      );
+    }
+
+    const redirectedUrl = new URL(location, currentUrl);
+    assertPublicHttpsParsedUrl(target, redirectedUrl);
+    currentUrl = redirectedUrl.toString();
+  }
+
+  throw new MetaMediaPreflightError(`${target.label} could not be reached.`);
+};
+
 const probeRemoteTarget = async (
   target: MediaTarget,
   timeoutMs: number,
 ) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const fetchWithSignal = async (method: "HEAD" | "GET") =>
-    fetch(target.url, {
-      method,
-      cache: "no-store",
-      redirect: "follow",
-      headers: method === "GET" ? { Range: "bytes=0-0" } : undefined,
-      signal: controller.signal,
-    });
 
+  let response: Response | null = null;
   try {
-    let response = await fetchWithSignal("HEAD");
+    response = await fetchWithValidatedRedirects(
+      target,
+      "HEAD",
+      controller.signal,
+    );
     if (HEAD_FALLBACK_STATUSES.has(response.status)) {
-      response = await fetchWithSignal("GET");
+      await closeResponseBody(response);
+      response = await fetchWithValidatedRedirects(
+        target,
+        "GET",
+        controller.signal,
+      );
     }
 
     if (!response.ok && response.status !== 206) {
@@ -158,7 +254,7 @@ const probeRemoteTarget = async (
       throw error;
     }
 
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (isAbortError(error)) {
       throw new MetaMediaPreflightError(
         `${target.label} probe timed out after ${Math.round(timeoutMs / 1000)}s.`,
       );
@@ -168,6 +264,7 @@ const probeRemoteTarget = async (
       `${target.label} could not be probed from the server.`,
     );
   } finally {
+    await closeResponseBody(response);
     clearTimeout(timeout);
   }
 };
