@@ -22,6 +22,15 @@ const jsonResponse = (body: unknown, status = 200) =>
     headers: { "Content-Type": "application/json" },
   });
 
+const mockQueueLoad = (
+  activeJobs: PublishJobClient[],
+  failedJobs: PublishJobClient[] = [],
+) => {
+  fetchMock
+    .mockResolvedValueOnce(jsonResponse({ jobs: activeJobs }))
+    .mockResolvedValueOnce(jsonResponse({ jobs: failedJobs }));
+};
+
 const makeJob = (overrides?: Partial<PublishJobClient>): PublishJobClient => ({
   id: "job-1",
   postId: "post-1",
@@ -66,26 +75,24 @@ describe("PublishJobQueue", () => {
   });
 
   it("renders queued and failed publish jobs for the workspace", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        jobs: [
-          makeJob(),
-          makeJob({
-            id: "job-2",
-            postId: "post-9",
-            status: "failed",
-            lastError: "OAuth token expired",
-            outcomeContext: {
-              variantName: "Retry B",
-              postType: "single-image",
-              caption: "Caption",
-              hook: "Hook",
-              hashtags: ["#retry"],
-              brandName: "Acme",
-            },
-          }),
-        ],
-      }),
+    mockQueueLoad(
+      [makeJob()],
+      [
+        makeJob({
+          id: "job-2",
+          postId: "post-9",
+          status: "failed",
+          lastError: "OAuth token expired",
+          outcomeContext: {
+            variantName: "Retry B",
+            postType: "single-image",
+            caption: "Caption",
+            hook: "Hook",
+            hashtags: ["#retry"],
+            brandName: "Acme",
+          },
+        }),
+      ],
     );
 
     render(
@@ -100,12 +107,15 @@ describe("PublishJobQueue", () => {
     expect(screen.getByText("This post")).not.toBeNull();
     expect(screen.getByText("OAuth token expired")).not.toBeNull();
     expect(screen.getByText("Failed")).not.toBeNull();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/publish-jobs?status=queued,processing&limit=8");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/publish-jobs?status=failed&limit=4");
   });
 
   it("cancels a queued job and refreshes the list", async () => {
+    mockQueueLoad([makeJob()]);
     fetchMock
-      .mockResolvedValueOnce(jsonResponse({ jobs: [makeJob()] }))
       .mockResolvedValueOnce(jsonResponse({ status: "canceled" }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }))
       .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
 
     render(
@@ -121,10 +131,10 @@ describe("PublishJobQueue", () => {
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
     });
 
-    const patchCall = fetchMock.mock.calls[1];
+    const patchCall = fetchMock.mock.calls[2];
     expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
     expect(patchCall?.[1]).toMatchObject({
       method: "PATCH",
@@ -137,20 +147,20 @@ describe("PublishJobQueue", () => {
   });
 
   it("reschedules a failed job and sends the new publish timestamp", async () => {
-    fetchMock
-      .mockResolvedValueOnce(
-        jsonResponse({
-          jobs: [
-            makeJob({
-              status: "failed",
-              lastError: "Temporary error",
-              attempts: 3,
-            }),
-          ],
+    mockQueueLoad(
+      [],
+      [
+        makeJob({
+          status: "failed",
+          lastError: "Temporary error",
+          attempts: 3,
         }),
-      )
+      ],
+    );
+    fetchMock
       .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
-      .mockResolvedValueOnce(jsonResponse({ jobs: [makeJob()] }));
+      .mockResolvedValueOnce(jsonResponse({ jobs: [makeJob()] }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
 
     render(
       <PublishJobQueue
@@ -170,10 +180,10 @@ describe("PublishJobQueue", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
     });
 
-    const patchCall = fetchMock.mock.calls[1];
+    const patchCall = fetchMock.mock.calls[2];
     expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
     expect(patchCall?.[1]).toMatchObject({ method: "PATCH" });
     expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({

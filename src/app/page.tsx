@@ -79,6 +79,7 @@ export default function Home() {
     posts,
     dispatch,
     createNewPost,
+    refreshPosts,
     selectPost,
   } = usePostContext();
 
@@ -573,6 +574,25 @@ export default function Home() {
     await publishToInstagramRef.current(scheduleAt);
   }, [activePost?.id, selectPost]);
 
+  const handlePublishJobsMutated = useCallback(async (
+    postId: string | undefined,
+    action: "cancel" | "reschedule",
+  ) => {
+    if (postId && activePost?.id === postId) {
+      dispatch({
+        type: "SET_STATUS",
+        status:
+          action === "reschedule"
+            ? "scheduled"
+            : activePost.result
+              ? "generated"
+              : "draft",
+      });
+    }
+
+    await refreshPosts();
+  }, [activePost?.id, activePost?.result, dispatch, refreshPosts]);
+
   useEffect(() => {
     if (!pendingGenerateRequest || activePost?.id !== pendingGenerateRequest.postId) {
       return;
@@ -697,7 +717,7 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
+                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
                       </section>
                     )}
                   </div>
@@ -739,7 +759,7 @@ export default function Home() {
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
+            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

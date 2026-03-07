@@ -20,6 +20,10 @@ type Props = {
   isAuthLoading: boolean;
   isSharing: boolean;
   isPublishing: boolean;
+  onPublishJobsMutated?: (
+    postId: string | undefined,
+    action: "cancel" | "reschedule",
+  ) => Promise<void> | void;
   publishJobsRefreshKey: number;
   shareUrl: string | null;
   shareCopyState: "idle" | "done";
@@ -36,6 +40,7 @@ export function PublishSection({
   isAuthLoading,
   isSharing,
   isPublishing,
+  onPublishJobsMutated,
   publishJobsRefreshKey,
   shareUrl,
   shareCopyState,
@@ -147,6 +152,7 @@ export function PublishSection({
       <PublishJobQueue
         activePostId={activePostId}
         localTimeZone={localTimeZone}
+        onJobsMutated={onPublishJobsMutated}
         refreshKey={publishJobsRefreshKey}
       />
     </div>

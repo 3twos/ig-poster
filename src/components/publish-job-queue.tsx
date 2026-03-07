@@ -22,10 +22,27 @@ import { cn } from "@/lib/utils";
 type Props = {
   activePostId?: string;
   localTimeZone: string;
+  onJobsMutated?: (
+    postId: string | undefined,
+    action: "cancel" | "reschedule",
+  ) => Promise<void> | void;
   refreshKey: number;
 };
 
-const LIST_QUERY = "status=queued,processing,failed&limit=8";
+const ACTIVE_JOBS_QUERY = "status=queued,processing&limit=8";
+const FAILED_JOBS_QUERY = "status=failed&limit=4";
+
+const fetchPublishJobs = async (query: string) => {
+  const response = await fetch(`/api/publish-jobs?${query}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await parseApiError(response));
+  }
+
+  const json = PublishJobListResponseSchema.parse(await response.json());
+  return json.jobs;
+};
 
 const statusTone = (status: PublishJobClient["status"]) => {
   if (status === "queued") {
@@ -61,6 +78,7 @@ const toInputValue = (iso: string) => {
 export function PublishJobQueue({
   activePostId,
   localTimeZone,
+  onJobsMutated,
   refreshKey,
 }: Props) {
   const [jobs, setJobs] = useState<PublishJobClient[]>([]);
@@ -80,15 +98,15 @@ export function PublishJobQueue({
     }
 
     try {
-      const response = await fetch(`/api/publish-jobs?${LIST_QUERY}`, {
-        cache: "no-store",
+      const activeJobs = await fetchPublishJobs(ACTIVE_JOBS_QUERY);
+      const failedJobs = await fetchPublishJobs(FAILED_JOBS_QUERY).catch((error) => {
+        const message = error instanceof Error
+          ? error.message
+          : "Could not load failed publish jobs.";
+        toast.error(message);
+        return [] satisfies PublishJobClient[];
       });
-      if (!response.ok) {
-        throw new Error(await parseApiError(response));
-      }
-
-      const json = PublishJobListResponseSchema.parse(await response.json());
-      setJobs(json.jobs);
+      setJobs([...activeJobs, ...failedJobs]);
       setLoadError(null);
       hasLoadedOnceRef.current = true;
     } catch (error) {
@@ -108,10 +126,10 @@ export function PublishJobQueue({
     // refreshKey is the external invalidation signal after new schedules are created.
   }, [loadJobs, refreshKey]);
 
-  const handleCancel = async (jobId: string) => {
-    setActiveJobId(jobId);
+  const handleCancel = async (job: PublishJobClient) => {
+    setActiveJobId(job.id);
     try {
-      const response = await fetch(`/api/publish-jobs/${jobId}`, {
+      const response = await fetch(`/api/publish-jobs/${job.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "cancel" }),
@@ -121,10 +139,11 @@ export function PublishJobQueue({
       }
 
       toast.success("Scheduled publish canceled.");
-      if (editingJobId === jobId) {
+      if (editingJobId === job.id) {
         setEditingJobId(null);
         setRescheduleAt("");
       }
+      await onJobsMutated?.(job.postId ?? undefined, "cancel");
       await loadJobs(true);
     } catch (error) {
       const message = error instanceof Error
@@ -136,12 +155,12 @@ export function PublishJobQueue({
     }
   };
 
-  const handleReschedule = async (jobId: string) => {
+  const handleReschedule = async (job: PublishJobClient) => {
     if (!rescheduleAt) return;
 
-    setActiveJobId(jobId);
+    setActiveJobId(job.id);
     try {
-      const response = await fetch(`/api/publish-jobs/${jobId}`, {
+      const response = await fetch(`/api/publish-jobs/${job.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -156,6 +175,7 @@ export function PublishJobQueue({
       toast.success("Scheduled publish updated.");
       setEditingJobId(null);
       setRescheduleAt("");
+      await onJobsMutated?.(job.postId ?? undefined, "reschedule");
       await loadJobs(true);
     } catch (error) {
       const message = error instanceof Error
@@ -279,7 +299,7 @@ export function PublishJobQueue({
                           variant="outline"
                           size="xs"
                           disabled={isBusy}
-                          onClick={() => void handleCancel(job.id)}
+                          onClick={() => void handleCancel(job)}
                         >
                           {isBusy ? (
                             <LoaderCircle className="h-3 w-3 animate-spin" />
@@ -308,7 +328,7 @@ export function PublishJobQueue({
                             type="button"
                             size="xs"
                             disabled={!rescheduleAt || isBusy}
-                            onClick={() => void handleReschedule(job.id)}
+                            onClick={() => void handleReschedule(job)}
                           >
                             {isBusy ? (
                               <LoaderCircle className="h-3 w-3 animate-spin" />
