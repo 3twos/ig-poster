@@ -961,6 +961,7 @@ friendly_pull_request_label() {
 
 friendly_change_title() {
   local title="$1"
+  local lowered
 
   title="$(sanitize_field "$title")"
   if [[ -z "$title" ]]; then
@@ -968,7 +969,15 @@ friendly_change_title() {
     return
   fi
 
-  printf '%s' "$(truncate_text "$title" 48)"
+  lowered="$(printf '%s' "$title" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    n/a|na|none|null|unknown|unlabeled)
+      printf '%s' "n/a"
+      return
+      ;;
+  esac
+
+  printf '%s' "$title"
 }
 
 pull_request_display_label() {
@@ -996,6 +1005,24 @@ pull_request_display_label() {
   printf '%s' "$pull_request_label"
 }
 
+pull_request_kind_label() {
+  local pull_request_label="$1"
+
+  pull_request_label="$(friendly_pull_request_label "$pull_request_label")"
+  case "$pull_request_label" in
+    pr:*)
+      printf '%s' "PR"
+      return
+      ;;
+    mr:*)
+      printf '%s' "MR"
+      return
+      ;;
+  esac
+
+  printf '%s' "n/a"
+}
+
 deployment_change_label() {
   local change_title="$1"
   local branch="$2"
@@ -1008,7 +1035,7 @@ deployment_change_label() {
 
   title_label="$(friendly_change_title "$change_title")"
   if [[ "$title_label" != "n/a" ]]; then
-    printf '%s' "$title_label"
+    printf '%s' "$(truncate_text "$title_label" 48)"
     return
   fi
 
@@ -1021,7 +1048,7 @@ deployment_change_label() {
     return
   fi
 
-  printf '%s' "$branch_label"
+  printf '%s' "$(truncate_text "$branch_label" 48)"
 }
 
 branch_context_hint() {
@@ -2288,7 +2315,7 @@ deployment_step_label() {
 
 process_deployment_transitions_and_alerts() {
   local i status old_status dep_id env_label identity_label spoken_identity duration_seconds duration_text duration_mmss spoken_duration
-  local target_label pr_display_label change_label
+  local target_label target_lower pr_display_label pr_kind_label change_label main_ref_label
   local alert_message spoken_alert error_message
 
   for (( i = 0; i < ${#DEP_IDS[@]}; i++ )); do
@@ -2306,8 +2333,17 @@ process_deployment_transitions_and_alerts() {
     identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
     spoken_identity="$(spoken_deployment_identity "$identity_label")"
     target_label="$(sanitize_field "${DEP_TARGET[i]:-preview}")"
+    target_lower="$(printf '%s' "$target_label" | tr '[:upper:]' '[:lower:]')"
+    if [[ -z "$target_lower" ]]; then
+      target_lower="preview"
+    fi
     pr_display_label="$(pull_request_display_label "${DEP_PULL_REQUEST[i]:-}")"
+    pr_kind_label="$(pull_request_kind_label "${DEP_PULL_REQUEST[i]:-}")"
     change_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
+    main_ref_label="$pr_display_label"
+    if [[ "$pr_kind_label" == "MR" && "$pr_display_label" != "n/a" ]]; then
+      main_ref_label="MR ${pr_display_label}"
+    fi
 
     duration_seconds="$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$(date +%s)}")"
     duration_text="$(format_duration "$duration_seconds")"
@@ -2320,26 +2356,57 @@ process_deployment_transitions_and_alerts() {
 
         case "$status" in
           READY)
-            if [[ "$target_label" == "production" || "$target_label" == "PRODUCTION" ]]; then
-              if [[ "$pr_display_label" != "n/a" && "$change_label" != "n/a" ]]; then
-                alert_message="Deployed Main ${pr_display_label} ${change_label} in ${duration_mmss}."
-              elif [[ "$pr_display_label" != "n/a" ]]; then
-                alert_message="Deployed Main ${pr_display_label} in ${duration_mmss}."
-              elif [[ "$change_label" != "n/a" ]]; then
-                alert_message="Deployed Main ${change_label} in ${duration_mmss}."
-              else
-                alert_message="Deployed Main in ${duration_mmss}."
-              fi
-            else
-              if [[ "$pr_display_label" != "n/a" ]]; then
-                alert_message="Deployed PR ${pr_display_label} in ${duration_mmss}."
-              elif [[ "$change_label" != "n/a" ]]; then
-                alert_message="Deployed Preview ${change_label} in ${duration_mmss}."
-              else
-                alert_message="Deployed Preview in ${duration_mmss}."
-              fi
-            fi
-            spoken_alert="$alert_message"
+            case "$target_lower" in
+              production)
+                if [[ "$pr_display_label" != "n/a" && "$change_label" != "n/a" ]]; then
+                  alert_message="Deployed Main ${main_ref_label} ${change_label} in ${duration_mmss}."
+                  spoken_alert="Deployed Main ${main_ref_label} ${change_label} in ${spoken_duration}."
+                elif [[ "$pr_display_label" != "n/a" ]]; then
+                  alert_message="Deployed Main ${main_ref_label} in ${duration_mmss}."
+                  spoken_alert="Deployed Main ${main_ref_label} in ${spoken_duration}."
+                elif [[ "$change_label" != "n/a" ]]; then
+                  alert_message="Deployed Main ${change_label} in ${duration_mmss}."
+                  spoken_alert="Deployed Main ${change_label} in ${spoken_duration}."
+                else
+                  alert_message="Deployed Main in ${duration_mmss}."
+                  spoken_alert="Deployed Main in ${spoken_duration}."
+                fi
+                ;;
+              preview|"")
+                if [[ "$pr_display_label" != "n/a" ]]; then
+                  if [[ "$pr_kind_label" == "MR" ]]; then
+                    alert_message="Deployed MR ${pr_display_label} in ${duration_mmss}."
+                    spoken_alert="Deployed MR ${pr_display_label} in ${spoken_duration}."
+                  else
+                    alert_message="Deployed PR ${pr_display_label} in ${duration_mmss}."
+                    spoken_alert="Deployed PR ${pr_display_label} in ${spoken_duration}."
+                  fi
+                elif [[ "$change_label" != "n/a" ]]; then
+                  alert_message="Deployed Preview ${change_label} in ${duration_mmss}."
+                  spoken_alert="Deployed Preview ${change_label} in ${spoken_duration}."
+                else
+                  alert_message="Deployed Preview in ${duration_mmss}."
+                  spoken_alert="Deployed Preview in ${spoken_duration}."
+                fi
+                ;;
+              *)
+                if [[ "$pr_display_label" != "n/a" ]]; then
+                  if [[ "$pr_kind_label" == "MR" ]]; then
+                    alert_message="Deployed ${env_label} MR ${pr_display_label} in ${duration_mmss}."
+                    spoken_alert="Deployed ${env_label} MR ${pr_display_label} in ${spoken_duration}."
+                  else
+                    alert_message="Deployed ${env_label} PR ${pr_display_label} in ${duration_mmss}."
+                    spoken_alert="Deployed ${env_label} PR ${pr_display_label} in ${spoken_duration}."
+                  fi
+                elif [[ "$change_label" != "n/a" ]]; then
+                  alert_message="Deployed ${env_label} ${change_label} in ${duration_mmss}."
+                  spoken_alert="Deployed ${env_label} ${change_label} in ${spoken_duration}."
+                else
+                  alert_message="Deployed ${env_label} in ${duration_mmss}."
+                  spoken_alert="Deployed ${env_label} in ${spoken_duration}."
+                fi
+                ;;
+            esac
             LAST_ALERT_LEVEL="success"
             log_line "Alert: ${alert_message}"
             ;;
@@ -2436,7 +2503,7 @@ render_dashboard() {
   local status_mark alert_mark event_time_display alert_time_display
   local i status env_mark raw_branch_label identity_label branch_label status_label step_label progress_percent progress_bar
   local id_label url_label started_display duration_text event_display error_text row_status_icon
-  local source_label actor_label commit_label pull_request_label pull_request_display change_title_label branch_hint_label
+  local source_label actor_label commit_label pull_request_label pull_request_display pull_request_kind change_title_label branch_hint_label
 
   if (( DASHBOARD_ENABLED == 0 )); then
     return
@@ -2513,8 +2580,11 @@ render_dashboard() {
         pull_request_label="n/a"
       fi
       pull_request_display="$(pull_request_display_label "$pull_request_label")"
+      pull_request_kind="$(pull_request_kind_label "$pull_request_label")"
+      if [[ "$pull_request_kind" == "n/a" ]]; then
+        pull_request_kind="PR"
+      fi
       change_title_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-      change_title_label="$(truncate_text "$change_title_label" 48)"
       branch_hint_label="$(branch_context_hint "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "$source_label" "$commit_label")"
       branch_hint_label="$(truncate_text "$branch_hint_label" 90)"
 
@@ -2523,9 +2593,9 @@ render_dashboard() {
       print_dashboard_linef '    step     : %s' "$step_label"
       print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
       if [[ "$pull_request_display" == "n/a" && "$change_title_label" == "n/a" && "$commit_label" != "n/a" ]]; then
-        print_dashboard_linef '    context  : PR n/a | change n/a | source %s | actor %s | commit %s' "$source_label" "$actor_label" "$commit_label"
+        print_dashboard_linef '    context  : %s n/a | change n/a | source %s | actor %s | commit %s' "$pull_request_kind" "$source_label" "$actor_label" "$commit_label"
       else
-        print_dashboard_linef '    context  : PR %s | change %s | source %s | actor %s' "$pull_request_display" "$change_title_label" "$source_label" "$actor_label"
+        print_dashboard_linef '    context  : %s %s | change %s | source %s | actor %s' "$pull_request_kind" "$pull_request_display" "$change_title_label" "$source_label" "$actor_label"
       fi
       if [[ "$raw_branch_label" == "unknown" && "$identity_label" == "unlabeled" ]]; then
         print_dashboard_linef '    branch   : %s' "$branch_hint_label"
