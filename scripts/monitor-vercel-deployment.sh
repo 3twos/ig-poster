@@ -249,6 +249,19 @@ const commitSha = sanitize(pick(
   payload?.meta?.commitSha,
   payload?.meta?.commit,
 ));
+const changeTitle = sanitize(pick(
+  payload?.meta?.githubPullRequestTitle,
+  payload?.meta?.gitlabMergeRequestTitle,
+  payload?.meta?.pullRequestTitle,
+  payload?.meta?.prTitle,
+  payload?.meta?.mergeRequestTitle,
+  payload?.meta?.mrTitle,
+  payload?.meta?.githubCommitSubject,
+  payload?.meta?.githubCommitMessage,
+  payload?.meta?.gitCommitMessage,
+  payload?.meta?.commitMessage,
+  payload?.meta?.message,
+));
 const pullRequest = sanitize(pick(
   payload?.meta?.githubPullRequestNumber,
   payload?.meta?.githubPullRequestId,
@@ -273,7 +286,7 @@ const pullRequestContext = mergeRequest
   : pullRequest;
 
 process.stdout.write(
-  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequestContext].join("\u001f"),
+  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequestContext, changeTitle].join("\u001f"),
 );
 '
 }
@@ -365,6 +378,19 @@ for (const item of deployments) {
     item?.meta?.commitSha,
     item?.meta?.commit,
   ));
+  const changeTitle = sanitize(pick(
+    item?.meta?.githubPullRequestTitle,
+    item?.meta?.gitlabMergeRequestTitle,
+    item?.meta?.pullRequestTitle,
+    item?.meta?.prTitle,
+    item?.meta?.mergeRequestTitle,
+    item?.meta?.mrTitle,
+    item?.meta?.githubCommitSubject,
+    item?.meta?.githubCommitMessage,
+    item?.meta?.gitCommitMessage,
+    item?.meta?.commitMessage,
+    item?.meta?.message,
+  ));
   const pullRequest = sanitize(pick(
     item?.meta?.githubPullRequestNumber,
     item?.meta?.githubPullRequestId,
@@ -388,7 +414,7 @@ for (const item of deployments) {
     ? `mr:${mergeRequest}`
     : pullRequest;
 
-  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequestContext].join("\u001f"));
+  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequestContext, changeTitle].join("\u001f"));
 }
 
 process.stdout.write(rows.join("\n"));
@@ -659,6 +685,16 @@ format_duration() {
   printf '%02d:%02d' $(( total_seconds / 60 )) $(( total_seconds % 60 ))
 }
 
+format_duration_mmss() {
+  local total_seconds="$1"
+
+  if ! [[ "$total_seconds" =~ ^[0-9]+$ ]] || (( total_seconds < 0 )); then
+    total_seconds=0
+  fi
+
+  printf '%02d:%02d' $(( total_seconds / 60 )) $(( total_seconds % 60 ))
+}
+
 format_spoken_duration() {
   local total_seconds="$1"
   local minutes seconds minute_word second_word
@@ -923,6 +959,71 @@ friendly_pull_request_label() {
   printf '%s:%s' "$kind" "$candidate"
 }
 
+friendly_change_title() {
+  local title="$1"
+
+  title="$(sanitize_field "$title")"
+  if [[ -z "$title" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  printf '%s' "$(truncate_text "$title" 48)"
+}
+
+pull_request_display_label() {
+  local pull_request_label="$1"
+  local payload
+
+  pull_request_label="$(friendly_pull_request_label "$pull_request_label")"
+  if [[ "$pull_request_label" == "n/a" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  if [[ "$pull_request_label" == pr:* ]]; then
+    payload="${pull_request_label#pr:}"
+    printf '#%s' "$payload"
+    return
+  fi
+
+  if [[ "$pull_request_label" == mr:* ]]; then
+    payload="${pull_request_label#mr:}"
+    printf '!%s' "$payload"
+    return
+  fi
+
+  printf '%s' "$pull_request_label"
+}
+
+deployment_change_label() {
+  local change_title="$1"
+  local branch="$2"
+  local target="$3"
+  local deployment_url="$4"
+  local title_label branch_label
+
+  # Target is accepted for callsite consistency with other label builders.
+  : "$target"
+
+  title_label="$(friendly_change_title "$change_title")"
+  if [[ "$title_label" != "n/a" ]]; then
+    printf '%s' "$title_label"
+    return
+  fi
+
+  branch_label="$(normalize_branch_context "$branch")"
+  if [[ -z "$branch_label" ]]; then
+    branch_label="$(infer_branch_from_deployment_url "$deployment_url")"
+  fi
+  if [[ -z "$branch_label" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  printf '%s' "$branch_label"
+}
+
 branch_context_hint() {
   local branch="$1"
   local target="$2"
@@ -969,7 +1070,7 @@ deployment_identity_label() {
   local commit_sha="$5"
   local source="$6"
   local actor="$7"
-  local resolved_branch pr_label commit_label source_label actor_label
+  local resolved_branch pr_label source_label actor_label
 
   resolved_branch="$(friendly_branch_label "$branch" "$target" "$deployment_url")"
   if [[ "$resolved_branch" != "unknown" ]]; then
@@ -980,12 +1081,6 @@ deployment_identity_label() {
   pr_label="$(friendly_pull_request_label "$pull_request")"
   if [[ "$pr_label" != "n/a" ]]; then
     printf '%s' "$pr_label"
-    return
-  fi
-
-  commit_label="$(friendly_commit_label "$commit_sha")"
-  if [[ "$commit_label" != "n/a" ]]; then
-    printf 'commit:%s' "$commit_label"
     return
   fi
 
@@ -1928,8 +2023,8 @@ reconcile_event_stream_workers() {
 
 refresh_project_deployments() {
   local response parsed record
-  local dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request
-  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name source_label actor_label commit_label pull_request_label
+  local dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request dep_change_title
+  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name source_label actor_label commit_label pull_request_label change_title_label
   local -a next_ids=()
   local -a next_status=()
   local -a next_url=()
@@ -1942,6 +2037,7 @@ refresh_project_deployments() {
   local -a next_actor=()
   local -a next_commit_sha=()
   local -a next_pull_request=()
+  local -a next_change_title=()
   local -a next_first_seen=()
   local -a next_last_status=()
   local -a next_announced=()
@@ -1973,6 +2069,7 @@ refresh_project_deployments() {
     DEP_ACTOR=()
     DEP_COMMIT_SHA=()
     DEP_PULL_REQUEST=()
+    DEP_CHANGE_TITLE=()
     DEP_FIRST_SEEN_EPOCH=()
     DEP_LAST_STATUS=()
     DEP_TERMINAL_ANNOUNCED=()
@@ -1988,7 +2085,7 @@ refresh_project_deployments() {
       continue
     fi
 
-    IFS=$'\x1f' read -r dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request <<<"$record"
+    IFS=$'\x1f' read -r dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request dep_change_title <<<"$record"
 
     if [[ -z "$dep_id" ]]; then
       continue
@@ -2019,6 +2116,7 @@ refresh_project_deployments() {
     actor_label="$(friendly_actor_label "$dep_actor")"
     commit_label="$(friendly_commit_label "$dep_commit_sha")"
     pull_request_label="$(friendly_pull_request_label "$dep_pull_request")"
+    change_title_label="$(friendly_change_title "$dep_change_title")"
 
     next_ids+=("$dep_id")
     next_status+=("$dep_status")
@@ -2032,6 +2130,7 @@ refresh_project_deployments() {
     next_actor+=("$actor_label")
     next_commit_sha+=("$commit_label")
     next_pull_request+=("$pull_request_label")
+    next_change_title+=("$change_title_label")
     next_first_seen+=("$first_seen")
     next_last_status+=("$last_status")
     next_announced+=("$announced")
@@ -2053,6 +2152,7 @@ refresh_project_deployments() {
   DEP_ACTOR=("${next_actor[@]-}")
   DEP_COMMIT_SHA=("${next_commit_sha[@]-}")
   DEP_PULL_REQUEST=("${next_pull_request[@]-}")
+  DEP_CHANGE_TITLE=("${next_change_title[@]-}")
   DEP_FIRST_SEEN_EPOCH=("${next_first_seen[@]-}")
   DEP_LAST_STATUS=("${next_last_status[@]-}")
   DEP_TERMINAL_ANNOUNCED=("${next_announced[@]-}")
@@ -2066,7 +2166,7 @@ refresh_project_deployments() {
 
 refresh_single_deployment() {
   local response parsed
-  local dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request
+  local dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request dep_change_title
   local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name
 
   if [[ -z "$ACTIVE_SINGLE_TARGET" ]]; then
@@ -2083,7 +2183,7 @@ refresh_single_deployment() {
     return 1
   fi
 
-  IFS=$'\x1f' read -r dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request <<<"$parsed"
+  IFS=$'\x1f' read -r dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request dep_change_title <<<"$parsed"
   if [[ -n "$dep_id" ]]; then
     ACTIVE_SINGLE_TARGET="$dep_id"
   else
@@ -2123,6 +2223,7 @@ refresh_single_deployment() {
   DEP_ACTOR=("$(friendly_actor_label "$dep_actor")")
   DEP_COMMIT_SHA=("$(friendly_commit_label "$dep_commit_sha")")
   DEP_PULL_REQUEST=("$(friendly_pull_request_label "$dep_pull_request")")
+  DEP_CHANGE_TITLE=("$(friendly_change_title "$dep_change_title")")
   DEP_FIRST_SEEN_EPOCH=("$first_seen")
   DEP_LAST_STATUS=("$last_status")
   DEP_TERMINAL_ANNOUNCED=("$announced")
@@ -2186,7 +2287,8 @@ deployment_step_label() {
 }
 
 process_deployment_transitions_and_alerts() {
-  local i status old_status dep_id env_label identity_label spoken_identity duration_seconds duration_text spoken_duration
+  local i status old_status dep_id env_label identity_label spoken_identity duration_seconds duration_text duration_mmss spoken_duration
+  local target_label pr_display_label change_label
   local alert_message spoken_alert error_message
 
   for (( i = 0; i < ${#DEP_IDS[@]}; i++ )); do
@@ -2203,9 +2305,13 @@ process_deployment_transitions_and_alerts() {
     env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
     identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
     spoken_identity="$(spoken_deployment_identity "$identity_label")"
+    target_label="$(sanitize_field "${DEP_TARGET[i]:-preview}")"
+    pr_display_label="$(pull_request_display_label "${DEP_PULL_REQUEST[i]:-}")"
+    change_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
 
     duration_seconds="$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$(date +%s)}")"
     duration_text="$(format_duration "$duration_seconds")"
+    duration_mmss="$(format_duration_mmss "$duration_seconds")"
     error_message="$(sanitize_field "${DEP_ERROR_MESSAGE[i]:-}")"
 
     if is_terminal_status "$status"; then
@@ -2214,8 +2320,26 @@ process_deployment_transitions_and_alerts() {
 
         case "$status" in
           READY)
-            alert_message="${env_label} ${identity_label} deployment completed in ${duration_text}."
-            spoken_alert="${env_label} ${spoken_identity} deployment completed in ${spoken_duration}."
+            if [[ "$target_label" == "production" || "$target_label" == "PRODUCTION" ]]; then
+              if [[ "$pr_display_label" != "n/a" && "$change_label" != "n/a" ]]; then
+                alert_message="Deployed Main ${pr_display_label} ${change_label} in ${duration_mmss}."
+              elif [[ "$pr_display_label" != "n/a" ]]; then
+                alert_message="Deployed Main ${pr_display_label} in ${duration_mmss}."
+              elif [[ "$change_label" != "n/a" ]]; then
+                alert_message="Deployed Main ${change_label} in ${duration_mmss}."
+              else
+                alert_message="Deployed Main in ${duration_mmss}."
+              fi
+            else
+              if [[ "$pr_display_label" != "n/a" ]]; then
+                alert_message="Deployed PR ${pr_display_label} in ${duration_mmss}."
+              elif [[ "$change_label" != "n/a" ]]; then
+                alert_message="Deployed Preview ${change_label} in ${duration_mmss}."
+              else
+                alert_message="Deployed Preview in ${duration_mmss}."
+              fi
+            fi
+            spoken_alert="$alert_message"
             LAST_ALERT_LEVEL="success"
             log_line "Alert: ${alert_message}"
             ;;
@@ -2312,7 +2436,7 @@ render_dashboard() {
   local status_mark alert_mark event_time_display alert_time_display
   local i status env_mark raw_branch_label identity_label branch_label status_label step_label progress_percent progress_bar
   local id_label url_label started_display duration_text event_display error_text row_status_icon
-  local source_label actor_label commit_label pull_request_label branch_hint_label
+  local source_label actor_label commit_label pull_request_label pull_request_display change_title_label branch_hint_label
 
   if (( DASHBOARD_ENABLED == 0 )); then
     return
@@ -2388,6 +2512,9 @@ render_dashboard() {
       if [[ -z "$pull_request_label" ]]; then
         pull_request_label="n/a"
       fi
+      pull_request_display="$(pull_request_display_label "$pull_request_label")"
+      change_title_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
+      change_title_label="$(truncate_text "$change_title_label" 48)"
       branch_hint_label="$(branch_context_hint "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "$source_label" "$commit_label")"
       branch_hint_label="$(truncate_text "$branch_hint_label" 90)"
 
@@ -2395,7 +2522,11 @@ render_dashboard() {
         "$(( i + 1 ))" "$env_mark" "$row_status_icon" "$branch_label" "$status_label" "$progress_bar" "$progress_percent"
       print_dashboard_linef '    step     : %s' "$step_label"
       print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
-      print_dashboard_linef '    context  : %s | source %s | actor %s | commit %s' "$pull_request_label" "$source_label" "$actor_label" "$commit_label"
+      if [[ "$pull_request_display" == "n/a" && "$change_title_label" == "n/a" && "$commit_label" != "n/a" ]]; then
+        print_dashboard_linef '    context  : PR n/a | change n/a | source %s | actor %s | commit %s' "$source_label" "$actor_label" "$commit_label"
+      else
+        print_dashboard_linef '    context  : PR %s | change %s | source %s | actor %s' "$pull_request_display" "$change_title_label" "$source_label" "$actor_label"
+      fi
       if [[ "$raw_branch_label" == "unknown" && "$identity_label" == "unlabeled" ]]; then
         print_dashboard_linef '    branch   : %s' "$branch_hint_label"
       fi
@@ -2681,6 +2812,7 @@ DEP_SOURCE=()
 DEP_ACTOR=()
 DEP_COMMIT_SHA=()
 DEP_PULL_REQUEST=()
+DEP_CHANGE_TITLE=()
 DEP_FIRST_SEEN_EPOCH=()
 DEP_LAST_STATUS=()
 DEP_TERMINAL_ANNOUNCED=()
