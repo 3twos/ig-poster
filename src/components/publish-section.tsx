@@ -78,7 +78,7 @@ export function PublishSection({
       y: tag.y,
     }))
     .filter((tag) => tag.username.length > 0);
-  const hasIncompleteUserTags = userTags.some((tag) =>
+  const hasIncompleteUserTags = supportsImageMetadata && userTags.some((tag) =>
     normalizeTagUsername(tag.username).length === 0
   );
   const firstCommentInputId = useId();
