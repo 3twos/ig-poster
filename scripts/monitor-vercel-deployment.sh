@@ -183,6 +183,12 @@ if (payload && payload.error) {
 }
 
 const text = (value) => (typeof value === "string" ? value : "");
+const stringish = (value) =>
+  typeof value === "string"
+    ? value
+    : typeof value === "number" && Number.isFinite(value)
+      ? String(Math.trunc(value))
+      : "";
 const intMs = (value) =>
   typeof value === "number" && Number.isFinite(value) ? String(Math.trunc(value)) : "";
 const sanitize = (value) =>
@@ -191,8 +197,13 @@ const sanitize = (value) =>
     .replace(/[\n\r\t]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-const pick = (...values) =>
-  values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
+const pick = (...values) => {
+  for (const value of values) {
+    const candidate = stringish(value);
+    if (candidate.trim().length > 0) return candidate;
+  }
+  return "";
+};
 const normalizeBranch = (value) => {
   let branch = pick(value).trim();
   if (!branch) return "";
@@ -238,9 +249,22 @@ const commitSha = sanitize(pick(
   payload?.meta?.commitSha,
   payload?.meta?.commit,
 ));
+const pullRequest = sanitize(pick(
+  payload?.meta?.githubPullRequestNumber,
+  payload?.meta?.githubPullRequestId,
+  payload?.meta?.githubPrNumber,
+  payload?.meta?.githubPrId,
+  payload?.meta?.pullRequestNumber,
+  payload?.meta?.pullRequestId,
+  payload?.meta?.prNumber,
+  payload?.meta?.pr,
+  payload?.meta?.gitlabMergeRequestIid,
+  payload?.meta?.gitlabMergeRequestId,
+  payload?.meta?.bitbucketPullRequestId,
+));
 
 process.stdout.write(
-  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha].join("\u001f"),
+  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequest].join("\u001f"),
 );
 '
 }
@@ -269,6 +293,12 @@ if (payload && payload.error) {
 
 const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
 const text = (value) => (typeof value === "string" ? value : "");
+const stringish = (value) =>
+  typeof value === "string"
+    ? value
+    : typeof value === "number" && Number.isFinite(value)
+      ? String(Math.trunc(value))
+      : "";
 const intMs = (value) =>
   typeof value === "number" && Number.isFinite(value) ? String(Math.trunc(value)) : "";
 const sanitize = (value) =>
@@ -277,8 +307,13 @@ const sanitize = (value) =>
     .replace(/[\n\r\t]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-const pick = (...values) =>
-  values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
+const pick = (...values) => {
+  for (const value of values) {
+    const candidate = stringish(value);
+    if (candidate.trim().length > 0) return candidate;
+  }
+  return "";
+};
 const normalizeBranch = (value) => {
   let branch = pick(value).trim();
   if (!branch) return "";
@@ -321,8 +356,21 @@ for (const item of deployments) {
     item?.meta?.commitSha,
     item?.meta?.commit,
   ));
+  const pullRequest = sanitize(pick(
+    item?.meta?.githubPullRequestNumber,
+    item?.meta?.githubPullRequestId,
+    item?.meta?.githubPrNumber,
+    item?.meta?.githubPrId,
+    item?.meta?.pullRequestNumber,
+    item?.meta?.pullRequestId,
+    item?.meta?.prNumber,
+    item?.meta?.pr,
+    item?.meta?.gitlabMergeRequestIid,
+    item?.meta?.gitlabMergeRequestId,
+    item?.meta?.bitbucketPullRequestId,
+  ));
 
-  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha].join("\u001f"));
+  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequest].join("\u001f"));
 }
 
 process.stdout.write(rows.join("\n"));
@@ -798,6 +846,49 @@ friendly_commit_label() {
   printf '%s' "$(truncate_text "$commit_sha" 12)"
 }
 
+friendly_pull_request_label() {
+  local pull_request="$1"
+  local lowered candidate
+
+  pull_request="$(sanitize_field "$pull_request")"
+  if [[ -z "$pull_request" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  lowered="$(printf '%s' "$pull_request" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$lowered" == pr:* || "$lowered" == mr:* ]]; then
+    printf '%s' "$lowered"
+    return
+  fi
+
+  if [[ "$pull_request" == \#* && "${pull_request#\#}" =~ ^[0-9]+$ ]]; then
+    printf 'pr:%s' "${pull_request#\#}"
+    return
+  fi
+  if [[ "$pull_request" == !* && "${pull_request#!}" =~ ^[0-9]+$ ]]; then
+    printf 'mr:%s' "${pull_request#!}"
+    return
+  fi
+
+  if [[ "$pull_request" =~ ^[0-9]+$ ]]; then
+    printf 'pr:%s' "$pull_request"
+    return
+  fi
+
+  if [[ "$pull_request" =~ /pull/([0-9]+) ]]; then
+    printf 'pr:%s' "${BASH_REMATCH[1]}"
+    return
+  fi
+  if [[ "$pull_request" =~ /merge_requests/([0-9]+) ]]; then
+    printf 'mr:%s' "${BASH_REMATCH[1]}"
+    return
+  fi
+
+  candidate="$(truncate_text "$pull_request" 12)"
+  printf 'pr:%s' "$candidate"
+}
+
 branch_context_hint() {
   local branch="$1"
   local target="$2"
@@ -840,14 +931,21 @@ deployment_identity_label() {
   local branch="$1"
   local target="$2"
   local deployment_url="$3"
-  local commit_sha="$4"
-  local source="$5"
-  local actor="$6"
-  local resolved_branch commit_label source_label actor_label
+  local pull_request="$4"
+  local commit_sha="$5"
+  local source="$6"
+  local actor="$7"
+  local resolved_branch pr_label commit_label source_label actor_label
 
   resolved_branch="$(friendly_branch_label "$branch" "$target" "$deployment_url")"
   if [[ "$resolved_branch" != "unknown" ]]; then
     printf '%s' "$resolved_branch"
+    return
+  fi
+
+  pr_label="$(friendly_pull_request_label "$pull_request")"
+  if [[ "$pr_label" != "n/a" ]]; then
+    printf '%s' "$pr_label"
     return
   fi
 
@@ -890,6 +988,20 @@ normalize_spoken_context() {
 spoken_deployment_identity() {
   local identity="$1"
   local payload
+
+  if [[ "$identity" == pr:* ]]; then
+    payload="${identity#pr:}"
+    payload="$(normalize_spoken_context "$payload")"
+    printf 'pull request %s' "$payload"
+    return
+  fi
+
+  if [[ "$identity" == mr:* ]]; then
+    payload="${identity#mr:}"
+    payload="$(normalize_spoken_context "$payload")"
+    printf 'merge request %s' "$payload"
+    return
+  fi
 
   if [[ "$identity" == commit:* ]]; then
     payload="${identity#commit:}"
@@ -1782,8 +1894,8 @@ reconcile_event_stream_workers() {
 
 refresh_project_deployments() {
   local response parsed record
-  local dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha
-  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name source_label actor_label commit_label
+  local dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request
+  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name source_label actor_label commit_label pull_request_label
   local -a next_ids=()
   local -a next_status=()
   local -a next_url=()
@@ -1795,6 +1907,7 @@ refresh_project_deployments() {
   local -a next_source=()
   local -a next_actor=()
   local -a next_commit_sha=()
+  local -a next_pull_request=()
   local -a next_first_seen=()
   local -a next_last_status=()
   local -a next_announced=()
@@ -1825,6 +1938,7 @@ refresh_project_deployments() {
     DEP_SOURCE=()
     DEP_ACTOR=()
     DEP_COMMIT_SHA=()
+    DEP_PULL_REQUEST=()
     DEP_FIRST_SEEN_EPOCH=()
     DEP_LAST_STATUS=()
     DEP_TERMINAL_ANNOUNCED=()
@@ -1840,7 +1954,7 @@ refresh_project_deployments() {
       continue
     fi
 
-    IFS=$'\x1f' read -r dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha <<<"$record"
+    IFS=$'\x1f' read -r dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request <<<"$record"
 
     if [[ -z "$dep_id" ]]; then
       continue
@@ -1870,6 +1984,7 @@ refresh_project_deployments() {
     source_label="$(friendly_source_label "$dep_source")"
     actor_label="$(friendly_actor_label "$dep_actor")"
     commit_label="$(friendly_commit_label "$dep_commit_sha")"
+    pull_request_label="$(friendly_pull_request_label "$dep_pull_request")"
 
     next_ids+=("$dep_id")
     next_status+=("$dep_status")
@@ -1882,6 +1997,7 @@ refresh_project_deployments() {
     next_source+=("$source_label")
     next_actor+=("$actor_label")
     next_commit_sha+=("$commit_label")
+    next_pull_request+=("$pull_request_label")
     next_first_seen+=("$first_seen")
     next_last_status+=("$last_status")
     next_announced+=("$announced")
@@ -1902,6 +2018,7 @@ refresh_project_deployments() {
   DEP_SOURCE=("${next_source[@]-}")
   DEP_ACTOR=("${next_actor[@]-}")
   DEP_COMMIT_SHA=("${next_commit_sha[@]-}")
+  DEP_PULL_REQUEST=("${next_pull_request[@]-}")
   DEP_FIRST_SEEN_EPOCH=("${next_first_seen[@]-}")
   DEP_LAST_STATUS=("${next_last_status[@]-}")
   DEP_TERMINAL_ANNOUNCED=("${next_announced[@]-}")
@@ -1915,7 +2032,7 @@ refresh_project_deployments() {
 
 refresh_single_deployment() {
   local response parsed
-  local dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha
+  local dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request
   local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name
 
   if [[ -z "$ACTIVE_SINGLE_TARGET" ]]; then
@@ -1932,7 +2049,7 @@ refresh_single_deployment() {
     return 1
   fi
 
-  IFS=$'\x1f' read -r dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha <<<"$parsed"
+  IFS=$'\x1f' read -r dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request <<<"$parsed"
   if [[ -n "$dep_id" ]]; then
     ACTIVE_SINGLE_TARGET="$dep_id"
   else
@@ -1971,6 +2088,7 @@ refresh_single_deployment() {
   DEP_SOURCE=("$(friendly_source_label "$dep_source")")
   DEP_ACTOR=("$(friendly_actor_label "$dep_actor")")
   DEP_COMMIT_SHA=("$(friendly_commit_label "$dep_commit_sha")")
+  DEP_PULL_REQUEST=("$(friendly_pull_request_label "$dep_pull_request")")
   DEP_FIRST_SEEN_EPOCH=("$first_seen")
   DEP_LAST_STATUS=("$last_status")
   DEP_TERMINAL_ANNOUNCED=("$announced")
@@ -2049,7 +2167,7 @@ process_deployment_transitions_and_alerts() {
     fi
 
     env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
-    identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
+    identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
     spoken_identity="$(spoken_deployment_identity "$identity_label")"
 
     duration_seconds="$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$(date +%s)}")"
@@ -2160,7 +2278,7 @@ render_dashboard() {
   local status_mark alert_mark event_time_display alert_time_display
   local i status env_mark raw_branch_label identity_label branch_label status_label step_label progress_percent progress_bar
   local id_label url_label started_display duration_text event_display error_text row_status_icon
-  local source_label actor_label commit_label branch_hint_label
+  local source_label actor_label commit_label pull_request_label branch_hint_label
 
   if (( DASHBOARD_ENABLED == 0 )); then
     return
@@ -2203,7 +2321,7 @@ render_dashboard() {
       row_status_icon="$(status_icon "$status")"
       env_mark="$(environment_icon "${DEP_TARGET[i]:-preview}")"
       raw_branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-      identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
+      identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
       branch_label="$(truncate_text "$identity_label" 24)"
       status_label="$(friendly_status "$status")"
 
@@ -2232,6 +2350,10 @@ render_dashboard() {
       if [[ -z "$commit_label" ]]; then
         commit_label="n/a"
       fi
+      pull_request_label="$(sanitize_field "${DEP_PULL_REQUEST[i]:-n/a}")"
+      if [[ -z "$pull_request_label" ]]; then
+        pull_request_label="n/a"
+      fi
       branch_hint_label="$(branch_context_hint "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "$source_label" "$commit_label")"
       branch_hint_label="$(truncate_text "$branch_hint_label" 90)"
 
@@ -2239,7 +2361,7 @@ render_dashboard() {
         "$(( i + 1 ))" "$env_mark" "$row_status_icon" "$branch_label" "$status_label" "$progress_bar" "$progress_percent"
       print_dashboard_linef '    step     : %s' "$step_label"
       print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
-      print_dashboard_linef '    context  : source %s | actor %s | commit %s' "$source_label" "$actor_label" "$commit_label"
+      print_dashboard_linef '    context  : pr %s | source %s | actor %s | commit %s' "$pull_request_label" "$source_label" "$actor_label" "$commit_label"
       if [[ "$raw_branch_label" == "unknown" && "$identity_label" == "unlabeled" ]]; then
         print_dashboard_linef '    branch   : %s' "$branch_hint_label"
       fi
@@ -2524,6 +2646,7 @@ DEP_ERROR_MESSAGE=()
 DEP_SOURCE=()
 DEP_ACTOR=()
 DEP_COMMIT_SHA=()
+DEP_PULL_REQUEST=()
 DEP_FIRST_SEEN_EPOCH=()
 DEP_LAST_STATUS=()
 DEP_TERMINAL_ANNOUNCED=()
