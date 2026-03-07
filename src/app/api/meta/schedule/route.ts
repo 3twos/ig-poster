@@ -11,10 +11,11 @@ import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
 import {
+  completePublishJobFailure,
+  completePublishJobSuccess,
   createPublishJob,
-  getPublishWindowUsage,
   markPostPublished,
-  recordPublishedJob,
+  reserveImmediatePublishJob,
 } from "@/lib/publish-jobs";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
@@ -85,26 +86,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const publishUsage = await getPublishWindowUsage(db, ownerHash);
-    if (publishUsage.remaining <= 0) {
-      throw new MetaScheduleClientError(
-        `Instagram publishing limit reached (${publishUsage.used}/${publishUsage.limit} posts in the last 24 hours). Try again once the rolling window advances.`,
-      );
-    }
-
-    const publish = await publishInstagramContent(
-      {
-        ...payload.media,
-        caption: payload.caption,
-      },
-      resolvedAuth.auth,
-    );
-
-    if (payload.postId) {
-      await markPostPublished(db, ownerHash, payload.postId, publish.publishId);
-    }
-
-    await recordPublishedJob(db, {
+    const reservedJob = await reserveImmediatePublishJob(db, {
       ownerHash,
       postId: payload.postId,
       caption: payload.caption,
@@ -112,10 +94,52 @@ export async function POST(req: Request) {
       authSource: resolvedAuth.source,
       connectionId: resolvedAuth.account.connectionId,
       outcomeContext: payload.outcomeContext,
-      publishId: publish.publishId,
-      creationId: publish.creationId,
-      children: "children" in publish ? publish.children : undefined,
+      maxAttempts: 1,
     });
+    if (!reservedJob) {
+      throw new MetaScheduleClientError(
+        "Instagram publishing limit reached (50 posts in the last 24 hours). Try again once the rolling window advances.",
+      );
+    }
+
+    let publish: Awaited<ReturnType<typeof publishInstagramContent>>;
+    try {
+      publish = await publishInstagramContent(
+        {
+          ...payload.media,
+          caption: payload.caption,
+        },
+        resolvedAuth.auth,
+      );
+    } catch (error) {
+      const detail = error instanceof Error
+        ? error.message
+        : "Unknown publish failure";
+      try {
+        await completePublishJobFailure(db, reservedJob, detail);
+      } catch {
+        // Best-effort cleanup; preserve upstream publish error response.
+      }
+      throw error;
+    }
+
+    try {
+      await completePublishJobSuccess(db, reservedJob, {
+        publishId: publish.publishId,
+        creationId: publish.creationId,
+        children: "children" in publish ? publish.children : undefined,
+      });
+    } catch {
+      // The publish already succeeded upstream; usage reservation remains in DB.
+    }
+
+    if (payload.postId) {
+      try {
+        await markPostPublished(db, ownerHash, payload.postId, publish.publishId);
+      } catch {
+        // Preserve successful publish response even if post snapshot update fails.
+      }
+    }
 
     // Record publish outcome (best-effort)
     if (isBlobEnabled() && payload.outcomeContext && publish.publishId) {

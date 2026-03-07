@@ -10,6 +10,10 @@ export type AppDb = NeonHttpDatabase<typeof schema>;
 export const DEFAULT_MAX_ATTEMPTS = 3;
 export const PUBLISH_WINDOW_LIMIT = 50;
 const PUBLISH_WINDOW_MS = 24 * 60 * 60 * 1000;
+const PUBLISH_WINDOW_STATUSES: PublishJobRow["status"][] = [
+  "published",
+  "processing",
+];
 
 const buildJobId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(9)))
@@ -133,7 +137,28 @@ export const createPublishJob = async (
   return row;
 };
 
-export const recordPublishedJob = async (
+const countPublishWindowRows = async (
+  db: Pick<AppDb, "select">,
+  ownerHash: string,
+  windowStart: Date,
+) => {
+  const [usage] = await db
+    .select({
+      publishedCount: sql<number>`count(*)`,
+    })
+    .from(publishJobs)
+    .where(
+      and(
+        eq(publishJobs.ownerHash, ownerHash),
+        inArray(publishJobs.status, PUBLISH_WINDOW_STATUSES),
+        gte(publishJobs.completedAt, windowStart),
+      ),
+    );
+
+  return Number(usage?.publishedCount ?? 0);
+};
+
+export const reserveImmediatePublishJob = async (
   db: AppDb,
   input: {
     ownerHash: string;
@@ -143,49 +168,54 @@ export const recordPublishedJob = async (
     authSource: "oauth" | "env";
     connectionId?: string;
     outcomeContext?: MetaScheduleRequest["outcomeContext"];
-    publishId?: string;
-    creationId?: string;
-    children?: string[];
+    maxAttempts?: number;
   },
-) => {
+): Promise<PublishJobRow | null> => {
   const now = new Date();
-  const [row] = await db
-    .insert(publishJobs)
-    .values({
-      id: buildJobId(),
-      ownerHash: input.ownerHash,
-      postId: input.postId,
-      status: "published",
-      caption: input.caption,
-      media: input.media,
-      publishAt: now,
-      attempts: 1,
-      maxAttempts: DEFAULT_MAX_ATTEMPTS,
-      lastAttemptAt: now,
-      authSource: input.authSource,
-      connectionId: input.connectionId,
-      outcomeContext: input.outcomeContext,
-      publishId: input.publishId,
-      creationId: input.creationId,
-      children: input.children,
-      completedAt: now,
-      events: appendPublishJobEvent(
-        appendPublishJobEvent([], {
-          type: "created",
-          detail: "Published immediately.",
-        }),
-        {
-          type: "published",
-          attempt: 1,
-          detail: input.publishId
-            ? `Published as ${input.publishId}.`
-            : "Published immediately.",
-        },
-      ),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
+  const windowStart = new Date(now.getTime() - PUBLISH_WINDOW_MS);
+  const maxAttempts = input.maxAttempts ?? 1;
+  const row = await db.transaction(async (tx) => {
+    const used = await countPublishWindowRows(tx, input.ownerHash, windowStart);
+    if (used >= PUBLISH_WINDOW_LIMIT) {
+      return null;
+    }
+
+    const [inserted] = await tx
+      .insert(publishJobs)
+      .values({
+        id: buildJobId(),
+        ownerHash: input.ownerHash,
+        postId: input.postId,
+        status: "processing",
+        caption: input.caption,
+        media: input.media,
+        publishAt: now,
+        attempts: 1,
+        maxAttempts,
+        lastAttemptAt: now,
+        authSource: input.authSource,
+        connectionId: input.connectionId,
+        outcomeContext: input.outcomeContext,
+        // Non-null so in-flight immediate reservations are counted in the 24h window.
+        completedAt: now,
+        events: appendPublishJobEvent(
+          appendPublishJobEvent([], {
+            type: "created",
+            detail: "Immediate publish started.",
+          }),
+          {
+            type: "processing",
+            attempt: 1,
+            detail: "Immediate publish slot reserved.",
+          },
+        ),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    return inserted ?? null;
+  }, { isolationLevel: "serializable" });
 
   return row ?? null;
 };
@@ -217,20 +247,7 @@ export const getPublishWindowUsage = async (
   now = new Date(),
 ) => {
   const windowStart = new Date(now.getTime() - PUBLISH_WINDOW_MS);
-  const [usage] = await db
-    .select({
-      publishedCount: sql<number>`count(*)`,
-    })
-    .from(publishJobs)
-    .where(
-      and(
-        eq(publishJobs.ownerHash, ownerHash),
-        eq(publishJobs.status, "published"),
-        gte(publishJobs.completedAt, windowStart),
-      ),
-    );
-
-  const used = Number(usage?.publishedCount ?? 0);
+  const used = await countPublishWindowRows(db, ownerHash, windowStart);
   return {
     limit: PUBLISH_WINDOW_LIMIT,
     used,
@@ -287,7 +304,7 @@ export const completePublishJobSuccess = async (
   db: AppDb,
   job: PublishJobRow,
   publish: { publishId?: string; creationId?: string; children?: string[] },
-) => {
+): Promise<PublishJobRow | null> => {
   const now = new Date();
   const [updated] = await db
     .update(publishJobs)
@@ -318,7 +335,7 @@ export const deferProcessingPublishJob = async (
   job: PublishJobRow,
   nextPublishAt: Date,
   detail: string,
-) => {
+): Promise<PublishJobRow | null> => {
   const now = new Date();
   const restoredAttempts = Math.max(job.attempts - 1, 0);
   const [updated] = await db
@@ -347,7 +364,7 @@ export const completePublishJobFailure = async (
   db: AppDb,
   job: PublishJobRow,
   errorMessage: string,
-) => {
+): Promise<PublishJobRow | null> => {
   const now = new Date();
   const shouldRetry = job.attempts < job.maxAttempts;
   const retryAt = shouldRetry

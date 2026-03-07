@@ -123,6 +123,11 @@ export const publishJobs = pgTable(
       table.status,
       table.publishAt,
     ),
+    index("publish_jobs_owner_status_completed_at_idx").on(
+      table.ownerHash,
+      table.status,
+      table.completedAt,
+    ),
     index("publish_jobs_post_idx").on(table.postId),
   ],
 );

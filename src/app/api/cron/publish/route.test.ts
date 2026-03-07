@@ -209,4 +209,32 @@ describe("GET /api/cron/publish", () => {
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
     expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
   });
+
+  it("does not consume retries when quota deferral update loses race", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([baseJob]);
+    mockedGetPublishWindowUsage.mockResolvedValue({
+      limit: 50,
+      used: 50,
+      remaining: 0,
+      windowStart: new Date("2026-03-06T00:00:00.000Z"),
+    });
+    mockedDeferProcessingPublishJob.mockResolvedValue(null);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 0,
+      retried: 0,
+      deferred: 0,
+      failed: 0,
+      errorCount: 1,
+    });
+    expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+  });
 });

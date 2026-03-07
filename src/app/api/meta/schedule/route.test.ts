@@ -13,10 +13,11 @@ vi.mock("@/lib/meta-auth", () => ({
 }));
 
 vi.mock("@/lib/publish-jobs", () => ({
+  completePublishJobFailure: vi.fn(),
+  completePublishJobSuccess: vi.fn(),
   createPublishJob: vi.fn(),
-  getPublishWindowUsage: vi.fn(),
   markPostPublished: vi.fn(),
-  recordPublishedJob: vi.fn(),
+  reserveImmediatePublishJob: vi.fn(),
 }));
 
 vi.mock("@/lib/blob-store", () => ({
@@ -37,10 +38,11 @@ import { getDb } from "@/db";
 import { publishInstagramContent } from "@/lib/meta";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import {
+  completePublishJobFailure,
+  completePublishJobSuccess,
   createPublishJob,
-  getPublishWindowUsage,
   markPostPublished,
-  recordPublishedJob,
+  reserveImmediatePublishJob,
 } from "@/lib/publish-jobs";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
@@ -48,10 +50,11 @@ const mockedGetDb = vi.mocked(getDb);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
 const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthFromRequest);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
-const mockedGetPublishWindowUsage = vi.mocked(getPublishWindowUsage);
+const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
+const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
+const mockedCompletePublishJobFailure = vi.mocked(completePublishJobFailure);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
-const mockedRecordPublishedJob = vi.mocked(recordPublishedJob);
 
 const session = {
   sub: "user-1",
@@ -59,6 +62,31 @@ const session = {
   domain: "example.com",
   issuedAt: new Date().toISOString(),
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
+};
+
+const reservedJob = {
+  id: "job_1",
+  ownerHash: "owner_hash",
+  postId: "post_1",
+  status: "processing",
+  caption: "Now",
+  media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
+  publishAt: new Date("2026-03-07T16:00:00.000Z"),
+  attempts: 1,
+  maxAttempts: 1,
+  lastAttemptAt: new Date("2026-03-07T16:00:00.000Z"),
+  lastError: null,
+  authSource: "oauth",
+  connectionId: "conn_1",
+  outcomeContext: null,
+  publishId: null,
+  creationId: null,
+  children: null,
+  completedAt: new Date("2026-03-07T16:00:00.000Z"),
+  canceledAt: null,
+  events: [],
+  createdAt: new Date("2026-03-07T16:00:00.000Z"),
+  updatedAt: new Date("2026-03-07T16:00:00.000Z"),
 };
 
 describe("POST /api/meta/schedule", () => {
@@ -78,14 +106,18 @@ describe("POST /api/meta/schedule", () => {
       },
     });
     mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
-    mockedGetPublishWindowUsage.mockResolvedValue({
-      limit: 50,
-      used: 0,
-      remaining: 50,
-      windowStart: new Date("2026-03-06T00:00:00.000Z"),
-    });
-    mockedRecordPublishedJob.mockResolvedValue(
-      {} as Awaited<ReturnType<typeof recordPublishedJob>>,
+    mockedReserveImmediatePublishJob.mockResolvedValue(
+      reservedJob as Awaited<ReturnType<typeof reserveImmediatePublishJob>>,
+    );
+    mockedCompletePublishJobSuccess.mockResolvedValue(
+      { ...reservedJob, status: "published" } as Awaited<
+        ReturnType<typeof completePublishJobSuccess>
+      >,
+    );
+    mockedCompletePublishJobFailure.mockResolvedValue(
+      { ...reservedJob, status: "failed" } as Awaited<
+        ReturnType<typeof completePublishJobFailure>
+      >,
     );
   });
 
@@ -145,8 +177,8 @@ describe("POST /api/meta/schedule", () => {
       id: "job_1",
     });
     expect(mockedCreatePublishJob).toHaveBeenCalledTimes(1);
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
-    expect(mockedGetPublishWindowUsage).not.toHaveBeenCalled();
   });
 
   it("publishes immediately and updates linked post", async () => {
@@ -180,19 +212,15 @@ describe("POST /api/meta/schedule", () => {
       status: "published",
       publishId: "publish_1",
     });
-    expect(mockedGetPublishWindowUsage).toHaveBeenCalledTimes(1);
+    expect(mockedReserveImmediatePublishJob).toHaveBeenCalledTimes(1);
     expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(1);
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
+    expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
     expect(mockedMarkPostPublished).toHaveBeenCalledTimes(1);
-    expect(mockedRecordPublishedJob).toHaveBeenCalledTimes(1);
   });
 
   it("returns 400 when the account hits the 24h publish limit", async () => {
-    mockedGetPublishWindowUsage.mockResolvedValue({
-      limit: 50,
-      used: 50,
-      remaining: 0,
-      windowStart: new Date("2026-03-06T00:00:00.000Z"),
-    });
+    mockedReserveImmediatePublishJob.mockResolvedValue(null);
 
     const req = new Request("https://app.example.com/api/meta/schedule", {
       method: "POST",
@@ -206,6 +234,33 @@ describe("POST /api/meta/schedule", () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
-    expect(mockedRecordPublishedJob).not.toHaveBeenCalled();
+    expect(mockedCompletePublishJobSuccess).not.toHaveBeenCalled();
+  });
+
+  it("returns success when publish-job success logging fails", async () => {
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+    mockedCompletePublishJobSuccess.mockRejectedValue(
+      new Error("db transient"),
+    );
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Now",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      status: "published",
+      publishId: "publish_1",
+    });
   });
 });

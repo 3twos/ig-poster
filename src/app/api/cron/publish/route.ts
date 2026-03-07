@@ -73,7 +73,11 @@ export async function GET(req: Request) {
             deferred += 1;
             continue;
           }
-          throw new Error("Could not defer publish job after quota check.");
+          errors.push({
+            id: job.id,
+            detail: "Could not defer publish job after quota check (state changed concurrently).",
+          });
+          continue;
         }
 
         let auth = job.authSource === "env" ? getEnvMetaAuth() : null;
