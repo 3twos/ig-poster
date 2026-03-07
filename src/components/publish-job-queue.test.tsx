@@ -146,7 +146,7 @@ describe("PublishJobQueue", () => {
     ).not.toBeNull();
   });
 
-  it("reschedules a failed job and sends the new publish timestamp", async () => {
+  it("edits a failed job and sends the updated publish timestamp", async () => {
     mockQueueLoad(
       [],
       [
@@ -172,9 +172,9 @@ describe("PublishJobQueue", () => {
 
     expect(await screen.findByText("Temporary error")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /reschedule/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     fireEvent.change(
-      screen.getByLabelText("Reschedule publish time for job-1"),
+      screen.getByLabelText("Edit publish time for job-1"),
       { target: { value: "2026-03-11T09:45" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -187,8 +187,44 @@ describe("PublishJobQueue", () => {
     expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
     expect(patchCall?.[1]).toMatchObject({ method: "PATCH" });
     expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
-      action: "reschedule",
+      action: "edit",
       publishAt: new Date("2026-03-11T09:45").toISOString(),
+    });
+  });
+
+  it("submits caption edits using action=edit", async () => {
+    mockQueueLoad([makeJob()]);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [makeJob({ caption: "Updated caption" })] }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText(/Launch A/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.change(
+      screen.getByLabelText("Edit caption for job-1"),
+      { target: { value: "Updated caption" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    const patchCall = fetchMock.mock.calls[2];
+    expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      action: "edit",
+      caption: "Updated caption",
     });
   });
 
