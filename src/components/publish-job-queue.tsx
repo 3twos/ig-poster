@@ -4,8 +4,10 @@ import {
   AlertCircle,
   CalendarClock,
   LoaderCircle,
+  Plus,
   RefreshCw,
   RotateCcw,
+  Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -16,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import type { PublishJobClient } from "@/lib/meta-schemas";
+import type { MetaScheduleRequest, PublishJobClient } from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
 import { parseApiError } from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
@@ -77,6 +79,86 @@ const toInputValue = (iso: string) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+const cloneMedia = (
+  media: MetaScheduleRequest["media"],
+): MetaScheduleRequest["media"] => {
+  if (media.mode === "carousel") {
+    return {
+      mode: "carousel",
+      items: media.items.map((item) => ({ ...item })),
+    };
+  }
+
+  return { ...media };
+};
+
+const normalizeMedia = (
+  media: MetaScheduleRequest["media"],
+): MetaScheduleRequest["media"] => {
+  if (media.mode === "image") {
+    return {
+      mode: "image",
+      imageUrl: media.imageUrl.trim(),
+    };
+  }
+
+  if (media.mode === "reel") {
+    const coverUrl = media.coverUrl?.trim();
+    return {
+      mode: "reel",
+      videoUrl: media.videoUrl.trim(),
+      coverUrl: coverUrl ? coverUrl : undefined,
+    };
+  }
+
+  return {
+    mode: "carousel",
+    items: media.items.map((item) => ({
+      mediaType: item.mediaType,
+      url: item.url.trim(),
+    })),
+  };
+};
+
+const isValidUrl = (value: string) => {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const validateMedia = (media: MetaScheduleRequest["media"]): string | null => {
+  if (media.mode === "image") {
+    if (!isValidUrl(media.imageUrl)) {
+      return "Image URL must be a valid URL.";
+    }
+    return null;
+  }
+
+  if (media.mode === "reel") {
+    if (!isValidUrl(media.videoUrl)) {
+      return "Video URL must be a valid URL.";
+    }
+    if (media.coverUrl && !isValidUrl(media.coverUrl)) {
+      return "Cover URL must be a valid URL.";
+    }
+    return null;
+  }
+
+  if (media.items.length < 2 || media.items.length > 10) {
+    return "Carousel media must include 2-10 items.";
+  }
+
+  const invalidIndex = media.items.findIndex((item) => !isValidUrl(item.url));
+  if (invalidIndex !== -1) {
+    return `Carousel item ${invalidIndex + 1} must use a valid URL.`;
+  }
+
+  return null;
+};
+
 export function PublishJobQueue({
   activePostId,
   localTimeZone,
@@ -91,7 +173,15 @@ export function PublishJobQueue({
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editPublishAt, setEditPublishAt] = useState("");
   const [editCaption, setEditCaption] = useState("");
+  const [editMedia, setEditMedia] = useState<MetaScheduleRequest["media"] | null>(null);
   const hasLoadedOnceRef = useRef(false);
+
+  const resetEditState = () => {
+    setEditingJobId(null);
+    setEditPublishAt("");
+    setEditCaption("");
+    setEditMedia(null);
+  };
 
   const loadJobs = useCallback(async (background = false) => {
     if (background) {
@@ -143,9 +233,7 @@ export function PublishJobQueue({
 
       toast.success("Scheduled publish canceled.");
       if (editingJobId === job.id) {
-        setEditingJobId(null);
-        setEditPublishAt("");
-        setEditCaption("");
+        resetEditState();
       }
       await onJobsMutated?.(job.postId ?? undefined, "cancel");
       await loadJobs(true);
@@ -199,6 +287,17 @@ export function PublishJobQueue({
       toast.error("Publish time is required.");
       return;
     }
+    if (!editMedia) {
+      toast.error("Media details are required.");
+      return;
+    }
+
+    const normalizedMedia = normalizeMedia(editMedia);
+    const mediaValidationError = validateMedia(normalizedMedia);
+    if (mediaValidationError) {
+      toast.error(mediaValidationError);
+      return;
+    }
 
     const currentPublishAtInput = toInputValue(job.publishAt);
     const publishAtChanged = editPublishAt !== currentPublishAtInput;
@@ -206,6 +305,7 @@ export function PublishJobQueue({
       action: "edit";
       caption?: string;
       publishAt?: string;
+      media?: MetaScheduleRequest["media"];
     } = {
       action: "edit",
     };
@@ -222,11 +322,12 @@ export function PublishJobQueue({
       }
       body.publishAt = parsedPublishAt.toISOString();
     }
+    if (JSON.stringify(normalizedMedia) !== JSON.stringify(job.media)) {
+      body.media = normalizedMedia;
+    }
 
-    if (!body.caption && !body.publishAt) {
-      setEditingJobId(null);
-      setEditPublishAt("");
-      setEditCaption("");
+    if (!body.caption && !body.publishAt && !body.media) {
+      resetEditState();
       return;
     }
 
@@ -242,9 +343,7 @@ export function PublishJobQueue({
       }
 
       toast.success("Publish job updated.");
-      setEditingJobId(null);
-      setEditPublishAt("");
-      setEditCaption("");
+      resetEditState();
       await onJobsMutated?.(job.postId ?? undefined, "edit");
       await loadJobs(true);
     } catch (error) {
@@ -377,6 +476,7 @@ export function PublishJobQueue({
                             setEditingJobId(job.id);
                             setEditPublishAt(toInputValue(job.publishAt));
                             setEditCaption(job.caption);
+                            setEditMedia(cloneMedia(job.media));
                           }}
                         >
                           Edit
@@ -414,6 +514,163 @@ export function PublishJobQueue({
                           Caption {editCaption.trim().length}/2200
                         </p>
                       </div>
+                      <div className="mt-3">
+                        <LabelLine>Media</LabelLine>
+                        {editMedia?.mode === "image" ? (
+                          <div className="mt-2">
+                            <Input
+                              aria-label={`Edit image URL for ${job.id}`}
+                              value={editMedia.imageUrl}
+                              onChange={(event) => {
+                                const imageUrl = event.target.value;
+                                setEditMedia((current) =>
+                                  current?.mode === "image"
+                                    ? { mode: "image", imageUrl }
+                                    : current
+                                );
+                              }}
+                              className="text-xs"
+                            />
+                          </div>
+                        ) : null}
+                        {editMedia?.mode === "reel" ? (
+                          <div className="mt-2 space-y-2">
+                            <Input
+                              aria-label={`Edit reel video URL for ${job.id}`}
+                              value={editMedia.videoUrl}
+                              onChange={(event) => {
+                                const videoUrl = event.target.value;
+                                setEditMedia((current) =>
+                                  current?.mode === "reel"
+                                    ? {
+                                        mode: "reel",
+                                        videoUrl,
+                                        coverUrl: current.coverUrl,
+                                      }
+                                    : current
+                                );
+                              }}
+                              className="text-xs"
+                            />
+                            <Input
+                              aria-label={`Edit reel cover URL for ${job.id}`}
+                              value={editMedia.coverUrl ?? ""}
+                              onChange={(event) => {
+                                const coverUrl = event.target.value;
+                                setEditMedia((current) =>
+                                  current?.mode === "reel"
+                                    ? {
+                                        mode: "reel",
+                                        videoUrl: current.videoUrl,
+                                        coverUrl,
+                                      }
+                                    : current
+                                );
+                              }}
+                              className="text-xs"
+                              placeholder="Optional cover URL"
+                            />
+                          </div>
+                        ) : null}
+                        {editMedia?.mode === "carousel" ? (
+                          <div className="mt-2 space-y-2">
+                            {editMedia.items.map((item, index) => (
+                              <div
+                                key={`${job.id}-carousel-item-${index}`}
+                                className="rounded-md border border-white/10 bg-slate-950/40 p-2"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    aria-label={`Edit carousel item ${index + 1} type for ${job.id}`}
+                                    value={item.mediaType}
+                                    onChange={(event) => {
+                                      const mediaType = event.target.value as "image" | "video";
+                                      setEditMedia((current) => {
+                                        if (!current || current.mode !== "carousel") return current;
+                                        const items = current.items.map((entry, entryIndex) =>
+                                          entryIndex === index
+                                            ? { ...entry, mediaType }
+                                            : entry
+                                        );
+                                        return { mode: "carousel", items };
+                                      });
+                                    }}
+                                    className="h-8 rounded-md border border-white/15 bg-slate-900/70 px-2 text-xs text-slate-100 outline-none focus:ring-1 focus:ring-white/30"
+                                  >
+                                    <option value="image">Image</option>
+                                    <option value="video">Video</option>
+                                  </select>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    disabled={isBusy || editMedia.items.length <= 2}
+                                    onClick={() => {
+                                      setEditMedia((current) => {
+                                        if (!current || current.mode !== "carousel") return current;
+                                        if (current.items.length <= 2) return current;
+                                        return {
+                                          mode: "carousel",
+                                          items: current.items.filter((_, entryIndex) =>
+                                            entryIndex !== index
+                                          ),
+                                        };
+                                      });
+                                    }}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                    Remove
+                                  </Button>
+                                </div>
+                                <Input
+                                  aria-label={`Edit carousel item ${index + 1} URL for ${job.id}`}
+                                  value={item.url}
+                                  onChange={(event) => {
+                                    const url = event.target.value;
+                                    setEditMedia((current) => {
+                                      if (!current || current.mode !== "carousel") return current;
+                                      const items = current.items.map((entry, entryIndex) =>
+                                        entryIndex === index
+                                          ? { ...entry, url }
+                                          : entry
+                                      );
+                                      return { mode: "carousel", items };
+                                    });
+                                  }}
+                                  className="mt-2 text-xs"
+                                />
+                              </div>
+                            ))}
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="xs"
+                                disabled={isBusy || editMedia.items.length >= 10}
+                                onClick={() => {
+                                  setEditMedia((current) => {
+                                    if (!current || current.mode !== "carousel") return current;
+                                    if (current.items.length >= 10) return current;
+                                    return {
+                                      mode: "carousel",
+                                      items: [
+                                        ...current.items,
+                                        { mediaType: "image", url: "" },
+                                      ],
+                                    };
+                                  });
+                                }}
+                              >
+                                <Plus className="h-3 w-3" />
+                                Add item
+                              </Button>
+                              <p className="text-[11px] text-slate-400">
+                                2-10 items
+                              </p>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                         <Input
                           type="datetime-local"
@@ -442,9 +699,7 @@ export function PublishJobQueue({
                             size="xs"
                             disabled={isBusy}
                             onClick={() => {
-                              setEditingJobId(null);
-                              setEditPublishAt("");
-                              setEditCaption("");
+                              resetEditState();
                             }}
                           >
                             Close

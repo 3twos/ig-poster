@@ -266,6 +266,56 @@ describe("PublishJobQueue", () => {
     });
   });
 
+  it("submits media URL edits using action=edit", async () => {
+    mockQueueLoad([makeJob()]);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          jobs: [
+            makeJob({
+              media: {
+                mode: "image",
+                imageUrl: "https://cdn.example.com/updated-poster.jpg",
+              },
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText(/Launch A/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.change(
+      screen.getByLabelText("Edit image URL for job-1"),
+      { target: { value: "https://cdn.example.com/updated-poster.jpg" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    const patchCall = fetchMock.mock.calls[2];
+    expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      action: "edit",
+      media: {
+        mode: "image",
+        imageUrl: "https://cdn.example.com/updated-poster.jpg",
+      },
+    });
+  });
+
   it("does not send publishAt for caption-only edits when stored time has seconds", async () => {
     mockQueueLoad([
       makeJob({
