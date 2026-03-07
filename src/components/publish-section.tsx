@@ -22,7 +22,7 @@ type Props = {
   isPublishing: boolean;
   onPublishJobsMutated?: (
     postId: string | undefined,
-    action: "cancel" | "reschedule" | "edit",
+    action: "cancel" | "reschedule" | "edit" | "retry-now",
   ) => Promise<void> | void;
   publishJobsRefreshKey: number;
   shareUrl: string | null;

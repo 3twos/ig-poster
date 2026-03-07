@@ -575,13 +575,13 @@ export default function Home() {
 
   const handlePublishJobsMutated = useCallback(async (
     postId: string | undefined,
-    action: "cancel" | "reschedule" | "edit",
+    action: "cancel" | "reschedule" | "edit" | "retry-now",
   ) => {
     if (postId && activePost?.id === postId) {
       dispatch({
         type: "SET_STATUS",
         status:
-          action === "reschedule" || action === "edit"
+          action === "reschedule" || action === "edit" || action === "retry-now"
             ? "scheduled"
             : activePost.result
               ? "generated"
