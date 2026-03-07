@@ -30,27 +30,43 @@ export type PostAction =
   | { type: "SET_DRAFT"; draft: PostDraft | null }
   | { type: "UPDATE_BRAND"; brand: Partial<BrandState> }
   | { type: "UPDATE_BRIEF"; brief: Partial<PostState> }
-  | { type: "SET_ASSETS"; assets: StoredAsset[] }
+  | { type: "SET_ASSETS"; assets: StoredAsset[]; postId?: string }
   | { type: "ADD_ASSET"; asset: StoredAsset }
-  | { type: "SET_LOGO"; logoUrl: string | null }
+  | { type: "SET_LOGO"; logoUrl: string | null; postId?: string }
   | { type: "SET_PROMPT_CONFIG"; config: Partial<PromptConfigState> }
   | {
       type: "SET_RESULT";
+      postId?: string;
       result: GenerationResponse;
       overlayLayouts: Record<string, OverlayLayout>;
     }
-  | { type: "SET_ACTIVE_VARIANT"; variantId: string }
+  | { type: "SET_ACTIVE_VARIANT"; variantId: string; postId?: string }
   | {
       type: "UPDATE_OVERLAY";
+      postId?: string;
       variantId: string;
       layout: OverlayLayout;
     }
   | { type: "SET_ACTIVE_SLIDE"; index: number }
-  | { type: "SET_SHARE"; shareUrl: string; shareProjectId?: string }
+  | { type: "SET_SHARE"; shareUrl: string; shareProjectId?: string; postId?: string }
   | { type: "SET_RENDERED_POSTER"; url: string }
-  | { type: "ADD_PUBLISH"; entry: PublishHistoryEntry }
-  | { type: "SET_STATUS"; status: string }
-  | { type: "SET_BRAND_KIT"; brandKitId: string; brand: Partial<BrandState>; logoUrl?: string | null; promptConfig?: Partial<PromptConfigState> | null };
+  | { type: "ADD_PUBLISH"; entry: PublishHistoryEntry; postId?: string }
+  | { type: "SET_STATUS"; status: string; postId?: string }
+  | {
+      type: "SET_BRAND_KIT";
+      postId?: string;
+      brandKitId: string;
+      brand: Partial<BrandState>;
+      logoUrl?: string | null;
+      promptConfig?: Partial<PromptConfigState> | null;
+    };
+
+function matchesOwnedAction(
+  state: PostDraft | null,
+  action: { postId?: string },
+): state is PostDraft {
+  return state !== null && (!action.postId || state.id === action.postId);
+}
 
 export function rowToDraft(row: PostRow): PostDraft {
   return {
@@ -100,7 +116,7 @@ export function postReducer(
       };
 
     case "SET_ASSETS":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return { ...state, assets: action.assets };
 
     case "ADD_ASSET":
@@ -108,7 +124,7 @@ export function postReducer(
       return { ...state, assets: [...state.assets, action.asset] };
 
     case "SET_LOGO":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return { ...state, logoUrl: action.logoUrl };
 
     case "SET_PROMPT_CONFIG":
@@ -119,7 +135,7 @@ export function postReducer(
       };
 
     case "SET_RESULT":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return {
         ...state,
         result: action.result,
@@ -128,11 +144,11 @@ export function postReducer(
       };
 
     case "SET_ACTIVE_VARIANT":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return { ...state, activeVariantId: action.variantId };
 
     case "UPDATE_OVERLAY":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return {
         ...state,
         overlayLayouts: {
@@ -146,7 +162,7 @@ export function postReducer(
       return { ...state, activeSlideIndex: action.index };
 
     case "SET_SHARE":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return {
         ...state,
         shareUrl: action.shareUrl,
@@ -158,7 +174,7 @@ export function postReducer(
       return { ...state, renderedPosterUrl: action.url };
 
     case "ADD_PUBLISH":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return {
         ...state,
         publishHistory: [...state.publishHistory, action.entry],
@@ -166,11 +182,11 @@ export function postReducer(
       };
 
     case "SET_STATUS":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return { ...state, status: action.status };
 
     case "SET_BRAND_KIT":
-      if (!state) return state;
+      if (!matchesOwnedAction(state, action)) return state;
       return {
         ...state,
         brandKitId: action.brandKitId,
