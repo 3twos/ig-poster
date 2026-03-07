@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MetaLocationSearchField } from "@/components/meta-location-search";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { MetaUserTagsEditor } from "@/components/meta-user-tags-editor";
@@ -655,14 +656,21 @@ export function PublishJobQueue({
                               className="text-xs"
                               placeholder="Location ID (optional)"
                             />
+                            <MetaLocationSearchField
+                              ariaLabel={`Search Meta locations for ${job.id}`}
+                              locationId={editLocationId}
+                              onSelectLocationId={setEditLocationId}
+                              disabled={isBusy}
+                            />
                             <MetaUserTagsEditor
                               ariaLabelPrefix={`Edit ${job.id}`}
+                              imageUrl={editMedia.imageUrl}
                               tags={editUserTags}
                               onChange={setEditUserTags}
                               disabled={isBusy}
                             />
                             <p className="text-[11px] text-slate-400">
-                              Add usernames and coordinates (x/y between 0 and 1).
+                              Place tags visually on the image, or fine-tune x/y values between 0 and 1.
                             </p>
                             {hasIncompleteEditUserTags ? (
                               <p className="text-[11px] text-amber-200">

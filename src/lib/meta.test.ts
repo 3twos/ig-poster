@@ -5,6 +5,7 @@ import {
   getMediaInsights,
   publishInstagramContent,
   publishInstagramFirstComment,
+  searchMetaLocations,
 } from "@/lib/meta";
 
 describe("meta auth/env helpers", () => {
@@ -206,5 +207,71 @@ describe("publishInstagramFirstComment", () => {
         },
       ),
     ).rejects.toThrow("Meta API did not return comment id");
+  });
+});
+
+describe("searchMetaLocations", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("requests place suggestions and returns normalized locations", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "12345",
+            name: "Napa Valley Welcome Center",
+            location: {
+              city: "Napa",
+              state: "CA",
+              country: "United States",
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const locations = await searchMetaLocations("napa", {
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      graphVersion: "v22.0",
+    });
+
+    expect(locations).toEqual([
+      {
+        id: "12345",
+        name: "Napa Valley Welcome Center",
+        city: "Napa",
+        state: "CA",
+        country: "United States",
+      },
+    ]);
+
+    const call = fetchMock.mock.calls[0];
+    const url = call?.[0] as URL;
+    expect(url.toString()).toContain("https://graph.facebook.com/v22.0/search");
+    expect(url.searchParams.get("type")).toBe("place");
+    expect(url.searchParams.get("q")).toBe("napa");
+    expect(url.searchParams.get("limit")).toBe("8");
+    expect(url.searchParams.get("fields")).toBe("name,location");
+    expect(url.searchParams.get("access_token")).toBe("token");
+  });
+
+  it("rejects short queries before calling Meta", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      searchMetaLocations("n", {
+        accessToken: "token",
+        instagramUserId: "ig-id",
+        graphVersion: "v22.0",
+      }),
+    ).rejects.toThrow("Search query must be at least 2 characters.");
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

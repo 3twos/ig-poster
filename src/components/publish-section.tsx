@@ -11,6 +11,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MetaLocationSearchField } from "@/components/meta-location-search";
 import { Textarea } from "@/components/ui/textarea";
 import { MetaUserTagsEditor } from "@/components/meta-user-tags-editor";
 import { PublishJobQueue } from "@/components/publish-job-queue";
@@ -38,6 +39,7 @@ type Props = {
   shareCopyState: "idle" | "done";
   localTimeZone: string;
   supportsImageMetadata: boolean;
+  imageMetadataPreviewUrl?: string;
   onOpenSettings: () => void;
   onCreateShareLink: () => void;
   onPostNow: (metadata?: PublishMetadataInput) => void;
@@ -59,6 +61,7 @@ export function PublishSection({
   shareCopyState,
   localTimeZone,
   supportsImageMetadata,
+  imageMetadataPreviewUrl,
   onOpenSettings,
   onCreateShareLink,
   onPostNow,
@@ -171,17 +174,24 @@ export function PublishSection({
             className="text-xs"
             placeholder="Facebook location ID"
           />
+          <MetaLocationSearchField
+            ariaLabel="Search Meta locations"
+            locationId={locationId}
+            onSelectLocationId={setLocationId}
+            disabled={isPublishing}
+          />
           <Label className="text-[11px] text-slate-300">
             User tags (image posts, optional)
           </Label>
           <MetaUserTagsEditor
             ariaLabelPrefix="Publish"
+            imageUrl={imageMetadataPreviewUrl}
             tags={userTags}
             onChange={setUserTags}
             disabled={isPublishing}
           />
           <p className="text-[11px] text-slate-400">
-            Add usernames and coordinates (x/y between 0 and 1).
+            Place tags visually on the image, or fine-tune x/y values between 0 and 1.
           </p>
           {hasIncompleteUserTags ? (
             <p className="text-[11px] text-amber-200">
