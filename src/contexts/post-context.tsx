@@ -163,6 +163,19 @@ export function PostProvider({ children }: { children: ReactNode }) {
     refreshPostsRef.current = refreshPosts;
   }, [refreshPosts]);
 
+  const notifyBeforePostSwitch = useCallback((toPostId: string | null) => {
+    const fromPostId = activePostIdRef.current;
+    if (fromPostId === toPostId) {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("ig:before-post-switch", {
+        detail: { fromPostId, toPostId },
+      }),
+    );
+  }, []);
+
   // Load posts on mount
   const didInitRef = useRef(false);
   useEffect(() => {
@@ -177,6 +190,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      notifyBeforePostSwitch(id);
       const requestSeq = ++selectRequestSeqRef.current;
       await saveNowRef.current();
 
@@ -198,10 +212,11 @@ export function PostProvider({ children }: { children: ReactNode }) {
         // Failed to load post
       }
     },
-    [], // Stable — uses refs
+    [notifyBeforePostSwitch],
   );
 
   const createNewPost = useCallback(async (): Promise<string> => {
+    notifyBeforePostSwitch(null);
     selectRequestSeqRef.current += 1;
     await saveNowRef.current();
 
@@ -242,7 +257,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
 
     await refreshPosts();
     return id;
-  }, [refreshPosts]);
+  }, [notifyBeforePostSwitch, refreshPosts]);
 
   const archivePost = useCallback(
     async (id: string) => {
