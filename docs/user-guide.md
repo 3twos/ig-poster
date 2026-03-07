@@ -75,10 +75,11 @@
    - Connect Instagram via Meta OAuth in Settings (if not already connected).
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - Optionally add a `First comment` in the publish section; it is posted right after media publish.
+   - For image posts, optionally set `Location ID` and `User tags` (`username,x,y` per line).
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
    - The publish section also shows a workspace queue for queued, processing, and failed jobs.
-   - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs) without leaving the editor.
+   - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata) without leaving the editor.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -98,6 +99,7 @@
 - `single-image` variant publishes a rendered poster image.
 - `carousel` variant uses uploaded media sequence (minimum 2 items, up to 10).
 - `reel` variant requires at least one uploaded video.
+- Location ID and user tags are supported only for single-image posts (including queue edits).
 - Instagram API throughput is capped at 50 published posts per rolling 24-hour window per account.
 - Media URL preflight runs before scheduling/publishing and queue media edits: URLs must be public HTTPS and must probe as the expected media type (`image/*` or `video/*`).
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.

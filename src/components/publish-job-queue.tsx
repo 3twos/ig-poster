@@ -18,7 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import type { MetaScheduleRequest, PublishJobClient } from "@/lib/meta-schemas";
+import type {
+  MetaScheduleRequest,
+  MetaUserTag,
+  PublishJobClient,
+} from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
 import { parseApiError } from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
@@ -215,6 +219,51 @@ const isSameMedia = (
   return false;
 };
 
+const formatUserTagsText = (tags: MetaUserTag[] | null | undefined) =>
+  (tags ?? [])
+    .map((tag) => `${tag.username},${tag.x},${tag.y}`)
+    .join("\n");
+
+const parseUserTagsText = (raw: string): MetaUserTag[] | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const parts = line.split(",").map((part) => part.trim());
+      if (parts.length !== 3) {
+        throw new Error(
+          `User tag line ${index + 1} must use "username,x,y" format.`,
+        );
+      }
+
+      const username = parts[0]?.replace(/^@/, "");
+      const x = Number(parts[1]);
+      const y = Number(parts[2]);
+      if (!username) {
+        throw new Error(`User tag line ${index + 1} is missing a username.`);
+      }
+      if (!Number.isFinite(x) || x < 0 || x > 1) {
+        throw new Error(`User tag line ${index + 1} has invalid x value.`);
+      }
+      if (!Number.isFinite(y) || y < 0 || y > 1) {
+        throw new Error(`User tag line ${index + 1} has invalid y value.`);
+      }
+
+      return { username, x, y };
+    });
+};
+
+const userTagsEqual = (
+  left: MetaUserTag[] | null,
+  right: MetaUserTag[] | null,
+) => JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
+
 export function PublishJobQueue({
   activePostId,
   localTimeZone,
@@ -230,6 +279,8 @@ export function PublishJobQueue({
   const [editPublishAt, setEditPublishAt] = useState("");
   const [editCaption, setEditCaption] = useState("");
   const [editFirstComment, setEditFirstComment] = useState("");
+  const [editLocationId, setEditLocationId] = useState("");
+  const [editUserTagsText, setEditUserTagsText] = useState("");
   const [editMedia, setEditMedia] = useState<EditableMedia | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
@@ -238,6 +289,8 @@ export function PublishJobQueue({
     setEditPublishAt("");
     setEditCaption("");
     setEditFirstComment("");
+    setEditLocationId("");
+    setEditUserTagsText("");
     setEditMedia(null);
   };
 
@@ -361,10 +414,24 @@ export function PublishJobQueue({
     const normalizedFirstComment = editFirstComment.trim();
     const nextFirstComment = normalizedFirstComment ? normalizedFirstComment : null;
     const currentFirstComment = job.firstComment ?? null;
+    const normalizedLocationId = editLocationId.trim();
+    const nextLocationId = normalizedLocationId ? normalizedLocationId : null;
+    const currentLocationId = job.locationId ?? null;
+    let nextUserTags: MetaUserTag[] | null;
+    try {
+      nextUserTags = parseUserTagsText(editUserTagsText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid user tags.";
+      toast.error(message);
+      return;
+    }
+    const currentUserTags = job.userTags ?? null;
     const body: {
       action: "edit";
       caption?: string;
       firstComment?: string | null;
+      locationId?: string | null;
+      userTags?: MetaUserTag[] | null;
       publishAt?: string;
       media?: MetaScheduleRequest["media"];
     } = {
@@ -376,6 +443,12 @@ export function PublishJobQueue({
     }
     if (nextFirstComment !== currentFirstComment) {
       body.firstComment = nextFirstComment;
+    }
+    if (nextLocationId !== currentLocationId) {
+      body.locationId = nextLocationId;
+    }
+    if (!userTagsEqual(nextUserTags, currentUserTags)) {
+      body.userTags = nextUserTags;
     }
 
     if (publishAtChanged) {
@@ -390,7 +463,14 @@ export function PublishJobQueue({
       body.media = normalizedMedia;
     }
 
-    if (!body.caption && body.firstComment === undefined && !body.publishAt && !body.media) {
+    if (
+      !body.caption &&
+      body.firstComment === undefined &&
+      body.locationId === undefined &&
+      body.userTags === undefined &&
+      !body.publishAt &&
+      !body.media
+    ) {
       resetEditState();
       return;
     }
@@ -541,6 +621,8 @@ export function PublishJobQueue({
                             setEditPublishAt(toInputValue(job.publishAt));
                             setEditCaption(job.caption);
                             setEditFirstComment(job.firstComment ?? "");
+                            setEditLocationId(job.locationId ?? "");
+                            setEditUserTagsText(formatUserTagsText(job.userTags));
                             setEditMedia(cloneMedia(job.media));
                           }}
                         >
@@ -592,6 +674,34 @@ export function PublishJobQueue({
                         <p className="mt-1 text-[11px] text-slate-400">
                           First comment {editFirstComment.trim().length}/2200
                         </p>
+                      </div>
+                      <div className="mt-3">
+                        <LabelLine>Publish metadata</LabelLine>
+                        {editMedia?.mode === "image" ? (
+                          <div className="mt-2 space-y-2">
+                            <Input
+                              aria-label={`Edit location ID for ${job.id}`}
+                              value={editLocationId}
+                              onChange={(event) => setEditLocationId(event.target.value)}
+                              className="text-xs"
+                              placeholder="Location ID (optional)"
+                            />
+                            <Textarea
+                              aria-label={`Edit user tags for ${job.id}`}
+                              value={editUserTagsText}
+                              onChange={(event) => setEditUserTagsText(event.target.value)}
+                              className="min-h-[70px] text-xs"
+                              placeholder={"username,x,y\nusername,x,y"}
+                            />
+                            <p className="text-[11px] text-slate-400">
+                              One user tag per line as username,x,y with x and y between 0 and 1.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-[11px] text-slate-400">
+                            Location and user tags are available for single-image posts only.
+                          </p>
+                        )}
                       </div>
                       <div className="mt-3">
                         <LabelLine>Media</LabelLine>

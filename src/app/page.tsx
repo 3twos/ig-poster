@@ -72,6 +72,47 @@ import { withPerf } from "@/lib/perf";
 import { cn, slugify } from "@/lib/utils";
 import { toast } from "sonner";
 
+type PublishMetadataInput = {
+  firstComment?: string;
+  locationId?: string;
+  userTagsText?: string;
+};
+
+const parsePublishUserTags = (raw?: string) => {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const parts = line.split(",").map((part) => part.trim());
+      if (parts.length !== 3) {
+        throw new Error(
+          `User tag line ${index + 1} must use "username,x,y" format.`,
+        );
+      }
+
+      const username = parts[0]?.replace(/^@/, "");
+      const x = Number(parts[1]);
+      const y = Number(parts[2]);
+      if (!username) {
+        throw new Error(`User tag line ${index + 1} is missing a username.`);
+      }
+      if (!Number.isFinite(x) || x < 0 || x > 1) {
+        throw new Error(`User tag line ${index + 1} has invalid x value.`);
+      }
+      if (!Number.isFinite(y) || y < 0 || y > 1) {
+        throw new Error(`User tag line ${index + 1} has invalid y value.`);
+      }
+
+      return { username, x, y };
+    });
+};
+
 export default function Home() {
   const {
     activePost,
@@ -475,7 +516,10 @@ export default function Home() {
     finally { setIsSharing(false); }
   };
 
-  const publishToInstagram = async (scheduleAt?: string, firstComment?: string) => {
+  const publishToInstagram = async (
+    scheduleAt?: string,
+    metadata?: PublishMetadataInput,
+  ) => {
     if (!activeVariant) {
       const m = "Generate and select a variant before posting.";
       generation.setError(m);
@@ -499,9 +543,17 @@ export default function Home() {
         media = { mode: "image", imageUrl: await uploadRenderedPoster() };
       }
       const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
-      const normalizedFirstComment = firstComment?.trim() || undefined;
+      const normalizedFirstComment = metadata?.firstComment?.trim() || undefined;
+      const locationId = metadata?.locationId?.trim() || undefined;
+      const userTags = parsePublishUserTags(metadata?.userTagsText);
+      if (
+        activeVariant.postType !== "single-image" &&
+        (locationId || userTags?.length)
+      ) {
+        throw new Error("Location and user tags are currently supported only for single-image posts.");
+      }
       const publishAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: activePost?.id, caption, firstComment: normalizedFirstComment, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: activePost?.id, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as {
         status?: string;
@@ -546,7 +598,7 @@ export default function Home() {
 
   const publishToInstagramRef = useRef<(
     scheduleAt?: string,
-    firstComment?: string,
+    metadata?: PublishMetadataInput,
   ) => Promise<void>>(async () => {});
   publishToInstagramRef.current = publishToInstagram;
 
@@ -744,7 +796,7 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(firstComment) => void publishToInstagram(undefined, firstComment)} onSchedulePost={(scheduleAt, firstComment) => void publishToInstagram(scheduleAt, firstComment)} />
+                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />
                       </section>
                     )}
                   </div>
@@ -786,7 +838,7 @@ export default function Home() {
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(firstComment) => void publishToInstagram(undefined, firstComment)} onSchedulePost={(scheduleAt, firstComment) => void publishToInstagram(scheduleAt, firstComment)} />}
+            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

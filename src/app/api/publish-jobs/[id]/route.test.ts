@@ -45,6 +45,8 @@ const baseJob = {
   status: "failed" as const,
   caption: "Caption",
   firstComment: null,
+  locationId: null,
+  userTags: null,
   media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date("2026-03-06T21:00:00.000Z"),
   attempts: 3,
@@ -337,6 +339,90 @@ describe("PATCH /api/publish-jobs/:id", () => {
         firstComment: null,
       }),
     );
+  });
+
+  it("stores location id and user tags during image edit", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([baseJob]),
+    };
+    const userTags = [{ username: "handle", x: 0.2, y: 0.8 }];
+    const updated = {
+      ...baseJob,
+      status: "queued" as const,
+      locationId: "12345",
+      userTags,
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([updated]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        locationId: "12345",
+        userTags,
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(200);
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locationId: "12345",
+        userTags,
+      }),
+    );
+  });
+
+  it("rejects non-image metadata edits with location/user tags", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([
+        {
+          ...baseJob,
+          media: {
+            mode: "reel" as const,
+            videoUrl: "https://cdn.example.com/reel.mp4",
+          },
+        },
+      ]),
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        locationId: "12345",
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Location and user tags are currently supported only for image posts.",
+    });
+    expect(updateChain.set).not.toHaveBeenCalled();
   });
 
   it("preflights media URLs when editing media payload", async () => {

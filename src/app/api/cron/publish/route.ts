@@ -110,6 +110,8 @@ export async function GET(req: Request) {
           {
             ...job.media,
             caption: job.caption,
+            locationId: job.locationId ?? undefined,
+            userTags: job.userTags ?? undefined,
           },
           auth,
         );

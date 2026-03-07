@@ -180,6 +180,27 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json(updated);
     }
 
+    const nextMedia = payload.media ?? existing.media;
+    const nextLocationId = payload.locationId !== undefined
+      ? payload.locationId
+      : existing.locationId;
+    const nextUserTags = payload.userTags !== undefined
+      ? payload.userTags
+      : existing.userTags;
+
+    if (
+      nextMedia.mode !== "image" &&
+      (nextLocationId !== null && nextLocationId !== undefined ||
+        (nextUserTags?.length ?? 0) > 0)
+    ) {
+      return NextResponse.json(
+        {
+          error: "Location and user tags are currently supported only for image posts.",
+        },
+        { status: 400 },
+      );
+    }
+
     if (payload.media) {
       await preflightMetaMediaForPublish(payload.media);
     }
@@ -193,7 +214,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
           payload.firstComment !== undefined
             ? payload.firstComment
             : existing.firstComment,
-        media: payload.media ?? existing.media,
+        locationId: nextLocationId,
+        userTags: nextUserTags,
+        media: nextMedia,
         publishAt: payload.publishAt
           ? new Date(payload.publishAt)
           : existing.publishAt,

@@ -98,12 +98,12 @@ Why this shape:
 
 ### 4) Publish / Schedule
 
-1. Client submits caption + media payload to `POST /api/meta/schedule`.
+1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment and image metadata).
 2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
 3. Route resolves auth context (OAuth connection first, env fallback second).
 4. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
 5. Otherwise route publishes immediately through Meta Graph API helpers.
-6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes.
+6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` and `userTags` are passed through for image-mode publish jobs.
 7. Cron route (`GET /api/cron/publish`) claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
 
 Why this shape:
@@ -167,7 +167,7 @@ Why this shape:
   - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
   - chat index: `chat/<ownerHash>/index.json`
 - Postgres persistence now includes:
-  - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), attempts/retries, scheduling timestamp, optional first-comment text, and event timeline.
+  - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), attempts/retries, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), and event timeline.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `generated`, `published`, `scheduled`, `archived`).
 
@@ -191,6 +191,7 @@ Why this shape:
 - Generation: in Fallback mode, provider errors cascade to the next model in priority order before degrading to deterministic fallback output. In Parallel mode, partial model failures are tolerated as long as at least one model succeeds.
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
 - First-comment posting failures are captured as publish warnings/events and do not roll back successful media publishes.
+- Location/user-tag metadata is validated as image-only across schedule, queue-edit, and publish runtime paths.
 - Scheduling: cron claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
 - Failed jobs remain queryable in Postgres for inspection/recovery.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.

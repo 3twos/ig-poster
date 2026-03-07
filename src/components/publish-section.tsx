@@ -15,6 +15,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { PublishJobQueue } from "@/components/publish-job-queue";
 import type { InstagramAuthStatus } from "@/lib/types";
 
+type PublishMetadataInput = {
+  firstComment?: string;
+  locationId?: string;
+  userTagsText?: string;
+};
+
 type Props = {
   activePostId?: string;
   authStatus: InstagramAuthStatus;
@@ -31,8 +37,11 @@ type Props = {
   localTimeZone: string;
   onOpenSettings: () => void;
   onCreateShareLink: () => void;
-  onPostNow: (firstComment?: string) => void;
-  onSchedulePost: (scheduleAt: string, firstComment?: string) => void;
+  onPostNow: (metadata?: PublishMetadataInput) => void;
+  onSchedulePost: (
+    scheduleAt: string,
+    metadata?: PublishMetadataInput,
+  ) => void;
 };
 
 export function PublishSection({
@@ -53,8 +62,14 @@ export function PublishSection({
 }: Props) {
   const [scheduleAt, setScheduleAt] = useState("");
   const [firstComment, setFirstComment] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [userTagsText, setUserTagsText] = useState("");
   const normalizedFirstComment = firstComment.trim() || undefined;
+  const normalizedLocationId = locationId.trim() || undefined;
+  const normalizedUserTagsText = userTagsText.trim() || undefined;
   const firstCommentInputId = useId();
+  const locationInputId = useId();
+  const userTagsInputId = useId();
 
   return (
     <div className="space-y-3">
@@ -130,11 +145,44 @@ export function PublishSection({
         </p>
       </div>
 
+      <div className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3">
+        <Label htmlFor={locationInputId} className="text-[11px] text-slate-300">
+          Location ID (image posts, optional)
+        </Label>
+        <Input
+          id={locationInputId}
+          aria-label="Location ID (optional)"
+          value={locationId}
+          onChange={(event) => setLocationId(event.target.value)}
+          className="text-xs"
+          placeholder="Facebook location ID"
+        />
+        <Label htmlFor={userTagsInputId} className="text-[11px] text-slate-300">
+          User tags (image posts, optional)
+        </Label>
+        <Textarea
+          id={userTagsInputId}
+          aria-label="User tags (optional)"
+          value={userTagsText}
+          onChange={(event) => setUserTagsText(event.target.value)}
+          className="min-h-[72px] text-xs"
+          placeholder="@username,0.50,0.50"
+        />
+        <p className="text-[11px] text-slate-400">
+          One tag per line: `username,x,y` where x and y are between 0 and 1.
+        </p>
+      </div>
+
       <div className="grid gap-2">
         <Button
           type="button"
           disabled={isPublishing || isAuthLoading || !authStatus.connected}
-          onClick={() => onPostNow(normalizedFirstComment)}
+          onClick={() =>
+            onPostNow({
+              firstComment: normalizedFirstComment,
+              locationId: normalizedLocationId,
+              userTagsText: normalizedUserTagsText,
+            })}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
           {isPublishing ? (
@@ -158,7 +206,12 @@ export function PublishSection({
               type="button"
               variant="outline"
               disabled={isPublishing || isAuthLoading || !scheduleAt || !authStatus.connected}
-              onClick={() => onSchedulePost(scheduleAt, normalizedFirstComment)}
+              onClick={() =>
+                onSchedulePost(scheduleAt, {
+                  firstComment: normalizedFirstComment,
+                  locationId: normalizedLocationId,
+                  userTagsText: normalizedUserTagsText,
+                })}
               className="sm:min-w-[135px]"
             >
               <CalendarClock className="h-3.5 w-3.5" />

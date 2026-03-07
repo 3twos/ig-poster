@@ -39,6 +39,8 @@ const makeJob = (overrides?: Partial<PublishJobClient>): PublishJobClient => ({
   status: "queued",
   caption: "Caption",
   firstComment: null,
+  locationId: null,
+  userTags: null,
   media: { mode: "image", imageUrl: "https://cdn.example.com/poster.jpg" },
   publishAt: "2026-03-10T18:30:00.000Z",
   attempts: 0,
@@ -305,6 +307,82 @@ describe("PublishJobQueue", () => {
       action: "edit",
       firstComment: null,
     });
+  });
+
+  it("submits location and user-tag edits for image jobs", async () => {
+    mockQueueLoad([makeJob()]);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          jobs: [
+            makeJob({
+              locationId: "12345",
+              userTags: [{ username: "handle", x: 0.2, y: 0.8 }],
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText(/Launch A/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.change(
+      screen.getByLabelText("Edit location ID for job-1"),
+      { target: { value: "12345" } },
+    );
+    fireEvent.change(
+      screen.getByLabelText("Edit user tags for job-1"),
+      { target: { value: "@handle,0.2,0.8\nfriend,0.5,0.5" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    const patchCall = fetchMock.mock.calls[2];
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      action: "edit",
+      locationId: "12345",
+      userTags: [
+        { username: "handle", x: 0.2, y: 0.8 },
+        { username: "friend", x: 0.5, y: 0.5 },
+      ],
+    });
+  });
+
+  it("blocks save when user-tag rows are invalid", async () => {
+    mockQueueLoad([makeJob()]);
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText(/Launch A/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.change(
+      screen.getByLabelText("Edit user tags for job-1"),
+      { target: { value: "bad-format" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mockedToastError).toHaveBeenCalled();
   });
 
   it("submits media URL edits using action=edit", async () => {
