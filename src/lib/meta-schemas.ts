@@ -60,15 +60,25 @@ export const MetaScheduleRequestSchema = z
     outcomeContext: OutcomeContextSchema.optional(),
   })
   .superRefine((value, ctx) => {
-    if (
-      value.media.mode !== "image" &&
-      (value.locationId !== undefined || value.userTags !== undefined)
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Location and user tags are currently supported only for image posts.",
-        path: ["locationId"],
-      });
+    const hasLocation = value.locationId !== undefined;
+    const hasUserTags = value.userTags !== undefined;
+
+    if (value.media.mode !== "image" && (hasLocation || hasUserTags)) {
+      if (hasLocation) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Location and user tags are currently supported only for image posts.",
+          path: ["locationId"],
+        });
+      }
+
+      if (hasUserTags) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Location and user tags are currently supported only for image posts.",
+          path: ["userTags"],
+        });
+      }
     }
   });
 

@@ -35,6 +35,7 @@ type Props = {
   shareUrl: string | null;
   shareCopyState: "idle" | "done";
   localTimeZone: string;
+  supportsImageMetadata: boolean;
   onOpenSettings: () => void;
   onCreateShareLink: () => void;
   onPostNow: (metadata?: PublishMetadataInput) => void;
@@ -55,6 +56,7 @@ export function PublishSection({
   shareUrl,
   shareCopyState,
   localTimeZone,
+  supportsImageMetadata,
   onOpenSettings,
   onCreateShareLink,
   onPostNow,
@@ -145,33 +147,35 @@ export function PublishSection({
         </p>
       </div>
 
-      <div className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3">
-        <Label htmlFor={locationInputId} className="text-[11px] text-slate-300">
-          Location ID (image posts, optional)
-        </Label>
-        <Input
-          id={locationInputId}
-          aria-label="Location ID (optional)"
-          value={locationId}
-          onChange={(event) => setLocationId(event.target.value)}
-          className="text-xs"
-          placeholder="Facebook location ID"
-        />
-        <Label htmlFor={userTagsInputId} className="text-[11px] text-slate-300">
-          User tags (image posts, optional)
-        </Label>
-        <Textarea
-          id={userTagsInputId}
-          aria-label="User tags (optional)"
-          value={userTagsText}
-          onChange={(event) => setUserTagsText(event.target.value)}
-          className="min-h-[72px] text-xs"
-          placeholder="@username,0.50,0.50"
-        />
-        <p className="text-[11px] text-slate-400">
-          One tag per line: `username,x,y` where x and y are between 0 and 1.
-        </p>
-      </div>
+      {supportsImageMetadata ? (
+        <div className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3">
+          <Label htmlFor={locationInputId} className="text-[11px] text-slate-300">
+            Location ID (image posts, optional)
+          </Label>
+          <Input
+            id={locationInputId}
+            aria-label="Location ID (optional)"
+            value={locationId}
+            onChange={(event) => setLocationId(event.target.value)}
+            className="text-xs"
+            placeholder="Facebook location ID"
+          />
+          <Label htmlFor={userTagsInputId} className="text-[11px] text-slate-300">
+            User tags (image posts, optional)
+          </Label>
+          <Textarea
+            id={userTagsInputId}
+            aria-label="User tags (optional)"
+            value={userTagsText}
+            onChange={(event) => setUserTagsText(event.target.value)}
+            className="min-h-[72px] text-xs"
+            placeholder="@username,0.50,0.50"
+          />
+          <p className="text-[11px] text-slate-400">
+            One tag per line: `username,x,y` where x and y are between 0 and 1.
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid gap-2">
         <Button
@@ -180,8 +184,8 @@ export function PublishSection({
           onClick={() =>
             onPostNow({
               firstComment: normalizedFirstComment,
-              locationId: normalizedLocationId,
-              userTagsText: normalizedUserTagsText,
+              locationId: supportsImageMetadata ? normalizedLocationId : undefined,
+              userTagsText: supportsImageMetadata ? normalizedUserTagsText : undefined,
             })}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
@@ -209,8 +213,8 @@ export function PublishSection({
               onClick={() =>
                 onSchedulePost(scheduleAt, {
                   firstComment: normalizedFirstComment,
-                  locationId: normalizedLocationId,
-                  userTagsText: normalizedUserTagsText,
+                  locationId: supportsImageMetadata ? normalizedLocationId : undefined,
+                  userTagsText: supportsImageMetadata ? normalizedUserTagsText : undefined,
                 })}
               className="sm:min-w-[135px]"
             >

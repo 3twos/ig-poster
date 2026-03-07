@@ -187,11 +187,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const nextUserTags = payload.userTags !== undefined
       ? payload.userTags
       : existing.userTags;
+    const hasLocationMetadata =
+      nextLocationId !== null && nextLocationId !== undefined;
+    const hasUserTagMetadata = (nextUserTags?.length ?? 0) > 0;
 
     if (
       nextMedia.mode !== "image" &&
-      (nextLocationId !== null && nextLocationId !== undefined ||
-        (nextUserTags?.length ?? 0) > 0)
+      (hasLocationMetadata || hasUserTagMetadata)
     ) {
       return NextResponse.json(
         {

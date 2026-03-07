@@ -24,6 +24,10 @@ import type {
   PublishJobClient,
 } from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
+import {
+  formatMetaUserTagsText,
+  parseMetaUserTagsText,
+} from "@/lib/meta-user-tags";
 import { parseApiError } from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
 
@@ -219,46 +223,6 @@ const isSameMedia = (
   return false;
 };
 
-const formatUserTagsText = (tags: MetaUserTag[] | null | undefined) =>
-  (tags ?? [])
-    .map((tag) => `${tag.username},${tag.x},${tag.y}`)
-    .join("\n");
-
-const parseUserTagsText = (raw: string): MetaUserTag[] | null => {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  return trimmed
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const parts = line.split(",").map((part) => part.trim());
-      if (parts.length !== 3) {
-        throw new Error(
-          `User tag line ${index + 1} must use "username,x,y" format.`,
-        );
-      }
-
-      const username = parts[0]?.replace(/^@/, "");
-      const x = Number(parts[1]);
-      const y = Number(parts[2]);
-      if (!username) {
-        throw new Error(`User tag line ${index + 1} is missing a username.`);
-      }
-      if (!Number.isFinite(x) || x < 0 || x > 1) {
-        throw new Error(`User tag line ${index + 1} has invalid x value.`);
-      }
-      if (!Number.isFinite(y) || y < 0 || y > 1) {
-        throw new Error(`User tag line ${index + 1} has invalid y value.`);
-      }
-
-      return { username, x, y };
-    });
-};
-
 const userTagsEqual = (
   left: MetaUserTag[] | null,
   right: MetaUserTag[] | null,
@@ -419,7 +383,7 @@ export function PublishJobQueue({
     const currentLocationId = job.locationId ?? null;
     let nextUserTags: MetaUserTag[] | null;
     try {
-      nextUserTags = parseUserTagsText(editUserTagsText);
+      nextUserTags = parseMetaUserTagsText(editUserTagsText) ?? null;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid user tags.";
       toast.error(message);
@@ -622,7 +586,7 @@ export function PublishJobQueue({
                             setEditCaption(job.caption);
                             setEditFirstComment(job.firstComment ?? "");
                             setEditLocationId(job.locationId ?? "");
-                            setEditUserTagsText(formatUserTagsText(job.userTags));
+                            setEditUserTagsText(formatMetaUserTagsText(job.userTags));
                             setEditMedia(cloneMedia(job.media));
                           }}
                         >

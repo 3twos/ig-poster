@@ -377,7 +377,7 @@ describe("PublishJobQueue", () => {
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     fireEvent.change(
       screen.getByLabelText("Edit user tags for job-1"),
-      { target: { value: "bad-format" } },
+      { target: { value: "friend,,0.5" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
