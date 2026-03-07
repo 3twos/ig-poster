@@ -68,15 +68,15 @@ import {
   parseApiError,
   revokeObjectUrlIfNeeded,
 } from "@/lib/upload-helpers";
-import { parseMetaUserTagsText } from "@/lib/meta-user-tags";
 import { withPerf } from "@/lib/perf";
 import { cn, slugify } from "@/lib/utils";
 import { toast } from "sonner";
+import type { MetaUserTag } from "@/lib/meta-schemas";
 
 type PublishMetadataInput = {
   firstComment?: string;
   locationId?: string;
-  userTagsText?: string;
+  userTags?: MetaUserTag[];
 };
 
 export default function Home() {
@@ -511,7 +511,9 @@ export default function Home() {
       const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
       const normalizedFirstComment = metadata?.firstComment?.trim() || undefined;
       const locationId = metadata?.locationId?.trim() || undefined;
-      const userTags = parseMetaUserTagsText(metadata?.userTagsText);
+      const userTags = metadata?.userTags?.length
+        ? metadata.userTags
+        : undefined;
       if (
         activeVariant.postType !== "single-image" &&
         (locationId || userTags?.length)

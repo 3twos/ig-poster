@@ -55,7 +55,7 @@
 
 4. Publish immediately
    - Connect Instagram via OAuth (or env credentials), then publish selected concept directly.
-   - Optional metadata for image posts: location ID and user tags (`username,x,y`).
+   - Optional metadata for image posts: location ID and guided user-tag rows (username + x/y coordinates).
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.

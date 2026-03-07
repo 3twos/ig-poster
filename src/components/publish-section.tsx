@@ -12,13 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MetaUserTagsEditor } from "@/components/meta-user-tags-editor";
 import { PublishJobQueue } from "@/components/publish-job-queue";
+import type { MetaUserTag } from "@/lib/meta-schemas";
 import type { InstagramAuthStatus } from "@/lib/types";
 
 type PublishMetadataInput = {
   firstComment?: string;
   locationId?: string;
-  userTagsText?: string;
+  userTags?: MetaUserTag[];
 };
 
 type Props = {
@@ -65,13 +67,22 @@ export function PublishSection({
   const [scheduleAt, setScheduleAt] = useState("");
   const [firstComment, setFirstComment] = useState("");
   const [locationId, setLocationId] = useState("");
-  const [userTagsText, setUserTagsText] = useState("");
+  const [userTags, setUserTags] = useState<MetaUserTag[]>([]);
+  const normalizeTagUsername = (value: string) => value.trim().replace(/^@/, "");
   const normalizedFirstComment = firstComment.trim() || undefined;
   const normalizedLocationId = locationId.trim() || undefined;
-  const normalizedUserTagsText = userTagsText.trim() || undefined;
+  const normalizedUserTags = userTags
+    .map((tag) => ({
+      username: normalizeTagUsername(tag.username),
+      x: tag.x,
+      y: tag.y,
+    }))
+    .filter((tag) => tag.username.length > 0);
+  const hasIncompleteUserTags = userTags.some((tag) =>
+    normalizeTagUsername(tag.username).length === 0
+  );
   const firstCommentInputId = useId();
   const locationInputId = useId();
-  const userTagsInputId = useId();
 
   return (
     <div className="space-y-3">
@@ -160,32 +171,37 @@ export function PublishSection({
             className="text-xs"
             placeholder="Facebook location ID"
           />
-          <Label htmlFor={userTagsInputId} className="text-[11px] text-slate-300">
+          <Label className="text-[11px] text-slate-300">
             User tags (image posts, optional)
           </Label>
-          <Textarea
-            id={userTagsInputId}
-            aria-label="User tags (optional)"
-            value={userTagsText}
-            onChange={(event) => setUserTagsText(event.target.value)}
-            className="min-h-[72px] text-xs"
-            placeholder="@username,0.50,0.50"
+          <MetaUserTagsEditor
+            ariaLabelPrefix="Publish"
+            tags={userTags}
+            onChange={setUserTags}
+            disabled={isPublishing}
           />
           <p className="text-[11px] text-slate-400">
-            One tag per line: `username,x,y` where x and y are between 0 and 1.
+            Add usernames and coordinates (x/y between 0 and 1).
           </p>
+          {hasIncompleteUserTags ? (
+            <p className="text-[11px] text-amber-200">
+              Fill username for each tag row or remove incomplete rows before publishing.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
       <div className="grid gap-2">
         <Button
           type="button"
-          disabled={isPublishing || isAuthLoading || !authStatus.connected}
+          disabled={isPublishing || isAuthLoading || !authStatus.connected || hasIncompleteUserTags}
           onClick={() =>
             onPostNow({
               firstComment: normalizedFirstComment,
               locationId: supportsImageMetadata ? normalizedLocationId : undefined,
-              userTagsText: supportsImageMetadata ? normalizedUserTagsText : undefined,
+              userTags: supportsImageMetadata && normalizedUserTags.length > 0
+                ? normalizedUserTags
+                : undefined,
             })}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
@@ -209,12 +225,14 @@ export function PublishSection({
             <Button
               type="button"
               variant="outline"
-              disabled={isPublishing || isAuthLoading || !scheduleAt || !authStatus.connected}
+              disabled={isPublishing || isAuthLoading || !scheduleAt || !authStatus.connected || hasIncompleteUserTags}
               onClick={() =>
                 onSchedulePost(scheduleAt, {
                   firstComment: normalizedFirstComment,
                   locationId: supportsImageMetadata ? normalizedLocationId : undefined,
-                  userTagsText: supportsImageMetadata ? normalizedUserTagsText : undefined,
+                  userTags: supportsImageMetadata && normalizedUserTags.length > 0
+                    ? normalizedUserTags
+                    : undefined,
                 })}
               className="sm:min-w-[135px]"
             >

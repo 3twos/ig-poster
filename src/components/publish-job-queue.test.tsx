@@ -340,9 +340,31 @@ describe("PublishJobQueue", () => {
       screen.getByLabelText("Edit location ID for job-1"),
       { target: { value: "12345" } },
     );
+    fireEvent.click(screen.getByLabelText("Edit job-1 add user tag"));
     fireEvent.change(
-      screen.getByLabelText("Edit user tags for job-1"),
-      { target: { value: "@handle,0.2,0.8\nfriend,0.5,0.5" } },
+      screen.getByLabelText("Edit job-1 user tag username 1"),
+      { target: { value: "@handle" } },
+    );
+    fireEvent.change(
+      screen.getByLabelText("Edit job-1 user tag x 1"),
+      { target: { value: "0.2" } },
+    );
+    fireEvent.change(
+      screen.getByLabelText("Edit job-1 user tag y 1"),
+      { target: { value: "0.8" } },
+    );
+    fireEvent.click(screen.getByLabelText("Edit job-1 add user tag"));
+    fireEvent.change(
+      screen.getByLabelText("Edit job-1 user tag username 2"),
+      { target: { value: "friend" } },
+    );
+    fireEvent.change(
+      screen.getByLabelText("Edit job-1 user tag x 2"),
+      { target: { value: "0.5" } },
+    );
+    fireEvent.change(
+      screen.getByLabelText("Edit job-1 user tag y 2"),
+      { target: { value: "0.5" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -375,14 +397,10 @@ describe("PublishJobQueue", () => {
     expect(await screen.findByText(/Launch A/)).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
-    fireEvent.change(
-      screen.getByLabelText("Edit user tags for job-1"),
-      { target: { value: "friend,,0.5" } },
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
+    fireEvent.click(screen.getByLabelText("Edit job-1 add user tag"));
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton.hasAttribute("disabled")).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(mockedToastError).toHaveBeenCalled();
   });
 
   it("submits media URL edits using action=edit", async () => {
