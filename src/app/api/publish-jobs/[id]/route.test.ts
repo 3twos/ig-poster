@@ -8,11 +8,26 @@ vi.mock("@/lib/workspace-auth", () => ({
   readWorkspaceSessionFromRequest: vi.fn(),
 }));
 
+vi.mock("@/lib/meta-media-preflight", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/meta-media-preflight")
+  >("@/lib/meta-media-preflight");
+  return {
+    ...actual,
+    preflightMetaMediaForPublish: vi.fn(),
+  };
+});
+
 import { PATCH } from "@/app/api/publish-jobs/[id]/route";
 import { getDb } from "@/db";
+import {
+  MetaMediaPreflightError,
+  preflightMetaMediaForPublish,
+} from "@/lib/meta-media-preflight";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 const mockedGetDb = vi.mocked(getDb);
+const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
 
 const session = {
@@ -51,6 +66,7 @@ const baseJob = {
 describe("PATCH /api/publish-jobs/:id", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockedPreflightMetaMedia.mockResolvedValue(undefined);
   });
 
   it("returns 401 when workspace session is missing", async () => {
@@ -275,6 +291,7 @@ describe("PATCH /api/publish-jobs/:id", () => {
     });
     const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
     expect(res.status).toBe(200);
+    expect(mockedPreflightMetaMedia).not.toHaveBeenCalled();
     expect(updateChain.set).toHaveBeenCalledWith(
       expect.objectContaining({
         attempts: 0,
@@ -283,6 +300,79 @@ describe("PATCH /api/publish-jobs/:id", () => {
         completedAt: null,
       }),
     );
+  });
+
+  it("preflights media URLs when editing media payload", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([baseJob]),
+    };
+    const updated = {
+      ...baseJob,
+      status: "queued" as const,
+      attempts: 0,
+      lastAttemptAt: null,
+      lastError: null,
+      completedAt: null,
+      media: { mode: "image" as const, imageUrl: "https://cdn.example.com/new.jpg" },
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([updated]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/new.jpg" },
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(200);
+    expect(mockedPreflightMetaMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 400 when media preflight fails for edit", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    mockedPreflightMetaMedia.mockRejectedValue(
+      new MetaMediaPreflightError("Image URL must use HTTPS."),
+    );
+
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([baseJob]),
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/new.jpg" },
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(400);
+    expect(updateChain.set).not.toHaveBeenCalled();
   });
 
   it("returns 500 for unexpected server errors", async () => {

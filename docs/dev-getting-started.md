@@ -175,6 +175,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
 - `src/lib/meta.ts`: Meta Graph publishing primitives.
+- `src/lib/meta-media-preflight.ts`: publish-time media URL compliance checks (public HTTPS validation + content-type probing).
 - `src/lib/meta-auth.ts`: Meta OAuth flow and credential resolution.
 - `src/lib/workspace-auth.ts`: Google Workspace OAuth + session tokens.
 - `src/proxy.ts`: Next.js 16 Proxy entrypoint for auth gate and canonical host redirect logic.

@@ -99,10 +99,11 @@ Why this shape:
 ### 4) Publish / Schedule
 
 1. Client submits caption + media payload to `POST /api/meta/schedule`.
-2. Route resolves auth context (OAuth connection first, env fallback second).
-3. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
-4. Otherwise route publishes immediately through Meta Graph API helpers.
-5. Cron route (`GET /api/cron/publish`) claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
+2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
+3. Route resolves auth context (OAuth connection first, env fallback second).
+4. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
+5. Otherwise route publishes immediately through Meta Graph API helpers.
+6. Cron route (`GET /api/cron/publish`) claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
 
 Why this shape:
 - Separates interactive request latency from scheduled execution.

@@ -12,6 +12,16 @@ vi.mock("@/lib/meta-auth", () => ({
   resolveMetaAuthFromRequest: vi.fn(),
 }));
 
+vi.mock("@/lib/meta-media-preflight", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/meta-media-preflight")
+  >("@/lib/meta-media-preflight");
+  return {
+    ...actual,
+    preflightMetaMediaForPublish: vi.fn(),
+  };
+});
+
 vi.mock("@/lib/publish-jobs", () => ({
   completePublishJobFailure: vi.fn(),
   completePublishJobSuccess: vi.fn(),
@@ -35,6 +45,10 @@ vi.mock("@/lib/meta", async () => {
 
 import { POST } from "@/app/api/meta/schedule/route";
 import { getDb } from "@/db";
+import {
+  MetaMediaPreflightError,
+  preflightMetaMediaForPublish,
+} from "@/lib/meta-media-preflight";
 import { publishInstagramContent } from "@/lib/meta";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import {
@@ -49,6 +63,7 @@ import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 const mockedGetDb = vi.mocked(getDb);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
 const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthFromRequest);
+const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
@@ -106,6 +121,7 @@ describe("POST /api/meta/schedule", () => {
       },
     });
     mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
+    mockedPreflightMetaMedia.mockResolvedValue(undefined);
     mockedReserveImmediatePublishJob.mockResolvedValue(
       reservedJob as Awaited<ReturnType<typeof reserveImmediatePublishJob>>,
     );
@@ -176,6 +192,7 @@ describe("POST /api/meta/schedule", () => {
       status: "scheduled",
       id: "job_1",
     });
+    expect(mockedPreflightMetaMedia).toHaveBeenCalledTimes(1);
     expect(mockedCreatePublishJob).toHaveBeenCalledTimes(1);
     expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
@@ -212,6 +229,7 @@ describe("POST /api/meta/schedule", () => {
       status: "published",
       publishId: "publish_1",
     });
+    expect(mockedPreflightMetaMedia).toHaveBeenCalledTimes(1);
     expect(mockedReserveImmediatePublishJob).toHaveBeenCalledTimes(1);
     expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(1);
     expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
@@ -235,6 +253,26 @@ describe("POST /api/meta/schedule", () => {
     expect(res.status).toBe(400);
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
     expect(mockedCompletePublishJobSuccess).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when media preflight fails", async () => {
+    mockedPreflightMetaMedia.mockRejectedValue(
+      new MetaMediaPreflightError("Image URL must use HTTPS."),
+    );
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Now",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
   });
 
   it("returns success when publish-job success logging fails", async () => {
