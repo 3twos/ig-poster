@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import type { PublishJobClient } from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
 import { parseApiError } from "@/lib/upload-helpers";
@@ -24,7 +25,7 @@ type Props = {
   localTimeZone: string;
   onJobsMutated?: (
     postId: string | undefined,
-    action: "cancel" | "reschedule",
+    action: "cancel" | "reschedule" | "edit",
   ) => Promise<void> | void;
   refreshKey: number;
 };
@@ -87,7 +88,8 @@ export function PublishJobQueue({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [rescheduleAt, setRescheduleAt] = useState("");
+  const [editPublishAt, setEditPublishAt] = useState("");
+  const [editCaption, setEditCaption] = useState("");
   const hasLoadedOnceRef = useRef(false);
 
   const loadJobs = useCallback(async (background = false) => {
@@ -141,7 +143,8 @@ export function PublishJobQueue({
       toast.success("Scheduled publish canceled.");
       if (editingJobId === job.id) {
         setEditingJobId(null);
-        setRescheduleAt("");
+        setEditPublishAt("");
+        setEditCaption("");
       }
       await onJobsMutated?.(job.postId ?? undefined, "cancel");
       await loadJobs(true);
@@ -155,32 +158,68 @@ export function PublishJobQueue({
     }
   };
 
-  const handleReschedule = async (job: PublishJobClient) => {
-    if (!rescheduleAt) return;
+  const handleEdit = async (job: PublishJobClient) => {
+    const normalizedCaption = editCaption.trim();
+    if (!normalizedCaption) {
+      toast.error("Caption cannot be empty.");
+      return;
+    }
+    if (!editPublishAt) {
+      toast.error("Publish time is required.");
+      return;
+    }
+
+    const currentPublishAtInput = toInputValue(job.publishAt);
+    const publishAtChanged = editPublishAt !== currentPublishAtInput;
+    const body: {
+      action: "edit";
+      caption?: string;
+      publishAt?: string;
+    } = {
+      action: "edit",
+    };
+
+    if (normalizedCaption !== job.caption) {
+      body.caption = normalizedCaption;
+    }
+
+    if (publishAtChanged) {
+      const parsedPublishAt = new Date(editPublishAt);
+      if (Number.isNaN(parsedPublishAt.getTime())) {
+        toast.error("Choose a valid publish time.");
+        return;
+      }
+      body.publishAt = parsedPublishAt.toISOString();
+    }
+
+    if (!body.caption && !body.publishAt) {
+      setEditingJobId(null);
+      setEditPublishAt("");
+      setEditCaption("");
+      return;
+    }
 
     setActiveJobId(job.id);
     try {
       const response = await fetch(`/api/publish-jobs/${job.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "reschedule",
-          publishAt: new Date(rescheduleAt).toISOString(),
-        }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         throw new Error(await parseApiError(response));
       }
 
-      toast.success("Scheduled publish updated.");
+      toast.success("Publish job updated.");
       setEditingJobId(null);
-      setRescheduleAt("");
-      await onJobsMutated?.(job.postId ?? undefined, "reschedule");
+      setEditPublishAt("");
+      setEditCaption("");
+      await onJobsMutated?.(job.postId ?? undefined, "edit");
       await loadJobs(true);
     } catch (error) {
       const message = error instanceof Error
         ? error.message
-        : "Could not reschedule publish.";
+        : "Could not update publish job.";
       toast.error(message);
     } finally {
       setActiveJobId(null);
@@ -289,10 +328,11 @@ export function PublishJobQueue({
                           disabled={isBusy}
                           onClick={() => {
                             setEditingJobId(job.id);
-                            setRescheduleAt(toInputValue(job.publishAt));
+                            setEditPublishAt(toInputValue(job.publishAt));
+                            setEditCaption(job.caption);
                           }}
                         >
-                          Reschedule
+                          Edit
                         </Button>
                         <Button
                           type="button"
@@ -314,21 +354,33 @@ export function PublishJobQueue({
 
                   {isEditing ? (
                     <div className="mt-3 rounded-md border border-white/10 bg-white/5 p-2.5">
-                      <LabelLine>Reschedule publish time</LabelLine>
+                      <LabelLine>Edit scheduled publish</LabelLine>
+                      <div className="mt-2">
+                        <Textarea
+                          aria-label={`Edit caption for ${job.id}`}
+                          value={editCaption}
+                          onChange={(event) => setEditCaption(event.target.value)}
+                          className="min-h-[92px] text-xs"
+                          maxLength={2200}
+                        />
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Caption {editCaption.trim().length}/2200
+                        </p>
+                      </div>
                       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                         <Input
                           type="datetime-local"
-                          aria-label={`Reschedule publish time for ${job.id}`}
-                          value={rescheduleAt}
-                          onChange={(event) => setRescheduleAt(event.target.value)}
+                          aria-label={`Edit publish time for ${job.id}`}
+                          value={editPublishAt}
+                          onChange={(event) => setEditPublishAt(event.target.value)}
                           className="text-xs"
                         />
                         <div className="flex gap-2">
                           <Button
                             type="button"
                             size="xs"
-                            disabled={!rescheduleAt || isBusy}
-                            onClick={() => void handleReschedule(job)}
+                            disabled={!editPublishAt || !editCaption.trim() || isBusy}
+                            onClick={() => void handleEdit(job)}
                           >
                             {isBusy ? (
                               <LoaderCircle className="h-3 w-3 animate-spin" />
@@ -344,7 +396,8 @@ export function PublishJobQueue({
                             disabled={isBusy}
                             onClick={() => {
                               setEditingJobId(null);
-                              setRescheduleAt("");
+                              setEditPublishAt("");
+                              setEditCaption("");
                             }}
                           >
                             Close
