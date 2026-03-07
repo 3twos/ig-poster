@@ -1,0 +1,1 @@
+CREATE INDEX "publish_jobs_owner_status_completed_at_idx" ON "publish_jobs" USING btree ("owner_hash","status","completed_at");

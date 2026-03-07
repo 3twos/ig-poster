@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 
 import * as schema from "@/db/schema";
@@ -8,6 +8,12 @@ import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
 export type AppDb = NeonHttpDatabase<typeof schema>;
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
+export const PUBLISH_WINDOW_LIMIT = 50;
+const PUBLISH_WINDOW_MS = 24 * 60 * 60 * 1000;
+const PUBLISH_WINDOW_STATUSES: PublishJobRow["status"][] = [
+  "published",
+  "processing",
+];
 
 const buildJobId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(9)))
@@ -131,6 +137,89 @@ export const createPublishJob = async (
   return row;
 };
 
+const countPublishWindowRows = async (
+  db: Pick<AppDb, "select">,
+  ownerHash: string,
+  windowStart: Date,
+) => {
+  const [usage] = await db
+    .select({
+      publishedCount: sql<number>`count(*)`,
+    })
+    .from(publishJobs)
+    .where(
+      and(
+        eq(publishJobs.ownerHash, ownerHash),
+        inArray(publishJobs.status, PUBLISH_WINDOW_STATUSES),
+        gte(publishJobs.completedAt, windowStart),
+      ),
+    );
+
+  return Number(usage?.publishedCount ?? 0);
+};
+
+export const reserveImmediatePublishJob = async (
+  db: AppDb,
+  input: {
+    ownerHash: string;
+    postId?: string;
+    caption: string;
+    media: MetaScheduleRequest["media"];
+    authSource: "oauth" | "env";
+    connectionId?: string;
+    outcomeContext?: MetaScheduleRequest["outcomeContext"];
+    maxAttempts?: number;
+  },
+): Promise<PublishJobRow | null> => {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - PUBLISH_WINDOW_MS);
+  const maxAttempts = input.maxAttempts ?? 1;
+  const row = await db.transaction(async (tx) => {
+    const used = await countPublishWindowRows(tx, input.ownerHash, windowStart);
+    if (used >= PUBLISH_WINDOW_LIMIT) {
+      return null;
+    }
+
+    const [inserted] = await tx
+      .insert(publishJobs)
+      .values({
+        id: buildJobId(),
+        ownerHash: input.ownerHash,
+        postId: input.postId,
+        status: "processing",
+        caption: input.caption,
+        media: input.media,
+        publishAt: now,
+        attempts: 1,
+        maxAttempts,
+        lastAttemptAt: now,
+        authSource: input.authSource,
+        connectionId: input.connectionId,
+        outcomeContext: input.outcomeContext,
+        // Non-null so in-flight immediate reservations are counted in the 24h window.
+        completedAt: now,
+        events: appendPublishJobEvent(
+          appendPublishJobEvent([], {
+            type: "created",
+            detail: "Immediate publish started.",
+          }),
+          {
+            type: "processing",
+            attempt: 1,
+            detail: "Immediate publish slot reserved.",
+          },
+        ),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    return inserted ?? null;
+  }, { isolationLevel: "serializable" });
+
+  return row ?? null;
+};
+
 export const listPublishJobsForOwner = (
   db: AppDb,
   ownerHash: string,
@@ -150,6 +239,21 @@ export const listPublishJobsForOwner = (
     .where(whereClause)
     .orderBy(asc(publishJobs.publishAt))
     .limit(Math.min(Math.max(options?.limit ?? 100, 1), 250));
+};
+
+export const getPublishWindowUsage = async (
+  db: AppDb,
+  ownerHash: string,
+  now = new Date(),
+) => {
+  const windowStart = new Date(now.getTime() - PUBLISH_WINDOW_MS);
+  const used = await countPublishWindowRows(db, ownerHash, windowStart);
+  return {
+    limit: PUBLISH_WINDOW_LIMIT,
+    used,
+    remaining: Math.max(PUBLISH_WINDOW_LIMIT - used, 0),
+    windowStart,
+  };
 };
 
 export const claimDuePublishJobs = async (
@@ -200,7 +304,7 @@ export const completePublishJobSuccess = async (
   db: AppDb,
   job: PublishJobRow,
   publish: { publishId?: string; creationId?: string; children?: string[] },
-) => {
+): Promise<PublishJobRow | null> => {
   const now = new Date();
   const [updated] = await db
     .update(publishJobs)
@@ -226,11 +330,41 @@ export const completePublishJobSuccess = async (
   return updated ?? null;
 };
 
+export const deferProcessingPublishJob = async (
+  db: AppDb,
+  job: PublishJobRow,
+  nextPublishAt: Date,
+  detail: string,
+): Promise<PublishJobRow | null> => {
+  const now = new Date();
+  const restoredAttempts = Math.max(job.attempts - 1, 0);
+  const [updated] = await db
+    .update(publishJobs)
+    .set({
+      status: "queued",
+      publishAt: nextPublishAt,
+      attempts: restoredAttempts,
+      lastAttemptAt: null,
+      lastError: null,
+      completedAt: null,
+      updatedAt: now,
+      events: appendPublishJobEvent(job.events, {
+        type: "retry-scheduled",
+        attempt: restoredAttempts || undefined,
+        detail: `${detail} Next retry at ${nextPublishAt.toISOString()}.`,
+      }),
+    })
+    .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "processing")))
+    .returning();
+
+  return updated ?? null;
+};
+
 export const completePublishJobFailure = async (
   db: AppDb,
   job: PublishJobRow,
   errorMessage: string,
-) => {
+): Promise<PublishJobRow | null> => {
   const now = new Date();
   const shouldRetry = job.attempts < job.maxAttempts;
   const retryAt = shouldRetry

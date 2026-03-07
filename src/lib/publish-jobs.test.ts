@@ -5,6 +5,9 @@ import {
   appendPublishJobEvent,
   completePublishJobFailure,
   completePublishJobSuccess,
+  deferProcessingPublishJob,
+  getPublishWindowUsage,
+  reserveImmediatePublishJob,
   type AppDb,
 } from "@/lib/publish-jobs";
 
@@ -23,6 +26,57 @@ const makeUpdateDb = <T>(rows: T[]) => {
   } as unknown as AppDb;
 
   return { db, chain };
+};
+
+const makeSelectDb = <T>(rows: T[]) => {
+  const fromChain = {
+    where: vi.fn().mockResolvedValue(rows),
+  };
+  const selectChain = {
+    from: vi.fn().mockReturnValue(fromChain),
+  };
+  const db = {
+    select: vi.fn().mockReturnValue(selectChain),
+  } as unknown as AppDb;
+
+  return { db, selectChain, fromChain };
+};
+
+const makeReservationDb = (usageCount: number, rows: PublishJobRow[]) => {
+  const usageWhere = vi.fn().mockResolvedValue([{ publishedCount: usageCount }]);
+  const usageFrom = vi.fn().mockReturnValue({ where: usageWhere });
+  const usageSelect = vi.fn().mockReturnValue({ from: usageFrom });
+
+  const insertChain = {
+    values: vi.fn().mockReturnThis(),
+    returning: vi.fn().mockResolvedValue(rows),
+  };
+  type ReservationTx = {
+    select: typeof usageSelect;
+    insert: ReturnType<typeof vi.fn>;
+  };
+  const tx: ReservationTx = {
+    select: usageSelect,
+    insert: vi.fn().mockReturnValue(insertChain),
+  };
+  const transaction = vi.fn(
+    async (
+      callback: (tx: ReservationTx) => Promise<unknown>,
+      config?: unknown,
+    ) => {
+      void config;
+      return callback(tx);
+    },
+  );
+  const db = { transaction } as unknown as AppDb;
+
+  return {
+    db,
+    tx,
+    transaction,
+    insertChain,
+    usageWhere,
+  };
 };
 
 const baseJob = (): PublishJobRow => ({
@@ -62,6 +116,60 @@ describe("appendPublishJobEvent", () => {
       detail: "Changed by user.",
     });
     expect(typeof events[1]?.at).toBe("string");
+  });
+});
+
+describe("getPublishWindowUsage", () => {
+  it("calculates remaining 24h publish capacity", async () => {
+    const now = new Date("2026-03-07T21:00:00.000Z");
+    const { db } = makeSelectDb([{ publishedCount: 12 }]);
+
+    const usage = await getPublishWindowUsage(db, "owner_hash", now);
+
+    expect(usage).toMatchObject({
+      limit: 50,
+      used: 12,
+      remaining: 38,
+      windowStart: new Date("2026-03-06T21:00:00.000Z"),
+    });
+  });
+});
+
+describe("reserveImmediatePublishJob", () => {
+  it("reserves an immediate slot when usage is below limit", async () => {
+    const job = baseJob();
+    const { db, transaction, insertChain } = makeReservationDb(12, [job]);
+
+    const reserved = await reserveImmediatePublishJob(db, {
+      ownerHash: "owner_hash",
+      postId: "post_1",
+      caption: "Now",
+      media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      authSource: "oauth",
+      connectionId: "conn_1",
+    });
+
+    expect(reserved?.id).toBe(job.id);
+    expect(transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ isolationLevel: "serializable" }),
+    );
+    expect(insertChain.values).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null when usage has reached the rolling limit", async () => {
+    const { db, tx } = makeReservationDb(50, []);
+
+    const reserved = await reserveImmediatePublishJob(db, {
+      ownerHash: "owner_hash",
+      caption: "Now",
+      media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      authSource: "oauth",
+      connectionId: "conn_1",
+    });
+
+    expect(reserved).toBeNull();
+    expect(tx.insert).not.toHaveBeenCalled();
   });
 });
 
@@ -148,6 +256,42 @@ describe("completePublishJobSuccess", () => {
     });
     expect(setPayload.events.at(-1)).toMatchObject({
       type: "published",
+      attempt: 1,
+    });
+  });
+});
+
+describe("deferProcessingPublishJob", () => {
+  it("requeues processing job without consuming an attempt", async () => {
+    const job = {
+      ...baseJob(),
+      attempts: 2,
+    };
+    const { db, chain } = makeUpdateDb([{ ...job, status: "queued" as const }]);
+    const nextPublishAt = new Date("2026-03-06T21:30:00.000Z");
+
+    await deferProcessingPublishJob(
+      db,
+      job,
+      nextPublishAt,
+      "Deferred by publish window limit (50/50 in last 24h).",
+    );
+
+    const setPayload = chain.set.mock.calls[0]?.[0] as {
+      status: string;
+      publishAt: Date;
+      attempts: number;
+      lastAttemptAt: Date | null;
+      completedAt: Date | null;
+      events: Array<{ type: string; detail?: string; attempt?: number }>;
+    };
+    expect(setPayload.status).toBe("queued");
+    expect(setPayload.publishAt.toISOString()).toBe("2026-03-06T21:30:00.000Z");
+    expect(setPayload.attempts).toBe(1);
+    expect(setPayload.lastAttemptAt).toBeNull();
+    expect(setPayload.completedAt).toBeNull();
+    expect(setPayload.events.at(-1)).toMatchObject({
+      type: "retry-scheduled",
       attempt: 1,
     });
   });

@@ -22,6 +22,8 @@ vi.mock("@/lib/publish-jobs", () => ({
   claimDuePublishJobs: vi.fn(),
   completePublishJobFailure: vi.fn(),
   completePublishJobSuccess: vi.fn(),
+  deferProcessingPublishJob: vi.fn(),
+  getPublishWindowUsage: vi.fn(),
   markPostPublished: vi.fn(),
 }));
 
@@ -41,6 +43,8 @@ import {
   claimDuePublishJobs,
   completePublishJobFailure,
   completePublishJobSuccess,
+  deferProcessingPublishJob,
+  getPublishWindowUsage,
   markPostPublished,
 } from "@/lib/publish-jobs";
 
@@ -51,6 +55,8 @@ const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedClaimDuePublishJobs = vi.mocked(claimDuePublishJobs);
 const mockedCompletePublishJobFailure = vi.mocked(completePublishJobFailure);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
+const mockedDeferProcessingPublishJob = vi.mocked(deferProcessingPublishJob);
+const mockedGetPublishWindowUsage = vi.mocked(getPublishWindowUsage);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
 
 const baseJob = {
@@ -85,6 +91,12 @@ describe("GET /api/cron/publish", () => {
     vi.stubEnv("CRON_SECRET", "cron-secret");
     mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
     mockedIsBlobEnabled.mockReturnValue(false);
+    mockedGetPublishWindowUsage.mockResolvedValue({
+      limit: 50,
+      used: 0,
+      remaining: 50,
+      windowStart: new Date("2026-03-06T00:00:00.000Z"),
+    });
   });
 
   afterEach(() => {
@@ -128,6 +140,7 @@ describe("GET /api/cron/publish", () => {
 
     expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(1);
     expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
+    expect(mockedGetPublishWindowUsage).toHaveBeenCalledTimes(1);
     expect(mockedMarkPostPublished).toHaveBeenCalledWith(
       expect.anything(),
       baseJob.ownerHash,
@@ -163,5 +176,65 @@ describe("GET /api/cron/publish", () => {
       errorCount: 1,
     });
     expect(mockedCompletePublishJobFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("defers processing jobs when 24h publish window is full", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([baseJob]);
+    mockedGetPublishWindowUsage.mockResolvedValue({
+      limit: 50,
+      used: 50,
+      remaining: 0,
+      windowStart: new Date("2026-03-06T00:00:00.000Z"),
+    });
+    mockedDeferProcessingPublishJob.mockResolvedValue({
+      ...baseJob,
+      status: "queued",
+    });
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 0,
+      retried: 1,
+      deferred: 1,
+      failed: 0,
+      errorCount: 0,
+    });
+    expect(mockedDeferProcessingPublishJob).toHaveBeenCalledTimes(1);
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+    expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
+  });
+
+  it("does not consume retries when quota deferral update loses race", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([baseJob]);
+    mockedGetPublishWindowUsage.mockResolvedValue({
+      limit: 50,
+      used: 50,
+      remaining: 0,
+      windowStart: new Date("2026-03-06T00:00:00.000Z"),
+    });
+    mockedDeferProcessingPublishJob.mockResolvedValue(null);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 0,
+      retried: 0,
+      deferred: 0,
+      failed: 0,
+      errorCount: 1,
+    });
+    expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
   });
 });

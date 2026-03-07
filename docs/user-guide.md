@@ -97,10 +97,12 @@
 - `single-image` variant publishes a rendered poster image.
 - `carousel` variant uses uploaded media sequence (minimum 2 items, up to 10).
 - `reel` variant requires at least one uploaded video.
+- Instagram API throughput is capped at 50 published posts per rolling 24-hour window per account.
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.
 - Scheduled posts are processed by `/api/cron/publish` (every 15 minutes in Vercel cron config).
 - Scheduled queue processing claims due jobs from Postgres-backed publish jobs.
 - Failed jobs stay visible in the publish queue with their latest error so they can be retried immediately or edited and re-queued.
+- If the 24-hour publish window is saturated, immediate publish returns a clear limit message and due queued jobs are deferred automatically (without consuming retry attempts) until capacity returns.
 
 ## Managing Connections
 
