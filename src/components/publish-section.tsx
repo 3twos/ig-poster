@@ -11,13 +11,20 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PublishJobQueue } from "@/components/publish-job-queue";
 import type { InstagramAuthStatus } from "@/lib/types";
 
 type Props = {
+  activePostId?: string;
   authStatus: InstagramAuthStatus;
   isAuthLoading: boolean;
   isSharing: boolean;
   isPublishing: boolean;
+  onPublishJobsMutated?: (
+    postId: string | undefined,
+    action: "cancel" | "reschedule",
+  ) => Promise<void> | void;
+  publishJobsRefreshKey: number;
   shareUrl: string | null;
   shareCopyState: "idle" | "done";
   localTimeZone: string;
@@ -28,10 +35,13 @@ type Props = {
 };
 
 export function PublishSection({
+  activePostId,
   authStatus,
   isAuthLoading,
   isSharing,
   isPublishing,
+  onPublishJobsMutated,
+  publishJobsRefreshKey,
   shareUrl,
   shareCopyState,
   localTimeZone,
@@ -138,6 +148,13 @@ export function PublishSection({
           </p>
         </div>
       </div>
+
+      <PublishJobQueue
+        activePostId={activePostId}
+        localTimeZone={localTimeZone}
+        onJobsMutated={onPublishJobsMutated}
+        refreshKey={publishJobsRefreshKey}
+      />
     </div>
   );
 }
