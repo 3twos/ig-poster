@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { PostTypeSchema } from "@/lib/creative";
 
+const FirstCommentSchema = z.string().trim().min(1).max(2200);
+
 export const CarouselItemSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   url: z.string().url(),
@@ -20,6 +22,7 @@ export const OutcomeContextSchema = z.object({
 export const MetaScheduleRequestSchema = z.object({
   postId: z.string().trim().min(1).max(18).optional(),
   caption: z.string().trim().min(1).max(2200),
+  firstComment: FirstCommentSchema.optional(),
   publishAt: z.string().datetime().optional(),
   media: z.discriminatedUnion("mode", [
     z.object({
@@ -76,12 +79,14 @@ export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("edit"),
     caption: z.string().trim().min(1).max(2200).optional(),
+    firstComment: z.union([FirstCommentSchema, z.null()]).optional(),
     publishAt: z.string().datetime().optional(),
     media: MetaScheduleRequestSchema.shape.media.optional(),
     outcomeContext: OutcomeContextSchema.optional(),
   }).refine(
     (value) =>
       value.caption !== undefined ||
+      value.firstComment !== undefined ||
       value.publishAt !== undefined ||
       value.media !== undefined ||
       value.outcomeContext !== undefined,
@@ -94,6 +99,7 @@ export const PublishJobClientSchema = z.object({
   postId: z.string().nullable().optional(),
   status: PublishJobStatusSchema,
   caption: z.string(),
+  firstComment: z.string().nullable().optional(),
   media: MetaScheduleRequestSchema.shape.media,
   publishAt: z.string().datetime(),
   attempts: z.number().int().nonnegative(),
@@ -120,6 +126,7 @@ export const PublishJobListResponseSchema = z.object({
 export const ScheduledJobSchema = z.object({
   id: z.string(),
   caption: z.string().min(1).max(2200),
+  firstComment: z.string().min(1).max(2200).optional(),
   media: MetaScheduleRequestSchema.shape.media,
   publishAt: z.string().datetime(),
   createdAt: z.string().datetime(),

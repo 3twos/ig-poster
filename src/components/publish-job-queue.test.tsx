@@ -38,6 +38,7 @@ const makeJob = (overrides?: Partial<PublishJobClient>): PublishJobClient => ({
   postId: "post-1",
   status: "queued",
   caption: "Caption",
+  firstComment: null,
   media: { mode: "image", imageUrl: "https://cdn.example.com/poster.jpg" },
   publishAt: "2026-03-10T18:30:00.000Z",
   attempts: 0,
@@ -265,6 +266,44 @@ describe("PublishJobQueue", () => {
     expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
       action: "edit",
       caption: "Updated caption",
+    });
+  });
+
+  it("submits first-comment clears using action=edit", async () => {
+    mockQueueLoad([makeJob({ firstComment: "Keep me" })]);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "queued" }))
+      .mockResolvedValueOnce(
+        jsonResponse({ jobs: [makeJob({ firstComment: null })] }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ jobs: [] }));
+
+    render(
+      <PublishJobQueue
+        activePostId="post-1"
+        localTimeZone="America/Los_Angeles"
+        refreshKey={0}
+      />,
+    );
+
+    expect(await screen.findByText(/Launch A/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.change(
+      screen.getByLabelText("Edit first comment for job-1"),
+      { target: { value: "" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    const patchCall = fetchMock.mock.calls[2];
+    expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      action: "edit",
+      firstComment: null,
     });
   });
 

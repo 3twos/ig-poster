@@ -229,6 +229,7 @@ export function PublishJobQueue({
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [editPublishAt, setEditPublishAt] = useState("");
   const [editCaption, setEditCaption] = useState("");
+  const [editFirstComment, setEditFirstComment] = useState("");
   const [editMedia, setEditMedia] = useState<EditableMedia | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
@@ -236,6 +237,7 @@ export function PublishJobQueue({
     setEditingJobId(null);
     setEditPublishAt("");
     setEditCaption("");
+    setEditFirstComment("");
     setEditMedia(null);
   };
 
@@ -317,9 +319,7 @@ export function PublishJobQueue({
 
       toast.success("Retry queued.");
       if (editingJobId === job.id) {
-        setEditingJobId(null);
-        setEditPublishAt("");
-        setEditCaption("");
+        resetEditState();
       }
       await onJobsMutated?.(job.postId ?? undefined, "retry-now");
       await loadJobs(true);
@@ -358,9 +358,13 @@ export function PublishJobQueue({
 
     const currentPublishAtInput = toInputValue(job.publishAt);
     const publishAtChanged = editPublishAt !== currentPublishAtInput;
+    const normalizedFirstComment = editFirstComment.trim();
+    const nextFirstComment = normalizedFirstComment ? normalizedFirstComment : null;
+    const currentFirstComment = job.firstComment ?? null;
     const body: {
       action: "edit";
       caption?: string;
+      firstComment?: string | null;
       publishAt?: string;
       media?: MetaScheduleRequest["media"];
     } = {
@@ -369,6 +373,9 @@ export function PublishJobQueue({
 
     if (normalizedCaption !== job.caption) {
       body.caption = normalizedCaption;
+    }
+    if (nextFirstComment !== currentFirstComment) {
+      body.firstComment = nextFirstComment;
     }
 
     if (publishAtChanged) {
@@ -383,7 +390,7 @@ export function PublishJobQueue({
       body.media = normalizedMedia;
     }
 
-    if (!body.caption && !body.publishAt && !body.media) {
+    if (!body.caption && body.firstComment === undefined && !body.publishAt && !body.media) {
       resetEditState();
       return;
     }
@@ -533,6 +540,7 @@ export function PublishJobQueue({
                             setEditingJobId(job.id);
                             setEditPublishAt(toInputValue(job.publishAt));
                             setEditCaption(job.caption);
+                            setEditFirstComment(job.firstComment ?? "");
                             setEditMedia(cloneMedia(job.media));
                           }}
                         >
@@ -569,6 +577,20 @@ export function PublishJobQueue({
                         />
                         <p className="mt-1 text-[11px] text-slate-400">
                           Caption {editCaption.trim().length}/2200
+                        </p>
+                      </div>
+                      <div className="mt-3">
+                        <LabelLine>First comment (optional)</LabelLine>
+                        <Textarea
+                          aria-label={`Edit first comment for ${job.id}`}
+                          value={editFirstComment}
+                          onChange={(event) => setEditFirstComment(event.target.value)}
+                          className="mt-2 min-h-[76px] text-xs"
+                          maxLength={2200}
+                          placeholder="Posted right after media publish."
+                        />
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          First comment {editFirstComment.trim().length}/2200
                         </p>
                       </div>
                       <div className="mt-3">

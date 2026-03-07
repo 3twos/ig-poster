@@ -475,7 +475,7 @@ export default function Home() {
     finally { setIsSharing(false); }
   };
 
-  const publishToInstagram = async (scheduleAt?: string) => {
+  const publishToInstagram = async (scheduleAt?: string, firstComment?: string) => {
     if (!activeVariant) {
       const m = "Generate and select a variant before posting.";
       generation.setError(m);
@@ -499,27 +499,55 @@ export default function Home() {
         media = { mode: "image", imageUrl: await uploadRenderedPoster() };
       }
       const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
+      const normalizedFirstComment = firstComment?.trim() || undefined;
       const publishAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: activePost?.id, caption, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: activePost?.id, caption, firstComment: normalizedFirstComment, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
-      const j = (await r.json()) as { status?: string; mode?: string; publishAt?: string; publishId?: string };
+      const j = (await r.json()) as {
+        status?: string;
+        mode?: string;
+        publishAt?: string;
+        publishId?: string;
+        firstCommentStatus?: "posted" | "failed";
+        firstCommentWarning?: string;
+      };
       if (j.status === "scheduled") {
         const scheduledIso = j.publishAt ?? publishAt;
         const scheduledDate = scheduledIso ? new Date(scheduledIso) : null;
         const scheduledText = scheduledDate && !Number.isNaN(scheduledDate.getTime())
           ? scheduledDate.toLocaleString()
           : "the selected time";
-        const m = `Scheduled for ${scheduledText} (${localTimeZone})`;
+        const m = normalizedFirstComment
+          ? `Scheduled for ${scheduledText} (${localTimeZone}). First comment will post after publish.`
+          : `Scheduled for ${scheduledText} (${localTimeZone})`;
         setPublishMessage(m);
         setPublishJobsRefreshKey((current) => current + 1);
         toast.success(m);
       }
-      else { const m = "Published to Instagram successfully."; setPublishMessage(m); toast.success(m); dispatch({ type: "ADD_PUBLISH", entry: { publishedAt: new Date().toISOString(), igMediaId: j.publishId } }); }
+      else {
+        if (j.firstCommentStatus === "failed") {
+          const warning = j.firstCommentWarning ?? "Could not post first comment.";
+          const m = `Published to Instagram. First comment failed: ${warning}`;
+          setPublishMessage(m);
+          toast.warning(m);
+        } else {
+          const m = "Published to Instagram successfully.";
+          setPublishMessage(m);
+          toast.success(m);
+        }
+        dispatch({
+          type: "ADD_PUBLISH",
+          entry: { publishedAt: new Date().toISOString(), igMediaId: j.publishId },
+        });
+      }
     } catch (e) { const m = e instanceof Error ? e.message : "Instagram publish failed"; generation.setError(m); toast.error(m); }
     finally { setIsPublishing(false); }
   };
 
-  const publishToInstagramRef = useRef<(scheduleAt?: string) => Promise<void>>(async () => {});
+  const publishToInstagramRef = useRef<(
+    scheduleAt?: string,
+    firstComment?: string,
+  ) => Promise<void>>(async () => {});
   publishToInstagramRef.current = publishToInstagram;
 
   const runGenerateFromQuickAction = useCallback(
@@ -716,7 +744,7 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />
+                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(firstComment) => void publishToInstagram(undefined, firstComment)} onSchedulePost={(scheduleAt, firstComment) => void publishToInstagram(scheduleAt, firstComment)} />
                       </section>
                     )}
                   </div>
@@ -758,7 +786,7 @@ export default function Home() {
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} />}
+            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(firstComment) => void publishToInstagram(undefined, firstComment)} onSchedulePost={(scheduleAt, firstComment) => void publishToInstagram(scheduleAt, firstComment)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

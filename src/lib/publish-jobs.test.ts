@@ -85,6 +85,7 @@ const baseJob = (): PublishJobRow => ({
   postId: null,
   status: "processing",
   caption: "Caption",
+  firstComment: null,
   media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
   publishAt: new Date("2026-03-06T21:00:00.000Z"),
   attempts: 1,
@@ -258,6 +259,23 @@ describe("completePublishJobSuccess", () => {
       type: "published",
       attempt: 1,
     });
+  });
+
+  it("appends warning detail when publish completed with non-blocking warning", async () => {
+    const job = baseJob();
+    const { db, chain } = makeUpdateDb([{ ...job, status: "published" as const }]);
+
+    await completePublishJobSuccess(db, job, {
+      publishId: "publish_1",
+      warningDetail: "Could not post first comment.",
+    });
+
+    const setPayload = chain.set.mock.calls[0]?.[0] as {
+      events: Array<{ type: string; detail?: string; attempt?: number }>;
+    };
+    expect(setPayload.events.at(-1)?.detail).toContain(
+      "Warning: Could not post first comment.",
+    );
   });
 });
 

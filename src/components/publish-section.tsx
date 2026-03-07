@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { PublishJobQueue } from "@/components/publish-job-queue";
 import type { InstagramAuthStatus } from "@/lib/types";
 
@@ -30,8 +31,8 @@ type Props = {
   localTimeZone: string;
   onOpenSettings: () => void;
   onCreateShareLink: () => void;
-  onPostNow: () => void;
-  onSchedulePost: (scheduleAt: string) => void;
+  onPostNow: (firstComment?: string) => void;
+  onSchedulePost: (scheduleAt: string, firstComment?: string) => void;
 };
 
 export function PublishSection({
@@ -51,6 +52,8 @@ export function PublishSection({
   onSchedulePost,
 }: Props) {
   const [scheduleAt, setScheduleAt] = useState("");
+  const [firstComment, setFirstComment] = useState("");
+  const normalizedFirstComment = firstComment.trim() || undefined;
 
   return (
     <div className="space-y-3">
@@ -108,11 +111,25 @@ export function PublishSection({
         </div>
       ) : null}
 
+      <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
+        <Label className="text-[11px] text-slate-300">First comment (optional)</Label>
+        <Textarea
+          value={firstComment}
+          onChange={(event) => setFirstComment(event.target.value)}
+          className="min-h-[76px] text-xs"
+          maxLength={2200}
+          placeholder="Add a first comment to post immediately after publish..."
+        />
+        <p className="text-[11px] text-slate-400">
+          {firstComment.trim().length}/2200
+        </p>
+      </div>
+
       <div className="grid gap-2">
         <Button
           type="button"
           disabled={isPublishing || isAuthLoading || !authStatus.connected}
-          onClick={onPostNow}
+          onClick={() => onPostNow(normalizedFirstComment)}
           className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
         >
           {isPublishing ? (
@@ -136,7 +153,7 @@ export function PublishSection({
               type="button"
               variant="outline"
               disabled={isPublishing || isAuthLoading || !scheduleAt || !authStatus.connected}
-              onClick={() => onSchedulePost(scheduleAt)}
+              onClick={() => onSchedulePost(scheduleAt, normalizedFirstComment)}
               className="sm:min-w-[135px]"
             >
               <CalendarClock className="h-3.5 w-3.5" />

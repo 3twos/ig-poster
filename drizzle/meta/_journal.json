@@ -29,6 +29,13 @@
       "when": 1772902299343,
       "tag": "0003_left_the_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772904224344,
+      "tag": "0004_illegal_sentry",
+      "breakpoints": true
     }
   ]
 }

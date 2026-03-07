@@ -93,6 +93,7 @@ export const createPublishJob = async (
     ownerHash: string;
     postId?: string;
     caption: string;
+    firstComment?: string;
     media: MetaScheduleRequest["media"];
     publishAt: string;
     authSource: "oauth" | "env";
@@ -110,6 +111,7 @@ export const createPublishJob = async (
       postId: input.postId,
       status: "queued",
       caption: input.caption,
+      firstComment: input.firstComment,
       media: input.media,
       publishAt: new Date(input.publishAt),
       attempts: 0,
@@ -164,6 +166,7 @@ export const reserveImmediatePublishJob = async (
     ownerHash: string;
     postId?: string;
     caption: string;
+    firstComment?: string;
     media: MetaScheduleRequest["media"];
     authSource: "oauth" | "env";
     connectionId?: string;
@@ -188,6 +191,7 @@ export const reserveImmediatePublishJob = async (
         postId: input.postId,
         status: "processing",
         caption: input.caption,
+        firstComment: input.firstComment,
         media: input.media,
         publishAt: now,
         attempts: 1,
@@ -303,9 +307,20 @@ export const claimDuePublishJobs = async (
 export const completePublishJobSuccess = async (
   db: AppDb,
   job: PublishJobRow,
-  publish: { publishId?: string; creationId?: string; children?: string[] },
+  publish: {
+    publishId?: string;
+    creationId?: string;
+    children?: string[];
+    warningDetail?: string;
+  },
 ): Promise<PublishJobRow | null> => {
   const now = new Date();
+  const publishDetail = publish.publishId
+    ? `Published as ${publish.publishId}.`
+    : "Published successfully.";
+  const detail = publish.warningDetail
+    ? `${publishDetail} Warning: ${publish.warningDetail}`
+    : publishDetail;
   const [updated] = await db
     .update(publishJobs)
     .set({
@@ -319,9 +334,7 @@ export const completePublishJobSuccess = async (
       events: appendPublishJobEvent(job.events, {
         type: "published",
         attempt: job.attempts,
-        detail: publish.publishId
-          ? `Published as ${publish.publishId}.`
-          : "Published successfully.",
+        detail,
       }),
     })
     .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "processing")))

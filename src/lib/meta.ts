@@ -287,6 +287,36 @@ export const publishInstagramContent = async (
   );
 };
 
+export const publishInstagramFirstComment = async (
+  mediaId: string,
+  comment: string,
+  auth?: MetaAuthContext,
+) => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Instagram publishing credentials");
+  }
+
+  const trimmed = comment.trim();
+  if (!trimmed) {
+    throw new Error("First comment cannot be empty");
+  }
+
+  const response = await callGraphPost(
+    `${mediaId}/comments`,
+    new URLSearchParams({
+      message: trimmed,
+    }),
+    resolvedAuth,
+  );
+
+  if (!response.id) {
+    throw new Error("Meta API did not return comment id");
+  }
+
+  return response.id;
+};
+
 type MediaInsights = {
   impressions: number;
   reach: number;

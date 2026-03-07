@@ -10,6 +10,7 @@ import { getMetaConnection } from "@/lib/meta-auth";
 import {
   getEnvMetaAuth,
   publishInstagramContent,
+  publishInstagramFirstComment,
 } from "@/lib/meta";
 import {
   claimDuePublishJobs,
@@ -112,10 +113,32 @@ export async function GET(req: Request) {
           },
           auth,
         );
+
+        let firstCommentWarning: string | undefined;
+        if (job.firstComment) {
+          if (!publish.publishId) {
+            firstCommentWarning =
+              "Published media id unavailable; could not post first comment.";
+          } else {
+            try {
+              await publishInstagramFirstComment(
+                publish.publishId,
+                job.firstComment,
+                auth,
+              );
+            } catch (error) {
+              firstCommentWarning = error instanceof Error
+                ? error.message
+                : "Could not post first comment.";
+            }
+          }
+        }
+
         await completePublishJobSuccess(db, job, {
           publishId: publish.publishId,
           creationId: publish.creationId,
           children: "children" in publish ? publish.children : undefined,
+          warningDetail: firstCommentWarning,
         });
         usage.used += 1;
         usage.remaining = Math.max(usage.limit - usage.used, 0);

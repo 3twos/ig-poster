@@ -10,10 +10,14 @@ import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import {
+  MetaScheduleRequestSchema,
+  publishInstagramContent,
+  publishInstagramFirstComment,
+} from "@/lib/meta";
+import {
   MetaMediaPreflightError,
   preflightMetaMediaForPublish,
 } from "@/lib/meta-media-preflight";
-import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
 import {
   completePublishJobFailure,
   completePublishJobSuccess,
@@ -77,6 +81,7 @@ export async function POST(req: Request) {
         ownerHash,
         postId: payload.postId,
         caption: payload.caption,
+        firstComment: payload.firstComment,
         media: payload.media,
         publishAt: new Date(publishAt).toISOString(),
         authSource: resolvedAuth.source,
@@ -95,6 +100,7 @@ export async function POST(req: Request) {
       ownerHash,
       postId: payload.postId,
       caption: payload.caption,
+      firstComment: payload.firstComment,
       media: payload.media,
       authSource: resolvedAuth.source,
       connectionId: resolvedAuth.account.connectionId,
@@ -128,11 +134,32 @@ export async function POST(req: Request) {
       throw error;
     }
 
+    let firstCommentWarning: string | undefined;
+    if (payload.firstComment) {
+      if (!publish.publishId) {
+        firstCommentWarning =
+          "Published media id unavailable; could not post first comment.";
+      } else {
+        try {
+          await publishInstagramFirstComment(
+            publish.publishId,
+            payload.firstComment,
+            resolvedAuth.auth,
+          );
+        } catch (error) {
+          firstCommentWarning = error instanceof Error
+            ? error.message
+            : "Could not post first comment.";
+        }
+      }
+    }
+
     try {
       await completePublishJobSuccess(db, reservedJob, {
         publishId: publish.publishId,
         creationId: publish.creationId,
         children: "children" in publish ? publish.children : undefined,
+        warningDetail: firstCommentWarning,
       });
     } catch {
       // The publish already succeeded upstream; usage reservation remains in DB.
@@ -174,6 +201,12 @@ export async function POST(req: Request) {
       publishId: publish.publishId,
       creationId: publish.creationId,
       children: "children" in publish ? publish.children : undefined,
+      firstCommentStatus: payload.firstComment
+        ? firstCommentWarning
+          ? "failed"
+          : "posted"
+        : undefined,
+      firstCommentWarning,
     });
   } catch (error) {
     const isClientError = error instanceof z.ZodError ||
