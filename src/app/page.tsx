@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   LoaderCircle,
-  RefreshCw,
   Sparkles,
   Square,
 } from "lucide-react";
@@ -307,7 +306,7 @@ export default function Home() {
   const secondaryVisual = getDisplayVisual(orderedVariantAssets[1]);
 
   const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
-  const canRetryGeneration = !generation.isGenerating && localAssets.length > 0 && !isUploadingAssets;
+
 
   const statusLine = useMemo(() => {
     if (generation.agentRun?.status === "running") {
@@ -680,7 +679,7 @@ export default function Home() {
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
                     </section>
                     <section className="border-b border-white/10 pb-6">
                       <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
@@ -733,7 +732,7 @@ export default function Home() {
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
@@ -786,7 +785,6 @@ export default function Home() {
             <Button variant="outline" size="xs" className="hidden lg:inline-flex" onClick={() => { activityPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); generation.setShowStepDetails(true); }}>View Details</Button>
             <Button variant="outline" size="xs" className="lg:hidden" onClick={() => setMobileAgentSheetOpen(true)}>View Details</Button>
             {statusLine.showStop && <Button variant="destructive" size="xs" onClick={generation.stopGeneration} className="border border-red-300/35 bg-red-400/10 text-red-100 hover:bg-red-400/20"><Square className="h-3 w-3 fill-current" />Stop</Button>}
-            {(generation.agentRun?.status === "error" || generation.agentRun?.status === "cancelled") && canRetryGeneration && <Button variant="outline" size="xs" onClick={() => void generation.generate()}><RefreshCw className="h-3 w-3" />Retry</Button>}
           </div>
         </div>
       </div>

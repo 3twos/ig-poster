@@ -2,8 +2,8 @@
 
 import {
   Download,
-  LoaderCircle,
   Sparkles,
+  Square,
   WandSparkles,
 } from "lucide-react";
 
@@ -40,6 +40,7 @@ type Props = {
   activeBrandKitId?: string | null;
   dispatch: (action: Record<string, unknown>) => void;
   onGenerate: () => void;
+  onCancelGenerate?: () => void;
   onExportPoster: () => void;
   onSelectBrandKit?: (kitId: string) => void;
 };
@@ -55,6 +56,7 @@ export function PostBriefForm({
   activeBrandKitId,
   dispatch,
   onGenerate,
+  onCancelGenerate,
   onExportPoster,
   onSelectBrandKit,
 }: Props) {
@@ -80,6 +82,7 @@ export function PostBriefForm({
           <Select
             value={activeBrandKitId ?? ""}
             onValueChange={onSelectBrandKit}
+            disabled={isGenerating}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select brand kit" />
@@ -101,6 +104,7 @@ export function PostBriefForm({
           <Label className="text-xs text-slate-200">Theme</Label>
           <Input
             value={post.theme}
+            disabled={isGenerating}
             onChange={(event) =>
               dispatch({ type: "UPDATE_BRIEF", brief: { theme: event.target.value } })
             }
@@ -110,6 +114,7 @@ export function PostBriefForm({
           <Label className="text-xs text-slate-200">Subject</Label>
           <Input
             value={post.subject}
+            disabled={isGenerating}
             onChange={(event) =>
               dispatch({ type: "UPDATE_BRIEF", brief: { subject: event.target.value } })
             }
@@ -121,6 +126,7 @@ export function PostBriefForm({
           <Label className="text-xs text-slate-200">Core Thought</Label>
           <Textarea
             value={post.thought}
+            disabled={isGenerating}
             onChange={(event) =>
               dispatch({ type: "UPDATE_BRIEF", brief: { thought: event.target.value } })
             }
@@ -133,6 +139,7 @@ export function PostBriefForm({
           <Label className="text-xs text-slate-200">Objective</Label>
           <Input
             value={post.objective}
+            disabled={isGenerating}
             onChange={(event) =>
               dispatch({ type: "UPDATE_BRIEF", brief: { objective: event.target.value } })
             }
@@ -142,6 +149,7 @@ export function PostBriefForm({
           <Label className="text-xs text-slate-200">Audience</Label>
           <Input
             value={post.audience}
+            disabled={isGenerating}
             onChange={(event) =>
               dispatch({ type: "UPDATE_BRIEF", brief: { audience: event.target.value } })
             }
@@ -153,6 +161,7 @@ export function PostBriefForm({
           <Label className="text-xs text-slate-200">Mood</Label>
           <Input
             value={post.mood}
+            disabled={isGenerating}
             onChange={(event) =>
               dispatch({ type: "UPDATE_BRIEF", brief: { mood: event.target.value } })
             }
@@ -162,6 +171,7 @@ export function PostBriefForm({
           <Label className="text-xs text-slate-200">Aspect Ratio</Label>
           <Select
             value={post.aspectRatio}
+            disabled={isGenerating}
             onValueChange={(value) =>
               dispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value as AspectRatio } })
             }
@@ -180,19 +190,26 @@ export function PostBriefForm({
         </div>
       </div>
 
-      {/* Generate button */}
+      {/* Generate / Stop button */}
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          onClick={onGenerate}
-          disabled={isGenerating || !hasAssets || isUploadingAssets}
-        >
-          {isGenerating ? (
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-          ) : (
+        {isGenerating ? (
+          <Button
+            variant="destructive"
+            onClick={onCancelGenerate}
+            className="border border-red-300/35 bg-red-400/10 text-red-100 hover:bg-red-400/20"
+          >
+            <Square className="h-3.5 w-3.5 fill-current" />
+            Stop
+          </Button>
+        ) : (
+          <Button
+            onClick={onGenerate}
+            disabled={!hasAssets || isUploadingAssets}
+          >
             <Sparkles className="h-4 w-4" />
-          )}
-          {isGenerating ? "Generating..." : "Generate"}
-        </Button>
+            Generate
+          </Button>
+        )}
 
         <Button
           variant="outline"

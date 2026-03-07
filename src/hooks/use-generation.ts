@@ -534,9 +534,20 @@ export function useGeneration({
           }
         };
 
+        const INACTIVITY_TIMEOUT_MS = 90_000;
+        let inactivityTimer: ReturnType<typeof setTimeout> | undefined;
+        const resetInactivityTimer = () => {
+          clearTimeout(inactivityTimer);
+          inactivityTimer = setTimeout(() => {
+            abortController.abort();
+          }, INACTIVITY_TIMEOUT_MS);
+        };
+        resetInactivityTimer();
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          resetInactivityTimer();
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
@@ -546,6 +557,8 @@ export function useGeneration({
             processDataLine(line);
           }
         }
+
+        clearTimeout(inactivityTimer);
 
         const trailing = `${buffer}${decoder.decode()}`;
         if (trailing.trim()) {
