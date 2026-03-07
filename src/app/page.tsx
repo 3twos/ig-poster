@@ -121,8 +121,11 @@ export default function Home() {
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
   const activePostIdRef = useRef<string | null>(activePost?.id ?? null);
+  const assetUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
+  const logoUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  activePostIdRef.current = activePost?.id ?? null;
 
   const brand: BrandState = useMemo(() => {
     if (!activePost?.brand) return INITIAL_BRAND;
@@ -170,10 +173,6 @@ export default function Home() {
   });
 
   useEffect(() => {
-    activePostIdRef.current = activePost?.id ?? null;
-  }, [activePost?.id]);
-
-  useEffect(() => {
     if (!activePost) {
       setLocalAssets([]);
       setLocalLogo(null);
@@ -215,10 +214,33 @@ export default function Home() {
     [dispatch],
   );
 
+  const isAbortError = (error: unknown) =>
+    error instanceof Error && error.name === "AbortError";
+
+  const abortUploadsForPostSwitch = useCallback((postId: string | null) => {
+    if (!postId) {
+      return;
+    }
+
+    if (assetUploadAbortRef.current?.postId === postId) {
+      assetUploadAbortRef.current.controller.abort("post-switch");
+      assetUploadAbortRef.current = null;
+    }
+
+    if (logoUploadAbortRef.current?.postId === postId) {
+      logoUploadAbortRef.current.controller.abort("post-switch");
+      logoUploadAbortRef.current = null;
+    }
+
+    setUploadingAssetsForPostId((current) => current === postId ? null : current);
+  }, []);
+
   useEffect(() => { assetCleanupRef.current = localAssets; }, [localAssets]);
   useEffect(() => { logoCleanupRef.current = localLogo; }, [localLogo]);
   useEffect(() => {
     return () => {
+      assetUploadAbortRef.current?.controller.abort("unmount");
+      logoUploadAbortRef.current?.controller.abort("unmount");
       assetCleanupRef.current.forEach((a) => {
         revokeObjectUrlIfNeeded(a.previewUrl);
         if (a.posterUrl) {
@@ -372,9 +394,13 @@ export default function Home() {
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
   }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, shareUrl]);
 
-  const uploadFileToStorage = async (file: File, folder: string) => {
+  const uploadFileToStorage = async (
+    file: File,
+    folder: string,
+    signal?: AbortSignal,
+  ) => {
     const fd = new FormData(); fd.append("file", file); fd.append("folder", folder);
-    const r = await fetch("/api/assets/upload", { method: "POST", body: fd });
+    const r = await fetch("/api/assets/upload", { method: "POST", body: fd, signal });
     if (!r.ok) throw new Error(await parseApiError(r));
     const j = (await r.json()) as { url?: string };
     if (!j.url) throw new Error("Storage did not return a URL");
@@ -385,47 +411,116 @@ export default function Home() {
     const postId = activePostIdRef.current;
     const selected = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!selected.length) return;
+    if (!postId || !selected.length) return;
     generation.setError(null);
     setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current);
     const remaining = 20 - localAssets.length;
     if (remaining <= 0) return;
     const files = selected.slice(0, remaining);
     const staged = files.map((file, i) => ({ id: `${Date.now()}-${i}-${file.name}`, name: file.name, mediaType: mediaTypeFromFile(file), previewUrl: URL.createObjectURL(file), status: "uploading" as const, size: file.size }));
+    const uploadController = new AbortController();
+    assetUploadAbortRef.current = { postId, controller: uploadController };
     setLocalAssetsForPost(postId, (current) => [...current, ...staged]);
     setUploadingAssetsForPostId(postId);
-    await Promise.allSettled(files.map(async (file, i) => {
-      const itemId = staged[i].id;
-      if (staged[i].mediaType === "video") { try { const m = await extractVideoMetadata(staged[i].previewUrl); setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, durationSec: m.durationSec, width: m.width, height: m.height, posterUrl: m.posterUrl } : asset)); } catch { setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, error: "Could not parse video metadata" } : asset)); } }
-      try { const url = await uploadFileToStorage(file, staged[i].mediaType === "video" ? "videos" : "assets"); setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, status: "uploaded", storageUrl: url } : asset)); } catch (e) { setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, status: "local", error: e instanceof Error ? e.message : "Upload failed" } : asset)); }
-    }));
-    setLocalAssetsForPost(postId, (current) => {
-      syncAssetsToPost(postId, current);
-      return current;
-    });
-    setUploadingAssetsForPostId((current) => current === postId ? null : current);
+    try {
+      await Promise.allSettled(files.map(async (file, i) => {
+        const itemId = staged[i].id;
+        if (staged[i].mediaType === "video") {
+          try {
+            const m = await extractVideoMetadata(staged[i].previewUrl);
+            if (uploadController.signal.aborted) {
+              revokeObjectUrlIfNeeded(m.posterUrl);
+              setLocalAssetsForPost(postId, (current) => {
+                const removing = current.find((asset) => asset.id === itemId);
+                if (removing) {
+                  revokeObjectUrlIfNeeded(removing.previewUrl);
+                  if (removing.posterUrl) {
+                    revokeObjectUrlIfNeeded(removing.posterUrl);
+                  }
+                }
+                const next = current.filter((asset) => asset.id !== itemId);
+                syncAssetsToPost(postId, next);
+                return next;
+              });
+              return;
+            }
+            setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, durationSec: m.durationSec, width: m.width, height: m.height, posterUrl: m.posterUrl } : asset));
+          } catch {
+            setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, error: "Could not parse video metadata" } : asset));
+          }
+        }
+        try {
+          const url = await uploadFileToStorage(file, staged[i].mediaType === "video" ? "videos" : "assets", uploadController.signal);
+          setLocalAssetsForPost(postId, (current) => {
+            const next = current.map((asset) => asset.id === itemId ? { ...asset, status: "uploaded" as const, storageUrl: url } : asset);
+            syncAssetsToPost(postId, next);
+            return next;
+          });
+        } catch (e) {
+          if (isAbortError(e)) {
+            setLocalAssetsForPost(postId, (current) => {
+              const removing = current.find((asset) => asset.id === itemId);
+              if (removing) {
+                revokeObjectUrlIfNeeded(removing.previewUrl);
+                if (removing.posterUrl) {
+                  revokeObjectUrlIfNeeded(removing.posterUrl);
+                }
+              }
+              const next = current.filter((asset) => asset.id !== itemId);
+              syncAssetsToPost(postId, next);
+              return next;
+            });
+            return;
+          }
+          setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, status: "local" as const, error: e instanceof Error ? e.message : "Upload failed" } : asset));
+        }
+      }));
+    } finally {
+      if (assetUploadAbortRef.current?.controller === uploadController) {
+        assetUploadAbortRef.current = null;
+      }
+      setUploadingAssetsForPostId((current) => current === postId ? null : current);
+    }
   };
 
   const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const postId = activePostIdRef.current;
     const file = event.target.files?.[0]; event.target.value = "";
-    if (!file) return;
+    if (!postId || !file) return;
     generation.setError(null);
     setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current);
+    const previousLogo = localLogo;
     const next: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
-    setLocalLogoForPost(postId, (current) => { if (current) revokeObjectUrlIfNeeded(current.previewUrl); return next; });
+    const uploadController = new AbortController();
+    logoUploadAbortRef.current = { postId, controller: uploadController };
+    setLocalLogoForPost(postId, () => next);
     try {
-      const url = await uploadFileToStorage(file, "logos");
-      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "uploaded", storageUrl: url } : null);
-      dispatch({ type: "SET_LOGO", postId: postId ?? undefined, logoUrl: url });
+      const url = await uploadFileToStorage(file, "logos", uploadController.signal);
+      if (previousLogo) {
+        revokeObjectUrlIfNeeded(previousLogo.previewUrl);
+      }
+      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "uploaded" as const, storageUrl: url } : null);
+      dispatch({ type: "SET_LOGO", postId, logoUrl: url });
     }
     catch (e) {
-      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "local", error: e instanceof Error ? e.message : "Upload failed" } : null);
+      if (isAbortError(e)) {
+        revokeObjectUrlIfNeeded(next.previewUrl);
+        setLocalLogoForPost(postId, (current) => current?.id === next.id ? previousLogo : current);
+        return;
+      }
+      if (previousLogo) {
+        revokeObjectUrlIfNeeded(previousLogo.previewUrl);
+      }
+      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "local" as const, error: e instanceof Error ? e.message : "Upload failed" } : null);
+    } finally {
+      if (logoUploadAbortRef.current?.controller === uploadController) {
+        logoUploadAbortRef.current = null;
+      }
     }
   };
   const removeAsset = useCallback((id: string) => {
     const postId = activePostIdRef.current;
-    setLocalAssets((current) => {
+    setLocalAssetsForPost(postId, (current) => {
       const removing = current.find((asset) => asset.id === id);
       if (removing) {
         revokeObjectUrlIfNeeded(removing.previewUrl);
@@ -437,22 +532,26 @@ export default function Home() {
       syncAssetsToPost(postId, next);
       return next;
     });
-  }, [syncAssetsToPost]);
+  }, [setLocalAssetsForPost, syncAssetsToPost]);
 
   const reorderAssets = useCallback((reordered: LocalAsset[]) => {
     const postId = activePostIdRef.current;
-    setLocalAssets(reordered); syncAssetsToPost(postId, reordered);
-  }, [syncAssetsToPost]);
+    setLocalAssetsForPost(postId, () => {
+      syncAssetsToPost(postId, reordered);
+      return reordered;
+    });
+  }, [setLocalAssetsForPost, syncAssetsToPost]);
 
   const removeLogo = useCallback(() => {
-    setLocalLogo((current) => {
+    const postId = activePostIdRef.current;
+    setLocalLogoForPost(postId, (current) => {
       if (current) {
         revokeObjectUrlIfNeeded(current.previewUrl);
       }
       return null;
     });
-    dispatch({ type: "SET_LOGO", postId: activePostIdRef.current ?? undefined, logoUrl: null });
-  }, [dispatch]);
+    dispatch({ type: "SET_LOGO", postId: postId ?? undefined, logoUrl: null });
+  }, [dispatch, setLocalLogoForPost]);
 
   const generateRef = useRef<(() => Promise<void>) | null>(null);
   const isAgentBusyRef = useRef(isAgentBusy);
@@ -470,8 +569,10 @@ export default function Home() {
     const onOpenSettings = () => setSettingsOpen(true);
     const onOpenBrandKits = () => setBrandKitsOpen(true);
     const onBeforePostSwitch = (e: Event) => {
-      const toPostId = ((e as CustomEvent<{ toPostId?: string | null }>).detail?.toPostId) ?? null;
-      generation.cancelForPostSwitch();
+      const detail = (e as CustomEvent<{ fromPostId?: string | null; toPostId?: string | null }>).detail;
+      const fromPostId = detail?.fromPostId ?? activePostIdRef.current;
+      const toPostId = detail?.toPostId ?? null;
+      abortUploadsForPostSwitch(fromPostId);
       setPendingGenerateRequest((current) => current && current.postId !== toPostId ? null : current);
       setPendingPublishRequest((current) => current && current.postId !== toPostId ? null : current);
     };
@@ -482,7 +583,7 @@ export default function Home() {
     window.addEventListener("ig:open-brand-kits", onOpenBrandKits);
     window.addEventListener("ig:before-post-switch", onBeforePostSwitch);
     return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:open-settings", onOpenSettings); window.removeEventListener("ig:open-brand-kits", onOpenBrandKits); window.removeEventListener("ig:before-post-switch", onBeforePostSwitch); };
-  }, [dispatch, generation]);
+  }, [abortUploadsForPostSwitch, dispatch]);
 
   const renderPosterToDataUrl = async () => {
     if (!posterRef.current || !activeVariant) throw new Error("No poster selected");

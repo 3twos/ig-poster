@@ -35,12 +35,16 @@ describe("useGeneration", () => {
 
   it("cancels an in-flight run when the selected post changes", async () => {
     const dispatch = vi.fn();
+    let aborted = false;
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
       return new Promise<Response>((_resolve, reject) => {
         const signal = init?.signal;
         signal?.addEventListener(
           "abort",
-          () => reject(new DOMException("Aborted", "AbortError")),
+          () => {
+            aborted = true;
+            reject(new DOMException("Aborted", "AbortError"));
+          },
           { once: true },
         );
       });
@@ -63,8 +67,9 @@ describe("useGeneration", () => {
       },
     );
 
+    let runPromise!: Promise<void>;
     act(() => {
-      void result.current.generate();
+      runPromise = result.current.generate();
     });
 
     await waitFor(() => {
@@ -73,11 +78,16 @@ describe("useGeneration", () => {
 
     rerender({ postId: "post-b" });
 
+    await act(async () => {
+      await runPromise;
+    });
+
     await waitFor(() => {
       expect(result.current.isGenerating).toBe(false);
       expect(result.current.agentRun).toBeNull();
     });
 
+    expect(aborted).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(dispatch).not.toHaveBeenCalled();
   });
