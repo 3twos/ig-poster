@@ -147,6 +147,7 @@ export default function Home() {
   const typedDispatch = dispatch as (action: any) => void;
 
   const generation = useGeneration({
+    activePostId: activePost?.id ?? null,
     brand,
     post,
     localAssets,
@@ -310,24 +311,28 @@ export default function Home() {
   const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
 
 
+  const isActivePostGenerating = generation.isActivePostGenerating;
+  const isAgentRunForActivePost = generation.isAgentRunForActivePost;
+
   const statusLine = useMemo(() => {
-    if (generation.agentRun?.status === "running") {
+    if (isActivePostGenerating && generation.agentRun?.status === "running") {
       const activeStep = generation.agentRun.steps.find((s) => s.status === "active") ?? generation.agentRun.steps[generation.agentRun.steps.length - 1];
       const activeIndex = activeStep ? generation.agentRun.steps.findIndex((s) => s.id === activeStep.id) + 1 : 1;
       return { tone: "active" as const, text: `${activeStep?.title ?? "Generating concepts"} · Step ${Math.max(activeIndex, 1)}/${Math.max(generation.agentRun.steps.length, 1)}${generation.agentRun.heartbeat ? ` · ${generation.agentRun.heartbeat}` : ""}`, elapsedMs: generation.runClock - generation.agentRun.startedAt, showStop: true };
     }
-    if (generation.isGenerating) return { tone: "active" as const, text: "Preparing generation request...", elapsedMs: undefined, showStop: true };
+    if (isActivePostGenerating) return { tone: "active" as const, text: "Preparing generation request...", elapsedMs: undefined, showStop: true };
+    if (generation.isGenerating) return { tone: "active" as const, text: "Generating concepts for another post...", elapsedMs: undefined, showStop: true };
     if (isUploadingAssets) return { tone: "active" as const, text: "Uploading assets...", elapsedMs: undefined, showStop: false };
     if (isSharing) return { tone: "active" as const, text: "Creating share link...", elapsedMs: undefined, showStop: false };
     if (isPublishing) return { tone: "active" as const, text: "Publishing to Instagram...", elapsedMs: undefined, showStop: false };
     if (isRefining) return { tone: "active" as const, text: "Refining selected variant...", elapsedMs: undefined, showStop: false };
     if (generation.error) return { tone: "error" as const, text: generation.error, elapsedMs: undefined, showStop: false };
-    if (generation.agentRun?.status === "success") return { tone: "success" as const, text: generation.agentRun.summary ?? "Concept generation complete.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
-    if (generation.agentRun?.status === "cancelled") return { tone: "error" as const, text: generation.agentRun.summary ?? "Generation stopped.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
+    if (isAgentRunForActivePost && generation.agentRun?.status === "success") return { tone: "success" as const, text: generation.agentRun.summary ?? "Concept generation complete.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
+    if (isAgentRunForActivePost && generation.agentRun?.status === "cancelled") return { tone: "error" as const, text: generation.agentRun.summary ?? "Generation stopped.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
     if (publishMessage) return { tone: "success" as const, text: publishMessage, elapsedMs: undefined, showStop: false };
     if (shareUrl) return { tone: "success" as const, text: "Share link created.", elapsedMs: undefined, showStop: false };
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
-  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, shareUrl]);
+  }, [generation.agentRun, generation.error, generation.isGenerating, isActivePostGenerating, isAgentRunForActivePost, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, shareUrl]);
 
   const uploadFileToStorage = async (file: File, folder: string) => {
     const fd = new FormData(); fd.append("file", file); fd.append("folder", folder);
@@ -701,7 +706,7 @@ export default function Home() {
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isActivePostGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
                     </section>
                     <section className="border-b border-white/10 pb-6">
                       <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
@@ -754,7 +759,7 @@ export default function Home() {
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isActivePostGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}

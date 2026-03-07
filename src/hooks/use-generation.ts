@@ -24,6 +24,7 @@ import { parseApiError } from "@/lib/upload-helpers";
 import { toast } from "sonner";
 
 type UseGenerationOptions = {
+  activePostId: string | null;
   brand: BrandState;
   post: PostState;
   localAssets: LocalAsset[];
@@ -33,6 +34,7 @@ type UseGenerationOptions = {
 };
 
 export function useGeneration({
+  activePostId,
   brand,
   post,
   localAssets,
@@ -41,8 +43,12 @@ export function useGeneration({
   dispatch,
 }: UseGenerationOptions) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingPostId, setGeneratingPostId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
+
+  const activePostIdRef = useRef(activePostId);
+  activePostIdRef.current = activePostId;
   const [agentVerbosity, setAgentVerbosity] = useState<AgentVerbosity>("standard");
   const [showStepDetails, setShowStepDetails] = useState(true);
   const [runClock, setRunClock] = useState(Date.now());
@@ -405,8 +411,10 @@ export function useGeneration({
   }, []);
 
   const generate = useCallback(async () => {
+    const targetPostId = activePostIdRef.current;
     setError(null);
     setIsGenerating(true);
+    setGeneratingPostId(targetPostId);
     setRunClock(Date.now());
 
     const abortController = new AbortController();
@@ -613,8 +621,24 @@ export function useGeneration({
           createDefaultOverlayLayout(variant.layout),
         ]),
       );
-      dispatch({ type: "SET_RESULT", result: finalResult, overlayLayouts: layouts });
-      dispatch({ type: "SET_ACTIVE_VARIANT", variantId: finalResult.variants[0]?.id ?? "" });
+      if (activePostIdRef.current === targetPostId) {
+        // Active post is still the one we generated for — update UI state
+        dispatch({ type: "SET_RESULT", result: finalResult, overlayLayouts: layouts });
+        dispatch({ type: "SET_ACTIVE_VARIANT", variantId: finalResult.variants[0]?.id ?? "" });
+      } else if (targetPostId) {
+        // User switched to another post — persist results directly via API
+        void fetch(`/api/posts/${targetPostId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            result: finalResult,
+            overlayLayouts: layouts,
+            activeVariantId: finalResult.variants[0]?.id ?? "",
+            status: "generated",
+          }),
+        });
+        toast.success("Generation completed for another post.");
+      }
     } catch (generationError) {
       if (
         generationError instanceof Error &&
@@ -688,6 +712,8 @@ export function useGeneration({
       toast.error(message);
     } finally {
       setIsGenerating(false);
+      // Keep generatingPostId set so post-completion UI (success/error/cancelled)
+      // can be scoped to the correct post. It is reset when a new generation starts.
       generationAbortRef.current = null;
     }
   }, [brand, post, localAssets, localLogo, promptConfig, dispatch, applyRunEvent]);
@@ -699,8 +725,14 @@ export function useGeneration({
     };
   }, []);
 
+  const isActivePostGenerating = isGenerating && generatingPostId === activePostId;
+  const isAgentRunForActivePost = generatingPostId === activePostId;
+
   return {
     isGenerating,
+    isActivePostGenerating,
+    isAgentRunForActivePost,
+    generatingPostId,
     error,
     setError,
     agentRun,
