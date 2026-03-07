@@ -258,13 +258,22 @@ const pullRequest = sanitize(pick(
   payload?.meta?.pullRequestId,
   payload?.meta?.prNumber,
   payload?.meta?.pr,
-  payload?.meta?.gitlabMergeRequestIid,
-  payload?.meta?.gitlabMergeRequestId,
   payload?.meta?.bitbucketPullRequestId,
 ));
+const mergeRequest = sanitize(pick(
+  payload?.meta?.gitlabMergeRequestIid,
+  payload?.meta?.gitlabMergeRequestId,
+  payload?.meta?.mergeRequestIid,
+  payload?.meta?.mergeRequestId,
+  payload?.meta?.mrNumber,
+  payload?.meta?.mr,
+));
+const pullRequestContext = mergeRequest
+  ? `mr:${mergeRequest}`
+  : pullRequest;
 
 process.stdout.write(
-  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequest].join("\u001f"),
+  [status, deploymentId, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequestContext].join("\u001f"),
 );
 '
 }
@@ -365,12 +374,21 @@ for (const item of deployments) {
     item?.meta?.pullRequestId,
     item?.meta?.prNumber,
     item?.meta?.pr,
-    item?.meta?.gitlabMergeRequestIid,
-    item?.meta?.gitlabMergeRequestId,
     item?.meta?.bitbucketPullRequestId,
   ));
+  const mergeRequest = sanitize(pick(
+    item?.meta?.gitlabMergeRequestIid,
+    item?.meta?.gitlabMergeRequestId,
+    item?.meta?.mergeRequestIid,
+    item?.meta?.mergeRequestId,
+    item?.meta?.mrNumber,
+    item?.meta?.mr,
+  ));
+  const pullRequestContext = mergeRequest
+    ? `mr:${mergeRequest}`
+    : pullRequest;
 
-  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequest].join("\u001f"));
+  rows.push([id, state, deploymentUrl, createdAtMs, readyAtMs, target, branch, errorMessage, source, actor, commitSha, pullRequestContext].join("\u001f"));
 }
 
 process.stdout.write(rows.join("\n"));
@@ -848,7 +866,7 @@ friendly_commit_label() {
 
 friendly_pull_request_label() {
   local pull_request="$1"
-  local lowered candidate
+  local lowered lowered_payload kind payload candidate
 
   pull_request="$(sanitize_field "$pull_request")"
   if [[ -z "$pull_request" ]]; then
@@ -857,36 +875,52 @@ friendly_pull_request_label() {
   fi
 
   lowered="$(printf '%s' "$pull_request" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$lowered" == pr:* || "$lowered" == mr:* ]]; then
-    printf '%s' "$lowered"
-    return
-  fi
+  case "$lowered" in
+    n/a|na|none|null|unknown|unlabeled)
+      printf '%s' "n/a"
+      return
+      ;;
+  esac
 
-  if [[ "$pull_request" == \#* && "${pull_request#\#}" =~ ^[0-9]+$ ]]; then
+  kind="pr"
+  payload="$pull_request"
+
+  if [[ "$lowered" == pr:* || "$lowered" == mr:* ]]; then
+    kind="${lowered%%:*}"
+    payload="${pull_request#*:}"
+  elif [[ "$pull_request" == \#* && "${pull_request#\#}" =~ ^[0-9]+$ ]]; then
     printf 'pr:%s' "${pull_request#\#}"
     return
-  fi
-  if [[ "$pull_request" == !* && "${pull_request#!}" =~ ^[0-9]+$ ]]; then
+  elif [[ "$pull_request" == !* && "${pull_request#!}" =~ ^[0-9]+$ ]]; then
     printf 'mr:%s' "${pull_request#!}"
     return
   fi
 
-  if [[ "$pull_request" =~ ^[0-9]+$ ]]; then
-    printf 'pr:%s' "$pull_request"
-    return
-  fi
+  payload="$(sanitize_field "$payload")"
+  lowered_payload="$(printf '%s' "$payload" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered_payload" in
+    ""|n/a|na|none|null|unknown|unlabeled)
+      printf '%s' "n/a"
+      return
+      ;;
+  esac
 
-  if [[ "$pull_request" =~ /pull/([0-9]+) ]]; then
-    printf 'pr:%s' "${BASH_REMATCH[1]}"
-    return
-  fi
-  if [[ "$pull_request" =~ /merge_requests/([0-9]+) ]]; then
+  if [[ "$payload" =~ /merge_requests/([0-9]+) ]]; then
     printf 'mr:%s' "${BASH_REMATCH[1]}"
     return
   fi
+  if [[ "$payload" =~ /pull/([0-9]+) ]]; then
+    printf 'pr:%s' "${BASH_REMATCH[1]}"
+    return
+  fi
 
-  candidate="$(truncate_text "$pull_request" 12)"
-  printf 'pr:%s' "$candidate"
+  if [[ "$payload" =~ ^[0-9]+$ ]]; then
+    printf '%s:%s' "$kind" "$payload"
+    return
+  fi
+
+  candidate="$(truncate_text "$payload" 12)"
+  printf '%s:%s' "$kind" "$candidate"
 }
 
 branch_context_hint() {
@@ -2361,7 +2395,7 @@ render_dashboard() {
         "$(( i + 1 ))" "$env_mark" "$row_status_icon" "$branch_label" "$status_label" "$progress_bar" "$progress_percent"
       print_dashboard_linef '    step     : %s' "$step_label"
       print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
-      print_dashboard_linef '    context  : pr %s | source %s | actor %s | commit %s' "$pull_request_label" "$source_label" "$actor_label" "$commit_label"
+      print_dashboard_linef '    context  : %s | source %s | actor %s | commit %s' "$pull_request_label" "$source_label" "$actor_label" "$commit_label"
       if [[ "$raw_branch_label" == "unknown" && "$identity_label" == "unlabeled" ]]; then
         print_dashboard_linef '    branch   : %s' "$branch_hint_label"
       fi
