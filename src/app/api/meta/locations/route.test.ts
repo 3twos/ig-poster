@@ -96,4 +96,23 @@ describe("GET /api/meta/locations", () => {
       graphVersion: "v22.0",
     });
   });
+
+  it("returns 401 when Meta auth is not connected", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    mockedResolveMetaAuth.mockRejectedValue(
+      new Error(
+        "Instagram account is not connected. Use Meta OAuth connect, or set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ID.",
+      ),
+    );
+
+    const req = new Request("https://app.example.com/api/meta/locations?q=napa");
+    const res = await GET(req);
+
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({
+      error:
+        "Instagram account is not connected. Use Meta OAuth connect, or set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ID.",
+    });
+    expect(mockedSearchMetaLocations).not.toHaveBeenCalled();
+  });
 });

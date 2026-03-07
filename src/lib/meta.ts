@@ -92,7 +92,7 @@ const callGraphGetWithParams = async <
   }
   if (options.params) {
     for (const [key, value] of Object.entries(options.params)) {
-      if (value) {
+      if (value !== undefined) {
         url.searchParams.set(key, value);
       }
     }

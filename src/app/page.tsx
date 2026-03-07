@@ -1,6 +1,6 @@
 "use client";
 
-import { toPng } from "html-to-image";
+import { toBlob, toPng } from "html-to-image";
 import {
   ChevronLeft,
   ChevronRight,
@@ -122,6 +122,7 @@ export default function Home() {
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
   const publishImagePreviewRenderIdRef = useRef(0);
+  const publishImagePreviewBlobUrlRef = useRef<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
@@ -432,32 +433,63 @@ export default function Home() {
     if (!posterRef.current || !activeVariant) throw new Error("No poster selected");
     return withPerf("toPng", () => toPng(posterRef.current!, { cacheBust: true, pixelRatio: 2 }));
   }, [activeVariant]);
+  const renderPosterToPreviewUrl = useCallback(async () => {
+    if (!posterRef.current || !activeVariant) throw new Error("No poster selected");
+    const blob = await withPerf("toBlob", () =>
+      toBlob(posterRef.current!, { cacheBust: true, pixelRatio: 1.5 }));
+    if (!blob) {
+      throw new Error("Could not render poster preview.");
+    }
+    return URL.createObjectURL(blob);
+  }, [activeVariant]);
   const uploadRenderedPoster = async () => {
     const d = await renderPosterToDataUrl(); const r = await fetch(d); const b = await r.blob();
     return uploadFileToStorage(new File([b], `${slugify(brand.brandName)}-${slugify(post.theme)}-${Date.now()}.png`, { type: "image/png" }), "renders");
   };
 
+  const revokePreviewUrlIfNeeded = useCallback((value: string | null) => {
+    if (value?.startsWith("blob:")) {
+      URL.revokeObjectURL(value);
+    }
+  }, []);
+
+  const replacePublishImagePreviewUrl = useCallback((nextUrl: string | null) => {
+    const previousUrl = publishImagePreviewBlobUrlRef.current;
+    publishImagePreviewBlobUrlRef.current = nextUrl;
+    if (previousUrl && previousUrl !== nextUrl) {
+      revokePreviewUrlIfNeeded(previousUrl);
+    }
+    setPublishImagePreviewUrl(nextUrl);
+  }, [revokePreviewUrlIfNeeded]);
+
+  useEffect(() => () => {
+    revokePreviewUrlIfNeeded(publishImagePreviewBlobUrlRef.current);
+    publishImagePreviewBlobUrlRef.current = null;
+  }, [revokePreviewUrlIfNeeded]);
+
   useEffect(() => {
     if (!activeVariant || activeVariant.postType !== "single-image") {
-      setPublishImagePreviewUrl(null);
+      replacePublishImagePreviewUrl(null);
       return;
     }
 
     const renderId = publishImagePreviewRenderIdRef.current + 1;
     publishImagePreviewRenderIdRef.current = renderId;
     const timer = window.setTimeout(() => {
-      void renderPosterToDataUrl()
-        .then((dataUrl) => {
+      void renderPosterToPreviewUrl()
+        .then((previewUrl) => {
           if (publishImagePreviewRenderIdRef.current === renderId) {
-            setPublishImagePreviewUrl(dataUrl);
+            replacePublishImagePreviewUrl(previewUrl);
+          } else {
+            revokePreviewUrlIfNeeded(previewUrl);
           }
         })
         .catch(() => {
           if (publishImagePreviewRenderIdRef.current === renderId) {
-            setPublishImagePreviewUrl(null);
+            replacePublishImagePreviewUrl(null);
           }
         });
-    }, 150);
+    }, 500);
 
     return () => {
       window.clearTimeout(timer);
@@ -469,7 +501,9 @@ export default function Home() {
     localLogo?.previewUrl,
     post.aspectRatio,
     primaryVisual,
-    renderPosterToDataUrl,
+    renderPosterToPreviewUrl,
+    replacePublishImagePreviewUrl,
+    revokePreviewUrlIfNeeded,
     secondaryVisual,
   ]);
 

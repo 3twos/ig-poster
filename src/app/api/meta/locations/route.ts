@@ -10,6 +10,16 @@ const MetaLocationSearchQuerySchema = z.object({
   q: z.string().trim().min(2).max(80),
 });
 
+class MetaLocationSearchClientError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "MetaLocationSearchClientError";
+    this.status = status;
+  }
+}
+
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
@@ -26,15 +36,31 @@ export async function GET(req: Request) {
     const query = MetaLocationSearchQuerySchema.parse({
       q: url.searchParams.get("q") ?? "",
     });
-    const resolvedAuth = await resolveMetaAuthFromRequest(req);
+    let resolvedAuth;
+    try {
+      resolvedAuth = await resolveMetaAuthFromRequest(req);
+    } catch (error) {
+      throw new MetaLocationSearchClientError(
+        error instanceof Error
+          ? error.message
+          : "Instagram account is not connected for Meta location search.",
+        401,
+      );
+    }
     const locations = await searchMetaLocations(query.q, resolvedAuth.auth);
 
     return NextResponse.json({ locations });
   } catch (error) {
-    const isClientError = error instanceof z.ZodError;
+    const isClientError =
+      error instanceof z.ZodError ||
+      error instanceof MetaLocationSearchClientError;
     return apiErrorResponse(error, {
-      fallback: "Could not search Meta locations",
-      status: isClientError ? 400 : 502,
+      fallback: error instanceof MetaLocationSearchClientError
+        ? error.message
+        : "Could not search Meta locations",
+      status: error instanceof MetaLocationSearchClientError
+        ? error.status
+        : isClientError ? 400 : 502,
     });
   }
 }

@@ -4,7 +4,7 @@ Last updated: 2026-03-07
 
 This document tracks the Meta/Instagram content publishing rollout in this repo so the plan is not trapped in PR history or chat context.
 
-## Completed on `main`
+## Completed
 
 1. Meta account setup moved into Settings
    - User-facing account connect/disconnect flow lives in Settings instead of the main publish panel.
@@ -35,11 +35,10 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
    - Normalizes usernames before submission and blocks incomplete tag rows client-side.
    - Reference: merged in PR `#77`.
 
-## In Progress
-
-1. Visual coordinate picker and location assist
-   - Add click-to-place user tagging on the rendered poster preview in the main publish form and on stored image URLs in queue edits.
-   - Add Meta place search that fills the existing `locationId` field while preserving manual ID entry as fallback.
+8. Visual coordinate picker and location assist
+   - Added click-to-place user tagging on the rendered poster preview in the main publish form and on stored image URLs in queue edits.
+   - Added Meta place search that fills the existing `locationId` field while preserving manual ID entry as fallback.
+   - Reference: PR `#79`.
 
 ## Remaining phases
 

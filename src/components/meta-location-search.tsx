@@ -1,7 +1,7 @@
 "use client";
 
 import { LoaderCircle, MapPin, Search, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,17 +33,29 @@ export function MetaLocationSearchField({
     useState<MetaLocationSearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeRequestIdRef = useRef(0);
   const hasSelectedQuery =
     Boolean(selectedLocation) && query.trim() === selectedLocation?.name;
 
   useEffect(() => {
     if (!locationId) {
       setSelectedLocation(null);
+      return;
     }
-  }, [locationId]);
+
+    if (selectedLocation && selectedLocation.id !== locationId) {
+      setSelectedLocation(null);
+      setQuery("");
+      setResults([]);
+      setError(null);
+    }
+  }, [locationId, selectedLocation]);
 
   useEffect(() => {
     const trimmed = query.trim();
+    activeRequestIdRef.current += 1;
+    const requestId = activeRequestIdRef.current;
+
     if (trimmed.length < 2) {
       setResults([]);
       setIsLoading(false);
@@ -58,14 +70,14 @@ export function MetaLocationSearchField({
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setIsLoading(true);
       setError(null);
       try {
         const response = await fetch(
           `/api/meta/locations?q=${encodeURIComponent(trimmed)}`,
-          { cache: "no-store" },
+          { cache: "no-store", signal: controller.signal },
         );
         if (!response.ok) {
           throw new Error(await parseApiError(response));
@@ -74,13 +86,16 @@ export function MetaLocationSearchField({
         const json = MetaLocationSearchResponseSchema.parse(
           await response.json(),
         );
-        if (cancelled) {
+        if (requestId !== activeRequestIdRef.current) {
           return;
         }
 
         setResults(json.locations);
       } catch (nextError) {
-        if (cancelled) {
+        if (requestId !== activeRequestIdRef.current) {
+          return;
+        }
+        if (nextError instanceof DOMException && nextError.name === "AbortError") {
           return;
         }
 
@@ -91,15 +106,15 @@ export function MetaLocationSearchField({
             : "Could not search Meta locations.",
         );
       } finally {
-        if (!cancelled) {
+        if (requestId === activeRequestIdRef.current) {
           setIsLoading(false);
         }
       }
     }, 250);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
+      controller.abort();
     };
   }, [query, selectedLocation]);
 
@@ -136,7 +151,7 @@ export function MetaLocationSearchField({
             type="button"
             aria-label={`${ariaLabel} clear search`}
             className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 transition hover:text-slate-100"
-            onClick={() => setQuery("")}
+            onClick={selectedLocation ? clearSelection : () => setQuery("")}
             disabled={disabled}
           >
             <X className="h-3.5 w-3.5" />
