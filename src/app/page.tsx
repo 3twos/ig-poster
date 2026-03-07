@@ -92,17 +92,17 @@ export default function Home() {
   const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
   const [localLogo, setLocalLogo] = useState<LocalAsset | null>(null);
   const [editorMode, setEditorMode] = useState(false);
-  const [isUploadingAssets, setIsUploadingAssets] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [uploadingAssetsForPostId, setUploadingAssetsForPostId] = useState<string | null>(null);
+  const [sharingForPostId, setSharingForPostId] = useState<string | null>(null);
+  const [publishingForPostId, setPublishingForPostId] = useState<string | null>(null);
+  const [publishMessageState, setPublishMessageState] = useState<{ postId: string | null; text: string | null }>({ postId: null, text: null });
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authStatus, setAuthStatus] = useState<InstagramAuthStatus>({ connected: false, source: null });
   const [llmAuthStatus, setLlmAuthStatus] = useState<LlmAuthStatus>({ connected: false, source: null });
   const [isCreatingPost, setIsCreatingPost] = useState(false);
-  const [isRefining, setIsRefining] = useState(false);
+  const [refiningForPostId, setRefiningForPostId] = useState<string | null>(null);
   const [mobileAgentSheetOpen, setMobileAgentSheetOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<"agent" | "chat">("agent");
@@ -120,8 +120,12 @@ export default function Home() {
   const logoCleanupRef = useRef<LocalAsset | null>(null);
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
+  const activePostIdRef = useRef<string | null>(activePost?.id ?? null);
+  const assetUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
+  const logoUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  activePostIdRef.current = activePost?.id ?? null;
 
   const brand: BrandState = useMemo(() => {
     if (!activePost?.brand) return INITIAL_BRAND;
@@ -149,11 +153,17 @@ export default function Home() {
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "local time",
     [],
   );
+  const isUploadingAssets = uploadingAssetsForPostId === activePost?.id;
+  const isSharing = sharingForPostId === activePost?.id;
+  const isPublishing = publishingForPostId === activePost?.id;
+  const isRefining = refiningForPostId === activePost?.id;
+  const publishMessage = publishMessageState.postId === activePost?.id ? publishMessageState.text : null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const typedDispatch = dispatch as (action: any) => void;
 
   const generation = useGeneration({
+    postId: activePost?.id ?? null,
     brand,
     post,
     localAssets,
@@ -187,24 +197,50 @@ export default function Home() {
     }
     setHydratedAssetsPostId(activePost.id);
     generation.setError(null);
-    setPublishMessage(null);
+    setPublishMessageState({ postId: activePost.id, text: null });
     setEditorMode(false);
   }, [activePost?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const syncAssetsToPost = useCallback(
-    (assets: LocalAsset[]) => {
+    (postId: string | null, assets: LocalAsset[]) => {
+      if (!postId || activePostIdRef.current !== postId) {
+        return;
+      }
       const stored = assets
         .filter((a) => a.status === "uploaded" && a.storageUrl)
         .map((a) => ({ id: a.id, name: a.name, url: a.storageUrl!, mediaType: a.mediaType, posterUrl: a.posterUrl, durationSec: a.durationSec }));
-      dispatch({ type: "SET_ASSETS", assets: stored });
+      dispatch({ type: "SET_ASSETS", postId, assets: stored });
     },
     [dispatch],
   );
+
+  const isAbortError = (error: unknown) =>
+    error instanceof Error && error.name === "AbortError";
+
+  const abortUploadsForPostSwitch = useCallback((postId: string | null) => {
+    if (!postId) {
+      return;
+    }
+
+    if (assetUploadAbortRef.current?.postId === postId) {
+      assetUploadAbortRef.current.controller.abort("post-switch");
+      assetUploadAbortRef.current = null;
+    }
+
+    if (logoUploadAbortRef.current?.postId === postId) {
+      logoUploadAbortRef.current.controller.abort("post-switch");
+      logoUploadAbortRef.current = null;
+    }
+
+    setUploadingAssetsForPostId((current) => current === postId ? null : current);
+  }, []);
 
   useEffect(() => { assetCleanupRef.current = localAssets; }, [localAssets]);
   useEffect(() => { logoCleanupRef.current = localLogo; }, [localLogo]);
   useEffect(() => {
     return () => {
+      assetUploadAbortRef.current?.controller.abort("unmount");
+      logoUploadAbortRef.current?.controller.abort("unmount");
       assetCleanupRef.current.forEach((a) => {
         revokeObjectUrlIfNeeded(a.previewUrl);
         if (a.posterUrl) {
@@ -216,6 +252,25 @@ export default function Home() {
       }
     };
   }, []);
+
+  const isPostStillActive = useCallback(
+    (postId: string | null) => activePostIdRef.current === postId,
+    [],
+  );
+
+  const setLocalAssetsForPost = useCallback(
+    (postId: string | null, update: (current: LocalAsset[]) => LocalAsset[]) => {
+      setLocalAssets((current) => (isPostStillActive(postId) ? update(current) : current));
+    },
+    [isPostStillActive],
+  );
+
+  const setLocalLogoForPost = useCallback(
+    (postId: string | null, update: (current: LocalAsset | null) => LocalAsset | null) => {
+      setLocalLogo((current) => (isPostStillActive(postId) ? update(current) : current));
+    },
+    [isPostStillActive],
+  );
 
   const loadAuthStatus = useCallback(async () => {
     setIsAuthLoading(true);
@@ -252,24 +307,27 @@ export default function Home() {
   }, []);
 
   const handleSelectBrandKit = useCallback(async (kitId: string) => {
+    const postId = activePostIdRef.current;
     try {
       const r = await fetch(`/api/brand-kits/${kitId}`, { cache: "no-store" });
       if (!r.ok) return;
       const kit = await r.json();
+      if (!isPostStillActive(postId)) return;
       dispatch({
         type: "SET_BRAND_KIT",
+        postId: postId ?? undefined,
         brandKitId: kitId,
         brand: kit.brand ?? {},
         logoUrl: kit.logoUrl ?? null,
         promptConfig: kit.promptConfig ?? null,
       });
       if (kit.logoUrl) {
-        setLocalLogo({ id: "kit-logo", name: "Logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
+        setLocalLogoForPost(postId, () => ({ id: "kit-logo", name: "Logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" }));
       } else {
-        setLocalLogo(null);
+        setLocalLogoForPost(postId, () => null);
       }
     } catch { /* ignore */ }
-  }, [dispatch]);
+  }, [dispatch, isPostStillActive, setLocalLogoForPost]);
 
   useEffect(() => {
     void loadAuthStatus();
@@ -278,7 +336,7 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
     const detail = params.get("detail");
-    if (auth === "connected") { setPublishMessage("Instagram account connected."); toast.success("Instagram account connected."); }
+    if (auth === "connected") { setPublishMessageState({ postId: activePostIdRef.current, text: "Instagram account connected." }); toast.success("Instagram account connected."); }
     if (auth === "error" && detail) { const s = detail.slice(0, 200).replace(/[<>"']/g, ""); generation.setError(s); toast.error(s); }
     if (auth) { params.delete("auth"); params.delete("detail"); const n = params.toString(); window.history.replaceState({}, "", n ? `${window.location.pathname}?${n}` : window.location.pathname); }
   }, [loadAuthStatus, loadLlmStatus, loadBrandKits]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -336,9 +394,13 @@ export default function Home() {
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
   }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, shareUrl]);
 
-  const uploadFileToStorage = async (file: File, folder: string) => {
+  const uploadFileToStorage = async (
+    file: File,
+    folder: string,
+    signal?: AbortSignal,
+  ) => {
     const fd = new FormData(); fd.append("file", file); fd.append("folder", folder);
-    const r = await fetch("/api/assets/upload", { method: "POST", body: fd });
+    const r = await fetch("/api/assets/upload", { method: "POST", body: fd, signal });
     if (!r.ok) throw new Error(await parseApiError(r));
     const j = (await r.json()) as { url?: string };
     if (!j.url) throw new Error("Storage did not return a URL");
@@ -346,36 +408,119 @@ export default function Home() {
   };
 
   const handleAssetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const postId = activePostIdRef.current;
     const selected = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!selected.length) return;
-    generation.setError(null); setPublishMessage(null);
+    if (!postId || !selected.length) return;
+    generation.setError(null);
+    setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current);
     const remaining = 20 - localAssets.length;
     if (remaining <= 0) return;
     const files = selected.slice(0, remaining);
     const staged = files.map((file, i) => ({ id: `${Date.now()}-${i}-${file.name}`, name: file.name, mediaType: mediaTypeFromFile(file), previewUrl: URL.createObjectURL(file), status: "uploading" as const, size: file.size }));
-    setLocalAssets((c) => [...c, ...staged]);
-    setIsUploadingAssets(true);
-    await Promise.allSettled(files.map(async (file, i) => {
-      const itemId = staged[i].id;
-      if (staged[i].mediaType === "video") { try { const m = await extractVideoMetadata(staged[i].previewUrl); setLocalAssets((c) => c.map((a) => a.id === itemId ? { ...a, durationSec: m.durationSec, width: m.width, height: m.height, posterUrl: m.posterUrl } : a)); } catch { setLocalAssets((c) => c.map((a) => a.id === itemId ? { ...a, error: "Could not parse video metadata" } : a)); } }
-      try { const url = await uploadFileToStorage(file, staged[i].mediaType === "video" ? "videos" : "assets"); setLocalAssets((c) => c.map((a) => a.id === itemId ? { ...a, status: "uploaded", storageUrl: url } : a)); } catch (e) { setLocalAssets((c) => c.map((a) => a.id === itemId ? { ...a, status: "local", error: e instanceof Error ? e.message : "Upload failed" } : a)); }
-    }));
-    setLocalAssets((c) => { syncAssetsToPost(c); return c; });
-    setIsUploadingAssets(false);
+    const uploadController = new AbortController();
+    assetUploadAbortRef.current = { postId, controller: uploadController };
+    setLocalAssetsForPost(postId, (current) => [...current, ...staged]);
+    setUploadingAssetsForPostId(postId);
+    try {
+      await Promise.allSettled(files.map(async (file, i) => {
+        const itemId = staged[i].id;
+        if (staged[i].mediaType === "video") {
+          try {
+            const m = await extractVideoMetadata(staged[i].previewUrl);
+            if (uploadController.signal.aborted) {
+              revokeObjectUrlIfNeeded(m.posterUrl);
+              setLocalAssetsForPost(postId, (current) => {
+                const removing = current.find((asset) => asset.id === itemId);
+                if (removing) {
+                  revokeObjectUrlIfNeeded(removing.previewUrl);
+                  if (removing.posterUrl) {
+                    revokeObjectUrlIfNeeded(removing.posterUrl);
+                  }
+                }
+                const next = current.filter((asset) => asset.id !== itemId);
+                syncAssetsToPost(postId, next);
+                return next;
+              });
+              return;
+            }
+            setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, durationSec: m.durationSec, width: m.width, height: m.height, posterUrl: m.posterUrl } : asset));
+          } catch {
+            setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, error: "Could not parse video metadata" } : asset));
+          }
+        }
+        try {
+          const url = await uploadFileToStorage(file, staged[i].mediaType === "video" ? "videos" : "assets", uploadController.signal);
+          setLocalAssetsForPost(postId, (current) => {
+            const next = current.map((asset) => asset.id === itemId ? { ...asset, status: "uploaded" as const, storageUrl: url } : asset);
+            syncAssetsToPost(postId, next);
+            return next;
+          });
+        } catch (e) {
+          if (isAbortError(e)) {
+            setLocalAssetsForPost(postId, (current) => {
+              const removing = current.find((asset) => asset.id === itemId);
+              if (removing) {
+                revokeObjectUrlIfNeeded(removing.previewUrl);
+                if (removing.posterUrl) {
+                  revokeObjectUrlIfNeeded(removing.posterUrl);
+                }
+              }
+              const next = current.filter((asset) => asset.id !== itemId);
+              syncAssetsToPost(postId, next);
+              return next;
+            });
+            return;
+          }
+          setLocalAssetsForPost(postId, (current) => current.map((asset) => asset.id === itemId ? { ...asset, status: "local" as const, error: e instanceof Error ? e.message : "Upload failed" } : asset));
+        }
+      }));
+    } finally {
+      if (assetUploadAbortRef.current?.controller === uploadController) {
+        assetUploadAbortRef.current = null;
+      }
+      setUploadingAssetsForPostId((current) => current === postId ? null : current);
+    }
   };
 
   const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const postId = activePostIdRef.current;
     const file = event.target.files?.[0]; event.target.value = "";
-    if (!file) return;
-    generation.setError(null); setPublishMessage(null);
+    if (!postId || !file) return;
+    generation.setError(null);
+    setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current);
+    const previousLogo = localLogo;
     const next: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
-    setLocalLogo((c) => { if (c) revokeObjectUrlIfNeeded(c.previewUrl); return next; });
-    try { const url = await uploadFileToStorage(file, "logos"); setLocalLogo((c) => c ? { ...c, status: "uploaded", storageUrl: url } : null); dispatch({ type: "SET_LOGO", logoUrl: url }); }
-    catch (e) { setLocalLogo((c) => c ? { ...c, status: "local", error: e instanceof Error ? e.message : "Upload failed" } : null); }
+    const uploadController = new AbortController();
+    logoUploadAbortRef.current = { postId, controller: uploadController };
+    setLocalLogoForPost(postId, () => next);
+    try {
+      const url = await uploadFileToStorage(file, "logos", uploadController.signal);
+      if (previousLogo) {
+        revokeObjectUrlIfNeeded(previousLogo.previewUrl);
+      }
+      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "uploaded" as const, storageUrl: url } : null);
+      dispatch({ type: "SET_LOGO", postId, logoUrl: url });
+    }
+    catch (e) {
+      if (isAbortError(e)) {
+        revokeObjectUrlIfNeeded(next.previewUrl);
+        setLocalLogoForPost(postId, (current) => current?.id === next.id ? previousLogo : current);
+        return;
+      }
+      if (previousLogo) {
+        revokeObjectUrlIfNeeded(previousLogo.previewUrl);
+      }
+      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "local" as const, error: e instanceof Error ? e.message : "Upload failed" } : null);
+    } finally {
+      if (logoUploadAbortRef.current?.controller === uploadController) {
+        logoUploadAbortRef.current = null;
+      }
+    }
   };
   const removeAsset = useCallback((id: string) => {
-    setLocalAssets((current) => {
+    const postId = activePostIdRef.current;
+    setLocalAssetsForPost(postId, (current) => {
       const removing = current.find((asset) => asset.id === id);
       if (removing) {
         revokeObjectUrlIfNeeded(removing.previewUrl);
@@ -384,24 +529,29 @@ export default function Home() {
         }
       }
       const next = current.filter((asset) => asset.id !== id);
-      syncAssetsToPost(next);
+      syncAssetsToPost(postId, next);
       return next;
     });
-  }, [syncAssetsToPost]);
+  }, [setLocalAssetsForPost, syncAssetsToPost]);
 
   const reorderAssets = useCallback((reordered: LocalAsset[]) => {
-    setLocalAssets(reordered); syncAssetsToPost(reordered);
-  }, [syncAssetsToPost]);
+    const postId = activePostIdRef.current;
+    setLocalAssetsForPost(postId, () => {
+      syncAssetsToPost(postId, reordered);
+      return reordered;
+    });
+  }, [setLocalAssetsForPost, syncAssetsToPost]);
 
   const removeLogo = useCallback(() => {
-    setLocalLogo((current) => {
+    const postId = activePostIdRef.current;
+    setLocalLogoForPost(postId, (current) => {
       if (current) {
         revokeObjectUrlIfNeeded(current.previewUrl);
       }
       return null;
     });
-    dispatch({ type: "SET_LOGO", logoUrl: null });
-  }, [dispatch]);
+    dispatch({ type: "SET_LOGO", postId: postId ?? undefined, logoUrl: null });
+  }, [dispatch, setLocalLogoForPost]);
 
   const generateRef = useRef<(() => Promise<void>) | null>(null);
   const isAgentBusyRef = useRef(isAgentBusy);
@@ -415,16 +565,25 @@ export default function Home() {
   useEffect(() => {
     const onGenerate = () => { if (!isAgentBusyRef.current && localAssetsRef.current.length > 0) void generateRef.current?.(); };
     const onToggleEditor = () => setEditorMode((v) => !v);
-    const onSelectVariant = (e: Event) => { const idx = (e as CustomEvent).detail?.index; if (typeof idx === "number" && resultRef.current?.variants[idx]) dispatch({ type: "SET_ACTIVE_VARIANT", variantId: resultRef.current.variants[idx].id }); };
+    const onSelectVariant = (e: Event) => { const idx = (e as CustomEvent).detail?.index; if (typeof idx === "number" && resultRef.current?.variants[idx]) dispatch({ type: "SET_ACTIVE_VARIANT", postId: activePostIdRef.current ?? undefined, variantId: resultRef.current.variants[idx].id }); };
     const onOpenSettings = () => setSettingsOpen(true);
     const onOpenBrandKits = () => setBrandKitsOpen(true);
+    const onBeforePostSwitch = (e: Event) => {
+      const detail = (e as CustomEvent<{ fromPostId?: string | null; toPostId?: string | null }>).detail;
+      const fromPostId = detail?.fromPostId ?? activePostIdRef.current;
+      const toPostId = detail?.toPostId ?? null;
+      abortUploadsForPostSwitch(fromPostId);
+      setPendingGenerateRequest((current) => current && current.postId !== toPostId ? null : current);
+      setPendingPublishRequest((current) => current && current.postId !== toPostId ? null : current);
+    };
     window.addEventListener("ig:generate", onGenerate);
     window.addEventListener("ig:toggle-editor", onToggleEditor);
     window.addEventListener("ig:select-variant", onSelectVariant);
     window.addEventListener("ig:open-settings", onOpenSettings);
     window.addEventListener("ig:open-brand-kits", onOpenBrandKits);
-    return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:open-settings", onOpenSettings); window.removeEventListener("ig:open-brand-kits", onOpenBrandKits); };
-  }, [dispatch]);
+    window.addEventListener("ig:before-post-switch", onBeforePostSwitch);
+    return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:open-settings", onOpenSettings); window.removeEventListener("ig:open-brand-kits", onOpenBrandKits); window.removeEventListener("ig:before-post-switch", onBeforePostSwitch); };
+  }, [abortUploadsForPostSwitch, dispatch]);
 
   const renderPosterToDataUrl = async () => {
     if (!posterRef.current || !activeVariant) throw new Error("No poster selected");
@@ -447,45 +606,51 @@ export default function Home() {
   };
 
   const refineVariant = async (instruction?: string) => {
+    const postId = activePostIdRef.current;
     const inst = instruction?.trim(); if (!activeVariant || !inst) return;
-    setIsRefining(true); generation.setError(null);
+    setRefiningForPostId(postId); generation.setError(null);
     try {
       const r = await fetch("/api/generate/refine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ variant: activeVariant, instruction: inst, brand }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = await r.json();
       if (j.source !== "model") throw new Error("Refinement could not be applied.");
-      if (result) dispatch({ type: "SET_RESULT", result: { ...result, variants: result.variants.map((v) => v.id === activeVariant.id ? { ...j.variant, id: activeVariant.id } : v) }, overlayLayouts });
-    } catch (e) { const m = e instanceof Error ? e.message : "Refinement failed"; generation.setError(m); toast.error(m); }
-    finally { setIsRefining(false); }
+      if (!isPostStillActive(postId)) return;
+      if (result) dispatch({ type: "SET_RESULT", postId: postId ?? undefined, result: { ...result, variants: result.variants.map((v) => v.id === activeVariant.id ? { ...j.variant, id: activeVariant.id } : v) }, overlayLayouts });
+    } catch (e) { if (isPostStillActive(postId)) { const m = e instanceof Error ? e.message : "Refinement failed"; generation.setError(m); toast.error(m); } }
+    finally { setRefiningForPostId((current) => current === postId ? null : current); }
   };
 
   const handleResetTextLayout = useCallback(() => {
     if (!activeVariant) return;
     dispatch({
       type: "UPDATE_OVERLAY",
+      postId: activePostIdRef.current ?? undefined,
       variantId: activeVariant.id,
       layout: createDefaultOverlayLayout(activeVariant.layout),
     });
   }, [activeVariant, dispatch]);
 
   const createShareLink = async () => {
+    const postId = activePostIdRef.current;
     if (!result || !activeVariant) return;
-    generation.setError(null); setIsSharing(true);
+    generation.setError(null); setSharingForPostId(postId);
     try {
       const pu = await uploadRenderedPoster();
       const r = await fetch("/api/projects/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brand, post, assets: localAssets.filter((a) => a.storageUrl).map((a) => ({ id: a.id, name: a.name, mediaType: a.mediaType, durationSec: a.durationSec, posterUrl: a.posterUrl, url: a.storageUrl })), logoUrl: localLogo?.storageUrl, result, activeVariantId: activeVariant.id, overlayLayouts, renderedPosterUrl: pu }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as { shareUrl?: string }; if (!j.shareUrl) throw new Error("No share link returned");
-      dispatch({ type: "SET_SHARE", shareUrl: j.shareUrl });
+      if (!isPostStillActive(postId)) return;
+      dispatch({ type: "SET_SHARE", postId: postId ?? undefined, shareUrl: j.shareUrl });
       try { await navigator.clipboard.writeText(j.shareUrl); setShareCopyState("done"); setTimeout(() => setShareCopyState("idle"), 1400); } catch { setShareCopyState("idle"); }
-    } catch (e) { const m = e instanceof Error ? e.message : "Could not create share link"; generation.setError(m); toast.error(m); }
-    finally { setIsSharing(false); }
+    } catch (e) { if (isPostStillActive(postId)) { const m = e instanceof Error ? e.message : "Could not create share link"; generation.setError(m); toast.error(m); } }
+    finally { setSharingForPostId((current) => current === postId ? null : current); }
   };
 
   const publishToInstagram = async (
     scheduleAt?: string,
     metadata?: PublishMetadataInput,
   ) => {
+    const postId = activePostIdRef.current;
     if (!activeVariant) {
       const m = "Generate and select a variant before posting.";
       generation.setError(m);
@@ -493,7 +658,7 @@ export default function Home() {
       return;
     }
     if (!authStatus.connected) { const m = "Connect an Instagram account before publishing."; generation.setError(m); toast.error(m); return; }
-    generation.setError(null); setPublishMessage(null); setIsPublishing(true);
+    generation.setError(null); setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current); setPublishingForPostId(postId);
     try {
       const seq = activeVariant.assetSequence.map((id) => assetMap.get(id)).filter((a): a is LocalAsset => Boolean(a));
       let media: { mode: string; [key: string]: unknown };
@@ -521,7 +686,7 @@ export default function Home() {
         throw new Error("Location and user tags are currently supported only for image posts.");
       }
       const publishAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId: activePost?.id, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as {
         status?: string;
@@ -540,7 +705,8 @@ export default function Home() {
         const m = normalizedFirstComment
           ? `Scheduled for ${scheduledText} (${localTimeZone}). First comment will post after publish.`
           : `Scheduled for ${scheduledText} (${localTimeZone})`;
-        setPublishMessage(m);
+        if (!isPostStillActive(postId)) return;
+        setPublishMessageState({ postId, text: m });
         setPublishJobsRefreshKey((current) => current + 1);
         toast.success(m);
       }
@@ -548,20 +714,23 @@ export default function Home() {
         if (j.firstCommentStatus === "failed") {
           const warning = j.firstCommentWarning ?? "Could not post first comment.";
           const m = `Published to Instagram. First comment failed: ${warning}`;
-          setPublishMessage(m);
+          if (!isPostStillActive(postId)) return;
+          setPublishMessageState({ postId, text: m });
           toast.warning(m);
         } else {
           const m = "Published to Instagram successfully.";
-          setPublishMessage(m);
+          if (!isPostStillActive(postId)) return;
+          setPublishMessageState({ postId, text: m });
           toast.success(m);
         }
         dispatch({
           type: "ADD_PUBLISH",
+          postId: postId ?? undefined,
           entry: { publishedAt: new Date().toISOString(), igMediaId: j.publishId },
         });
       }
-    } catch (e) { const m = e instanceof Error ? e.message : "Instagram publish failed"; generation.setError(m); toast.error(m); }
-    finally { setIsPublishing(false); }
+    } catch (e) { if (isPostStillActive(postId)) { const m = e instanceof Error ? e.message : "Instagram publish failed"; generation.setError(m); toast.error(m); } }
+    finally { setPublishingForPostId((current) => current === postId ? null : current); }
   };
 
   const publishToInstagramRef = useRef<(
@@ -628,6 +797,7 @@ export default function Home() {
     if (postId && activePost?.id === postId) {
       dispatch({
         type: "SET_STATUS",
+        postId,
         status:
           action === "reschedule" || action === "edit" || action === "retry-now"
             ? "scheduled"

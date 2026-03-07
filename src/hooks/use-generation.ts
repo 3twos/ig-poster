@@ -24,6 +24,7 @@ import { parseApiError } from "@/lib/upload-helpers";
 import { toast } from "sonner";
 
 type UseGenerationOptions = {
+  postId: string | null;
   brand: BrandState;
   post: PostState;
   localAssets: LocalAsset[];
@@ -32,7 +33,14 @@ type UseGenerationOptions = {
   dispatch: (action: Record<string, unknown>) => void;
 };
 
+type ActiveGenerationRequest = {
+  token: string;
+  postId: string;
+  controller: AbortController;
+};
+
 export function useGeneration({
+  postId,
   brand,
   post,
   localAssets,
@@ -40,15 +48,22 @@ export function useGeneration({
   promptConfig,
   dispatch,
 }: UseGenerationOptions) {
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingAnyPost, setIsGeneratingAnyPost] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
+  const [runPostId, setRunPostId] = useState<string | null>(null);
+  const [agentRunState, setAgentRunState] = useState<AgentRun | null>(null);
   const [agentVerbosity, setAgentVerbosity] = useState<AgentVerbosity>("standard");
   const [showStepDetails, setShowStepDetails] = useState(true);
   const [runClock, setRunClock] = useState(Date.now());
   const [runLogCopyState, setRunLogCopyState] = useState<"idle" | "done">("idle");
 
-  const generationAbortRef = useRef<AbortController | null>(null);
+  const activeRequestRef = useRef<ActiveGenerationRequest | null>(null);
+  const currentPostIdRef = useRef<string | null>(postId);
+  const previousPostIdRef = useRef<string | null>(postId);
+  currentPostIdRef.current = postId;
+
+  const agentRun = runPostId === postId ? agentRunState : null;
+  const isGenerating = isGeneratingAnyPost && runPostId === postId;
 
   useEffect(() => {
     if (agentRun?.status !== "running") {
@@ -70,7 +85,7 @@ export function useGeneration({
       second: "2-digit",
     });
 
-    setAgentRun((current) => {
+    setAgentRunState((current) => {
       if (event.type === "run-start") {
         return {
           id: event.runId,
@@ -360,58 +375,109 @@ export function useGeneration({
     }
   }, [agentRun, runClock]);
 
+  const cancelGeneration = useCallback(
+    (reason: "user" | "post-switch" = "user") => {
+      const activeRequest = activeRequestRef.current;
+      if (!activeRequest) {
+        return;
+      }
+
+      activeRequestRef.current = null;
+      activeRequest.controller.abort(reason);
+      setIsGeneratingAnyPost(false);
+
+      const now = Date.now();
+      setAgentRunState((current) => {
+        if (!current) {
+          return current;
+        }
+
+        if (
+          current.status === "success" ||
+          current.status === "error" ||
+          current.status === "cancelled"
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          status: "cancelled",
+          endedAt: now,
+          currentStepId: undefined,
+          summary:
+            reason === "post-switch"
+              ? "Generation cancelled when switching posts."
+              : "Generation stopped by user.",
+          steps: current.steps.map((step) =>
+            step.status === "active" || step.status === "pending"
+              ? {
+                  ...step,
+                  status: "cancelled",
+                  detail:
+                    reason === "post-switch"
+                      ? "Cancelled while switching posts."
+                      : "Cancelled by user.",
+                  endedAt: now,
+                }
+              : step,
+          ),
+          logLines: [
+            ...current.logLines,
+            reason === "post-switch"
+              ? "Run cancelled while switching posts."
+              : "Run cancelled by user.",
+          ],
+        };
+      });
+    },
+    [],
+  );
+
   const stopGeneration = useCallback(() => {
-    const activeController = generationAbortRef.current;
-    if (!activeController) {
-      return;
+    cancelGeneration("user");
+  }, [cancelGeneration]);
+
+  const cancelForPostSwitch = useCallback(() => {
+    cancelGeneration("post-switch");
+  }, [cancelGeneration]);
+
+  useEffect(() => {
+    const previousPostId = previousPostIdRef.current;
+    previousPostIdRef.current = postId;
+
+    if (
+      previousPostId &&
+      previousPostId !== postId &&
+      activeRequestRef.current?.postId === previousPostId
+    ) {
+      cancelForPostSwitch();
     }
-
-    generationAbortRef.current = null;
-    activeController.abort();
-
-    const now = Date.now();
-    setAgentRun((current) => {
-      if (!current) {
-        return current;
-      }
-
-      if (
-        current.status === "success" ||
-        current.status === "error" ||
-        current.status === "cancelled"
-      ) {
-        return current;
-      }
-
-      return {
-        ...current,
-        status: "cancelled",
-        endedAt: now,
-        currentStepId: undefined,
-        summary: "Generation stopped by user.",
-        steps: current.steps.map((step) =>
-          step.status === "active" || step.status === "pending"
-            ? {
-                ...step,
-                status: "cancelled",
-                detail: "Cancelled by user.",
-                endedAt: now,
-              }
-            : step,
-        ),
-        logLines: [...current.logLines, "Run cancelled by user."],
-      };
-    });
-  }, []);
+  }, [cancelForPostSwitch, postId]);
 
   const generate = useCallback(async () => {
+    if (!postId) {
+      return;
+    }
     setError(null);
-    setIsGenerating(true);
+    setIsGeneratingAnyPost(true);
+    setRunPostId(postId);
     setRunClock(Date.now());
 
+    const requestToken = crypto.randomUUID();
     const abortController = new AbortController();
-    generationAbortRef.current = abortController;
+    activeRequestRef.current = { token: requestToken, postId, controller: abortController };
     let finalResult: GenerationResponse | null = null;
+    const isCurrentRequest = () => activeRequestRef.current?.token === requestToken;
+    const shouldCommitForCurrentPost = () =>
+      isCurrentRequest() && currentPostIdRef.current === postId;
+    const applyRunEventIfCurrent = (event: GenerationRunEvent) => {
+      if (!isCurrentRequest()) {
+        return;
+      }
+
+      applyRunEvent(event);
+    };
 
     try {
       const response = await fetch("/api/generate", {
@@ -467,7 +533,7 @@ export function useGeneration({
 
             if (isGenerationRunEvent(event)) {
               lastStreamDetail = summarizeRunEvent(event);
-              applyRunEvent(event);
+              applyRunEventIfCurrent(event);
               if (event.type === "run-complete") {
                 finalResult = GenerationResponseSchema.parse(event.result);
               } else if (event.type === "run-error") {
@@ -485,13 +551,13 @@ export function useGeneration({
             if (legacy.type === "status" && legacy.message) {
               lastStreamDetail = legacy.message;
               if (!seededLegacyStream) {
-                applyRunEvent({
+                applyRunEventIfCurrent({
                   type: "run-start",
                   runId: crypto.randomUUID(),
                   label: "Generate SOTA Concepts",
                   detail: "Streaming generation updates.",
                 });
-                applyRunEvent({
+                applyRunEventIfCurrent({
                   type: "step-start",
                   stepId: "legacy-stream",
                   title: "Generate concepts",
@@ -500,7 +566,7 @@ export function useGeneration({
                 });
                 seededLegacyStream = true;
               } else {
-                applyRunEvent({
+                applyRunEventIfCurrent({
                   type: "heartbeat",
                   detail: legacy.message,
                 });
@@ -509,13 +575,13 @@ export function useGeneration({
               finalResult = GenerationResponseSchema.parse(legacy.result);
               lastStreamDetail = "Generation stream completed.";
               if (seededLegacyStream) {
-                applyRunEvent({
+                applyRunEventIfCurrent({
                   type: "step-complete",
                   stepId: "legacy-stream",
                   detail: "Generation stream completed.",
                 });
               }
-              applyRunEvent({
+              applyRunEventIfCurrent({
                 type: "run-complete",
                 result: legacy.result,
                 summary: "Generated concept variants successfully.",
@@ -580,25 +646,25 @@ export function useGeneration({
         }
       } else {
         const parsed = GenerationResponseSchema.parse(await response.json());
-        applyRunEvent({
+        applyRunEventIfCurrent({
           type: "run-start",
           runId: crypto.randomUUID(),
           label: "Generate SOTA Concepts",
           detail: "Running non-stream fallback path.",
         });
-        applyRunEvent({
+        applyRunEventIfCurrent({
           type: "step-start",
           stepId: "fallback-json",
           title: "Generate concepts",
           detail: "Received a non-stream response from API.",
           phase: "execution",
         });
-        applyRunEvent({
+        applyRunEventIfCurrent({
           type: "step-complete",
           stepId: "fallback-json",
           detail: "Concept payload received.",
         });
-        applyRunEvent({
+        applyRunEventIfCurrent({
           type: "run-complete",
           result: parsed,
           summary: "Generated concept variants using fallback path.",
@@ -613,13 +679,28 @@ export function useGeneration({
           createDefaultOverlayLayout(variant.layout),
         ]),
       );
-      dispatch({ type: "SET_RESULT", result: finalResult, overlayLayouts: layouts });
-      dispatch({ type: "SET_ACTIVE_VARIANT", variantId: finalResult.variants[0]?.id ?? "" });
+      if (!shouldCommitForCurrentPost()) {
+        return;
+      }
+      dispatch({
+        type: "SET_RESULT",
+        postId: postId ?? undefined,
+        result: finalResult,
+        overlayLayouts: layouts,
+      });
+      dispatch({
+        type: "SET_ACTIVE_VARIANT",
+        postId: postId ?? undefined,
+        variantId: finalResult.variants[0]?.id ?? "",
+      });
     } catch (generationError) {
       if (
         generationError instanceof Error &&
         generationError.name === "AbortError"
       ) {
+        if (!isCurrentRequest()) {
+          return;
+        }
         const isTimeout = abortController.signal.reason === "inactivity-timeout";
         const summary = isTimeout
           ? "Generation timed out — no data received for 90 seconds."
@@ -627,7 +708,7 @@ export function useGeneration({
         const detail = isTimeout ? "Timed out." : "Cancelled by user.";
         const status = isTimeout ? "error" as const : "cancelled" as const;
 
-        setAgentRun((current) => {
+        setAgentRunState((current) => {
           if (!current || current.status !== "running") {
             return current;
           }
@@ -664,7 +745,10 @@ export function useGeneration({
         generationError instanceof Error
           ? generationError.message
           : "Unexpected generation issue.";
-      setAgentRun((current) => {
+      if (!isCurrentRequest()) {
+        return;
+      }
+      setAgentRunState((current) => {
         if (!current || current.status !== "running") {
           return current;
         }
@@ -687,15 +771,17 @@ export function useGeneration({
       setError(message);
       toast.error(message);
     } finally {
-      setIsGenerating(false);
-      generationAbortRef.current = null;
+      if (isCurrentRequest()) {
+        setIsGeneratingAnyPost(false);
+        activeRequestRef.current = null;
+      }
     }
-  }, [brand, post, localAssets, localLogo, promptConfig, dispatch, applyRunEvent]);
+  }, [brand, dispatch, localAssets, localLogo, post, postId, promptConfig, applyRunEvent]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      generationAbortRef.current?.abort();
+      activeRequestRef.current?.controller.abort();
     };
   }, []);
 
@@ -716,6 +802,7 @@ export function useGeneration({
     runDurationMs,
     generate,
     stopGeneration,
+    cancelForPostSwitch,
     copyRunLog,
   };
 }
