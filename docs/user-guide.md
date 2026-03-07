@@ -75,7 +75,7 @@
    - Connect Instagram via Meta OAuth in Settings (if not already connected).
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - Optionally add a `First comment` in the publish section; it is posted right after media publish.
-   - For image posts, optionally set `Location ID` and `User tags` (`username,x,y` per line).
+   - For image posts, optionally set `Location ID` and add `User tags` with structured rows (username + x + y coordinates).
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
    - The publish section also shows a workspace queue for queued, processing, and failed jobs.

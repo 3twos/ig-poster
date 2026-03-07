@@ -18,16 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { MetaUserTagsEditor } from "@/components/meta-user-tags-editor";
 import type {
   MetaScheduleRequest,
   MetaUserTag,
   PublishJobClient,
 } from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
-import {
-  formatMetaUserTagsText,
-  parseMetaUserTagsText,
-} from "@/lib/meta-user-tags";
 import { parseApiError } from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
 
@@ -244,9 +241,13 @@ export function PublishJobQueue({
   const [editCaption, setEditCaption] = useState("");
   const [editFirstComment, setEditFirstComment] = useState("");
   const [editLocationId, setEditLocationId] = useState("");
-  const [editUserTagsText, setEditUserTagsText] = useState("");
+  const [editUserTags, setEditUserTags] = useState<MetaUserTag[]>([]);
   const [editMedia, setEditMedia] = useState<EditableMedia | null>(null);
   const hasLoadedOnceRef = useRef(false);
+  const normalizeTagUsername = (value: string) => value.trim().replace(/^@/, "");
+  const hasIncompleteEditUserTags = editUserTags.some((tag) =>
+    normalizeTagUsername(tag.username).length === 0
+  );
 
   const resetEditState = () => {
     setEditingJobId(null);
@@ -254,7 +255,7 @@ export function PublishJobQueue({
     setEditCaption("");
     setEditFirstComment("");
     setEditLocationId("");
-    setEditUserTagsText("");
+    setEditUserTags([]);
     setEditMedia(null);
   };
 
@@ -381,14 +382,18 @@ export function PublishJobQueue({
     const normalizedLocationId = editLocationId.trim();
     const nextLocationId = normalizedLocationId ? normalizedLocationId : null;
     const currentLocationId = job.locationId ?? null;
-    let nextUserTags: MetaUserTag[] | null;
-    try {
-      nextUserTags = parseMetaUserTagsText(editUserTagsText) ?? null;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Invalid user tags.";
-      toast.error(message);
+    const normalizedUserTags = editUserTags
+      .map((tag) => ({
+        username: normalizeTagUsername(tag.username),
+        x: tag.x,
+        y: tag.y,
+      }))
+      .filter((tag) => tag.username.length > 0);
+    if (hasIncompleteEditUserTags) {
+      toast.error("Fill username for each user tag row or remove incomplete rows.");
       return;
     }
+    const nextUserTags = normalizedUserTags.length > 0 ? normalizedUserTags : null;
     const currentUserTags = job.userTags ?? null;
     const body: {
       action: "edit";
@@ -586,7 +591,7 @@ export function PublishJobQueue({
                             setEditCaption(job.caption);
                             setEditFirstComment(job.firstComment ?? "");
                             setEditLocationId(job.locationId ?? "");
-                            setEditUserTagsText(formatMetaUserTagsText(job.userTags));
+                            setEditUserTags(job.userTags ?? []);
                             setEditMedia(cloneMedia(job.media));
                           }}
                         >
@@ -650,16 +655,20 @@ export function PublishJobQueue({
                               className="text-xs"
                               placeholder="Location ID (optional)"
                             />
-                            <Textarea
-                              aria-label={`Edit user tags for ${job.id}`}
-                              value={editUserTagsText}
-                              onChange={(event) => setEditUserTagsText(event.target.value)}
-                              className="min-h-[70px] text-xs"
-                              placeholder={"username,x,y\nusername,x,y"}
+                            <MetaUserTagsEditor
+                              ariaLabelPrefix={`Edit ${job.id}`}
+                              tags={editUserTags}
+                              onChange={setEditUserTags}
+                              disabled={isBusy}
                             />
                             <p className="text-[11px] text-slate-400">
-                              One user tag per line as username,x,y with x and y between 0 and 1.
+                              Add usernames and coordinates (x/y between 0 and 1).
                             </p>
+                            {hasIncompleteEditUserTags ? (
+                              <p className="text-[11px] text-amber-200">
+                                Fill username for each tag row or remove incomplete rows before saving.
+                              </p>
+                            ) : null}
                           </div>
                         ) : (
                           <p className="mt-2 text-[11px] text-slate-400">
@@ -840,7 +849,7 @@ export function PublishJobQueue({
                           <Button
                             type="button"
                             size="xs"
-                            disabled={!editPublishAt || !editCaption.trim() || isBusy}
+                            disabled={!editPublishAt || !editCaption.trim() || isBusy || hasIncompleteEditUserTags}
                             onClick={() => void handleEdit(job)}
                           >
                             {isBusy ? (
