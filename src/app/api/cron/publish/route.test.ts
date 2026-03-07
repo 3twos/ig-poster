@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/db", () => ({
+  getDb: vi.fn(),
+}));
+
 vi.mock("@/lib/blob-store", () => ({
   isBlobEnabled: vi.fn(),
-  listBlobsPaginated: vi.fn(),
-  deleteBlob: vi.fn(),
+  putJson: vi.fn(),
 }));
 
 vi.mock("@/lib/meta", () => ({
@@ -15,6 +18,13 @@ vi.mock("@/lib/meta-auth", () => ({
   getMetaConnection: vi.fn(),
 }));
 
+vi.mock("@/lib/publish-jobs", () => ({
+  claimDuePublishJobs: vi.fn(),
+  completePublishJobFailure: vi.fn(),
+  completePublishJobSuccess: vi.fn(),
+  markPostPublished: vi.fn(),
+}));
+
 vi.mock("@/lib/app-encryption", () => ({
   requireAppEncryptionSecret: vi.fn(),
 }));
@@ -24,108 +34,134 @@ vi.mock("@/lib/secure", () => ({
 }));
 
 import { GET } from "@/app/api/cron/publish/route";
-import { deleteBlob, isBlobEnabled, listBlobsPaginated } from "@/lib/blob-store";
+import { getDb } from "@/db";
+import { isBlobEnabled } from "@/lib/blob-store";
 import { getEnvMetaAuth, publishInstagramContent } from "@/lib/meta";
+import {
+  claimDuePublishJobs,
+  completePublishJobFailure,
+  completePublishJobSuccess,
+  markPostPublished,
+} from "@/lib/publish-jobs";
 
+const mockedGetDb = vi.mocked(getDb);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
-const mockedListBlobsPaginated = vi.mocked(listBlobsPaginated);
 const mockedGetEnvMetaAuth = vi.mocked(getEnvMetaAuth);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
-const mockedDeleteBlob = vi.mocked(deleteBlob);
+const mockedClaimDuePublishJobs = vi.mocked(claimDuePublishJobs);
+const mockedCompletePublishJobFailure = vi.mocked(completePublishJobFailure);
+const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
+const mockedMarkPostPublished = vi.mocked(markPostPublished);
+
+const baseJob = {
+  id: "job_1",
+  ownerHash: "owner_hash",
+  postId: "post_1",
+  status: "processing" as const,
+  caption: "Caption",
+  media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
+  publishAt: new Date(),
+  attempts: 1,
+  maxAttempts: 3,
+  lastAttemptAt: new Date(),
+  lastError: null,
+  authSource: "env",
+  connectionId: null,
+  outcomeContext: null,
+  publishId: null,
+  creationId: null,
+  children: null,
+  completedAt: null,
+  canceledAt: null,
+  events: [],
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
 
 describe("GET /api/cron/publish", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
     vi.stubEnv("CRON_SECRET", "cron-secret");
+    mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
+    mockedIsBlobEnabled.mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
   });
 
   it("returns 401 for invalid bearer token", async () => {
     const req = new Request("https://app.example.com/api/cron/publish", {
-      headers: {
-        authorization: "Bearer nope",
-      },
+      headers: { authorization: "Bearer nope" },
     });
 
     const res = await GET(req);
     expect(res.status).toBe(401);
   });
 
-  it("publishes due env-auth jobs in pathname order", async () => {
-    mockedIsBlobEnabled.mockReturnValue(true);
+  it("publishes claimed jobs and marks success", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([baseJob]);
     mockedGetEnvMetaAuth.mockReturnValue({
       accessToken: "token",
       instagramUserId: "ig-id",
       graphVersion: "v22.0",
     });
-
-    const now = Date.now();
-    mockedListBlobsPaginated.mockResolvedValue([
-      {
-        pathname: `schedules/${now}-b.json`,
-        url: "https://blob/b",
-        downloadUrl: "https://blob/b?download=1",
-        size: 1,
-        uploadedAt: new Date(),
-        etag: "b",
-      },
-      {
-        pathname: `schedules/${now}-a.json`,
-        url: "https://blob/a",
-        downloadUrl: "https://blob/a?download=1",
-        size: 1,
-        uploadedAt: new Date(),
-        etag: "a",
-      },
-    ]);
-
-    const makeJob = (id: string) => ({
-      id,
-      caption: `Caption ${id}`,
-      media: {
-        mode: "image",
-        imageUrl: "https://cdn.example.com/image.jpg",
-      },
-      publishAt: new Date(now - 60_000).toISOString(),
-      createdAt: new Date(now - 120_000).toISOString(),
-      authSource: "env",
-    });
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((url: string) => {
-        if (url.includes("/a")) {
-          return Promise.resolve({ ok: true, json: async () => makeJob("a") });
-        }
-        return Promise.resolve({ ok: true, json: async () => makeJob("b") });
-      }),
-    );
-
     mockedPublishInstagramContent.mockResolvedValue({
       mode: "image",
-      creationId: "c1",
-      publishId: "p1",
+      creationId: "create_1",
+      publishId: "publish_1",
     });
+    mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
 
     const req = new Request("https://app.example.com/api/cron/publish", {
-      headers: {
-        authorization: "Bearer cron-secret",
-      },
+      headers: { authorization: "Bearer cron-secret" },
     });
 
     const res = await GET(req);
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toMatchObject({ published: 2, errorCount: 0 });
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 1,
+      errorCount: 0,
+    });
 
-    expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(2);
-    expect(mockedPublishInstagramContent.mock.calls[0]?.[0]).toMatchObject({ caption: "Caption a" });
-    expect(mockedPublishInstagramContent.mock.calls[1]?.[0]).toMatchObject({ caption: "Caption b" });
-    expect(mockedDeleteBlob).toHaveBeenCalledTimes(2);
+    expect(mockedPublishInstagramContent).toHaveBeenCalledTimes(1);
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
+    expect(mockedMarkPostPublished).toHaveBeenCalledWith(
+      expect.anything(),
+      baseJob.ownerHash,
+      baseJob.postId,
+      "publish_1",
+    );
+  });
+
+  it("records failures and retry transitions", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([baseJob]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      graphVersion: "v22.0",
+    });
+    mockedPublishInstagramContent.mockRejectedValue(new Error("Upstream failure"));
+    mockedCompletePublishJobFailure.mockResolvedValue({
+      ...baseJob,
+      status: "queued",
+    });
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 0,
+      retried: 1,
+      failed: 0,
+      errorCount: 1,
+    });
+    expect(mockedCompletePublishJobFailure).toHaveBeenCalledTimes(1);
   });
 });

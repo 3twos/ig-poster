@@ -1,13 +1,17 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getDb } from "@/db";
+import { posts } from "@/db/schema";
 import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { MetaScheduleRequestSchema, publishInstagramContent } from "@/lib/meta";
-import { ScheduledJobSchema } from "@/lib/meta-schemas";
+import { createPublishJob, markPostPublished } from "@/lib/publish-jobs";
+import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 class MetaScheduleClientError extends Error {
@@ -21,7 +25,30 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    const session = await readWorkspaceSessionFromRequest(req);
+    if (!session) {
+      return NextResponse.json(
+        { error: "Workspace authentication required for publish scheduling." },
+        { status: 401 },
+      );
+    }
+
+    const ownerHash = hashEmail(session.email);
     const payload = MetaScheduleRequestSchema.parse(await req.json());
+    const db = getDb();
+    if (payload.postId) {
+      const [linkedPost] = await db
+        .select({ id: posts.id })
+        .from(posts)
+        .where(and(eq(posts.id, payload.postId), eq(posts.ownerHash, ownerHash)))
+        .limit(1);
+      if (!linkedPost) {
+        throw new MetaScheduleClientError(
+          "Selected post could not be found in this workspace.",
+        );
+      }
+    }
+
     const resolvedAuth = await resolveMetaAuthFromRequest(req);
     const now = Date.now();
     const publishAt = payload.publishAt ? new Date(payload.publishAt).getTime() : undefined;
@@ -29,37 +56,27 @@ export async function POST(req: Request) {
     const shouldSchedule = Boolean(publishAt && publishAt - now > 2 * 60 * 1000);
 
     if (shouldSchedule && publishAt) {
-      if (!isBlobEnabled()) {
-        return NextResponse.json(
-          { error: "Scheduling requires Blob storage (BLOB_READ_WRITE_TOKEN)." },
-          { status: 503 },
-        );
-      }
-
       if (resolvedAuth.source === "oauth" && !resolvedAuth.account.connectionId) {
         throw new MetaScheduleClientError(
           "OAuth scheduling requires private persistent credential storage. Configure POSTGRES_URL or DATABASE_URL and reconnect Meta OAuth.",
         );
       }
 
-      const id = randomUUID().replace(/-/g, "").slice(0, 18);
-      const job = ScheduledJobSchema.parse({
-        id,
+      const job = await createPublishJob(db, {
+        ownerHash,
+        postId: payload.postId,
         caption: payload.caption,
         media: payload.media,
         publishAt: new Date(publishAt).toISOString(),
-        createdAt: new Date().toISOString(),
         authSource: resolvedAuth.source,
         connectionId: resolvedAuth.account.connectionId,
         outcomeContext: payload.outcomeContext,
       });
 
-      await putJson(`schedules/${publishAt}-${id}.json`, job);
-
       return NextResponse.json({
         status: "scheduled",
-        id,
-        publishAt: job.publishAt,
+        id: job.id,
+        publishAt: job.publishAt.toISOString(),
       });
     }
 
@@ -71,17 +88,16 @@ export async function POST(req: Request) {
       resolvedAuth.auth,
     );
 
+    if (payload.postId) {
+      await markPostPublished(db, ownerHash, payload.postId, publish.publishId);
+    }
+
     // Record publish outcome (best-effort)
     if (isBlobEnabled() && payload.outcomeContext && publish.publishId) {
       try {
-        const session = await readWorkspaceSessionFromRequest(req);
-        if (!session) throw new Error("No session for outcome recording");
-        const emailHash = createHash("sha256")
-          .update(session.email.trim().toLowerCase())
-          .digest("hex");
         const outcomeId = randomUUID().replace(/-/g, "").slice(0, 18);
         const publishedAt = new Date().toISOString();
-        await putJson(`outcomes/${emailHash}/${Date.now()}-${outcomeId}.json`, {
+        await putJson(`outcomes/${ownerHash}/${Date.now()}-${outcomeId}.json`, {
           id: outcomeId,
           publishedAt,
           publishId: publish.publishId,

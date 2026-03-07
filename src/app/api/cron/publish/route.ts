@@ -1,16 +1,22 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
+import { getDb } from "@/db";
 import { apiErrorResponse } from "@/lib/api-error";
-import { deleteBlob, isBlobEnabled, listBlobsPaginated } from "@/lib/blob-store";
+import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { requireAppEncryptionSecret } from "@/lib/app-encryption";
 import { getMetaConnection } from "@/lib/meta-auth";
 import {
   getEnvMetaAuth,
   publishInstagramContent,
 } from "@/lib/meta";
-import { ScheduledJobSchema } from "@/lib/meta-schemas";
+import {
+  claimDuePublishJobs,
+  completePublishJobFailure,
+  completePublishJobSuccess,
+  markPostPublished,
+} from "@/lib/publish-jobs";
 import { decryptString } from "@/lib/secure";
 
 export const runtime = "nodejs";
@@ -33,58 +39,24 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (!isBlobEnabled()) {
-      return NextResponse.json(
-        { error: "Scheduling requires Blob storage (BLOB_READ_WRITE_TOKEN)." },
-        { status: 503 },
-      );
-    }
-
-    const blobs = await listBlobsPaginated("schedules/", {
-      pageSize: 1000,
-      maxResults: 5000,
-    });
-    blobs.sort((a, b) => a.pathname.localeCompare(b.pathname));
-    const now = Date.now();
+    const db = getDb();
+    const claimed = await claimDuePublishJobs(db, new Date(), 100);
 
     let published = 0;
+    let retried = 0;
+    let failed = 0;
     const errors: Array<{ id: string; detail: string }> = [];
 
-    for (const blob of blobs) {
-      const response = await fetch(blob.url, { cache: "no-store" });
-      if (!response.ok) {
-        errors.push({ id: blob.pathname, detail: `Failed to fetch blob (${response.status})` });
-        continue;
-      }
-
-      let rawJson: unknown;
+    for (const job of claimed) {
       try {
-        rawJson = await response.json();
-      } catch {
-        errors.push({ id: blob.pathname, detail: "Blob is not valid JSON" });
-        continue;
-      }
+        let auth = job.authSource === "env" ? getEnvMetaAuth() : null;
 
-      const parsed = ScheduledJobSchema.safeParse(rawJson);
-      if (!parsed.success) {
-        errors.push({ id: blob.pathname, detail: `Invalid schema: ${parsed.error.message}` });
-        continue;
-      }
-
-      const publishAtMs = new Date(parsed.data.publishAt).getTime();
-      if (publishAtMs > now) {
-        continue;
-      }
-
-      try {
-        let auth = parsed.data.authSource === "env" ? getEnvMetaAuth() : null;
-
-        if (parsed.data.authSource === "oauth") {
-          if (!parsed.data.connectionId) {
+        if (job.authSource === "oauth") {
+          if (!job.connectionId) {
             throw new Error("Missing OAuth connectionId");
           }
 
-          const connection = await getMetaConnection(parsed.data.connectionId);
+          const connection = await getMetaConnection(job.connectionId);
           if (!connection) {
             throw new Error("OAuth connection no longer exists");
           }
@@ -102,26 +74,62 @@ export async function GET(req: Request) {
           );
         }
 
-        await publishInstagramContent(
+        const publish = await publishInstagramContent(
           {
-            ...parsed.data.media,
-            caption: parsed.data.caption,
+            ...job.media,
+            caption: job.caption,
           },
           auth,
         );
-        await deleteBlob(blob.url);
+        await completePublishJobSuccess(db, job, {
+          publishId: publish.publishId,
+          creationId: publish.creationId,
+          children: "children" in publish ? publish.children : undefined,
+        });
+        if (job.postId) {
+          await markPostPublished(db, job.ownerHash, job.postId, publish.publishId);
+        }
+        if (isBlobEnabled() && job.outcomeContext && publish.publishId) {
+          try {
+            const outcomeId = randomUUID().replace(/-/g, "").slice(0, 18);
+            const publishedAt = new Date().toISOString();
+            await putJson(`outcomes/${job.ownerHash}/${Date.now()}-${outcomeId}.json`, {
+              id: outcomeId,
+              publishedAt,
+              publishId: publish.publishId,
+              postType: job.outcomeContext.postType,
+              caption: job.outcomeContext.caption,
+              hook: job.outcomeContext.hook,
+              hashtags: job.outcomeContext.hashtags,
+              variantName: job.outcomeContext.variantName,
+              brandName: job.outcomeContext.brandName,
+              score: job.outcomeContext.score,
+            });
+          } catch {
+            // Outcome recording is non-critical
+          }
+        }
         published += 1;
       } catch (error) {
+        const detail = error instanceof Error ? error.message : "Unknown publish failure";
+        const updated = await completePublishJobFailure(db, job, detail);
+        if (updated?.status === "queued") {
+          retried += 1;
+        } else {
+          failed += 1;
+        }
         errors.push({
-          id: parsed.data.id,
-          detail: error instanceof Error ? error.message : "Unknown publish failure",
+          id: job.id,
+          detail,
         });
       }
     }
 
     return NextResponse.json({
-      scanned: blobs.length,
+      claimed: claimed.length,
       published,
+      retried,
+      failed,
       errorCount: errors.length,
       errors: errors.slice(0, 20),
       ranAt: new Date().toISOString(),

@@ -6,7 +6,7 @@
 - Shared project links at `/share/<id>` are public read-only pages; treat links as sensitive.
 - For full functionality, ensure the environment has:
   - Postgres configured (`POSTGRES_URL` or `DATABASE_URL`) for post creation/loading and autosave.
-  - Blob storage configured (`BLOB_READ_WRITE_TOKEN`) for uploads/shares/scheduling.
+  - Blob storage configured (`BLOB_READ_WRITE_TOKEN`) for uploads/shares/outcomes.
   - Meta credentials configured (OAuth app settings and/or env fallback) for publishing.
   - LLM credentials connected (or env fallback) for model-based generation.
 
@@ -97,7 +97,7 @@
 - `reel` variant requires at least one uploaded video.
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.
 - Scheduled posts are processed by `/api/cron/publish` (every 15 minutes in Vercel cron config).
-- Scheduled queue processing now walks paginated schedule blobs to reduce missed publishes under larger backlogs.
+- Scheduled queue processing claims due jobs from Postgres-backed publish jobs.
 
 ## Managing Connections
 
@@ -109,7 +109,7 @@
   - Connected LLM providers are used by both generation and the AI chat assistant.
 - Instagram:
   - Connect/disconnect in Settings under Instagram Publishing.
-  - OAuth connection id is stored in cookie; encrypted tokens are persisted in Blob.
+  - OAuth connection id is stored in cookie; encrypted tokens are persisted in the private credential store (DB) when available, with encrypted cookie fallback.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.
 
@@ -124,7 +124,7 @@
 - "Invalid request body" responses on post create/update APIs:
   - Check field formats (URLs, status values, and structured payload shape) before retrying.
 
-- Upload/share/schedule errors mentioning Blob:
+- Upload/share errors mentioning Blob:
   - Configure `BLOB_READ_WRITE_TOKEN`.
 
 - Generation falls back or looks generic:
