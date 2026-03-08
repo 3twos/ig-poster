@@ -66,6 +66,7 @@ type OverlayCanvasBlock = {
 const ASPECT_MAP: Record<AspectRatio, string> = {
   "1:1": "1 / 1",
   "4:5": "4 / 5",
+  "1.91:1": "1.91 / 1",
   "9:16": "9 / 16",
 };
 

@@ -101,6 +101,7 @@ export async function POST(req: Request) {
         logoUrl,
         brandKitId,
         promptConfig,
+        mediaComposition: body.mediaComposition ?? undefined,
         createdAt: now,
         updatedAt: now,
       })

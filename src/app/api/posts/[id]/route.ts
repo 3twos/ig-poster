@@ -81,6 +81,8 @@ export async function PUT(req: Request, ctx: Ctx) {
       update.shareProjectId = body.shareProjectId;
     if (body.brandKitId !== undefined)
       update.brandKitId = body.brandKitId;
+    if (body.mediaComposition !== undefined && body.mediaComposition !== null)
+      update.mediaComposition = body.mediaComposition;
 
     // Merge JSONB fields — guard against null incoming values
     if (body.brand !== undefined)

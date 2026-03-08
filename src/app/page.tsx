@@ -21,6 +21,7 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 
 import { AgentActivityPanel } from "@/components/agent-activity-panel";
 import { BrandKitModal } from "@/components/brand-kit-modal";
+import { CarouselComposer } from "@/components/carousel-composer";
 import { ChatPanel } from "@/components/chat";
 import { AppShell } from "@/components/app-shell";
 import { AssetManager } from "@/components/asset-manager";
@@ -68,6 +69,14 @@ import {
   INITIAL_BRAND,
   INITIAL_POST,
 } from "@/lib/types";
+import {
+  aspectRatioFromOrientation,
+  mediaCompositionEquals,
+  normalizeAssetSequence,
+  orientationFromAspectRatio,
+  reconcileMediaComposition,
+  type MediaComposition,
+} from "@/lib/media-composer";
 import {
   extractVideoMetadata,
   mediaTypeFromFile,
@@ -149,6 +158,19 @@ export default function Home() {
   const result: GenerationResponse | null = activePost?.result ?? null;
   const activeVariantId = activePost?.activeVariantId ?? null;
   const overlayLayouts = useMemo(() => activePost?.overlayLayouts ?? {}, [activePost?.overlayLayouts]);
+  const localAssetIds = useMemo(
+    () => localAssets.map((asset) => asset.id),
+    [localAssets],
+  );
+  const mediaComposition = useMemo(
+    () =>
+      reconcileMediaComposition(
+        activePost?.mediaComposition,
+        localAssetIds,
+        post.aspectRatio,
+      ),
+    [activePost?.mediaComposition, localAssetIds, post.aspectRatio],
+  );
   const activeSlideIndex = activePost?.activeSlideIndex ?? 0;
   const shareUrl = activePost?.shareUrl ?? null;
   const promptConfig: PromptConfigState = useMemo(
@@ -224,6 +246,32 @@ export default function Home() {
     setPublishMessageState({ postId: activePost.id, text: null });
     setEditorMode(false);
   }, [activePost?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!activePost) return;
+    if (mediaCompositionEquals(activePost.mediaComposition, mediaComposition)) {
+      return;
+    }
+    dispatch({
+      type: "SET_MEDIA_COMPOSITION",
+      postId: activePost.id,
+      mediaComposition,
+    });
+  }, [activePost, dispatch, mediaComposition]);
+
+  useEffect(() => {
+    if (!activePost || post.aspectRatio === "9:16") return;
+    const nextOrientation = orientationFromAspectRatio(post.aspectRatio);
+    if (mediaComposition.orientation === nextOrientation) return;
+    dispatch({
+      type: "SET_MEDIA_COMPOSITION",
+      postId: activePost.id,
+      mediaComposition: {
+        ...mediaComposition,
+        orientation: nextOrientation,
+      },
+    });
+  }, [activePost, dispatch, mediaComposition, post.aspectRatio]);
 
   const syncAssetsToPost = useCallback(
     (postId: string | null, assets: LocalAsset[]) => {
@@ -354,7 +402,94 @@ export default function Home() {
     return result.variants.find((v) => v.id === activeVariantId) ?? result.variants[0];
   }, [activeVariantId, result]);
 
+  const patchResult = useCallback(
+    (update: (current: GenerationResponse) => GenerationResponse) => {
+      if (!result) return;
+      dispatch({
+        type: "SET_RESULT",
+        postId: activePostIdRef.current ?? undefined,
+        result: update(result),
+        overlayLayouts,
+      });
+    },
+    [dispatch, overlayLayouts, result],
+  );
+
+  const updateMediaComposition = useCallback(
+    (update: (current: MediaComposition) => MediaComposition) => {
+      const postId = activePostIdRef.current;
+      if (!postId) return;
+      dispatch({
+        type: "SET_MEDIA_COMPOSITION",
+        postId,
+        mediaComposition: update(mediaComposition),
+      });
+    },
+    [dispatch, mediaComposition],
+  );
+
+  const updateActiveVariantAssetSequence = useCallback(
+    (nextSequence: string[]) => {
+      if (!activeVariant) return;
+      const normalized = normalizeAssetSequence(nextSequence, localAssetIds);
+      if (!normalized.length) return;
+      if (
+        normalized.length === activeVariant.assetSequence.length &&
+        normalized.every(
+          (assetId, index) => assetId === activeVariant.assetSequence[index],
+        )
+      ) {
+        return;
+      }
+
+      patchResult((current) => ({
+        ...current,
+        variants: current.variants.map((variant) =>
+          variant.id === activeVariant.id
+            ? { ...variant, assetSequence: normalized }
+            : variant,
+        ),
+      }));
+
+      if (activeSlideIndex >= normalized.length) {
+        dispatch({
+          type: "SET_ACTIVE_SLIDE",
+          index: Math.max(normalized.length - 1, 0),
+        });
+      }
+    },
+    [activeSlideIndex, activeVariant, dispatch, localAssetIds, patchResult],
+  );
+
   useEffect(() => { dispatch({ type: "SET_ACTIVE_SLIDE", index: 0 }); }, [activeVariantId, dispatch]);
+
+  useEffect(() => {
+    if (!result || localAssetIds.length === 0) return;
+    let didChange = false;
+
+    const nextVariants = result.variants.map((variant) => {
+      const filtered = normalizeAssetSequence(variant.assetSequence, localAssetIds);
+      if (
+        filtered.length === variant.assetSequence.length &&
+        filtered.every((assetId, index) => assetId === variant.assetSequence[index])
+      ) {
+        return variant;
+      }
+
+      didChange = true;
+      return {
+        ...variant,
+        assetSequence: filtered.length ? filtered : localAssetIds.slice(0, 1),
+      };
+    });
+
+    if (!didChange) return;
+
+    patchResult((current) => ({
+      ...current,
+      variants: nextVariants,
+    }));
+  }, [localAssetIds, patchResult, result]);
 
   const activeOverlayLayout = useMemo(() => {
     if (!activeVariant) return undefined;
@@ -364,15 +499,55 @@ export default function Home() {
     );
   }, [activeVariant, overlayLayouts]);
 
+  const handleCarouselComposerSequenceChange = useCallback(
+    (nextSequence: string[]) => {
+      updateActiveVariantAssetSequence(nextSequence);
+      const includedAssetIds = new Set(nextSequence);
+      updateMediaComposition((current) => ({
+        ...current,
+        items: current.items.map((item) => ({
+          ...item,
+          excludedFromPost: !includedAssetIds.has(item.assetId),
+        })),
+      }));
+    },
+    [updateActiveVariantAssetSequence, updateMediaComposition],
+  );
+
+  const handleCarouselOrientationChange = useCallback(
+    (orientation: MediaComposition["orientation"]) => {
+      updateMediaComposition((current) => ({
+        ...current,
+        orientation,
+      }));
+      dispatch({
+        type: "UPDATE_BRIEF",
+        brief: {
+          aspectRatio: aspectRatioFromOrientation(orientation),
+        },
+      });
+    },
+    [dispatch, updateMediaComposition],
+  );
+
   const assetMap = useMemo(() => new Map(localAssets.map((a) => [a.id, a])), [localAssets]);
+  const carouselComposerSequence = useMemo(() => {
+    if (!activeVariant || activeVariant.postType !== "carousel") {
+      return [];
+    }
+    const filtered = normalizeAssetSequence(activeVariant.assetSequence, localAssetIds);
+    return filtered.length ? filtered : localAssetIds.slice(0, 10);
+  }, [activeVariant, localAssetIds]);
 
   const orderedVariantAssets = useMemo(() => {
     if (!activeVariant) return localAssets;
-    const ordered = activeVariant.assetSequence.map((id) => assetMap.get(id)).filter((a): a is LocalAsset => Boolean(a));
+    const ordered = normalizeAssetSequence(activeVariant.assetSequence, localAssetIds)
+      .map((id) => assetMap.get(id))
+      .filter((a): a is LocalAsset => Boolean(a));
     if (!ordered.length) return localAssets;
     const used = new Set(ordered.map((a) => a.id));
     return [...ordered, ...localAssets.filter((a) => !used.has(a.id))];
-  }, [activeVariant, assetMap, localAssets]);
+  }, [activeVariant, assetMap, localAssetIds, localAssets]);
 
   const getDisplayVisual = (asset?: LocalAsset) => {
     if (!asset) return undefined;
@@ -670,7 +845,7 @@ export default function Home() {
     generation.setError(null); setSharingForPostId(postId);
     try {
       const pu = await uploadRenderedPoster();
-      const r = await fetch("/api/projects/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brand, post, assets: localAssets.filter((a) => a.storageUrl).map((a) => ({ id: a.id, name: a.name, mediaType: a.mediaType, durationSec: a.durationSec, posterUrl: a.posterUrl, url: a.storageUrl })), logoUrl: selectedLogo?.storageUrl, result, activeVariantId: activeVariant.id, overlayLayouts, renderedPosterUrl: pu }) });
+      const r = await fetch("/api/projects/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brand, post, assets: localAssets.filter((a) => a.storageUrl).map((a) => ({ id: a.id, name: a.name, mediaType: a.mediaType, durationSec: a.durationSec, posterUrl: a.posterUrl, url: a.storageUrl })), logoUrl: selectedLogo?.storageUrl, result, activeVariantId: activeVariant.id, overlayLayouts, mediaComposition, renderedPosterUrl: pu }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as { shareUrl?: string }; if (!j.shareUrl) throw new Error("No share link returned");
       if (!isPostStillActive(postId)) return;
@@ -970,6 +1145,16 @@ export default function Home() {
                             </PostBriefActions>
                           </div>
                           <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} onSaveNow={saveNow} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                          {activeVariant?.postType === "carousel" ? (
+                            <CarouselComposer
+                              assets={localAssets}
+                              assetSequence={carouselComposerSequence}
+                              orientation={mediaComposition.orientation}
+                              onAssetSequenceChange={handleCarouselComposerSequenceChange}
+                              onOrientationChange={handleCarouselOrientationChange}
+                              disabled={isAgentBusy}
+                            />
+                          ) : null}
                         </div>
                       </div>
                     </section>
@@ -1031,6 +1216,16 @@ export default function Home() {
             <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} />
             <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} onSaveNow={saveNow} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
+            {activeVariant?.postType === "carousel" ? (
+              <CarouselComposer
+                assets={localAssets}
+                assetSequence={carouselComposerSequence}
+                orientation={mediaComposition.orientation}
+                onAssetSequenceChange={handleCarouselComposerSequenceChange}
+                onOrientationChange={handleCarouselOrientationChange}
+                disabled={isAgentBusy}
+              />
+            ) : null}
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
               if (!activeVariant) return;
               dispatch({

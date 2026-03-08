@@ -11,6 +11,7 @@
 
 - Generates exactly 3 creative variants per request, including strategy rationale, caption, hashtags, and format-aware plans (single image, carousel, reel).
 - Accepts mixed media assets (images + short videos), with drag-and-drop reorderable asset management and automatic video metadata extraction for better planning.
+- For carousel variants, supports a dedicated composer strip with authoritative add/reorder/remove controls and feed-orientation switching (`square`, `portrait`, `landscape`) backed by persisted media-composition state.
 - Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
 - New posts default to the first available brand kit for that user (when one exists), so brand/prompt context and the kit's primary logo are prefilled consistently.
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
@@ -35,7 +36,7 @@
 ## Key Features
 
 - Workspace login gate for all private pages and APIs; `/share/<id>` remains a public, read-only link.
-- Postgres-backed persistent post workspace (create/select/archive/delete + autosave).
+- Postgres-backed persistent post workspace (create/select/archive/delete + autosave), including persisted carousel composition state.
 - Multi-model LLM generation pipeline with strict schema validation, supporting prioritized model lists with Fallback and Parallel execution modes.
 - Deterministic fallback generation when no LLM credentials are available or all models fail.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
@@ -51,13 +52,14 @@
    - Select a brand kit (or use the default), choose one of that kit's named logos in the post brief, use the Asset Manager controls to attach assets, fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
-   - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, iterate prompts, and fine-tune the canvas layout or copy without regenerating.
+   - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, reorder carousel media in the composer, and fine-tune the canvas layout or copy without regenerating.
 
 3. Collaborate asynchronously
    - Save a project snapshot and send a share link so teammates can review the selected concept.
 
 4. Publish immediately
    - Connect Instagram via OAuth (or env credentials), then publish selected concept directly.
+   - For carousel variants, use the carousel composer to control which items are included, their order, and the feed orientation before publishing.
    - Optional metadata for image posts: search Meta places to fill `locationId`, or paste one manually, and place user tags visually on the rendered poster with x/y fallback fields.
 
 5. Schedule approved content
