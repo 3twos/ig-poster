@@ -151,12 +151,21 @@ export const CustomOverlayBlockSchema = OverlayBlockSchema.extend({
   label: z.string().trim().min(1).max(32).optional().default("Custom"),
 });
 
+export const LogoPositionSchema = z.object({
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  width: z.number().min(3).max(100),
+  height: z.number().min(2).max(100),
+  visible: z.boolean().optional().default(true),
+});
+
 export const OverlayLayoutSchema = z.object({
   hook: OverlayBlockSchema,
   headline: OverlayBlockSchema,
   supportingText: OverlayBlockSchema,
   cta: OverlayBlockSchema,
   custom: z.array(CustomOverlayBlockSchema).max(6).optional().default([]),
+  logo: LogoPositionSchema.optional(),
 });
 
 export const PublishOutcomeInsightsSchema = z.object({
@@ -192,7 +201,16 @@ export type InternalGenerationResponse = z.infer<typeof InternalGenerationRespon
 export type OverlayBlock = z.infer<typeof OverlayBlockSchema>;
 export type CustomOverlayBlock = z.infer<typeof CustomOverlayBlockSchema>;
 export type OverlayLayout = z.infer<typeof OverlayLayoutSchema>;
+export type LogoPosition = z.infer<typeof LogoPositionSchema>;
 export type PublishOutcome = z.infer<typeof PublishOutcomeSchema>;
+
+export const DEFAULT_LOGO_POSITION: LogoPosition = {
+  x: 3,
+  y: 3,
+  width: 20,
+  height: 6,
+  visible: true,
+};
 
 const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
   "hero-quote": {
@@ -201,6 +219,7 @@ const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
     supportingText: { x: 8, y: 82, width: 84, height: 12, fontScale: 1, visible: true, text: "" },
     cta: { x: 8, y: 93, width: 64, height: 6, fontScale: 1, visible: true, text: "" },
     custom: [],
+    logo: { ...DEFAULT_LOGO_POSITION },
   },
   "split-story": {
     hook: { x: 6, y: 60, width: 56, height: 7, fontScale: 1, visible: true, text: "" },
@@ -208,6 +227,7 @@ const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
     supportingText: { x: 6, y: 81, width: 58, height: 11, fontScale: 1, visible: true, text: "" },
     cta: { x: 6, y: 92, width: 56, height: 6, fontScale: 1, visible: true, text: "" },
     custom: [],
+    logo: { ...DEFAULT_LOGO_POSITION },
   },
   magazine: {
     hook: { x: 6, y: 72, width: 72, height: 7, fontScale: 1, visible: true, text: "" },
@@ -215,6 +235,7 @@ const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
     supportingText: { x: 6, y: 90, width: 84, height: 8, fontScale: 1, visible: true, text: "" },
     cta: { x: 6, y: 96, width: 56, height: 5, fontScale: 1, visible: true, text: "" },
     custom: [],
+    logo: { ...DEFAULT_LOGO_POSITION },
   },
   "minimal-logo": {
     hook: { x: 18, y: 24, width: 64, height: 8, fontScale: 1, visible: true, text: "" },
@@ -222,6 +243,7 @@ const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
     supportingText: { x: 16, y: 56, width: 68, height: 16, fontScale: 1, visible: true, text: "" },
     cta: { x: 26, y: 74, width: 48, height: 8, fontScale: 1, visible: true, text: "" },
     custom: [],
+    logo: { ...DEFAULT_LOGO_POSITION },
   },
 };
 
@@ -231,6 +253,7 @@ export const createDefaultOverlayLayout = (layout: CreativeLayout): OverlayLayou
   supportingText: { ...OVERLAY_DEFAULTS[layout].supportingText },
   cta: { ...OVERLAY_DEFAULTS[layout].cta },
   custom: [],
+  logo: { ...DEFAULT_LOGO_POSITION },
 });
 
 const DEFAULT_CUSTOM_OVERLAY_BLOCK: Omit<CustomOverlayBlock, "id"> = {
@@ -280,6 +303,7 @@ export const normalizeOverlayLayout = (
           normalizeCustomOverlayBlock(block, index),
         )
       : [],
+    logo: layout?.logo ? { ...DEFAULT_LOGO_POSITION, ...layout.logo } : { ...DEFAULT_LOGO_POSITION },
   };
 };
 
