@@ -25,7 +25,7 @@ import { ChatPanel } from "@/components/chat";
 import { AppShell } from "@/components/app-shell";
 import { AssetManager } from "@/components/asset-manager";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
-import { PostBriefForm } from "@/components/post-brief-form";
+import { PostBriefActions, PostBriefForm } from "@/components/post-brief-form";
 import { PosterSection } from "@/components/poster-section";
 import { MobileSidebarDrawer, SidebarContent } from "@/components/post-sidebar";
 import { PublishSection } from "@/components/publish-section";
@@ -997,17 +997,24 @@ export default function Home() {
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
-              <ResizablePanel defaultSize={52} minSize={35}>
+              <ResizablePanel defaultSize={58} minSize={35}>
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,27rem)_minmax(0,1fr)]">
+                        <div className="min-w-0 max-w-[27rem]">
+                          <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} compact showHeader={false} showActions={false} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                        </div>
+                        <div className="min-w-0 space-y-6">
+                          <div className="w-full max-w-[40rem]">
+                            <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} />
+                          </div>
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                        </div>
+                      </div>
                     </section>
                     <section className="border-b border-white/10 pb-6">
                       <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
-                    </section>
-                    <section className="border-b border-white/10 pb-6">
-                      <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
                     </section>
                     {result && (
                       <section className="border-b border-white/10 pb-6">
@@ -1030,7 +1037,7 @@ export default function Home() {
                 </ScrollArea>
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
-              <ResizablePanel panelRef={rightPanelRef} defaultSize={30} minSize={18} collapsible collapsedSize={0} onResize={(size) => setRightCollapsed(size.asPercentage === 0)} className="flex flex-col">
+              <ResizablePanel panelRef={rightPanelRef} defaultSize={24} minSize={18} collapsible collapsedSize={0} onResize={(size) => setRightCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div className="flex h-full flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl mr-4 overflow-hidden">
                   {/* Agent / Chat tab switcher */}
                   <div className="flex shrink-0 border-b border-white/10" role="tablist" aria-label="Right panel tabs">

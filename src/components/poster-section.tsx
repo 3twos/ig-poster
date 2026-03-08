@@ -5,6 +5,7 @@ import type { RefObject } from "react";
 
 import { PosterPreview } from "@/components/poster-preview";
 import type { AspectRatio, CreativeVariant, OverlayLayout } from "@/lib/creative";
+import { cn } from "@/lib/utils";
 
 type Props = {
   posterRef: RefObject<HTMLDivElement | null>;
@@ -17,6 +18,7 @@ type Props = {
   editorMode: boolean;
   overlayLayout?: OverlayLayout;
   activeSlideIndex: number;
+  previewClassName?: string;
   dispatch: (action: Record<string, unknown>) => void;
 };
 
@@ -31,11 +33,17 @@ export function PosterSection({
   editorMode,
   overlayLayout,
   activeSlideIndex,
+  previewClassName,
   dispatch,
 }: Props) {
   if (!activeVariant) {
     return (
-      <div className="mx-auto flex aspect-[4/5] max-w-[430px] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300">
+      <div
+        className={cn(
+          "mx-auto flex aspect-[4/5] w-full max-w-[430px] items-center justify-center rounded-3xl border border-dashed border-white/25 bg-white/5 text-sm text-slate-300",
+          previewClassName,
+        )}
+      >
         Upload assets and generate concepts to preview your post.
       </div>
     );
@@ -46,7 +54,7 @@ export function PosterSection({
       key={activeVariant.id}
       initial={{ opacity: 0.2 }}
       animate={{ opacity: 1 }}
-      className="mx-auto max-w-[430px]"
+      className={cn("mx-auto w-full max-w-[430px]", previewClassName)}
     >
       <PosterPreview
         ref={posterRef}
