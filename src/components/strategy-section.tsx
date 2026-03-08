@@ -76,7 +76,10 @@ type Props = {
   editorMode: boolean;
   isRefining: boolean;
   dispatch: (action: Record<string, unknown>) => void;
+  captionValue: string;
   onRefineVariant: (instruction?: string) => void;
+  onCaptionChange: (value: string) => void;
+  onUseGeneratedCaption: () => void;
   onCopyCaption: () => void;
   copyState: "idle" | "done";
   overlayLayout?: OverlayLayout;
@@ -443,7 +446,10 @@ export function StrategySection({
   editorMode,
   isRefining,
   dispatch,
+  captionValue,
   onRefineVariant,
+  onCaptionChange,
+  onUseGeneratedCaption,
   onCopyCaption,
   copyState,
   overlayLayout,
@@ -605,22 +611,45 @@ export function StrategySection({
           <div className="rounded-2xl border border-white/15 bg-black/25 p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold tracking-[0.18em] text-slate-300 uppercase">
-                Caption Bundle
+                Post Caption
               </p>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="xs" onClick={onCopyCaption}>
-                    <Copy className="h-3.5 w-3.5" />
-                    {copyState === "done" ? "Copied" : "Copy"}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Copy caption and hashtags</TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="xs" onClick={onUseGeneratedCaption}>
+                  Use generated
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="xs" onClick={onCopyCaption}>
+                      <Copy className="h-3.5 w-3.5" />
+                      {copyState === "done" ? "Copied" : "Copy"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy the current post caption</TooltipContent>
+                </Tooltip>
+              </div>
             </div>
-            <p className="mt-2 text-sm text-slate-200">{activeVariant.caption}</p>
-            <p className="mt-3 text-xs text-orange-200">
-              {activeVariant.hashtags.join(" ")}
+            <Textarea
+              value={captionValue}
+              onChange={(event) => onCaptionChange(event.target.value)}
+              className="mt-3 min-h-[140px] text-sm"
+              maxLength={2200}
+              placeholder={`${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`}
+            />
+            <p className="mt-2 text-[11px] text-slate-400">
+              Publishing uses this field. Leave it blank to fall back to the generated suggestion for the selected variant.
             </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {captionValue.trim().length}/2200
+            </p>
+            <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+                Generated Suggestion
+              </p>
+              <p className="mt-2 text-sm text-slate-200">{activeVariant.caption}</p>
+              <p className="mt-3 text-xs text-orange-200">
+                {activeVariant.hashtags.join(" ")}
+              </p>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-white/15 bg-black/25 p-4">

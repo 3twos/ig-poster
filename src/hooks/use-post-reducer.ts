@@ -1,7 +1,13 @@
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
 import type { MediaComposition } from "@/lib/media-composer";
 import type { StoredAsset } from "@/lib/project";
-import type { BrandState, PostState, PromptConfigState } from "@/lib/types";
+import type {
+  BrandState,
+  PostState,
+  PromptConfigState,
+  PublishSettingsState,
+} from "@/lib/types";
+import { INITIAL_PUBLISH_SETTINGS } from "@/lib/types";
 import type { PostRow, PublishHistoryEntry } from "@/db/schema";
 
 /** Client-side post state — extends DB row with transient fields */
@@ -19,6 +25,7 @@ export type PostDraft = {
   activeVariantId: string | null;
   overlayLayouts: Record<string, OverlayLayout>;
   mediaComposition: MediaComposition;
+  publishSettings: PublishSettingsState;
   renderedPosterUrl: string | null;
   shareUrl: string | null;
   shareProjectId: string | null;
@@ -34,6 +41,11 @@ export type PostAction =
   | { type: "UPDATE_BRIEF"; brief: Partial<PostState> }
   | { type: "SET_ASSETS"; assets: StoredAsset[]; postId?: string }
   | { type: "SET_MEDIA_COMPOSITION"; mediaComposition: MediaComposition; postId?: string }
+  | {
+      type: "SET_PUBLISH_SETTINGS";
+      publishSettings: Partial<PublishSettingsState>;
+      postId?: string;
+    }
   | { type: "ADD_ASSET"; asset: StoredAsset }
   | { type: "SET_LOGO"; logoUrl: string | null; postId?: string }
   | { type: "SET_PROMPT_CONFIG"; config: Partial<PromptConfigState> }
@@ -86,6 +98,10 @@ export function rowToDraft(row: PostRow): PostDraft {
     activeVariantId: row.activeVariantId,
     overlayLayouts: row.overlayLayouts ?? {},
     mediaComposition: row.mediaComposition ?? { orientation: "portrait", items: [] },
+    publishSettings: {
+      ...INITIAL_PUBLISH_SETTINGS,
+      ...(row.publishSettings ?? {}),
+    },
     renderedPosterUrl: row.renderedPosterUrl,
     shareUrl: row.shareUrl,
     shareProjectId: row.shareProjectId,
@@ -126,6 +142,16 @@ export function postReducer(
     case "SET_MEDIA_COMPOSITION":
       if (!matchesOwnedAction(state, action)) return state;
       return { ...state, mediaComposition: action.mediaComposition };
+
+    case "SET_PUBLISH_SETTINGS":
+      if (!matchesOwnedAction(state, action)) return state;
+      return {
+        ...state,
+        publishSettings: {
+          ...state.publishSettings,
+          ...action.publishSettings,
+        },
+      };
 
     case "ADD_ASSET":
       if (!state) return state;

@@ -126,4 +126,26 @@ describe("PostListItem quick actions", () => {
     // Menu path should still open the same confirmation dialog.
     expect(screen.queryByRole("alertdialog")).not.toBeNull();
   });
+
+  it("exposes duplicate from the post menu", () => {
+    const duplicatePost = vi.fn();
+
+    renderPostListItem(
+      {
+        post: makePost(),
+        isActive: false,
+        onSelect: vi.fn(),
+        onDuplicate: duplicatePost,
+        onArchive: vi.fn(),
+        onDelete: vi.fn(),
+      },
+    );
+
+    const menuTrigger = screen.getByRole("button", { name: "Post options" });
+    fireEvent.pointerDown(menuTrigger, { button: 0 });
+    fireEvent.click(menuTrigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+
+    expect(duplicatePost).toHaveBeenCalledTimes(1);
+  });
 });

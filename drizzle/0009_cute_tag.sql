@@ -1,0 +1,1 @@
+ALTER TABLE "posts" ADD COLUMN "publish_settings" jsonb DEFAULT '{"reelShareToFeed":true}'::jsonb NOT NULL;

@@ -220,7 +220,7 @@ describe("PublishJobQueue", () => {
     render(
       <PublishJobQueue
         activePostId="post-1"
-        localTimeZone="America/Los_Angeles"
+        localTimeZone="America/New_York"
         refreshKey={0}
       />,
     );
@@ -243,7 +243,7 @@ describe("PublishJobQueue", () => {
     expect(patchCall?.[1]).toMatchObject({ method: "PATCH" });
     expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
       action: "edit",
-      publishAt: new Date("2026-03-11T09:45").toISOString(),
+      publishAt: "2026-03-11T13:45:00.000Z",
     });
   });
 

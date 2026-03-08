@@ -42,6 +42,7 @@ type PostBriefActionsProps = {
   onCancelGenerate: () => void;
   onExportPoster: () => void;
   children?: React.ReactNode;
+  extraActions?: React.ReactNode;
 };
 
 type PostBriefAspectRatioProps = {
@@ -71,6 +72,7 @@ type Props = {
   onExportPoster: () => void;
   onSelectBrandKit?: (kitId: string) => void;
   onSelectLogo?: (logoUrl: string | null) => void;
+  extraActions?: React.ReactNode;
 };
 
 export function PostBriefActions({
@@ -83,6 +85,7 @@ export function PostBriefActions({
   onCancelGenerate,
   onExportPoster,
   children,
+  extraActions,
 }: PostBriefActionsProps) {
   return (
     <div className="space-y-3">
@@ -107,6 +110,7 @@ export function PostBriefActions({
           <Download className="h-4 w-4" />
           Export PNG
         </Button>
+        {extraActions}
         {children}
       </div>
 
@@ -181,6 +185,7 @@ export function PostBriefForm({
   onExportPoster,
   onSelectBrandKit,
   onSelectLogo,
+  extraActions,
 }: Props) {
   const hasBrandKitSelector = Boolean(
     brandKits && brandKits.length > 0 && onSelectBrandKit,
@@ -371,6 +376,7 @@ export function PostBriefForm({
           onGenerate={onGenerate}
           onCancelGenerate={onCancelGenerate}
           onExportPoster={onExportPoster}
+          extraActions={extraActions}
         />
       ) : null}
     </div>

@@ -17,12 +17,14 @@
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
-- Sidebar post rows expose quick publish actions (`Post now`, `Post at`) in the context menu, in addition to archive/delete controls.
+- Sidebar post rows expose quick publish actions (`Post now`, `Post at`) plus `Duplicate` in the context menu, in addition to archive/delete controls.
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed Postgres queue.
-- Surfaces a publish queue in the publish section so users can review queued/processing/failed jobs, cancel jobs, retry failed jobs immediately, and edit queued/failed publish details (caption, first comment, publish time, media URLs, image metadata, and reel feed-sharing) without leaving the editor.
-- For single-image posts, supports Meta location search assist and click-to-place user tagging on the rendered poster preview, with numeric x/y fallback for fine tuning.
+- Promotes caption editing into a persisted post-composer field, while keeping the generated caption bundle available as a one-click suggestion.
+- Adds explicit lifecycle controls for `Finish later`, `Duplicate post`, and a planner sheet for scheduled posts.
+- Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor.
+- Supports Meta location search assist plus structured user tagging for single-image posts, reels, and carousel image items, with per-item carousel tagging persisted in media-composition state.
 - For reels, supports choosing whether the publish should also appear on the main feed (`share_to_feed`), with the default remaining on.
 - Automatically fails stale `processing` publish jobs after a timeout so abandoned work does not keep consuming publish-window capacity, and shows recent job activity directly in the queue UI.
 - Enforces Meta Content Publishing throughput guardrails (50 published posts per rolling 24-hour window) for immediate publishes, and automatically defers queued jobs when the window is saturated.
@@ -36,7 +38,7 @@
 ## Key Features
 
 - Workspace login gate for all private pages and APIs; `/share/<id>` remains a public, read-only link.
-- Postgres-backed persistent post workspace (create/select/archive/delete + autosave), including persisted carousel composition state.
+- Postgres-backed persistent post workspace (create/select/duplicate/archive/delete + autosave), including persisted carousel composition state and publish settings.
 - Multi-model LLM generation pipeline with strict schema validation, supporting prioritized model lists with Fallback and Parallel execution modes.
 - Deterministic fallback generation when no LLM credentials are available or all models fail.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
@@ -52,7 +54,7 @@
    - Select a brand kit (or use the default), choose one of that kit's named logos in the post brief, use the Asset Manager controls to attach assets, fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
-   - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, reorder carousel media in the composer, and fine-tune the canvas layout or copy without regenerating.
+   - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, and fine-tune the canvas layout or copy without regenerating.
 
 3. Collaborate asynchronously
    - Save a project snapshot and send a share link so teammates can review the selected concept.
@@ -64,7 +66,7 @@
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.
-   - Review and manage queued/failed jobs directly from the publish section.
+   - Review scheduled posts from the planner, move them back to draft when needed, and use the queue for lower-level retry/edit diagnostics.
 
 6. Refine ideas with AI chat
    - Open the Chat tab in the right panel to brainstorm captions, get hashtag suggestions, or refine creative direction in a multi-turn conversation.

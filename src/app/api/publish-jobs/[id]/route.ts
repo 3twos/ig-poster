@@ -9,7 +9,10 @@ import {
   MetaMediaPreflightError,
   preflightMetaMediaForPublish,
 } from "@/lib/meta-media-preflight";
-import { PublishJobUpdateRequestSchema } from "@/lib/meta-schemas";
+import {
+  getMetaMetadataValidationIssues,
+  PublishJobUpdateRequestSchema,
+} from "@/lib/meta-schemas";
 import { appendPublishJobEvent, markPostScheduled } from "@/lib/publish-jobs";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
@@ -48,16 +51,27 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Publish job not found" }, { status: 404 });
     }
 
-    if (payload.action === "cancel") {
+    if (payload.action === "cancel" || payload.action === "move-to-draft") {
       if (existing.status === "published" || existing.status === "canceled") {
         return NextResponse.json(
-          { error: `Cannot cancel a ${existing.status} job.` },
+          {
+            error:
+              payload.action === "move-to-draft"
+                ? `Cannot move a ${existing.status} job back to draft.`
+                : `Cannot cancel a ${existing.status} job.`,
+          },
           { status: 409 },
         );
       }
       if (existing.status === "processing") {
         return NextResponse.json(
           { error: "Cannot cancel a job that is currently processing." },
+          { status: 409 },
+        );
+      }
+      if (payload.action === "move-to-draft" && !existing.postId) {
+        return NextResponse.json(
+          { error: "Only saved posts can be moved back to draft." },
           { status: 409 },
         );
       }
@@ -70,7 +84,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
           updatedAt: new Date(),
           events: appendPublishJobEvent(existing.events, {
             type: "canceled",
-            detail: "Canceled by user.",
+            detail:
+              payload.action === "move-to-draft"
+                ? "Moved back to draft by user."
+                : "Canceled by user.",
           }),
         })
         .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, ownerHash)))
@@ -90,7 +107,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
           await db
             .update(posts)
             .set({
-              status: post.result ? "generated" : "draft",
+              status:
+                payload.action === "move-to-draft"
+                  ? "draft"
+                  : post.result
+                    ? "generated"
+                    : "draft",
               updatedAt: new Date(),
             })
             .where(and(eq(posts.id, existing.postId), eq(posts.ownerHash, ownerHash)));
@@ -187,17 +209,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
     const nextUserTags = payload.userTags !== undefined
       ? payload.userTags
       : existing.userTags;
-    const hasLocationMetadata =
-      nextLocationId !== null && nextLocationId !== undefined;
-    const hasUserTagMetadata = (nextUserTags?.length ?? 0) > 0;
+    const metadataIssues = getMetaMetadataValidationIssues({
+      media: nextMedia,
+      locationId: nextLocationId,
+      userTags: nextUserTags,
+    });
 
-    if (
-      nextMedia.mode !== "image" &&
-      (hasLocationMetadata || hasUserTagMetadata)
-    ) {
+    if (metadataIssues.length > 0) {
       return NextResponse.json(
         {
-          error: "Location and user tags are currently supported only for image posts.",
+          error: metadataIssues[0]?.message ?? "Publish metadata is not valid for this media type.",
         },
         { status: 400 },
       );

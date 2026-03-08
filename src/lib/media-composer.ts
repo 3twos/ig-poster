@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { AspectRatio } from "@/lib/creative";
+import { MetaUserTagSchema } from "@/lib/meta-schemas";
 
 export const ComposerOrientationSchema = z.enum([
   "square",
@@ -26,6 +27,7 @@ export const MediaCompositionItemSchema = z.object({
   ]).optional(),
   excludedFromPost: z.boolean().optional(),
   coverPriority: z.number().int().min(1).max(20).optional(),
+  userTags: z.array(MetaUserTagSchema).max(20).optional(),
 });
 
 export const MediaCompositionSchema = z.object({
@@ -58,6 +60,7 @@ const normalizeItem = (
   rotation: item.rotation ?? 0,
   excludedFromPost: item.excludedFromPost ?? false,
   coverPriority: item.coverPriority,
+  userTags: item.userTags?.length ? item.userTags : undefined,
 });
 
 export const orientationFromAspectRatio = (
@@ -106,6 +109,25 @@ export const reconcileMediaComposition = (
   return {
     orientation: requestedOrientation,
     items: nextItems,
+  };
+};
+
+export const alignMediaCompositionOrientation = (
+  composition: MediaComposition,
+  aspectRatio: AspectRatio,
+): MediaComposition => {
+  if (aspectRatio === "9:16") {
+    return composition;
+  }
+
+  const orientation = orientationFromAspectRatio(aspectRatio);
+  if (composition.orientation === orientation) {
+    return composition;
+  }
+
+  return {
+    ...composition,
+    orientation,
   };
 };
 

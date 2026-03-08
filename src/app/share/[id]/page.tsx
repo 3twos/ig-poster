@@ -101,6 +101,21 @@ export default function ShareProjectPage() {
 
     return toVisualUrl(orderedAssets[1]);
   }, [activeVariant, orderedAssets, project]);
+  const effectiveCaption = useMemo(() => {
+    if (!project || !activeVariant) {
+      return "";
+    }
+
+    const persistedCaption = project.publishSettings.caption?.trim();
+    if (persistedCaption) {
+      return persistedCaption;
+    }
+
+    const hashtags = activeVariant.hashtags.join(" ");
+    return hashtags
+      ? `${activeVariant.caption}\n\n${hashtags}`
+      : activeVariant.caption;
+  }, [activeVariant, project]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-10 text-white md:px-8">
@@ -162,8 +177,7 @@ export default function ShareProjectPage() {
               <p className="mt-3 text-3xl leading-tight font-semibold tracking-tight">{activeVariant.headline}</p>
               <p className="mt-3 text-sm text-slate-300">{activeVariant.supportingText}</p>
               <p className="mt-4 text-sm font-semibold text-white">{activeVariant.cta}</p>
-              <p className="mt-6 text-sm text-slate-200">{activeVariant.caption}</p>
-              <p className="mt-3 text-xs text-orange-200">{activeVariant.hashtags.join(" ")}</p>
+              <p className="mt-6 text-sm whitespace-pre-wrap text-slate-200">{effectiveCaption}</p>
               <p className="mt-5 text-xs text-slate-400">Created {new Date(project.createdAt).toLocaleString()}</p>
             </div>
           </div>

@@ -102,6 +102,7 @@ export async function POST(req: Request) {
         brandKitId,
         promptConfig,
         mediaComposition: body.mediaComposition ?? undefined,
+        publishSettings: body.publishSettings ?? undefined,
         createdAt: now,
         updatedAt: now,
       })
