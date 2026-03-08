@@ -172,4 +172,26 @@ describe("creative helpers", () => {
     expect(normalized.custom).toEqual([]);
     expect(normalized.hook.visible).toBe(true);
   });
+
+  it("normalizes custom overlay ids and defaults", () => {
+    const normalized = normalizeOverlayLayout("hero-quote", {
+      custom: [
+        {
+          id: "   ",
+          label: " Custom Label ",
+          text: "Custom text",
+          x: 10,
+          y: 12,
+          width: 40,
+          height: 10,
+          fontScale: 1,
+          visible: true,
+        },
+      ],
+    });
+
+    expect(normalized.custom).toHaveLength(1);
+    expect(normalized.custom[0]?.id).toBe("custom-1");
+    expect(normalized.custom[0]?.label).toBe(" Custom Label ");
+  });
 });

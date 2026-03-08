@@ -49,7 +49,6 @@ import { usePostContext } from "@/contexts/post-context";
 import { useGeneration } from "@/hooks/use-generation";
 import {
   createDefaultOverlayLayout,
-  normalizeOverlayLayout,
   type GenerationResponse,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
@@ -353,9 +352,9 @@ export default function Home() {
 
   const activeOverlayLayout = useMemo(() => {
     if (!activeVariant) return undefined;
-    return normalizeOverlayLayout(
-      activeVariant.layout,
-      overlayLayouts[activeVariant.id] ?? createDefaultOverlayLayout(activeVariant.layout),
+    return (
+      overlayLayouts[activeVariant.id] ??
+      createDefaultOverlayLayout(activeVariant.layout)
     );
   }, [activeVariant, overlayLayouts]);
 

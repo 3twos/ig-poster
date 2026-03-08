@@ -7,6 +7,7 @@ import { Rnd } from "react-rnd";
 import {
   normalizeOverlayLayout,
   type AspectRatio,
+  type CanonicalOverlayKey,
   type CreativeVariant,
   type OverlayLayout,
 } from "@/lib/creative";
@@ -34,8 +35,6 @@ type PosterPreviewProps = {
   activeSlideIndex?: number;
   onSlideChange?: (index: number) => void;
 };
-
-type CanonicalOverlayKey = "hook" | "headline" | "supportingText" | "cta";
 
 type OverlayCanvasBlock = {
   id: string;

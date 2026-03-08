@@ -93,6 +93,11 @@ const ReelPlanSchema = z.object({
 });
 
 export type CreativeLayout = z.infer<typeof LayoutSchema>;
+export type CanonicalOverlayKey =
+  | "hook"
+  | "headline"
+  | "supportingText"
+  | "cta";
 
 export const CreativeVariantSchema = z.object({
   id: z.string().trim().min(1),

@@ -24,13 +24,12 @@ import {
 } from "@/components/ui/tooltip";
 import type { SaveStatus } from "@/hooks/use-auto-save";
 import type {
+  CanonicalOverlayKey,
   CreativeVariant,
   GenerationResponse,
   OverlayLayout,
 } from "@/lib/creative";
 import { cn } from "@/lib/utils";
-
-type CanonicalOverlayKey = "hook" | "headline" | "supportingText" | "cta";
 
 const REFINE_PRESETS = [
   {
