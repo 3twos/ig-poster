@@ -61,6 +61,7 @@ type OverlayCanvasBlock = {
   className: string;
   containerClassName: string;
   contentClassName: string;
+  borderRadius: number;
 };
 
 const ASPECT_MAP: Record<AspectRatio, string> = {
@@ -113,8 +114,9 @@ const buildOverlayBlocks = (
       type: "canonical",
       ...overlayLayout.hook,
       text: overlayLayout.hook.text.trim() || resolvedCopy.hook,
+      borderRadius: overlayLayout.hook.borderRadius ?? 16,
       className: "text-xs font-semibold tracking-[0.22em] uppercase text-white/80",
-      containerClassName: "rounded-2xl bg-black/28 backdrop-blur-sm",
+      containerClassName: "bg-black/28 backdrop-blur-sm",
       contentClassName: alignClass,
     },
     {
@@ -124,8 +126,9 @@ const buildOverlayBlocks = (
       type: "canonical",
       ...overlayLayout.headline,
       text: overlayLayout.headline.text.trim() || resolvedCopy.headline,
+      borderRadius: overlayLayout.headline.borderRadius ?? 26,
       className: "text-3xl leading-tight font-semibold text-white",
-      containerClassName: "rounded-[26px] bg-black/42 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.9)] backdrop-blur-md",
+      containerClassName: "bg-black/42 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.9)] backdrop-blur-md",
       contentClassName: alignClass,
     },
     {
@@ -135,8 +138,9 @@ const buildOverlayBlocks = (
       type: "canonical",
       ...overlayLayout.supportingText,
       text: overlayLayout.supportingText.text.trim() || resolvedCopy.supportingText,
+      borderRadius: overlayLayout.supportingText.borderRadius ?? 24,
       className: "text-sm leading-relaxed text-white/90",
-      containerClassName: "rounded-[24px] bg-black/36 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur-md",
+      containerClassName: "bg-black/36 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur-md",
       contentClassName: alignClass,
     },
     {
@@ -146,6 +150,7 @@ const buildOverlayBlocks = (
       type: "canonical",
       ...overlayLayout.cta,
       text: overlayLayout.cta.text.trim() || resolvedCopy.cta,
+      borderRadius: overlayLayout.cta.borderRadius ?? 9999,
       className:
         "inline-flex rounded-full border border-white/35 bg-black/20 px-3 py-1 text-xs font-semibold uppercase text-white",
       containerClassName: "bg-transparent",
@@ -164,8 +169,9 @@ const buildOverlayBlocks = (
     height: block.height,
     fontScale: block.fontScale,
     visible: block.visible,
+    borderRadius: block.borderRadius ?? 24,
     className: "text-sm leading-relaxed text-white",
-    containerClassName: "rounded-[24px] bg-black/34 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.88)] backdrop-blur-md",
+    containerClassName: "bg-black/34 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.88)] backdrop-blur-md",
     contentClassName: alignClass,
   }));
 
@@ -184,7 +190,7 @@ const OverlayBlockBody = ({
 }: {
   block: OverlayCanvasBlock;
   isEditing?: boolean;
-  onTextCommit?: (text: string) => void;
+  onTextCommit?: (text: string, contentHeight?: number) => void;
   onEditStart?: () => void;
 }) => {
   const spanRef = useRef<HTMLSpanElement>(null);
@@ -200,7 +206,10 @@ const OverlayBlockBody = ({
       return;
     }
     if (!onTextCommit || !spanRef.current) return;
-    onTextCommit(spanRef.current.textContent ?? "");
+    // Measure the span's natural height (not the min-h-full wrapper) for auto-sizing
+    const contentHeight = spanRef.current.scrollHeight;
+    // Add padding from the body container (p-3 = 12px * 2 = 24px)
+    onTextCommit(spanRef.current.textContent ?? "", contentHeight ? contentHeight + 24 : undefined);
   }, [block.text, onTextCommit]);
 
   const handleKeyDown = useCallback(
@@ -244,6 +253,7 @@ const OverlayBlockBody = ({
         block.containerClassName,
         block.key === "cta" ? "items-start" : "items-stretch",
       )}
+      style={{ borderRadius: block.borderRadius }}
       onDoubleClick={onEditStart}
     >
       <div
@@ -287,11 +297,27 @@ const OverlayBlock = ({
       minHeight: `${block.height}%`,
     }}
   >
-    <div className={cn("min-h-full w-full", editable && "border border-white/10")}>
+    <div
+      className={cn("min-h-full w-full", editable && "border border-white/10")}
+      style={{ borderRadius: block.borderRadius }}
+    >
       <OverlayBlockBody block={block} />
     </div>
   </div>
 );
+
+/** Convert pixel rect to percent-of-frame, clamping to given minimums. */
+const toPercentRect = (
+  data: { x: number; y: number; width: number; height: number },
+  frame: { width: number; height: number },
+  minWidth = 5,
+  minHeight = 5,
+) => ({
+  x: Math.max(0, Math.min(100, (data.x / frame.width) * 100)),
+  y: Math.max(0, Math.min(100, (data.y / frame.height) * 100)),
+  width: Math.max(minWidth, Math.min(100, (data.width / frame.width) * 100)),
+  height: Math.max(minHeight, Math.min(100, (data.height / frame.height) * 100)),
+});
 
 /* ── Phase 4: LogoBadge component ── */
 
@@ -352,18 +378,6 @@ const LogoBadge = ({
     );
   }
 
-  const toPercentRect = (data: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }) => ({
-    x: Math.max(0, Math.min(100, (data.x / frame.width) * 100)),
-    y: Math.max(0, Math.min(100, (data.y / frame.height) * 100)),
-    width: Math.max(3, Math.min(100, (data.width / frame.width) * 100)),
-    height: Math.max(2, Math.min(100, (data.height / frame.height) * 100)),
-  });
-
   const x = (logoPos.x / 100) * frame.width;
   const y = (logoPos.y / 100) * frame.height;
   const width = (logoPos.width / 100) * frame.width;
@@ -377,7 +391,7 @@ const LogoBadge = ({
       minWidth={Math.max(frame.width * 0.08, 48)}
       minHeight={Math.max(frame.height * 0.03, 24)}
       onDragStop={(_event, data) => {
-        const next = toPercentRect({ x: data.x, y: data.y, width, height });
+        const next = toPercentRect({ x: data.x, y: data.y, width, height }, frame, 3, 2);
         onPositionChange({ ...logoPos, ...next });
       }}
       onResizeStop={(_event, _dir, ref, _delta, position) => {
@@ -386,7 +400,7 @@ const LogoBadge = ({
           y: position.y,
           width: ref.offsetWidth,
           height: ref.offsetHeight,
-        });
+        }, frame, 3, 2);
         onPositionChange({ ...logoPos, ...next });
       }}
       className="z-20"
@@ -416,23 +430,11 @@ const EditorOverlay = ({
 }) => {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
 
-  const toPercentRect = (data: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }) => ({
-    x: Math.max(0, Math.min(100, (data.x / frame.width) * 100)),
-    y: Math.max(0, Math.min(100, (data.y / frame.height) * 100)),
-    width: Math.max(5, Math.min(100, (data.width / frame.width) * 100)),
-    height: Math.max(5, Math.min(100, (data.height / frame.height) * 100)),
-  });
-
   const updateBlockRect = (
     block: OverlayCanvasBlock,
     data: { x: number; y: number; width: number; height: number },
   ) => {
-    const nextRect = toPercentRect(data);
+    const nextRect = toPercentRect(data, frame);
 
     if (block.type === "canonical" && block.key) {
       onChange({
@@ -454,26 +456,36 @@ const EditorOverlay = ({
   };
 
   const updateBlockText = useCallback(
-    (block: OverlayCanvasBlock, text: string) => {
+    (block: OverlayCanvasBlock, text: string, contentHeight?: number) => {
+      // Auto-size: convert measured content height to percentage
+      let newHeight: number | undefined;
+      if (contentHeight && frame.height > 0) {
+        // Add ~40px for the editor chrome (p-2 padding + top controls)
+        newHeight = Math.min(100, Math.max(5, ((contentHeight + 40) / frame.height) * 100));
+      }
+
       if (block.type === "canonical" && block.key) {
         onChange({
           ...layout,
           [block.key]: {
             ...layout[block.key],
             text,
+            ...(newHeight != null && { height: newHeight }),
           },
         });
       } else {
         onChange({
           ...layout,
           custom: (layout.custom ?? []).map((item) =>
-            item.id === block.id ? { ...item, text } : item,
+            item.id === block.id
+              ? { ...item, text, ...(newHeight != null && { height: newHeight }) }
+              : item,
           ),
         });
       }
       setEditingBlockId(null);
     },
-    [layout, onChange],
+    [layout, onChange, frame.height],
   );
 
   const removeBlock = (block: OverlayCanvasBlock) => {
@@ -531,7 +543,10 @@ const EditorOverlay = ({
               });
             }}
           >
-            <div className="relative h-full w-full rounded-xl border border-orange-300/70 bg-black/24 p-2 backdrop-blur-sm">
+            <div
+              className="relative h-full w-full border border-orange-300/70 bg-black/24 p-2 backdrop-blur-sm"
+              style={{ borderRadius: Math.min(block.borderRadius, 28) }}
+            >
               <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
                 <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
                   {block.label}
@@ -553,7 +568,7 @@ const EditorOverlay = ({
                   block={block}
                   isEditing={isEditing}
                   onEditStart={() => setEditingBlockId(block.id)}
-                  onTextCommit={(text) => updateBlockText(block, text)}
+                  onTextCommit={(text, contentHeight) => updateBlockText(block, text, contentHeight)}
                 />
               </div>
             </div>
