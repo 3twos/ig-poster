@@ -3,18 +3,15 @@
 import {
   closestCenter,
   DndContext,
-  DragOverlay,
   type DragEndEvent,
-  type DropAnimation,
   KeyboardSensor,
-  defaultDropAnimationSideEffects,
   PointerSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
 import {
   arrayMove,
-  rectSortingStrategy,
+  horizontalListSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -30,7 +27,7 @@ import {
   Square,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { ComposerOrientation } from "@/lib/media-composer";
@@ -72,7 +69,10 @@ export function CarouselComposer({
   onOrientationChange,
   disabled = false,
 }: Props) {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  /* ---- internal sequence while dragging to prevent parent re-renders ---- */
+  const [dragSequence, setDragSequence] = useState<string[] | null>(null);
+  const activeSeq = dragSequence ?? assetSequence;
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
@@ -80,35 +80,54 @@ export function CarouselComposer({
     }),
   );
 
-  const dropAnimation: DropAnimation = {
-    sideEffects: defaultDropAnimationSideEffects({
-      styles: { active: { opacity: "0.4" } },
-    }),
-  };
-
   const assetMap = useMemo(
     () => new Map(assets.map((asset) => [asset.id, asset])),
     [assets],
   );
-  const includedAssets = assetSequence
+  const includedAssets = activeSeq
     .map((assetId) => assetMap.get(assetId))
     .filter((asset): asset is LocalAsset => Boolean(asset));
-  const availableAssets = assets.filter((asset) => !assetSequence.includes(asset.id));
-  const activeAsset = activeId ? assetMap.get(activeId) ?? null : null;
+  const availableAssets = assets.filter((asset) => !activeSeq.includes(asset.id));
   const canAdd = includedAssets.length < 10;
   const canRemove = includedAssets.length > 2;
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveId(null);
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+  const handleDragOver = useCallback(
+    (event: { active: { id: string | number }; over: { id: string | number } | null }) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const seq = dragSequence ?? assetSequence;
+      const oldIdx = seq.indexOf(String(active.id));
+      const newIdx = seq.indexOf(String(over.id));
+      if (oldIdx === -1 || newIdx === -1) return;
+      setDragSequence(arrayMove(seq, oldIdx, newIdx));
+    },
+    [dragSequence, assetSequence],
+  );
 
-    const oldIndex = assetSequence.indexOf(String(active.id));
-    const newIndex = assetSequence.indexOf(String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      const seq = dragSequence ?? assetSequence;
+      if (over && active.id !== over.id) {
+        const oldIdx = seq.indexOf(String(active.id));
+        const newIdx = seq.indexOf(String(over.id));
+        if (oldIdx !== -1 && newIdx !== -1) {
+          onAssetSequenceChange(arrayMove(seq, oldIdx, newIdx));
+        }
+      } else if (dragSequence) {
+        onAssetSequenceChange(dragSequence);
+      }
+      setDragSequence(null);
+    },
+    [dragSequence, assetSequence, onAssetSequenceChange],
+  );
 
-    onAssetSequenceChange(arrayMove(assetSequence, oldIndex, newIndex));
-  };
+  const handleDragCancel = useCallback(() => setDragSequence(null), []);
+
+  const handleDragStart = useCallback(
+    () => setDragSequence([...assetSequence]),
+    [assetSequence],
+  );
 
   return (
     <div className="rounded-2xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl">
@@ -157,52 +176,50 @@ export function CarouselComposer({
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          onDragStart={(event) => setActiveId(String(event.active.id))}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
-          onDragCancel={() => setActiveId(null)}
+          onDragCancel={handleDragCancel}
         >
           <SortableContext
             items={includedAssets.map((asset) => asset.id)}
-            strategy={rectSortingStrategy}
+            strategy={horizontalListSortingStrategy}
           >
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {includedAssets.map((asset) => (
+            <ScrollStrip>
+              {includedAssets.map((asset, i) => (
                 <SortableComposerTile
                   key={asset.id}
                   asset={asset}
-                  index={assetSequence.indexOf(asset.id)}
+                  index={i}
                   total={includedAssets.length}
                   removable={canRemove}
                   disabled={disabled}
                   onMoveLeft={() => {
-                    const currentIndex = assetSequence.indexOf(asset.id);
+                    const currentIndex = activeSeq.indexOf(asset.id);
                     if (currentIndex <= 0) return;
                     onAssetSequenceChange(
-                      arrayMove(assetSequence, currentIndex, currentIndex - 1),
+                      arrayMove(activeSeq, currentIndex, currentIndex - 1),
                     );
                   }}
                   onMoveRight={() => {
-                    const currentIndex = assetSequence.indexOf(asset.id);
-                    if (currentIndex === -1 || currentIndex >= assetSequence.length - 1) {
+                    const currentIndex = activeSeq.indexOf(asset.id);
+                    if (currentIndex === -1 || currentIndex >= activeSeq.length - 1) {
                       return;
                     }
                     onAssetSequenceChange(
-                      arrayMove(assetSequence, currentIndex, currentIndex + 1),
+                      arrayMove(activeSeq, currentIndex, currentIndex + 1),
                     );
                   }}
                   onRemove={() => {
                     if (!canRemove) return;
                     onAssetSequenceChange(
-                      assetSequence.filter((assetId) => assetId !== asset.id),
+                      activeSeq.filter((assetId) => assetId !== asset.id),
                     );
                   }}
                 />
               ))}
-            </div>
+            </ScrollStrip>
           </SortableContext>
-          <DragOverlay dropAnimation={dropAnimation}>
-            {activeAsset ? <ComposerTile asset={activeAsset} dragOverlay /> : null}
-          </DragOverlay>
         </DndContext>
 
         {includedAssets.length < 2 ? (
@@ -222,7 +239,7 @@ export function CarouselComposer({
               {canAdd ? "Add up to 10 items" : "Carousel limit reached"}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <ScrollStrip>
             {availableAssets.map((asset) => (
               <ComposerTile
                 key={asset.id}
@@ -231,22 +248,39 @@ export function CarouselComposer({
                 actionLabel="Add"
                 onAction={() => {
                   if (!canAdd) return;
-                  onAssetSequenceChange([...assetSequence, asset.id]);
+                  onAssetSequenceChange([...activeSeq, asset.id]);
                 }}
               />
             ))}
-          </div>
+          </ScrollStrip>
         </div>
       ) : null}
     </div>
   );
 }
 
+/* ---- horizontal scroll strip ---- */
+
+function ScrollStrip({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div
+      ref={ref}
+      className="flex gap-3 overflow-x-auto pb-1"
+      style={{ scrollBehavior: "smooth" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ---- tile ---- */
+
 function ComposerTile({
   asset,
   removable = false,
   disabled = false,
-  dragOverlay = false,
+  isDragging = false,
   actionLabel,
   onAction,
   onMoveLeft,
@@ -258,7 +292,7 @@ function ComposerTile({
   asset: LocalAsset;
   removable?: boolean;
   disabled?: boolean;
-  dragOverlay?: boolean;
+  isDragging?: boolean;
   actionLabel?: string;
   onAction?: () => void;
   onMoveLeft?: () => void;
@@ -270,8 +304,8 @@ function ComposerTile({
   return (
     <div
       className={cn(
-        "group rounded-xl border border-white/10 bg-black/20 p-2",
-        dragOverlay && "border-orange-300/50 shadow-lg shadow-orange-500/10",
+        "w-28 shrink-0 rounded-xl border border-white/10 bg-black/20 p-1.5 select-none",
+        isDragging && "z-10 scale-105 border-orange-300/50 shadow-lg shadow-orange-500/20",
       )}
     >
       <div className="relative overflow-hidden rounded-lg">
@@ -280,7 +314,8 @@ function ComposerTile({
           <img
             src={asset.posterUrl || asset.previewUrl}
             alt={asset.name}
-            className="aspect-square w-full object-cover"
+            className="aspect-square w-full object-cover pointer-events-none"
+            draggable={false}
           />
         ) : (
           <div className="flex aspect-square w-full items-center justify-center bg-white/10">
@@ -320,7 +355,7 @@ function ComposerTile({
         </div>
       ) : null}
       {onMoveLeft || onMoveRight ? (
-        <div className="mt-1.5 flex items-center justify-between">
+        <div className="mt-1 flex items-center justify-between">
           <button
             type="button"
             disabled={disabled || !onMoveLeft || index === 0}
@@ -366,6 +401,8 @@ function ComposerTile({
   );
 }
 
+/* ---- sortable wrapper ---- */
+
 function SortableComposerTile({
   asset,
   index,
@@ -408,22 +445,17 @@ function SortableComposerTile({
         cursor: disabled ? undefined : isDragging ? "grabbing" : "grab",
       }}
     >
-      {isDragging ? (
-        <div className="rounded-xl border-2 border-dashed border-white/20 bg-white/5 p-2">
-          <div className="aspect-square w-full rounded-lg" />
-        </div>
-      ) : (
-        <ComposerTile
-          asset={asset}
-          removable={removable}
-          disabled={disabled}
-          onMoveLeft={onMoveLeft}
-          onMoveRight={onMoveRight}
-          index={index}
-          total={total}
-          onRemove={onRemove}
-        />
-      )}
+      <ComposerTile
+        asset={asset}
+        removable={removable}
+        disabled={disabled}
+        isDragging={isDragging}
+        onMoveLeft={onMoveLeft}
+        onMoveRight={onMoveRight}
+        index={index}
+        total={total}
+        onRemove={onRemove}
+      />
     </div>
   );
 }
