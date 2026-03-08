@@ -98,14 +98,14 @@ Why this shape:
 
 ### 4) Publish / Schedule
 
-Before submit, single-image clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`.
+Before submitting, single-image clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`. Reel clients can also choose whether Meta should `share_to_feed`.
 
-1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment and image metadata).
+1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment, optional image metadata, and optional reel `shareToFeed` control).
 2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
 3. Route resolves auth context (OAuth connection first, env fallback second).
 4. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
 5. Otherwise route publishes immediately through Meta Graph API helpers.
-6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` and `userTags` are passed through for image-mode publish jobs.
+6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` and `userTags` are passed through for image-mode publish jobs, while optional reel `shareToFeed` is passed through for reel-mode publish jobs.
 7. Cron route (`GET /api/cron/publish`) claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
 
 Why this shape:

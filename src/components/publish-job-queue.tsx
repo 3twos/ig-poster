@@ -98,6 +98,7 @@ type EditableMedia =
     }
   | {
       mode: "reel";
+      shareToFeed: boolean;
       videoUrl: string;
       coverUrl?: string;
     }
@@ -125,7 +126,9 @@ const cloneMedia = (
     };
   }
 
-  return { ...media };
+  return media.mode === "reel"
+    ? { ...media, shareToFeed: media.shareToFeed ?? true }
+    : { ...media };
 };
 
 const normalizeMedia = (
@@ -142,6 +145,7 @@ const normalizeMedia = (
     const coverUrl = media.coverUrl?.trim();
     return {
       mode: "reel",
+      shareToFeed: media.shareToFeed,
       videoUrl: media.videoUrl.trim(),
       coverUrl: coverUrl ? coverUrl : undefined,
     };
@@ -207,6 +211,7 @@ const isSameMedia = (
 
   if (left.mode === "reel" && right.mode === "reel") {
     return left.videoUrl === right.videoUrl &&
+      left.shareToFeed === right.shareToFeed &&
       (left.coverUrl ?? "") === (right.coverUrl ?? "");
   }
 
@@ -714,6 +719,7 @@ export function PublishJobQueue({
                                   current?.mode === "reel"
                                     ? {
                                         mode: "reel",
+                                        shareToFeed: current.shareToFeed,
                                         videoUrl,
                                         coverUrl: current.coverUrl,
                                       }
@@ -731,6 +737,7 @@ export function PublishJobQueue({
                                   current?.mode === "reel"
                                     ? {
                                         mode: "reel",
+                                        shareToFeed: current.shareToFeed,
                                         videoUrl: current.videoUrl,
                                         coverUrl,
                                       }
@@ -740,6 +747,31 @@ export function PublishJobQueue({
                               className="text-xs"
                               placeholder="Optional cover URL"
                             />
+                            <label className="flex items-start gap-2 text-xs text-slate-200">
+                              <input
+                                type="checkbox"
+                                aria-label={`Share reel to main feed for ${job.id}`}
+                                checked={editMedia.shareToFeed}
+                                onChange={(event) => {
+                                  const shareToFeed = event.target.checked;
+                                  setEditMedia((current) =>
+                                    current?.mode === "reel"
+                                      ? {
+                                          mode: "reel",
+                                          shareToFeed,
+                                          videoUrl: current.videoUrl,
+                                          coverUrl: current.coverUrl,
+                                        }
+                                      : current
+                                  );
+                                }}
+                                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-950/40"
+                              />
+                              <span>Share reel to main feed</span>
+                            </label>
+                            <p className="text-[11px] text-slate-400">
+                              Turn this off to keep the reel off the main feed.
+                            </p>
                           </div>
                         ) : null}
                         {editMedia?.mode === "carousel" ? (

@@ -460,6 +460,7 @@ describe("PublishJobQueue", () => {
           mode: "reel",
           videoUrl: "https://cdn.example.com/reel-old.mp4",
           coverUrl: "https://cdn.example.com/cover-old.jpg",
+          shareToFeed: true,
         },
       }),
     ]);
@@ -473,6 +474,7 @@ describe("PublishJobQueue", () => {
                 mode: "reel",
                 videoUrl: "https://cdn.example.com/reel-new.mp4",
                 coverUrl: "https://cdn.example.com/cover-new.jpg",
+                shareToFeed: false,
               },
             }),
           ],
@@ -499,6 +501,9 @@ describe("PublishJobQueue", () => {
       screen.getByLabelText("Edit reel cover URL for job-1"),
       { target: { value: "https://cdn.example.com/cover-new.jpg" } },
     );
+    fireEvent.click(
+      screen.getByLabelText("Share reel to main feed for job-1"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
@@ -512,6 +517,7 @@ describe("PublishJobQueue", () => {
         mode: "reel",
         videoUrl: "https://cdn.example.com/reel-new.mp4",
         coverUrl: "https://cdn.example.com/cover-new.jpg",
+        shareToFeed: false,
       },
     });
   });

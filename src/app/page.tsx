@@ -76,6 +76,7 @@ import type { MetaUserTag } from "@/lib/meta-schemas";
 type PublishMetadataInput = {
   firstComment?: string;
   locationId?: string;
+  reelShareToFeed?: boolean;
   userTags?: MetaUserTag[];
 };
 
@@ -737,7 +738,11 @@ export default function Home() {
       if (activeVariant.postType === "reel") {
         const ra = seq.find((a) => a.mediaType === "video" && a.storageUrl) ?? localAssets.find((a) => a.mediaType === "video" && a.storageUrl);
         if (!ra?.storageUrl) throw new Error("Reel requires an uploaded video asset.");
-        media = { mode: "reel", videoUrl: ra.storageUrl };
+        media = {
+          mode: "reel",
+          videoUrl: ra.storageUrl,
+          shareToFeed: metadata?.reelShareToFeed ?? true,
+        };
       } else if (activeVariant.postType === "carousel") {
         const items = seq.filter((a): a is LocalAsset & { storageUrl: string } => Boolean(a.storageUrl)).slice(0, 10).map((a) => ({ mediaType: a.mediaType, url: a.storageUrl }));
         if (items.length < 2) throw new Error("Carousel needs at least 2 uploaded media assets.");
@@ -1006,7 +1011,7 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />
+                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} supportsReelControls={activeVariant.postType === "reel"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />
                       </section>
                     )}
                   </div>
@@ -1048,7 +1053,7 @@ export default function Home() {
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />}
+            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} supportsReelControls={activeVariant.postType === "reel"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

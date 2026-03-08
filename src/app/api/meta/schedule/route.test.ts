@@ -230,6 +230,41 @@ describe("POST /api/meta/schedule", () => {
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
   });
 
+  it("preserves reel share-to-feed selection for scheduled jobs", async () => {
+    const publishAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    mockedCreatePublishJob.mockResolvedValue({
+      id: "job_1",
+      publishAt: new Date(publishAt),
+    } as Awaited<ReturnType<typeof createPublishJob>>);
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Scheduled reel",
+        publishAt,
+        media: {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/reel.mp4",
+          shareToFeed: false,
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockedCreatePublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        media: {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/reel.mp4",
+          shareToFeed: false,
+        },
+      }),
+    );
+  });
+
   it("passes location and user tags for immediate image publish", async () => {
     const userTags = [{ username: "handle", x: 0.25, y: 0.75 }];
     mockedPublishInstagramContent.mockResolvedValue({
@@ -263,6 +298,43 @@ describe("POST /api/meta/schedule", () => {
         mode: "image",
         locationId: "12345",
         userTags,
+      }),
+      expect.objectContaining({ accessToken: "token" }),
+    );
+  });
+
+  it("defaults reel share-to-feed to true for immediate publish", async () => {
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "reel",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caption: "Reel now",
+        media: { mode: "reel", videoUrl: "https://cdn.example.com/reel.mp4" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockedReserveImmediatePublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        media: {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/reel.mp4",
+          shareToFeed: true,
+        },
+      }),
+    );
+    expect(mockedPublishInstagramContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "reel",
+        shareToFeed: true,
       }),
       expect.objectContaining({ accessToken: "token" }),
     );
