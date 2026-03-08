@@ -21,6 +21,7 @@ import type { InstagramAuthStatus } from "@/lib/types";
 type PublishMetadataInput = {
   firstComment?: string;
   locationId?: string;
+  reelShareToFeed?: boolean;
   userTags?: MetaUserTag[];
 };
 
@@ -39,6 +40,7 @@ type Props = {
   shareCopyState: "idle" | "done";
   localTimeZone: string;
   supportsImageMetadata: boolean;
+  supportsReelControls: boolean;
   imageMetadataPreviewUrl?: string;
   onOpenSettings: () => void;
   onCreateShareLink: () => void;
@@ -61,6 +63,7 @@ export function PublishSection({
   shareCopyState,
   localTimeZone,
   supportsImageMetadata,
+  supportsReelControls,
   imageMetadataPreviewUrl,
   onOpenSettings,
   onCreateShareLink,
@@ -70,6 +73,7 @@ export function PublishSection({
   const [scheduleAt, setScheduleAt] = useState("");
   const [firstComment, setFirstComment] = useState("");
   const [locationId, setLocationId] = useState("");
+  const [reelShareToFeed, setReelShareToFeed] = useState(true);
   const [userTags, setUserTags] = useState<MetaUserTag[]>([]);
   const normalizeTagUsername = (value: string) => value.trim().replace(/^@/, "");
   const normalizedFirstComment = firstComment.trim() || undefined;
@@ -201,6 +205,30 @@ export function PublishSection({
         </div>
       ) : null}
 
+      {supportsReelControls ? (
+        <div className="space-y-2 rounded-xl border border-white/15 bg-white/5 p-3">
+          <p className="text-[11px] font-medium text-slate-300">
+            Reel controls
+          </p>
+          <label className="flex items-start gap-2 text-xs text-slate-200">
+            <input
+              type="checkbox"
+              aria-label="Share reel to main feed"
+              checked={reelShareToFeed}
+              onChange={(event) => setReelShareToFeed(event.target.checked)}
+              disabled={isPublishing}
+              className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-950/40"
+            />
+            <span>
+              Share reel to main feed
+            </span>
+          </label>
+          <p className="text-[11px] text-slate-400">
+            Turn this off to publish the reel only to the Reels tab.
+          </p>
+        </div>
+      ) : null}
+
       <div className="grid gap-2">
         <Button
           type="button"
@@ -209,6 +237,7 @@ export function PublishSection({
             onPostNow({
               firstComment: normalizedFirstComment,
               locationId: supportsImageMetadata ? normalizedLocationId : undefined,
+              reelShareToFeed: supportsReelControls ? reelShareToFeed : undefined,
               userTags: supportsImageMetadata && normalizedUserTags.length > 0
                 ? normalizedUserTags
                 : undefined,
@@ -240,6 +269,7 @@ export function PublishSection({
                 onSchedulePost(scheduleAt, {
                   firstComment: normalizedFirstComment,
                   locationId: supportsImageMetadata ? normalizedLocationId : undefined,
+                  reelShareToFeed: supportsReelControls ? reelShareToFeed : undefined,
                   userTags: supportsImageMetadata && normalizedUserTags.length > 0
                     ? normalizedUserTags
                     : undefined,

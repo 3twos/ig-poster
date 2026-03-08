@@ -75,12 +75,13 @@
    - Connect Instagram via Meta OAuth in Settings (if not already connected).
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - Optionally add a `First comment` in the publish section; it is posted right after media publish.
+   - For reel posts, choose whether `Share reel to main feed` stays on or off before posting or scheduling.
    - For image posts, optionally search Meta places to fill `Location ID` (or paste the ID manually).
    - For image posts, optionally add `User tags` with structured rows and click directly on the image preview to place each tag before fine-tuning x/y values.
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
    - The publish section also shows a workspace queue for queued, processing, and failed jobs.
-   - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata, including visual tag placement and location search assist) without leaving the editor.
+   - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata, including visual tag placement and location search assist, plus reel feed-sharing) without leaving the editor.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -99,7 +100,7 @@
 
 - `single-image` variant publishes a rendered poster image.
 - `carousel` variant uses uploaded media sequence (minimum 2 items, up to 10).
-- `reel` variant requires at least one uploaded video.
+- `reel` variant requires at least one uploaded video and includes a `Share reel to main feed` toggle. The default is on, matching the previous hardcoded behavior.
 - Location ID and user tags are supported only for single-image posts (including queue edits).
 - Location search suggestions populate the same `locationId` field sent to Meta; if search fails, you can still paste the raw ID manually.
 - User-tag placement uses the rendered poster preview in the main composer and the stored published image URL in queue edits, while x/y inputs remain available for precision edits.

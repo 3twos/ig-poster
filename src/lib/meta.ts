@@ -196,14 +196,19 @@ const publishSingleImage = async (
 };
 
 const publishReel = async (
-  payload: { videoUrl: string; caption: string; coverUrl?: string },
+  payload: {
+    videoUrl: string;
+    caption: string;
+    coverUrl?: string;
+    shareToFeed?: boolean;
+  },
   auth: MetaAuthContext,
 ) => {
   const params = new URLSearchParams({
     media_type: "REELS",
     video_url: payload.videoUrl,
     caption: payload.caption,
-    share_to_feed: "true",
+    share_to_feed: payload.shareToFeed === false ? "false" : "true",
   });
 
   if (payload.coverUrl) {
@@ -328,6 +333,7 @@ export const publishInstagramContent = async (
         videoUrl: payload.videoUrl,
         caption: payload.caption,
         coverUrl: payload.coverUrl,
+        shareToFeed: payload.shareToFeed,
       },
       resolvedAuth,
     );

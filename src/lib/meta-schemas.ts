@@ -65,6 +65,7 @@ export const MetaScheduleRequestSchema = z
         mode: z.literal("reel"),
         videoUrl: z.string().url(),
         coverUrl: z.string().url().optional(),
+        shareToFeed: z.boolean().default(true),
       }),
       z.object({
         mode: z.literal("carousel"),

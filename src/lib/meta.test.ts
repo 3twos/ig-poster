@@ -145,6 +145,7 @@ describe("publishInstagramContent", () => {
         {
           mode: "reel",
           videoUrl: "https://cdn.example.com/reel.mp4",
+          shareToFeed: true,
           caption: "Caption",
           locationId: "12345",
         },
@@ -157,6 +158,47 @@ describe("publishInstagramContent", () => {
     ).rejects.toThrow(
       "Location and user tags are currently supported only for image posts.",
     );
+  });
+
+  it("passes reel share_to_feed overrides to Meta", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "creation_1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status_code: "FINISHED" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "publish_1" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishInstagramContent(
+        {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/reel.mp4",
+          shareToFeed: false,
+          caption: "Caption",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toMatchObject({
+      mode: "reel",
+      creationId: "creation_1",
+      publishId: "publish_1",
+    });
+
+    const createCall = fetchMock.mock.calls[0];
+    const createBody = createCall?.[1]?.body as URLSearchParams;
+    expect(createBody.get("share_to_feed")).toBe("false");
   });
 });
 

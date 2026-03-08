@@ -156,7 +156,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/brand-kit-modal.tsx`: full-screen brand kit dialog (logo, palette, voice, prompt controls, kit CRUD).
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls.
-- `src/components/publish-section.tsx`: share link, Instagram auth, optional first-comment input, optional image metadata (location ID + search assist + visual user tags), schedule, publish form.
+- `src/components/publish-section.tsx`: share link, Instagram auth, optional first-comment input, optional image metadata (location ID + search assist + visual user tags), optional reel feed-sharing toggle, schedule, publish form.
 - `src/components/meta-location-search.tsx`: shared Meta place-search assist used by both the main publish form and queue editor.
 - `src/components/poster-preview.tsx`: poster renderer + editable overlay blocks.
 - `src/components/chat/`: chat module — `chat-panel.tsx` (embeddable for right panel), `chat-container.tsx` (standalone with sidebar), `chat-messages.tsx`, `chat-message.tsx`, `chat-input.tsx`, `chat-markdown.tsx`, `chat-code-block.tsx`, `chat-thinking.tsx`, `chat-empty.tsx`, `chat-header.tsx`, `chat-sidebar.tsx`.
@@ -171,11 +171,11 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/settings/page.tsx` and `src/app/brand/page.tsx`: compatibility routes that redirect to `/` (settings and brand editing now live in modals from the main shell).
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing (including `/api/meta/locations` for place search), and brand kit CRUD (`/api/brand-kits`).
-- `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including optional `first_comment`, `location_id`, and `user_tags` publish metadata fields).
+- `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted `media` JSON payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
-- `src/lib/meta.ts`: Meta Graph publishing primitives plus place-search helper for location assist.
+- `src/lib/meta.ts`: Meta Graph publishing primitives plus place-search helper for location assist and reel `share_to_feed` handling.
 - `src/lib/meta-media-preflight.ts`: publish-time media URL compliance checks (public HTTPS validation + content-type probing).
 - `src/lib/meta-auth.ts`: Meta OAuth flow and credential resolution.
 - `src/lib/workspace-auth.ts`: Google Workspace OAuth + session tokens.

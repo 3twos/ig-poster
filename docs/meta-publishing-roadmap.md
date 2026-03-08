@@ -1,6 +1,6 @@
 # Meta Publishing Roadmap
 
-Last updated: 2026-03-07
+Last updated: 2026-03-08
 
 This document tracks the Meta/Instagram content publishing rollout in this repo so the plan is not trapped in PR history or chat context.
 
@@ -38,15 +38,17 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
 8. Visual coordinate picker and location assist
    - Added click-to-place user tagging on the rendered poster preview in the main publish form and on stored image URLs in queue edits.
    - Added Meta place search that fills the existing `locationId` field while preserving manual ID entry as fallback.
-   - Reference: PR `#79`.
+   - Reference: merged in PR `#79`.
+
+## In Progress
+
+1. Additional Meta publishing controls
+   - First slice: expose reel `share_to_feed` as a user-facing toggle in the publish form, queue edit flow, and runtime publish pipeline.
+   - Candidate follow-ons inside this phase: collaborator workflows and other Graph API publish metadata worth exposing.
 
 ## Remaining phases
 
-1. Additional Meta publishing controls
-   - Expand support for other content-publishing options that materially improve authoring power or operational flexibility.
-   - Candidate areas: collaborator workflows, richer reel-specific controls, and other Graph API publish metadata worth exposing.
-
-2. Operational hardening
+1. Operational hardening
    - Strengthen idempotency, diagnostics, and publish-history observability around retries, deferred jobs, and downstream failures.
    - Goal: make the queue safer and easier to operate under real publishing load.
 
