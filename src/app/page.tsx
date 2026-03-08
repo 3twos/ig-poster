@@ -25,7 +25,7 @@ import { ChatPanel } from "@/components/chat";
 import { AppShell } from "@/components/app-shell";
 import { AssetManager } from "@/components/asset-manager";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
-import { PostBriefForm } from "@/components/post-brief-form";
+import { PostBriefActions, PostBriefForm } from "@/components/post-brief-form";
 import { PosterSection } from "@/components/poster-section";
 import { MobileSidebarDrawer, SidebarContent } from "@/components/post-sidebar";
 import { PublishSection } from "@/components/publish-section";
@@ -1001,12 +1001,15 @@ export default function Home() {
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(220px,0.9fr)]">
-                        <div className="min-w-0 max-w-[44rem]">
-                          <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} compact dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,27rem)_minmax(0,1fr)]">
+                        <div className="min-w-0 max-w-[27rem]">
+                          <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} compact showHeader={false} showActions={false} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
                         </div>
-                        <div className="min-w-0">
-                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[360px]" dispatch={typedDispatch} />
+                        <div className="min-w-0 space-y-6">
+                          <div className="w-full max-w-[40rem]">
+                            <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} />
+                          </div>
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
                         </div>
                       </div>
                     </section>
