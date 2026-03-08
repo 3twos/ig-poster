@@ -123,7 +123,6 @@ export function PosterSection({
           <Button
             variant="outline"
             size="xs"
-            disabled={!activeVariant}
             onClick={onResetTextLayout}
           >
             <LayoutTemplate className="h-3.5 w-3.5" />

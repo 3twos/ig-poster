@@ -22,11 +22,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { SaveStatus } from "@/hooks/use-auto-save";
-import type {
-  CanonicalOverlayKey,
-  CreativeVariant,
-  GenerationResponse,
-  OverlayLayout,
+import {
+  DEFAULT_LOGO_POSITION,
+  type CanonicalOverlayKey,
+  type CreativeVariant,
+  type GenerationResponse,
+  type OverlayLayout,
 } from "@/lib/creative";
 import { cn } from "@/lib/utils";
 
@@ -409,7 +410,7 @@ function EditorInspector({
               onOverlayLayoutChange({
                 ...overlayLayout,
                 logo: {
-                  ...(overlayLayout.logo ?? { x: 3, y: 3, width: 20, height: 6, visible: true }),
+                  ...(overlayLayout.logo ?? DEFAULT_LOGO_POSITION),
                   visible: !(overlayLayout.logo?.visible ?? true),
                 },
               })

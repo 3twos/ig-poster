@@ -213,11 +213,28 @@ const OverlayBlockBody = ({
     [],
   );
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData("text/plain");
-    document.execCommand("insertText", false, text);
-  }, []);
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      e.preventDefault();
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+
+      const range = selection.getRangeAt(0);
+      if (!spanRef.current || !spanRef.current.contains(range.commonAncestorContainer)) return;
+
+      range.deleteContents();
+      const textNode = document.createTextNode(text);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    },
+    [],
+  );
 
   return (
     <div
@@ -309,7 +326,7 @@ const LogoBadge = ({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={logoImage}
-          alt="Brand logo"
+          alt={`${brandName} logo`}
           className="h-6 max-w-[4rem] object-contain"
         />
       ) : (
