@@ -44,17 +44,31 @@ Already in place:
 - direct text overrides, hide/show, and custom text boxes
 - share snapshots
 - scheduling and queue management
+- dedicated `Drafts` sidebar filter
+- scheduled-post queue edit flow
 - location and user-tag metadata for single-image publish flow
+- persisted media-composition state for feed posts
+- carousel composer with add/reorder/remove controls and shared preview/publish ordering
+- feed orientation switching for carousel composition (`square`, `portrait`, `landscape`)
 
 Still below Meta baseline:
 
-- no pre-publish carousel item removal inside the canvas/editor flow
-- no crop/orientation editor with persisted per-item transforms
+- no crop editor despite persisted per-item transform foundations
 - no per-item carousel tagging UI
 - no media filter/edit surface
+- no dedicated caption composer field; generated caption is still the publish source of truth
 - no explicit "Finish later" draft affordance near the composer
 - no planner/calendar entry point for editing scheduled content from the main editor
 - no post-publish caption/location edit workflow
+
+## Saved P1 Plan
+
+This roadmap now treats the first parity slice as:
+
+1. Persist media-composition state on posts and shared snapshots.
+2. Make carousel preview/share/publish read from the user-controlled composition order.
+3. Expose a dedicated carousel composer for add/reorder/remove and orientation control.
+4. Leave crop/filter/tagging/post-publish edits as follow-on phases on top of that foundation.
 
 ## Delivery Plan
 

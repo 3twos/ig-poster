@@ -135,5 +135,6 @@ export const INITIAL_POST: PostState = {
 export const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
   { value: "1:1", label: "Square (1:1)" },
   { value: "4:5", label: "Feed Max (4:5)" },
+  { value: "1.91:1", label: "Landscape (1.91:1)" },
   { value: "9:16", label: "Story/Reel (9:16)" },
 ];

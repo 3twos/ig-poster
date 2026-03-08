@@ -12,6 +12,7 @@ import {
 
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
 import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
+import type { MediaComposition } from "@/lib/media-composer";
 import type { StoredAsset } from "@/lib/project";
 import type {
   BrandKitLogo,
@@ -63,6 +64,10 @@ export const posts = pgTable(
       .$type<Record<string, OverlayLayout>>()
       .notNull()
       .default({}),
+    mediaComposition: jsonb("media_composition")
+      .$type<MediaComposition>()
+      .notNull()
+      .default({ orientation: "portrait", items: [] }),
 
     renderedPosterUrl: text("rendered_poster_url"),
     shareUrl: text("share_url"),

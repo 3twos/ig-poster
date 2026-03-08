@@ -5,6 +5,7 @@ import {
   GenerationResponseSchema,
   OverlayLayoutSchema,
 } from "@/lib/creative";
+import { MediaCompositionSchema } from "@/lib/media-composer";
 import { StoredAssetSchema } from "@/lib/project";
 
 export const PostStatusSchema = z.enum([
@@ -59,6 +60,7 @@ export const PostCreateRequestSchema = z
     logoUrl: NullishUrlSchema.optional(),
     brandKitId: z.union([z.string().trim().max(18), z.null()]).optional(),
     promptConfig: PromptConfigSchema.nullish(),
+    mediaComposition: MediaCompositionSchema.nullish(),
   })
   .passthrough();
 
@@ -76,6 +78,7 @@ export const PostUpdateRequestSchema = z
     brief: DraftBriefSchema.nullish(),
     promptConfig: PromptConfigSchema.nullish(),
     overlayLayouts: z.record(z.string(), OverlayLayoutSchema).nullish(),
+    mediaComposition: MediaCompositionSchema.nullish(),
     assets: z.array(StoredAssetSchema).max(20).optional(),
     result: GenerationResponseSchema.nullish(),
     publishHistory: z.array(PublishHistoryEntrySchema).max(200).optional(),
