@@ -329,6 +329,7 @@ const LogoBadge = ({
   editorMode,
   frame,
   onPositionChange,
+  borderRadius,
 }: {
   logoImage?: string;
   brandName: string;
@@ -337,17 +338,19 @@ const LogoBadge = ({
   editorMode: boolean;
   frame: { width: number; height: number };
   onPositionChange?: (pos: LogoPosition) => void;
+  borderRadius?: number;
 }) => {
   const badgeContent = (
     <div
       className={cn(
-        "flex h-full w-full items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] uppercase shadow-lg backdrop-blur-sm",
+        "flex h-full w-full items-center gap-2 border px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] uppercase shadow-lg backdrop-blur-sm",
         logoImage
           ? logoTone === "light"
             ? "border-white/15 bg-slate-950/78 text-white"
             : "border-black/10 bg-white/92 text-slate-950"
           : "border-black/10 bg-white/90 text-slate-900",
       )}
+      style={{ borderRadius: borderRadius ?? 9999 }}
     >
       {logoImage ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -840,6 +843,7 @@ export const PosterPreview = memo(
               editorMode={canEdit}
               frame={frameSize}
               onPositionChange={canEdit ? handleLogoPositionChange : undefined}
+              borderRadius={resolvedOverlayLayout.hook.borderRadius}
             />
           ) : null}
         </div>
