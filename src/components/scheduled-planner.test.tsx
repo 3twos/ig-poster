@@ -84,6 +84,15 @@ describe("ScheduledPlanner", () => {
 
     expect(await screen.findByText("Launch A")).not.toBeNull();
     expect(screen.getByText(/1 scheduled post/i)).not.toBeNull();
+    expect(
+      screen.getByText(
+        `${new Intl.DateTimeFormat(undefined, {
+          timeZone: "UTC",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date("2026-03-10T18:30:00.000Z"))} (UTC)`,
+      ),
+    ).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /open post/i }));
     expect(onSelectPost).toHaveBeenCalledWith("post-1");

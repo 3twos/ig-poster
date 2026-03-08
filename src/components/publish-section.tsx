@@ -11,6 +11,7 @@ import { useState } from "react";
 import { ScheduledPlanner } from "@/components/scheduled-planner";
 import { PublishJobQueue } from "@/components/publish-job-queue";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Sheet,
@@ -152,11 +153,11 @@ export function PublishSection({
         <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
           <Label className="text-[11px] text-slate-300">Post at</Label>
           <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-            <input
+            <Input
               type="datetime-local"
               value={scheduleAt}
               onChange={(event) => setScheduleAt(event.target.value)}
-              className="flex h-10 w-full rounded-md border border-white/10 bg-slate-950/60 px-3 text-xs text-slate-100 outline-none focus:border-white/30"
+              className="text-xs"
             />
             <Button
               type="button"

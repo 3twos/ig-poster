@@ -86,10 +86,11 @@ const formatPublishTime = (iso: string, localTimeZone: string) => {
   if (Number.isNaN(date.getTime())) {
     return iso;
   }
-  return `${date.toLocaleTimeString([], {
+  return `${new Intl.DateTimeFormat(undefined, {
+    timeZone: localTimeZone,
     hour: "numeric",
     minute: "2-digit",
-  })} (${localTimeZone})`;
+  }).format(date)} (${localTimeZone})`;
 };
 
 const toInputValue = (iso: string) => {

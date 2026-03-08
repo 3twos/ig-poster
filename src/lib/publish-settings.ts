@@ -9,7 +9,7 @@ export const PublishSettingsSchema = z.object({
 
 export type PublishSettings = z.infer<typeof PublishSettingsSchema>;
 
-export const INITIAL_PUBLISH_SETTINGS: PublishSettings = {
+export const DEFAULT_PUBLISH_SETTINGS: PublishSettings = {
   caption: "",
   firstComment: "",
   locationId: "",
