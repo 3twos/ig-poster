@@ -212,10 +212,9 @@ describe("PosterPreview", () => {
     // The cancelledRef causes handleBlur to restore original text
     await waitFor(() => {
       // If onChange was called, it should not contain the discarded text
-      const calls = onChange.mock.calls;
+      const calls = onChange.mock.calls as Array<[Record<string, Record<string, string>>]>;
       const hasDiscarded = calls.some(
-        (call: [typeof createDefaultOverlayLayout extends (...a: never[]) => infer R ? R : never]) =>
-          call[0]?.headline?.text === "Should be discarded",
+        (call) => call[0]?.headline?.text === "Should be discarded",
       );
       expect(hasDiscarded).toBe(false);
     });
