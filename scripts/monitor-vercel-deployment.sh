@@ -31,6 +31,7 @@ Options:
   --project-name <name>        Short name used in spoken alerts
   --team-id <id>               Team/org id (default: $VERCEL_TEAM_ID or $VERCEL_ORG_ID)
   --token <token>              Vercel token (default: $VERCEL_TOKEN, or secure prompt)
+  --target <target>            Filter deployments by target: production, preview (default: all)
   --max-deployments <count>    Number of recent deployments to display (default: 6)
   --event-mode <mode>          auto | stream | poll (default: auto)
   --no-speak                   Disable spoken alerts
@@ -38,7 +39,10 @@ Options:
   -h, --help                   Show help
 
 Examples:
-  # Watch multiple recent deployments for a project until Ctrl+C
+  # Watch only production deployments for a project until Ctrl+C
+  VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --target production --interval 5
+
+  # Watch all deployments (production + preview)
   VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
   # Watch one deployment continuously until Ctrl+C
@@ -635,6 +639,10 @@ build_deployment_url() {
 
 build_project_deployments_url() {
   local url="https://api.vercel.com/v6/deployments?projectId=${PROJECT_ID}&limit=${MAX_DEPLOYMENTS}"
+
+  if [[ -n "$TARGET_FILTER" ]]; then
+    url="${url}&target=${TARGET_FILTER}"
+  fi
 
   if [[ -n "$TEAM_ID" ]]; then
     url="${url}&teamId=${TEAM_ID}"
@@ -2197,6 +2205,25 @@ refresh_project_deployments() {
       continue
     fi
 
+    # Skip "Ignored Build Step" cancellations: preview deployments that were
+    # canceled very quickly (<5s duration) by the Vercel build-step ignore rule.
+    if [[ "$dep_status" == "CANCELED" ]]; then
+      local dep_target_lower
+      dep_target_lower="$(printf '%s' "$dep_target" | tr '[:upper:]' '[:lower:]')"
+      if [[ "$dep_target_lower" == "preview" || -z "$dep_target_lower" ]]; then
+        # Only skip when both timestamps are valid, positive integers and we can
+        # compute a short (sub-5s) duration. Otherwise, treat it as a real cancel.
+        if [[ "$dep_created_at" =~ ^[0-9]+$ ]] && [[ "$dep_ready_at" =~ ^[0-9]+$ ]] && (( dep_ready_at > 0 && dep_created_at > 0 )); then
+          local cancel_duration
+          cancel_duration=$(( dep_ready_at - dep_created_at ))
+          if (( cancel_duration >= 0 && cancel_duration < 5000 )); then
+            log_line "Skipping ignored build step: id=${dep_id} target=${dep_target:-preview}"
+            continue
+          fi
+        fi
+      fi
+    fi
+
     old_idx="$(deployment_index_by_id "$dep_id")"
     if (( old_idx >= 0 )); then
       first_seen="${DEP_FIRST_SEEN_EPOCH[old_idx]}"
@@ -2743,6 +2770,7 @@ TOKEN_FROM_ARG=0
 ENABLE_SPEAK=1
 FORCE_PLAIN=0
 TARGET=""
+TARGET_FILTER=""
 MAX_DEPLOYMENTS=6
 EVENT_MODE="auto"
 
@@ -2810,6 +2838,14 @@ while [[ $# -gt 0 ]]; do
       fi
       TOKEN="$2"
       TOKEN_FROM_ARG=1
+      shift 2
+      ;;
+    --target)
+      if [[ $# -lt 2 ]]; then
+        print_error "$1 requires a value."
+        exit 1
+      fi
+      TARGET_FILTER="$2"
       shift 2
       ;;
     --max-deployments)
@@ -2889,6 +2925,12 @@ fi
 EVENT_MODE="$(printf '%s' "$EVENT_MODE" | tr '[:upper:]' '[:lower:]')"
 if [[ "$EVENT_MODE" != "auto" && "$EVENT_MODE" != "stream" && "$EVENT_MODE" != "poll" ]]; then
   print_error "--event-mode must be one of: auto, stream, poll."
+  exit 1
+fi
+
+TARGET_FILTER="$(printf '%s' "$TARGET_FILTER" | tr '[:upper:]' '[:lower:]')"
+if [[ -n "$TARGET_FILTER" && "$TARGET_FILTER" != "production" && "$TARGET_FILTER" != "preview" ]]; then
+  print_error "--target must be one of: production, preview."
   exit 1
 fi
 
