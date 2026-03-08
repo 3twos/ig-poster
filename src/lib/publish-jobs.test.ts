@@ -357,7 +357,7 @@ describe("recoverStaleProcessingJobs", () => {
       status: string;
       lastError: string;
       completedAt: Date;
-      events: Array<{ type: string; detail?: string; attempt?: number }>;
+      events: Array<{ type: string; detail?: string; attempt?: number; at?: string }>;
     };
     expect(setPayload.status).toBe("failed");
     expect(setPayload.completedAt.toISOString()).toBe(now.toISOString());
@@ -365,6 +365,7 @@ describe("recoverStaleProcessingJobs", () => {
     expect(setPayload.events.at(-1)).toMatchObject({
       type: "failed",
       attempt: 2,
+      at: now.toISOString(),
     });
   });
 });

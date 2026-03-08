@@ -43,6 +43,13 @@
       "when": 1772907618186,
       "tag": "0005_broad_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772990012020,
+      "tag": "0006_lumpy_guardsmen",
+      "breakpoints": true
     }
   ]
 }

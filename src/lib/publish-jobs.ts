@@ -354,6 +354,7 @@ export const recoverStaleProcessingJobs = async (
           type: "failed",
           attempt: job.attempts || undefined,
           detail,
+          at: now.toISOString(),
         }),
       })
       .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "processing")))
