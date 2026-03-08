@@ -38,7 +38,7 @@
 
 4. Fill brand and post details
    - Brand fields: name, values, principles, story, voice, visual direction, palette (color picker swatches), fonts, logo notes.
-   - Post fields: theme, subject, thought, objective, audience, mood, aspect ratio.
+   - Post fields: theme, subject, thought, objective, audience, mood, aspect ratio (including feed landscape `1.91:1`).
    - Brand kits can store multiple named logos. Upload them in Brand Kits, edit the display names, then select both the brand kit and logo from the post brief form.
    - New posts default to the first available brand kit in the database when one exists.
    - The post subject field is used as the post title in the sidebar list, falling back to theme or the first generated variant headline.
@@ -62,6 +62,8 @@
 
 8. Pick and edit a variant
    - Select a variant tile to preview.
+   - For carousel variants, use the **Carousel Composer** under the preview to add/remove included items, reorder them, and switch the feed orientation between square, portrait, and landscape.
+   - Carousel composer changes are part of the same autosaved draft state as the brief and overlay edits, so preview, share snapshots, and publish all use the same order.
    - Enable editor mode to drag/resize text overlay blocks.
    - The canvas auto-saves after edits; use `Save now` beside the editor controls when you want an immediate write.
    - Use the Canvas Editor inspector to:
@@ -104,12 +106,12 @@
 - Selecting a different post saves pending edits first, then loads the selected draft.
 - If you click multiple posts quickly, stale responses are ignored and only the latest selection is applied.
 - Sidebar list refreshes keep existing entries visible to avoid flicker while background updates run.
-- Editor text/layout changes are part of the same autosaved draft state as your brief, assets, and selected variant.
+- Editor text/layout changes and carousel composition changes are part of the same autosaved draft state as your brief, assets, and selected variant.
 
 ## Publishing Behavior
 
 - `single-image` variant publishes a rendered poster image.
-- `carousel` variant uses uploaded media sequence (minimum 2 items, up to 10).
+- `carousel` variant uses the Carousel Composer sequence (minimum 2 items, up to 10) and the selected feed orientation.
 - `reel` variant requires at least one uploaded video and includes a `Share reel to main feed` toggle. The default is on, matching the previous hardcoded behavior.
 - Location ID and user tags are supported only for single-image posts (including queue edits).
 - Location search suggestions populate the same `locationId` field sent to Meta; if search fails, you can still paste the raw ID manually.

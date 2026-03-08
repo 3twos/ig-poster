@@ -7,11 +7,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PosterPreview } from "@/components/poster-preview";
 import { type SavedProject, SavedProjectSchema } from "@/lib/project";
 
+const toVisualUrl = (asset?: SavedProject["assets"][number]) => {
+  if (!asset) return undefined;
+  if (asset.mediaType === "video") {
+    return asset.posterUrl || undefined;
+  }
+  return asset.url;
+};
+
 export default function ShareProjectPage() {
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<SavedProject | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const posterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,39 +57,50 @@ export default function ShareProjectPage() {
     );
   }, [project]);
 
+  useEffect(() => {
+    setActiveSlideIndex(0);
+  }, [activeVariant?.id]);
+
+  const orderedAssets = useMemo(() => {
+    if (!project || !activeVariant) {
+      return [];
+    }
+
+    const assetMap = new Map(project.assets.map((asset) => [asset.id, asset]));
+    const ordered = activeVariant.assetSequence
+      .map((assetId) => assetMap.get(assetId))
+      .filter((asset): asset is SavedProject["assets"][number] => Boolean(asset));
+
+    return ordered.length ? ordered : project.assets;
+  }, [activeVariant, project]);
+
   const primaryAssetUrl = useMemo(() => {
-    if (!project) {
+    if (!project || !activeVariant) {
       return undefined;
     }
 
-    const first = project.assets[0];
-    if (!first) {
-      return undefined;
+    if (activeVariant.postType === "single-image") {
+      return project.renderedPosterUrl || toVisualUrl(orderedAssets[0]);
     }
 
-    if (first.mediaType === "video") {
-      return first.posterUrl || project.renderedPosterUrl || undefined;
+    if (activeVariant.postType === "carousel") {
+      return (
+        toVisualUrl(
+          orderedAssets[Math.min(activeSlideIndex, orderedAssets.length - 1)],
+        ) || project.renderedPosterUrl || undefined
+      );
     }
 
-    return first.url;
-  }, [project]);
+    return toVisualUrl(orderedAssets[0]) || project.renderedPosterUrl || undefined;
+  }, [activeSlideIndex, activeVariant, orderedAssets, project]);
 
   const secondaryAssetUrl = useMemo(() => {
-    if (!project) {
+    if (!project || !activeVariant || activeVariant.postType === "carousel") {
       return undefined;
     }
 
-    const second = project.assets[1];
-    if (!second) {
-      return undefined;
-    }
-
-    if (second.mediaType === "video") {
-      return second.posterUrl || undefined;
-    }
-
-    return second.url;
-  }, [project]);
+    return toVisualUrl(orderedAssets[1]);
+  }, [activeVariant, orderedAssets, project]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] px-4 py-10 text-white md:px-8">
@@ -123,10 +143,17 @@ export default function ShareProjectPage() {
                 variant={activeVariant}
                 brandName={project.brand.brandName}
                 aspectRatio={project.post.aspectRatio}
-                primaryImage={project.renderedPosterUrl || primaryAssetUrl}
+                primaryImage={primaryAssetUrl}
                 secondaryImage={secondaryAssetUrl}
                 logoImage={project.logoUrl || undefined}
                 overlayLayout={project.overlayLayouts[activeVariant.id]}
+                carouselSlides={activeVariant.carouselSlides}
+                activeSlideIndex={activeSlideIndex}
+                onSlideChange={
+                  activeVariant.postType === "carousel"
+                    ? setActiveSlideIndex
+                    : undefined
+                }
               />
             </div>
 
