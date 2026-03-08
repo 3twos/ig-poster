@@ -137,6 +137,13 @@ export const OverlayBlockSchema = z.object({
   width: z.number().min(5).max(100),
   height: z.number().min(5).max(100),
   fontScale: z.number().min(0.6).max(2.4),
+  visible: z.boolean().optional().default(true),
+  text: z.string().trim().max(320).optional().default(""),
+});
+
+export const CustomOverlayBlockSchema = OverlayBlockSchema.extend({
+  id: z.string().trim().min(1).max(64),
+  label: z.string().trim().min(1).max(32).optional().default("Custom"),
 });
 
 export const OverlayLayoutSchema = z.object({
@@ -144,6 +151,7 @@ export const OverlayLayoutSchema = z.object({
   headline: OverlayBlockSchema,
   supportingText: OverlayBlockSchema,
   cta: OverlayBlockSchema,
+  custom: z.array(CustomOverlayBlockSchema).max(6).optional().default([]),
 });
 
 export const PublishOutcomeInsightsSchema = z.object({
@@ -176,33 +184,39 @@ export type PromptConfig = NonNullable<GenerationRequest["promptConfig"]>;
 export type CreativeVariant = z.infer<typeof CreativeVariantSchema>;
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 export type InternalGenerationResponse = z.infer<typeof InternalGenerationResponseSchema>;
+export type OverlayBlock = z.infer<typeof OverlayBlockSchema>;
+export type CustomOverlayBlock = z.infer<typeof CustomOverlayBlockSchema>;
 export type OverlayLayout = z.infer<typeof OverlayLayoutSchema>;
 export type PublishOutcome = z.infer<typeof PublishOutcomeSchema>;
 
 const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
   "hero-quote": {
-    hook: { x: 8, y: 58, width: 72, height: 8, fontScale: 1 },
-    headline: { x: 8, y: 66, width: 80, height: 16, fontScale: 1 },
-    supportingText: { x: 8, y: 82, width: 84, height: 12, fontScale: 1 },
-    cta: { x: 8, y: 93, width: 64, height: 6, fontScale: 1 },
+    hook: { x: 8, y: 58, width: 72, height: 8, fontScale: 1, visible: true, text: "" },
+    headline: { x: 8, y: 66, width: 80, height: 16, fontScale: 1, visible: true, text: "" },
+    supportingText: { x: 8, y: 82, width: 84, height: 12, fontScale: 1, visible: true, text: "" },
+    cta: { x: 8, y: 93, width: 64, height: 6, fontScale: 1, visible: true, text: "" },
+    custom: [],
   },
   "split-story": {
-    hook: { x: 6, y: 60, width: 56, height: 7, fontScale: 1 },
-    headline: { x: 6, y: 67, width: 58, height: 14, fontScale: 1 },
-    supportingText: { x: 6, y: 81, width: 58, height: 11, fontScale: 1 },
-    cta: { x: 6, y: 92, width: 56, height: 6, fontScale: 1 },
+    hook: { x: 6, y: 60, width: 56, height: 7, fontScale: 1, visible: true, text: "" },
+    headline: { x: 6, y: 67, width: 58, height: 14, fontScale: 1, visible: true, text: "" },
+    supportingText: { x: 6, y: 81, width: 58, height: 11, fontScale: 1, visible: true, text: "" },
+    cta: { x: 6, y: 92, width: 56, height: 6, fontScale: 1, visible: true, text: "" },
+    custom: [],
   },
   magazine: {
-    hook: { x: 6, y: 72, width: 72, height: 7, fontScale: 1 },
-    headline: { x: 6, y: 79, width: 84, height: 12, fontScale: 1 },
-    supportingText: { x: 6, y: 90, width: 84, height: 8, fontScale: 1 },
-    cta: { x: 6, y: 96, width: 56, height: 5, fontScale: 1 },
+    hook: { x: 6, y: 72, width: 72, height: 7, fontScale: 1, visible: true, text: "" },
+    headline: { x: 6, y: 79, width: 84, height: 12, fontScale: 1, visible: true, text: "" },
+    supportingText: { x: 6, y: 90, width: 84, height: 8, fontScale: 1, visible: true, text: "" },
+    cta: { x: 6, y: 96, width: 56, height: 5, fontScale: 1, visible: true, text: "" },
+    custom: [],
   },
   "minimal-logo": {
-    hook: { x: 18, y: 24, width: 64, height: 8, fontScale: 1 },
-    headline: { x: 10, y: 34, width: 80, height: 22, fontScale: 1 },
-    supportingText: { x: 16, y: 56, width: 68, height: 16, fontScale: 1 },
-    cta: { x: 26, y: 74, width: 48, height: 8, fontScale: 1 },
+    hook: { x: 18, y: 24, width: 64, height: 8, fontScale: 1, visible: true, text: "" },
+    headline: { x: 10, y: 34, width: 80, height: 22, fontScale: 1, visible: true, text: "" },
+    supportingText: { x: 16, y: 56, width: 68, height: 16, fontScale: 1, visible: true, text: "" },
+    cta: { x: 26, y: 74, width: 48, height: 8, fontScale: 1, visible: true, text: "" },
+    custom: [],
   },
 };
 
@@ -211,7 +225,58 @@ export const createDefaultOverlayLayout = (layout: CreativeLayout): OverlayLayou
   headline: { ...OVERLAY_DEFAULTS[layout].headline },
   supportingText: { ...OVERLAY_DEFAULTS[layout].supportingText },
   cta: { ...OVERLAY_DEFAULTS[layout].cta },
+  custom: [],
 });
+
+const DEFAULT_CUSTOM_OVERLAY_BLOCK: Omit<CustomOverlayBlock, "id"> = {
+  label: "Custom",
+  x: 12,
+  y: 14,
+  width: 56,
+  height: 12,
+  fontScale: 1,
+  visible: true,
+  text: "",
+};
+
+const normalizeOverlayBlock = (
+  block: Partial<OverlayBlock> | null | undefined,
+  defaults: OverlayBlock,
+): OverlayBlock => ({
+  ...defaults,
+  ...(block ?? {}),
+});
+
+const normalizeCustomOverlayBlock = (
+  block: Partial<CustomOverlayBlock> | null | undefined,
+  index: number,
+): CustomOverlayBlock => ({
+  ...DEFAULT_CUSTOM_OVERLAY_BLOCK,
+  id: block?.id?.trim() || `custom-${index + 1}`,
+  ...(block ?? {}),
+});
+
+export const normalizeOverlayLayout = (
+  layoutType: CreativeLayout,
+  layout?: Partial<OverlayLayout> | null,
+): OverlayLayout => {
+  const defaults = createDefaultOverlayLayout(layoutType);
+
+  return {
+    hook: normalizeOverlayBlock(layout?.hook, defaults.hook),
+    headline: normalizeOverlayBlock(layout?.headline, defaults.headline),
+    supportingText: normalizeOverlayBlock(
+      layout?.supportingText,
+      defaults.supportingText,
+    ),
+    cta: normalizeOverlayBlock(layout?.cta, defaults.cta),
+    custom: Array.isArray(layout?.custom)
+      ? layout.custom.map((block, index) =>
+          normalizeCustomOverlayBlock(block, index),
+        )
+      : [],
+  };
+};
 
 const FALLBACK_COLORS = ["#0F172A", "#F97316", "#22C55E", "#FFFFFF"];
 

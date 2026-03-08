@@ -23,7 +23,7 @@ Output:
 - Caption + hashtag bundle
 - Prompt controls (system addendum + campaign instructions)
 - Live poster preview
-- Draggable/resizable text canvas editor
+- Draggable/resizable text canvas editor with text overrides, hide/show controls, and custom text boxes
 - PNG export
 - Workspace project URL (requires login)
 - Publish now or schedule to Instagram
@@ -40,7 +40,8 @@ Output:
 2. Editable drag/resize overlay canvas
 - Toggle editor mode in the right panel
 - Move and resize hook/headline/body/cta text blocks
-- Save overlay positions per concept and include in shared snapshots
+- Edit generated text in-place, hide generated blocks, and add/remove custom text boxes
+- Autosave overlay changes per concept and include them in shared snapshots
 
 3. One-click Meta publish integration + scheduler
 - Publish immediately via Meta Graph API (image, carousel, reel)

@@ -63,6 +63,14 @@
 8. Pick and edit a variant
    - Select a variant tile to preview.
    - Enable editor mode to drag/resize text overlay blocks.
+   - The canvas auto-saves after edits; use `Save now` beside the editor controls when you want an immediate write.
+   - Use the Canvas Editor inspector to:
+     - change hook/headline/body/CTA text without regenerating
+     - hide a generated text block and add it back later
+     - add or remove custom text boxes
+     - adjust text scale per box
+   - Turning editor mode off keeps the edited layout visible in the normal preview and in shared snapshots.
+   - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
 
 9. Export or copy content
    - Export poster as PNG.
@@ -93,6 +101,7 @@
 - Selecting a different post saves pending edits first, then loads the selected draft.
 - If you click multiple posts quickly, stale responses are ignored and only the latest selection is applied.
 - Sidebar list refreshes keep existing entries visible to avoid flicker while background updates run.
+- Editor text/layout changes are part of the same autosaved draft state as your brief, assets, and selected variant.
 
 ## Publishing Behavior
 

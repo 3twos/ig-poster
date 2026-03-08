@@ -49,6 +49,7 @@ import { usePostContext } from "@/contexts/post-context";
 import { useGeneration } from "@/hooks/use-generation";
 import {
   createDefaultOverlayLayout,
+  normalizeOverlayLayout,
   type GenerationResponse,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
@@ -87,6 +88,8 @@ export default function Home() {
     createNewPost,
     refreshPosts,
     selectPost,
+    saveNow,
+    saveStatus,
   } = usePostContext();
 
   const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
@@ -350,7 +353,10 @@ export default function Home() {
 
   const activeOverlayLayout = useMemo(() => {
     if (!activeVariant) return undefined;
-    return overlayLayouts[activeVariant.id] ?? createDefaultOverlayLayout(activeVariant.layout);
+    return normalizeOverlayLayout(
+      activeVariant.layout,
+      overlayLayouts[activeVariant.id] ?? createDefaultOverlayLayout(activeVariant.layout),
+    );
   }, [activeVariant, overlayLayouts]);
 
   const assetMap = useMemo(() => new Map(localAssets.map((a) => [a.id, a])), [localAssets]);
@@ -929,7 +935,14 @@ export default function Home() {
                     </section>
                     {result && (
                       <section className="border-b border-white/10 pb-6">
-                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />
+                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
+                          if (!activeVariant) return;
+                          dispatch({
+                            type: "UPDATE_OVERLAY",
+                            variantId: activeVariant.id,
+                            layout,
+                          });
+                        }} saveStatus={saveStatus} onSaveNow={saveNow} />
                       </section>
                     )}
                     {activeVariant && (
@@ -975,7 +988,14 @@ export default function Home() {
             <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
-            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
+            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
+              if (!activeVariant) return;
+              dispatch({
+                type: "UPDATE_OVERLAY",
+                variantId: activeVariant.id,
+                layout,
+              });
+            }} saveStatus={saveStatus} onSaveNow={saveNow} />}
             {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>

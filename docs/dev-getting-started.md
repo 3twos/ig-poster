@@ -155,9 +155,9 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/settings-modal.tsx`: full-screen settings dialog (LLM connections, ordering, execution mode).
 - `src/components/brand-kit-modal.tsx`: full-screen brand kit dialog (logo, palette, voice, prompt controls, kit CRUD).
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
-- `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls.
+- `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls, and the canvas editor inspector (save state, text overrides, custom boxes).
 - `src/components/publish-section.tsx`: share link, Instagram auth, optional first-comment input, optional image metadata (location ID + user tags), schedule, publish form.
-- `src/components/poster-preview.tsx`: poster renderer + editable overlay blocks.
+- `src/components/poster-preview.tsx`: poster renderer, persisted overlay layout playback, carousel slide preview, adaptive logo chip, and editable overlay blocks.
 - `src/components/chat/`: chat module — `chat-panel.tsx` (embeddable for right panel), `chat-container.tsx` (standalone with sidebar), `chat-messages.tsx`, `chat-message.tsx`, `chat-input.tsx`, `chat-markdown.tsx`, `chat-code-block.tsx`, `chat-thinking.tsx`, `chat-empty.tsx`, `chat-header.tsx`, `chat-sidebar.tsx`.
 - `src/hooks/use-generation.ts`: SSE-based generation orchestration, agent run state, thinking token handling.
 - `src/hooks/use-chat.ts`: chat message state, SSE streaming, send/stop/regenerate/edit.
