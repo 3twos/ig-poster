@@ -960,15 +960,28 @@ friendly_pull_request_label() {
 }
 
 # Cache for branch→PR lookups via gh CLI (avoids repeated API calls).
-# Uses a flat key=value list since associative arrays have portability issues.
+# Uses two parallel indexed arrays for keys and values since associative arrays have portability issues.
+# Successful lookups (pr:<number>) are cached permanently. Failed lookups (n/a) are cached with a
+# timestamp and retried after _BRANCH_PR_MISS_TTL seconds so the PR becomes discoverable once created.
 _BRANCH_PR_CACHE_KEYS=()
 _BRANCH_PR_CACHE_VALS=()
+_BRANCH_PR_CACHE_EPOCH=()
+_BRANCH_PR_MISS_TTL=120
 GH_CLI_AVAILABLE=""
 
 _branch_pr_cache_get() {
-  local key="$1" i
+  local key="$1" i now
   for (( i = 0; i < ${#_BRANCH_PR_CACHE_KEYS[@]}; i++ )); do
     if [[ "${_BRANCH_PR_CACHE_KEYS[i]}" == "$key" ]]; then
+      # Expire n/a entries after TTL so we retry failed lookups.
+      if [[ "${_BRANCH_PR_CACHE_VALS[i]}" == "n/a" ]]; then
+        now="$(date +%s)"
+        if (( now - ${_BRANCH_PR_CACHE_EPOCH[i]:-0} >= _BRANCH_PR_MISS_TTL )); then
+          # Remove stale entry by clearing the key so it won't match again.
+          _BRANCH_PR_CACHE_KEYS[i]=""
+          return 1
+        fi
+      fi
       printf '%s' "${_BRANCH_PR_CACHE_VALS[i]}"
       return 0
     fi
@@ -979,6 +992,7 @@ _branch_pr_cache_get() {
 _branch_pr_cache_set() {
   _BRANCH_PR_CACHE_KEYS+=("$1")
   _BRANCH_PR_CACHE_VALS+=("$2")
+  _BRANCH_PR_CACHE_EPOCH+=("$(date +%s)")
 }
 
 resolve_pr_for_branch() {
