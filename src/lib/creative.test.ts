@@ -155,7 +155,15 @@ describe("creative helpers", () => {
 
   it("normalizes older overlay layouts with editor defaults", () => {
     const normalized = normalizeOverlayLayout("hero-quote", {
-      headline: { x: 12, y: 20, width: 60, height: 18, fontScale: 1.2 },
+      headline: {
+        x: 12,
+        y: 20,
+        width: 60,
+        height: 18,
+        fontScale: 1.2,
+        visible: true,
+        text: "",
+      },
     });
 
     expect(normalized.headline.x).toBe(12);

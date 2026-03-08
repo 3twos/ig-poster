@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -68,6 +68,20 @@ beforeAll(() => {
     value: ResizeObserverMock,
     configurable: true,
   });
+
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get() {
+      return 400;
+    },
+  });
+
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get() {
+      return 500;
+    },
+  });
 });
 
 describe("PosterPreview", () => {
@@ -88,5 +102,25 @@ describe("PosterPreview", () => {
 
     expect(screen.getByText("Manual carousel headline")).not.toBeNull();
     expect(screen.queryByAltText("Secondary poster asset")).toBeNull();
+  });
+
+  it("uses the clamped carousel slide index for overlay copy and does not double-render editor text", async () => {
+    render(
+      <PosterPreview
+        variant={carouselVariant}
+        brandName="Nexa Labs"
+        aspectRatio="4:5"
+        primaryImage="https://example.com/primary.jpg"
+        overlayLayout={createDefaultOverlayLayout(carouselVariant.layout)}
+        carouselSlides={carouselVariant.carouselSlides}
+        activeSlideIndex={99}
+        editorMode
+        onOverlayLayoutChange={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Slide three headline")).toHaveLength(1);
+    });
   });
 });

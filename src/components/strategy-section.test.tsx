@@ -86,4 +86,23 @@ describe("StrategySection editor inspector", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(screen.queryByDisplayValue("New text")).toBeNull();
   });
+
+  it("keeps custom boxes within schema limits while editing", () => {
+    render(<StrategyHarness />);
+
+    const addButton = screen.getByRole("button", { name: "Add box" });
+    for (let index = 0; index < 6; index += 1) {
+      fireEvent.click(addButton);
+    }
+
+    expect((addButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(6);
+
+    const firstLabelInput = screen.getByDisplayValue("Text Box 1");
+    fireEvent.change(firstLabelInput, { target: { value: "" } });
+    expect(screen.getByDisplayValue("Text Box 1")).not.toBeNull();
+
+    const firstCustomText = screen.getAllByDisplayValue("New text")[0] as HTMLTextAreaElement;
+    expect(firstCustomText.getAttribute("maxLength")).toBe("320");
+  });
 });

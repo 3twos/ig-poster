@@ -252,8 +252,8 @@ const normalizeCustomOverlayBlock = (
   index: number,
 ): CustomOverlayBlock => ({
   ...DEFAULT_CUSTOM_OVERLAY_BLOCK,
-  id: block?.id?.trim() || `custom-${index + 1}`,
   ...(block ?? {}),
+  id: block?.id?.trim() || `custom-${index + 1}`,
 });
 
 export const normalizeOverlayLayout = (

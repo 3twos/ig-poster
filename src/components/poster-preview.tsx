@@ -459,23 +459,6 @@ export const PosterPreview = memo(
         [overlayLayout, variant.layout],
       );
 
-      const visibleBlocks = useMemo(
-        () =>
-          buildOverlayBlocks(
-            variant,
-            resolvedOverlayLayout,
-            carouselSlides,
-            activeSlideIndex,
-          ),
-        [activeSlideIndex, carouselSlides, resolvedOverlayLayout, variant],
-      );
-
-      const canEdit =
-        Boolean(editorMode) &&
-        Boolean(onOverlayLayoutChange) &&
-        frameSize.width > 0 &&
-        frameSize.height > 0;
-
       const navLength =
         variant.postType === "carousel"
           ? Math.min(
@@ -485,6 +468,23 @@ export const PosterPreview = memo(
           : 0;
       const clampedSlideIndex =
         navLength > 0 ? Math.min(activeSlideIndex, navLength - 1) : 0;
+
+      const visibleBlocks = useMemo(
+        () =>
+          buildOverlayBlocks(
+            variant,
+            resolvedOverlayLayout,
+            carouselSlides,
+            clampedSlideIndex,
+          ),
+        [carouselSlides, clampedSlideIndex, resolvedOverlayLayout, variant],
+      );
+
+      const canEdit =
+        Boolean(editorMode) &&
+        Boolean(onOverlayLayoutChange) &&
+        frameSize.width > 0 &&
+        frameSize.height > 0;
 
       return (
         <div
@@ -520,9 +520,11 @@ export const PosterPreview = memo(
 
           <div className="absolute inset-0" style={{ background: overlay }} />
 
-          {visibleBlocks.map((block) => (
-            <OverlayBlock key={block.id} block={block} editable={false} />
-          ))}
+          {!canEdit
+            ? visibleBlocks.map((block) => (
+                <OverlayBlock key={block.id} block={block} editable={false} />
+              ))
+            : null}
 
           {canEdit && onOverlayLayoutChange ? (
             <EditorOverlay

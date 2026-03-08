@@ -101,6 +101,10 @@ function saveStatusLabel(saveStatus: SaveStatus) {
   }
 }
 
+const MAX_CUSTOM_TEXT_BOXES = 6;
+const MAX_OVERLAY_TEXT_LENGTH = 320;
+const MAX_CUSTOM_LABEL_LENGTH = 32;
+
 function createCustomTextBox(count: number): OverlayLayout["custom"][number] {
   const offset = count * 4;
   return {
@@ -114,6 +118,11 @@ function createCustomTextBox(count: number): OverlayLayout["custom"][number] {
     fontScale: 1,
     visible: true,
   };
+}
+
+function normalizeCustomLabel(raw: string, fallbackLabel: string): string {
+  const trimmed = raw.trim();
+  return trimmed.slice(0, MAX_CUSTOM_LABEL_LENGTH) || fallbackLabel;
 }
 
 function EditorInspector({
@@ -153,9 +162,14 @@ function EditorInspector({
   };
 
   const addCustomField = () => {
+    const currentCount = overlayLayout.custom?.length ?? 0;
+    if (currentCount >= MAX_CUSTOM_TEXT_BOXES) {
+      return;
+    }
+
     onOverlayLayoutChange({
       ...overlayLayout,
-      custom: [...(overlayLayout.custom ?? []), createCustomTextBox(overlayLayout.custom?.length ?? 0)],
+      custom: [...(overlayLayout.custom ?? []), createCustomTextBox(currentCount)],
     });
   };
 
@@ -241,6 +255,7 @@ function EditorInspector({
                 <Textarea
                   value={value}
                   disabled={!isVisible}
+                  maxLength={MAX_OVERLAY_TEXT_LENGTH}
                   onChange={(event) =>
                     updateCanonicalField(field.key, { text: event.target.value })
                   }
@@ -252,6 +267,7 @@ function EditorInspector({
                 <Input
                   value={value}
                   disabled={!isVisible}
+                  maxLength={MAX_OVERLAY_TEXT_LENGTH}
                   onChange={(event) =>
                     updateCanonicalField(field.key, { text: event.target.value })
                   }
@@ -294,7 +310,12 @@ function EditorInspector({
           <p className="text-xs font-semibold tracking-[0.16em] text-slate-200 uppercase">
             Custom Text Boxes
           </p>
-          <Button variant="outline" size="xs" onClick={addCustomField}>
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={addCustomField}
+            disabled={(overlayLayout.custom?.length ?? 0) >= MAX_CUSTOM_TEXT_BOXES}
+          >
             <Plus className="h-3.5 w-3.5" />
             Add box
           </Button>
@@ -302,7 +323,7 @@ function EditorInspector({
 
         {overlayLayout.custom?.length ? (
           <div className="mt-3 grid gap-3">
-            {overlayLayout.custom.map((block) => (
+            {overlayLayout.custom.map((block, index) => (
               <div
                 key={block.id}
                 className="rounded-xl border border-white/10 bg-black/20 p-3"
@@ -310,8 +331,22 @@ function EditorInspector({
                 <div className="flex items-center justify-between gap-2">
                   <Input
                     value={block.label}
+                    maxLength={MAX_CUSTOM_LABEL_LENGTH}
                     onChange={(event) =>
-                      updateCustomField(block.id, { label: event.target.value })
+                      updateCustomField(block.id, {
+                        label: normalizeCustomLabel(
+                          event.target.value,
+                          `Text Box ${index + 1}`,
+                        ),
+                      })
+                    }
+                    onBlur={() =>
+                      updateCustomField(block.id, {
+                        label: normalizeCustomLabel(
+                          block.label,
+                          `Text Box ${index + 1}`,
+                        ),
+                      })
                     }
                     placeholder="Text Box"
                     className="h-8"
@@ -328,6 +363,7 @@ function EditorInspector({
 
                 <Textarea
                   value={block.text}
+                  maxLength={MAX_OVERLAY_TEXT_LENGTH}
                   onChange={(event) =>
                     updateCustomField(block.id, { text: event.target.value })
                   }
