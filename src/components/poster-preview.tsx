@@ -194,7 +194,6 @@ const OverlayBlockBody = ({
   onEditStart?: () => void;
 }) => {
   const spanRef = useRef<HTMLSpanElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
   const cancelledRef = useRef(false);
 
   const handleBlur = useCallback(() => {
@@ -207,8 +206,10 @@ const OverlayBlockBody = ({
       return;
     }
     if (!onTextCommit || !spanRef.current) return;
-    const contentHeight = bodyRef.current?.scrollHeight;
-    onTextCommit(spanRef.current.textContent ?? "", contentHeight);
+    // Measure span's natural height (not the min-h-full wrapper) for auto-sizing.
+    // Add p-3 padding (24px) from the body container.
+    const spanHeight = spanRef.current.scrollHeight;
+    onTextCommit(spanRef.current.textContent ?? "", spanHeight ? spanHeight + 24 : undefined);
   }, [block.text, onTextCommit]);
 
   const handleKeyDown = useCallback(
@@ -247,7 +248,6 @@ const OverlayBlockBody = ({
 
   return (
     <div
-      ref={bodyRef}
       className={cn(
         "flex min-h-full w-full p-3",
         block.containerClassName,
@@ -461,7 +461,7 @@ const EditorOverlay = ({
       let newHeight: number | undefined;
       if (contentHeight && frame.height > 0) {
         // Add ~40px for the editor chrome (p-2 padding + top controls)
-        newHeight = Math.max(5, ((contentHeight + 40) / frame.height) * 100);
+        newHeight = Math.min(100, Math.max(5, ((contentHeight + 40) / frame.height) * 100));
       }
 
       if (block.type === "canonical" && block.key) {

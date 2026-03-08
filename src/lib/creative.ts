@@ -144,7 +144,7 @@ export const OverlayBlockSchema = z.object({
   fontScale: z.number().min(0.6).max(2.4),
   visible: z.boolean().optional().default(true),
   text: z.string().trim().max(320).optional().default(""),
-  borderRadius: z.number().min(0).max(999).optional(),
+  borderRadius: z.number().min(0).max(9999).optional(),
 });
 
 export const CustomOverlayBlockSchema = OverlayBlockSchema.extend({
