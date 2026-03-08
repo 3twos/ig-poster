@@ -405,20 +405,25 @@ function SortableComposerTile({
       style={{
         transform: CSS.Translate.toString(transform),
         transition: transition ?? undefined,
-        opacity: isDragging ? 0 : 1,
-        cursor: disabled ? undefined : "grab",
+        cursor: disabled ? undefined : isDragging ? "grabbing" : "grab",
       }}
     >
-      <ComposerTile
-        asset={asset}
-        removable={removable}
-        disabled={disabled}
-        onMoveLeft={onMoveLeft}
-        onMoveRight={onMoveRight}
-        index={index}
-        total={total}
-        onRemove={onRemove}
-      />
+      {isDragging ? (
+        <div className="rounded-xl border-2 border-dashed border-white/20 bg-white/5 p-2">
+          <div className="aspect-square w-full rounded-lg" />
+        </div>
+      ) : (
+        <ComposerTile
+          asset={asset}
+          removable={removable}
+          disabled={disabled}
+          onMoveLeft={onMoveLeft}
+          onMoveRight={onMoveRight}
+          index={index}
+          total={total}
+          onRemove={onRemove}
+        />
+      )}
     </div>
   );
 }
