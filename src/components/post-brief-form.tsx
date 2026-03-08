@@ -41,11 +41,13 @@ type PostBriefActionsProps = {
   onGenerate: () => void;
   onCancelGenerate: () => void;
   onExportPoster: () => void;
+  children?: React.ReactNode;
 };
 
 type PostBriefAspectRatioProps = {
   aspectRatio: AspectRatio;
   disabled?: boolean;
+  showLabel?: boolean;
   onChange: (value: AspectRatio) => void;
 };
 
@@ -80,6 +82,7 @@ export function PostBriefActions({
   onGenerate,
   onCancelGenerate,
   onExportPoster,
+  children,
 }: PostBriefActionsProps) {
   return (
     <div className="space-y-3">
@@ -104,6 +107,7 @@ export function PostBriefActions({
           <Download className="h-4 w-4" />
           Export PNG
         </Button>
+        {children}
       </div>
 
       {!llmAuthStatus.connected ? (
@@ -131,11 +135,12 @@ export function PostBriefActions({
 export function PostBriefAspectRatio({
   aspectRatio,
   disabled,
+  showLabel = true,
   onChange,
 }: PostBriefAspectRatioProps) {
   return (
     <div className="space-y-1">
-      <Label className="text-xs text-slate-200">Aspect Ratio</Label>
+      {showLabel ? <Label className="text-xs text-slate-200">Aspect Ratio</Label> : null}
       <Select
         value={aspectRatio}
         disabled={disabled}
