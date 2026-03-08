@@ -2205,25 +2205,6 @@ refresh_project_deployments() {
       continue
     fi
 
-    # Skip "Ignored Build Step" cancellations: preview deployments that were
-    # canceled very quickly (<5s duration) by the Vercel build-step ignore rule.
-    if [[ "$dep_status" == "CANCELED" ]]; then
-      local dep_target_lower
-      dep_target_lower="$(printf '%s' "$dep_target" | tr '[:upper:]' '[:lower:]')"
-      if [[ "$dep_target_lower" == "preview" || -z "$dep_target_lower" ]]; then
-        # Only skip when both timestamps are valid, positive integers and we can
-        # compute a short (sub-5s) duration. Otherwise, treat it as a real cancel.
-        if [[ "$dep_created_at" =~ ^[0-9]+$ ]] && [[ "$dep_ready_at" =~ ^[0-9]+$ ]] && (( dep_ready_at > 0 && dep_created_at > 0 )); then
-          local cancel_duration
-          cancel_duration=$(( dep_ready_at - dep_created_at ))
-          if (( cancel_duration >= 0 && cancel_duration < 5000 )); then
-            log_line "Skipping ignored build step: id=${dep_id} target=${dep_target:-preview}"
-            continue
-          fi
-        fi
-      fi
-    fi
-
     old_idx="$(deployment_index_by_id "$dep_id")"
     if (( old_idx >= 0 )); then
       first_seen="${DEP_FIRST_SEEN_EPOCH[old_idx]}"
@@ -2439,6 +2420,64 @@ process_deployment_transitions_and_alerts() {
 
     if [[ -z "$old_status" ]]; then
       log_line "Watching deployment id=${dep_id} state=${status}"
+
+      # Announce newly discovered deployments that are actively building
+      if is_active_status "$status"; then
+        # Compute labels early so we can build the starting announcement
+        env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
+        identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
+        spoken_identity="$(spoken_deployment_identity "$identity_label")"
+        target_label="$(sanitize_field "${DEP_TARGET[i]:-preview}")"
+        target_lower="$(printf '%s' "$target_label" | tr '[:upper:]' '[:lower:]')"
+        if [[ -z "$target_lower" ]]; then
+          target_lower="preview"
+        fi
+        pr_display_label="$(pull_request_display_label "${DEP_PULL_REQUEST[i]:-}")"
+        change_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
+
+        local branch_last_segment
+        branch_last_segment="${DEP_BRANCH[i]:-}"
+        branch_last_segment="${branch_last_segment##*/}"
+        # Convert hyphens/underscores to spaces for spoken form
+        branch_last_segment="${branch_last_segment//[-_]/ }"
+
+        case "$target_lower" in
+          production)
+            if [[ "$change_label" != "n/a" ]]; then
+              alert_message="Starting Main ${change_label}."
+              spoken_alert="Starting Main ${change_label}."
+            else
+              alert_message="Starting Main."
+              spoken_alert="Starting Main."
+            fi
+            ;;
+          preview|"")
+            if [[ "$pr_display_label" != "n/a" && -n "$branch_last_segment" ]]; then
+              alert_message="Starting PR ${pr_display_label} ${branch_last_segment}."
+              spoken_alert="Starting PR ${pr_display_label} ${branch_last_segment}."
+            elif [[ "$pr_display_label" != "n/a" ]]; then
+              alert_message="Starting PR ${pr_display_label}."
+              spoken_alert="Starting PR ${pr_display_label}."
+            elif [[ -n "$branch_last_segment" ]]; then
+              alert_message="Starting ${branch_last_segment}."
+              spoken_alert="Starting ${branch_last_segment}."
+            else
+              alert_message="Starting ${spoken_identity}."
+              spoken_alert="Starting ${spoken_identity}."
+            fi
+            ;;
+          *)
+            alert_message="Starting ${spoken_identity}."
+            spoken_alert="Starting ${spoken_identity}."
+            ;;
+        esac
+
+        LAST_ALERT_MESSAGE="$alert_message"
+        LAST_ALERT_EPOCH="$(date +%s)"
+        LAST_ALERT_LEVEL="info"
+        log_line "Alert: ${alert_message}"
+        speak_alert "$spoken_alert"
+      fi
     elif [[ "$status" != "$old_status" ]]; then
       log_line "Transition: ${old_status} -> ${status} (id=${dep_id})"
     fi
