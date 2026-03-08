@@ -2418,49 +2418,54 @@ process_deployment_transitions_and_alerts() {
     status="${DEP_STATUS[i]:-UNKNOWN}"
     old_status="${DEP_LAST_STATUS[i]:-}"
 
+    # Compute shared labels once per deployment iteration
+    env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
+    identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
+    spoken_identity="$(spoken_deployment_identity "$identity_label")"
+    target_label="$(sanitize_field "${DEP_TARGET[i]:-preview}")"
+    target_lower="$(printf '%s' "$target_label" | tr '[:upper:]' '[:lower:]')"
+    if [[ -z "$target_lower" ]]; then
+      target_lower="preview"
+    fi
+    pr_display_label="$(pull_request_display_label "${DEP_PULL_REQUEST[i]:-}")"
+    pr_kind_label="$(pull_request_kind_label "${DEP_PULL_REQUEST[i]:-}")"
+    change_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
+
     if [[ -z "$old_status" ]]; then
       log_line "Watching deployment id=${dep_id} state=${status}"
 
       # Announce newly discovered deployments that are actively building
       if is_active_status "$status"; then
-        # Compute labels early so we can build the starting announcement
-        env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
-        identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
-        spoken_identity="$(spoken_deployment_identity "$identity_label")"
-        target_label="$(sanitize_field "${DEP_TARGET[i]:-preview}")"
-        target_lower="$(printf '%s' "$target_label" | tr '[:upper:]' '[:lower:]')"
-        if [[ -z "$target_lower" ]]; then
-          target_lower="preview"
+        local spoken_change
+        if [[ "$change_label" != "n/a" ]]; then
+          spoken_change="$change_label"
+        else
+          # Fall back to branch last segment when no title is available
+          spoken_change="${DEP_BRANCH[i]:-}"
+          spoken_change="${spoken_change##*/}"
+          spoken_change="${spoken_change//[-_]/ }"
         fi
-        pr_display_label="$(pull_request_display_label "${DEP_PULL_REQUEST[i]:-}")"
-        change_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-
-        local branch_last_segment
-        branch_last_segment="${DEP_BRANCH[i]:-}"
-        branch_last_segment="${branch_last_segment##*/}"
-        # Convert hyphens/underscores to spaces for spoken form
-        branch_last_segment="${branch_last_segment//[-_]/ }"
 
         case "$target_lower" in
           production)
-            if [[ "$change_label" != "n/a" ]]; then
-              alert_message="Starting Main ${change_label}."
-              spoken_alert="Starting Main ${change_label}."
+            if [[ -n "$spoken_change" && "$change_label" != "n/a" ]]; then
+              alert_message="Starting Main ${spoken_change}."
+              spoken_alert="Starting Main ${spoken_change}."
             else
               alert_message="Starting Main."
               spoken_alert="Starting Main."
             fi
             ;;
           preview|"")
-            if [[ "$pr_display_label" != "n/a" && -n "$branch_last_segment" ]]; then
-              alert_message="Starting PR ${pr_display_label} ${branch_last_segment}."
-              spoken_alert="Starting PR ${pr_display_label} ${branch_last_segment}."
+            if [[ "$pr_display_label" != "n/a" && -n "$spoken_change" ]]; then
+              alert_message="Starting PR ${pr_display_label} ${spoken_change}."
+              spoken_alert="Starting PR ${pr_display_label} ${spoken_change}."
             elif [[ "$pr_display_label" != "n/a" ]]; then
               alert_message="Starting PR ${pr_display_label}."
               spoken_alert="Starting PR ${pr_display_label}."
-            elif [[ -n "$branch_last_segment" ]]; then
-              alert_message="Starting ${branch_last_segment}."
-              spoken_alert="Starting ${branch_last_segment}."
+            elif [[ -n "$spoken_change" ]]; then
+              alert_message="Starting ${spoken_change}."
+              spoken_alert="Starting ${spoken_change}."
             else
               alert_message="Starting ${spoken_identity}."
               spoken_alert="Starting ${spoken_identity}."
@@ -2482,17 +2487,6 @@ process_deployment_transitions_and_alerts() {
       log_line "Transition: ${old_status} -> ${status} (id=${dep_id})"
     fi
 
-    env_label="$(friendly_environment_label "${DEP_TARGET[i]:-preview}")"
-    identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
-    spoken_identity="$(spoken_deployment_identity "$identity_label")"
-    target_label="$(sanitize_field "${DEP_TARGET[i]:-preview}")"
-    target_lower="$(printf '%s' "$target_label" | tr '[:upper:]' '[:lower:]')"
-    if [[ -z "$target_lower" ]]; then
-      target_lower="preview"
-    fi
-    pr_display_label="$(pull_request_display_label "${DEP_PULL_REQUEST[i]:-}")"
-    pr_kind_label="$(pull_request_kind_label "${DEP_PULL_REQUEST[i]:-}")"
-    change_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
     main_ref_label="$pr_display_label"
     if [[ "$pr_kind_label" == "MR" && "$pr_display_label" != "n/a" ]]; then
       main_ref_label="MR ${pr_display_label}"
