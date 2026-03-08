@@ -40,7 +40,7 @@ flowchart LR
   - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
-- `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, and adaptive logo-chip contrast.
+  - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, and adaptive logo-chip contrast.
   - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, and refine/caption controls.
   - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, and sidebar summary refresh behavior.
 - API layer:

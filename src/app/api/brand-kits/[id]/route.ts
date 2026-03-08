@@ -57,7 +57,7 @@ export async function PUT(req: Request, { params }: Params) {
     const body = await req.json();
     const db = getDb();
     const normalizedLogos =
-      body.logos !== undefined || body.logoUrl !== undefined
+      body.logos !== undefined
         ? normalizeBrandKitLogos(body.logos, body.logoUrl)
         : undefined;
 
