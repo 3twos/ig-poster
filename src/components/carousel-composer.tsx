@@ -27,7 +27,7 @@ import {
   Square,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { ComposerOrientation } from "@/lib/media-composer";
@@ -69,7 +69,8 @@ export function CarouselComposer({
   onOrientationChange,
   disabled = false,
 }: Props) {
-  /* ---- internal sequence while dragging to prevent parent re-renders ---- */
+  /* Internal sequence used while dragging so parent re-renders (auto-save)
+     cannot reset positions mid-drag. Committed to parent only on drop. */
   const [dragSequence, setDragSequence] = useState<string[] | null>(null);
   const activeSeq = dragSequence ?? assetSequence;
 
@@ -87,12 +88,22 @@ export function CarouselComposer({
   const includedAssets = activeSeq
     .map((assetId) => assetMap.get(assetId))
     .filter((asset): asset is LocalAsset => Boolean(asset));
-  const availableAssets = assets.filter((asset) => !activeSeq.includes(asset.id));
+  const availableAssets = assets.filter(
+    (asset) => !activeSeq.includes(asset.id),
+  );
   const canAdd = includedAssets.length < 10;
   const canRemove = includedAssets.length > 2;
 
+  const handleDragStart = useCallback(
+    () => setDragSequence([...assetSequence]),
+    [assetSequence],
+  );
+
   const handleDragOver = useCallback(
-    (event: { active: { id: string | number }; over: { id: string | number } | null }) => {
+    (event: {
+      active: { id: string | number };
+      over: { id: string | number } | null;
+    }) => {
       const { active, over } = event;
       if (!over || active.id === over.id) return;
       const seq = dragSequence ?? assetSequence;
@@ -115,6 +126,7 @@ export function CarouselComposer({
           onAssetSequenceChange(arrayMove(seq, oldIdx, newIdx));
         }
       } else if (dragSequence) {
+        // Commit whatever intermediate order we have
         onAssetSequenceChange(dragSequence);
       }
       setDragSequence(null);
@@ -123,11 +135,6 @@ export function CarouselComposer({
   );
 
   const handleDragCancel = useCallback(() => setDragSequence(null), []);
-
-  const handleDragStart = useCallback(
-    () => setDragSequence([...assetSequence]),
-    [assetSequence],
-  );
 
   return (
     <div className="rounded-2xl border border-white/15 bg-slate-900/55 p-4 backdrop-blur-xl">
@@ -166,11 +173,10 @@ export function CarouselComposer({
       </div>
 
       <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-2">
           <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
             Included
           </p>
-          <p className="text-[11px] text-slate-500">{includedAssets.length}/10 items</p>
         </div>
 
         <DndContext
@@ -185,7 +191,7 @@ export function CarouselComposer({
             items={includedAssets.map((asset) => asset.id)}
             strategy={horizontalListSortingStrategy}
           >
-            <ScrollStrip>
+            <div className="flex gap-3 overflow-x-auto pb-1">
               {includedAssets.map((asset, i) => (
                 <SortableComposerTile
                   key={asset.id}
@@ -195,30 +201,28 @@ export function CarouselComposer({
                   removable={canRemove}
                   disabled={disabled}
                   onMoveLeft={() => {
-                    const currentIndex = activeSeq.indexOf(asset.id);
-                    if (currentIndex <= 0) return;
+                    const idx = activeSeq.indexOf(asset.id);
+                    if (idx <= 0) return;
                     onAssetSequenceChange(
-                      arrayMove(activeSeq, currentIndex, currentIndex - 1),
+                      arrayMove(activeSeq, idx, idx - 1),
                     );
                   }}
                   onMoveRight={() => {
-                    const currentIndex = activeSeq.indexOf(asset.id);
-                    if (currentIndex === -1 || currentIndex >= activeSeq.length - 1) {
-                      return;
-                    }
+                    const idx = activeSeq.indexOf(asset.id);
+                    if (idx === -1 || idx >= activeSeq.length - 1) return;
                     onAssetSequenceChange(
-                      arrayMove(activeSeq, currentIndex, currentIndex + 1),
+                      arrayMove(activeSeq, idx, idx + 1),
                     );
                   }}
                   onRemove={() => {
                     if (!canRemove) return;
                     onAssetSequenceChange(
-                      activeSeq.filter((assetId) => assetId !== asset.id),
+                      activeSeq.filter((id) => id !== asset.id),
                     );
                   }}
                 />
               ))}
-            </ScrollStrip>
+            </div>
           </SortableContext>
         </DndContext>
 
@@ -239,7 +243,7 @@ export function CarouselComposer({
               {canAdd ? "Add up to 10 items" : "Carousel limit reached"}
             </p>
           </div>
-          <ScrollStrip>
+          <div className="flex gap-3 overflow-x-auto pb-1">
             {availableAssets.map((asset) => (
               <ComposerTile
                 key={asset.id}
@@ -252,29 +256,14 @@ export function CarouselComposer({
                 }}
               />
             ))}
-          </ScrollStrip>
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
-/* ---- horizontal scroll strip ---- */
-
-function ScrollStrip({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  return (
-    <div
-      ref={ref}
-      className="flex gap-3 overflow-x-auto pb-1"
-      style={{ scrollBehavior: "smooth" }}
-    >
-      {children}
-    </div>
-  );
-}
-
-/* ---- tile ---- */
+/* ---- Tile ---- */
 
 function ComposerTile({
   asset,
@@ -304,8 +293,9 @@ function ComposerTile({
   return (
     <div
       className={cn(
-        "w-28 shrink-0 rounded-xl border border-white/10 bg-black/20 p-1.5 select-none",
-        isDragging && "z-10 scale-105 border-orange-300/50 shadow-lg shadow-orange-500/20",
+        "w-28 shrink-0 rounded-xl border border-white/10 bg-black/20 p-1.5 select-none transition-shadow",
+        isDragging &&
+          "z-10 scale-[1.04] border-orange-300/50 shadow-xl shadow-orange-500/20",
       )}
     >
       <div className="relative overflow-hidden rounded-lg">
@@ -314,7 +304,7 @@ function ComposerTile({
           <img
             src={asset.posterUrl || asset.previewUrl}
             alt={asset.name}
-            className="aspect-square w-full object-cover pointer-events-none"
+            className="pointer-events-none aspect-square w-full object-cover"
             draggable={false}
           />
         ) : (
@@ -330,7 +320,7 @@ function ComposerTile({
             onClick={onRemove}
             aria-label={`Remove ${asset.name} from carousel`}
             className={cn(
-              "absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/60 text-white transition hover:bg-red-500/90",
+              "absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/60 text-white transition hover:bg-red-500/90 focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:outline-none",
               (!removable || disabled) && "cursor-not-allowed opacity-50",
             )}
           >
@@ -354,6 +344,7 @@ function ComposerTile({
           </Button>
         </div>
       ) : null}
+
       {onMoveLeft || onMoveRight ? (
         <div className="mt-1 flex items-center justify-between">
           <button
@@ -362,8 +353,9 @@ function ComposerTile({
             onClick={onMoveLeft}
             aria-label={`Move ${asset.name} left`}
             className={cn(
-              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white",
-              (disabled || !onMoveLeft || index === 0) && "pointer-events-none opacity-30",
+              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:outline-none",
+              (disabled || !onMoveLeft || index === 0) &&
+                "pointer-events-none opacity-30",
             )}
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -385,7 +377,7 @@ function ComposerTile({
             onClick={onMoveRight}
             aria-label={`Move ${asset.name} right`}
             className={cn(
-              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white",
+              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:outline-none",
               (disabled ||
                 !onMoveRight ||
                 typeof index !== "number" ||
@@ -401,7 +393,7 @@ function ComposerTile({
   );
 }
 
-/* ---- sortable wrapper ---- */
+/* ---- Sortable wrapper ---- */
 
 function SortableComposerTile({
   asset,
