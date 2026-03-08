@@ -7,7 +7,6 @@ on:
 
 jobs:
   deploy-production:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
