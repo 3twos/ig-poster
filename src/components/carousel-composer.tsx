@@ -21,7 +21,6 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowLeft,
   ArrowRight,
-  GripVertical,
   Image as ImageIcon,
   Plus,
   RectangleHorizontal,
@@ -240,7 +239,6 @@ function ComposerTile({
   removable = false,
   disabled = false,
   dragOverlay = false,
-  dragHandleProps,
   actionLabel,
   onAction,
   onMoveLeft,
@@ -253,10 +251,6 @@ function ComposerTile({
   removable?: boolean;
   disabled?: boolean;
   dragOverlay?: boolean;
-  dragHandleProps?: {
-    attributes: Record<string, unknown>;
-    listeners: Record<string, unknown>;
-  };
   actionLabel?: string;
   onAction?: () => void;
   onMoveLeft?: () => void;
@@ -302,25 +296,8 @@ function ComposerTile({
         ) : null}
       </div>
 
-      {dragHandleProps ? (
-        <div
-          {...dragHandleProps.attributes}
-          {...dragHandleProps.listeners}
-          className={cn(
-            "mt-1.5 inline-flex w-full items-center justify-center gap-1 rounded-md bg-white/5 py-1 text-[10px] text-slate-400 transition hover:bg-white/10 hover:text-white",
-            disabled && "pointer-events-none opacity-50",
-          )}
-        >
-          <GripVertical className="h-3 w-3" />
-          Drag
-        </div>
-      ) : null}
-
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <p className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-200">
-          {asset.name}
-        </p>
-        {onAction ? (
+      {onAction ? (
+        <div className="mt-1.5 flex items-center justify-center">
           <Button
             type="button"
             size="xs"
@@ -332,8 +309,8 @@ function ComposerTile({
             <Plus className="h-3 w-3" />
             {actionLabel ?? "Add"}
           </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {onMoveLeft || onMoveRight ? (
         <div className="mt-1.5 flex items-center justify-between">
           <button
@@ -415,20 +392,19 @@ function SortableComposerTile({
   return (
     <div
       ref={setNodeRef}
+      {...attributes}
+      {...listeners}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.35 : 1,
+        cursor: disabled ? undefined : "grab",
       }}
     >
       <ComposerTile
         asset={asset}
         removable={removable}
         disabled={disabled}
-        dragHandleProps={{
-          attributes: attributes as unknown as Record<string, unknown>,
-          listeners: listeners as unknown as Record<string, unknown>,
-        }}
         onMoveLeft={onMoveLeft}
         onMoveRight={onMoveRight}
         index={index}
