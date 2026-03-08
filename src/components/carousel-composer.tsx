@@ -4,11 +4,13 @@ import {
   closestCenter,
   DndContext,
   DragOverlay,
+  type DragEndEvent,
+  type DropAnimation,
   KeyboardSensor,
+  defaultDropAnimationSideEffects,
   PointerSensor,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -72,11 +74,17 @@ export function CarouselComposer({
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  const dropAnimation: DropAnimation = {
+    sideEffects: defaultDropAnimationSideEffects({
+      styles: { active: { opacity: "0.4" } },
+    }),
+  };
 
   const assetMap = useMemo(
     () => new Map(assets.map((asset) => [asset.id, asset])),
@@ -192,7 +200,7 @@ export function CarouselComposer({
               ))}
             </div>
           </SortableContext>
-          <DragOverlay>
+          <DragOverlay dropAnimation={dropAnimation}>
             {activeAsset ? <ComposerTile asset={activeAsset} dragOverlay /> : null}
           </DragOverlay>
         </DndContext>
@@ -395,9 +403,9 @@ function SortableComposerTile({
       {...attributes}
       {...listeners}
       style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.35 : 1,
+        transform: CSS.Translate.toString(transform),
+        transition: transition ?? undefined,
+        opacity: isDragging ? 0 : 1,
         cursor: disabled ? undefined : "grab",
       }}
     >
