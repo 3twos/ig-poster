@@ -187,16 +187,26 @@ const OverlayBlockBody = ({
   onEditStart?: () => void;
 }) => {
   const spanRef = useRef<HTMLSpanElement>(null);
+  const cancelledRef = useRef(false);
 
   const handleBlur = useCallback(() => {
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      // Restore original text on cancel
+      if (spanRef.current) {
+        spanRef.current.textContent = block.text;
+      }
+      return;
+    }
     if (!onTextCommit || !spanRef.current) return;
     onTextCommit(spanRef.current.textContent ?? "");
-  }, [onTextCommit]);
+  }, [block.text, onTextCommit]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        cancelledRef.current = true;
         (e.target as HTMLElement).blur();
       }
     },
