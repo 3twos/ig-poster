@@ -158,7 +158,7 @@ export function CarouselComposer({
             items={includedAssets.map((asset) => asset.id)}
             strategy={rectSortingStrategy}
           >
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {includedAssets.map((asset) => (
                 <SortableComposerTile
                   key={asset.id}
@@ -215,7 +215,7 @@ export function CarouselComposer({
               {canAdd ? "Add up to 10 items" : "Carousel limit reached"}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {availableAssets.map((asset) => (
               <ComposerTile
                 key={asset.id}
@@ -291,7 +291,7 @@ function ComposerTile({
             {...dragHandleProps.attributes}
             {...dragHandleProps.listeners}
             className={cn(
-              "absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/65 px-1.5 py-1 text-[10px] text-white",
+              "absolute left-1 top-1 inline-flex items-center gap-0.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[10px] text-white",
               disabled && "pointer-events-none opacity-50",
             )}
           >
@@ -307,11 +307,11 @@ function ComposerTile({
             onClick={onRemove}
             aria-label={`Remove ${asset.name} from carousel`}
             className={cn(
-              "absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500/90 text-white transition hover:bg-red-400",
+              "absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/90 text-white transition hover:bg-red-400",
               (!removable || disabled) && "cursor-not-allowed opacity-50",
             )}
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3 w-3" />
           </button>
         ) : null}
       </div>
@@ -335,27 +335,26 @@ function ComposerTile({
         ) : null}
       </div>
       {onMoveLeft || onMoveRight ? (
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <Button
+        <div className="mt-1.5 flex items-center justify-between">
+          <button
             type="button"
-            size="xs"
-            variant="ghost"
             disabled={disabled || !onMoveLeft || index === 0}
             onClick={onMoveLeft}
             aria-label={`Move ${asset.name} left`}
+            className={cn(
+              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white",
+              (disabled || !onMoveLeft || index === 0) && "pointer-events-none opacity-30",
+            )}
           >
-            <ArrowLeft className="h-3 w-3" />
-            Left
-          </Button>
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </button>
           <span className="text-[10px] text-slate-500">
             {typeof index === "number" && typeof total === "number"
               ? `${index + 1}/${total}`
               : null}
           </span>
-          <Button
+          <button
             type="button"
-            size="xs"
-            variant="ghost"
             disabled={
               disabled ||
               !onMoveRight ||
@@ -365,10 +364,17 @@ function ComposerTile({
             }
             onClick={onMoveRight}
             aria-label={`Move ${asset.name} right`}
+            className={cn(
+              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white",
+              (disabled ||
+                !onMoveRight ||
+                typeof index !== "number" ||
+                typeof total !== "number" ||
+                index === total - 1) && "pointer-events-none opacity-30",
+            )}
           >
-            Right
-            <ArrowRight className="h-3 w-3" />
-          </Button>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       ) : null}
     </div>
