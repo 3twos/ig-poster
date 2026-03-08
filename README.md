@@ -183,6 +183,7 @@ Comprehensive research notes for Instagram growth mechanics + vineyard/wine comp
 ## Planning Docs
 
 - `docs/ai-leverage-roadmap-2026-03-03.md`
+- `docs/cli-spec-2026-03-08.md`
 
 ## GitHub + Vercel CI/CD
 
