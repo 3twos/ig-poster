@@ -98,7 +98,7 @@ Why this shape:
 
 ### 4) Publish / Schedule
 
-Before submit, single-image clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`. Reel clients can also choose whether Meta should `share_to_feed`.
+Before submitting, single-image clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`. Reel clients can also choose whether Meta should `share_to_feed`.
 
 1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment, optional image metadata, and optional reel `shareToFeed` control).
 2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
