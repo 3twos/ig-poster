@@ -915,17 +915,21 @@ export default function Home() {
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
-              <ResizablePanel defaultSize={52} minSize={35}>
+              <ResizablePanel defaultSize={58} minSize={35}>
                 <ScrollArea className="h-full px-4">
                   <div className="space-y-6 py-4">
                     <section className="border-b border-white/10 pb-6">
-                      <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(220px,0.9fr)]">
+                        <div className="min-w-0 max-w-[44rem]">
+                          <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} compact dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                        </div>
+                        <div className="min-w-0">
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[360px]" dispatch={typedDispatch} />
+                        </div>
+                      </div>
                     </section>
                     <section className="border-b border-white/10 pb-6">
                       <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
-                    </section>
-                    <section className="border-b border-white/10 pb-6">
-                      <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
                     </section>
                     {result && (
                       <section className="border-b border-white/10 pb-6">
@@ -941,7 +945,7 @@ export default function Home() {
                 </ScrollArea>
               </ResizablePanel>
               <ResizableHandle withHandle className="mx-1 bg-white/5 hover:bg-white/10" />
-              <ResizablePanel panelRef={rightPanelRef} defaultSize={30} minSize={18} collapsible collapsedSize={0} onResize={(size) => setRightCollapsed(size.asPercentage === 0)} className="flex flex-col">
+              <ResizablePanel panelRef={rightPanelRef} defaultSize={24} minSize={18} collapsible collapsedSize={0} onResize={(size) => setRightCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div className="flex h-full flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl mr-4 overflow-hidden">
                   {/* Agent / Chat tab switcher */}
                   <div className="flex shrink-0 border-b border-white/10" role="tablist" aria-label="Right panel tabs">

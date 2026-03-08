@@ -22,6 +22,7 @@ import {
 import type { AspectRatio } from "@/lib/creative";
 import type { PostState, LlmAuthStatus } from "@/lib/types";
 import { RATIO_OPTIONS } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export type BrandKitOption = {
@@ -38,6 +39,7 @@ type Props = {
   hasResult: boolean;
   brandKits?: BrandKitOption[];
   activeBrandKitId?: string | null;
+  compact?: boolean;
   dispatch: (action: Record<string, unknown>) => void;
   onGenerate: () => void;
   onCancelGenerate: () => void;
@@ -54,6 +56,7 @@ export function PostBriefForm({
   hasResult,
   brandKits,
   activeBrandKitId,
+  compact = false,
   dispatch,
   onGenerate,
   onCancelGenerate,
@@ -100,7 +103,7 @@ export function PostBriefForm({
       )}
 
       {/* Theme + Subject */}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className={cn("grid gap-3", compact ? "xl:grid-cols-2" : "md:grid-cols-2")}>
         <div className="space-y-1">
           <Label className="text-xs text-slate-200">Theme</Label>
           <Input
@@ -123,7 +126,7 @@ export function PostBriefForm({
         </div>
 
         {/* Core Thought */}
-        <div className="space-y-1 md:col-span-2">
+        <div className={cn("space-y-1", compact ? "xl:col-span-2" : "md:col-span-2")}>
           <Label className="text-xs text-slate-200">Core Thought</Label>
           <Textarea
             value={post.thought}
