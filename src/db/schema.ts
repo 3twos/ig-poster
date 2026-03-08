@@ -132,6 +132,10 @@ export const publishJobs = pgTable(
       table.completedAt,
     ),
     index("publish_jobs_post_idx").on(table.postId),
+    index("publish_jobs_status_last_attempt_idx").on(
+      table.status,
+      table.lastAttemptAt,
+    ),
   ],
 );
 

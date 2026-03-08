@@ -1,0 +1,1 @@
+CREATE INDEX "publish_jobs_status_last_attempt_idx" ON "publish_jobs" USING btree ("status","last_attempt_at");

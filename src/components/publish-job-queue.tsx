@@ -23,6 +23,7 @@ import { MetaUserTagsEditor } from "@/components/meta-user-tags-editor";
 import type {
   MetaScheduleRequest,
   MetaUserTag,
+  PublishJobEvent,
   PublishJobClient,
 } from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
@@ -230,6 +231,11 @@ const userTagsEqual = (
   left: MetaUserTag[] | null,
   right: MetaUserTag[] | null,
 ) => JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
+
+const eventLabel = (type: PublishJobEvent["type"]) => {
+  if (type === "retry-scheduled") return "Retry scheduled";
+  return type.slice(0, 1).toUpperCase() + type.slice(1);
+};
 
 export function PublishJobQueue({
   activePostId,
@@ -526,6 +532,7 @@ export function PublishJobQueue({
             {jobs.map((job) => {
               const isBusy = activeJobId === job.id;
               const isEditing = editingJobId === job.id;
+              const recentEvents = [...job.events].slice(-3).reverse();
 
               return (
                 <div
@@ -565,6 +572,29 @@ export function PublishJobQueue({
                       </p>
                       {job.lastError ? (
                         <p className="mt-2 text-[11px] text-red-200">{job.lastError}</p>
+                      ) : null}
+                      {recentEvents.length ? (
+                        <div className="mt-3 rounded-md border border-white/10 bg-white/5 p-2">
+                          <p className="text-[11px] font-medium text-slate-300">
+                            Recent activity
+                          </p>
+                          <div className="mt-2 space-y-2">
+                            {recentEvents.map((event, index) => (
+                              <div key={`${job.id}-${event.at}-${index}`} className="text-[11px] text-slate-300">
+                                <p>
+                                  <span className="font-medium text-slate-200">
+                                    {eventLabel(event.type)}
+                                  </span>
+                                  {event.attempt ? ` · Attempt ${event.attempt}` : ""}
+                                  {` · ${formatTimestamp(event.at, localTimeZone)}`}
+                                </p>
+                                {event.detail ? (
+                                  <p className="mt-0.5 text-slate-400">{event.detail}</p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       ) : null}
                     </div>
 

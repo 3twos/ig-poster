@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 
 import * as schema from "@/db/schema";
@@ -10,6 +10,7 @@ export type AppDb = NeonHttpDatabase<typeof schema>;
 export const DEFAULT_MAX_ATTEMPTS = 3;
 export const PUBLISH_WINDOW_LIMIT = 50;
 const PUBLISH_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const STALE_PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
 const PUBLISH_WINDOW_STATUSES: PublishJobRow["status"][] = [
   "published",
   "processing",
@@ -310,6 +311,61 @@ export const claimDuePublishJobs = async (
   }
 
   return claimed;
+};
+
+export const recoverStaleProcessingJobs = async (
+  db: AppDb,
+  now: Date,
+  options?: {
+    timeoutMs?: number;
+    limit?: number;
+  },
+) => {
+  const timeoutMs = options?.timeoutMs ?? STALE_PROCESSING_TIMEOUT_MS;
+  const staleBefore = new Date(now.getTime() - timeoutMs);
+  const staleJobs = await db
+    .select()
+    .from(publishJobs)
+    .where(
+      and(
+        eq(publishJobs.status, "processing"),
+        or(
+          lte(publishJobs.lastAttemptAt, staleBefore),
+          and(isNull(publishJobs.lastAttemptAt), lte(publishJobs.updatedAt, staleBefore)),
+        ),
+      ),
+    )
+    .orderBy(asc(publishJobs.updatedAt))
+    .limit(Math.min(Math.max(options?.limit ?? 100, 1), 250));
+
+  const detail =
+    `Processing attempt exceeded ${Math.round(timeoutMs / 60_000)} minutes and was marked failed to avoid duplicate publish risk. Review before retrying.`;
+  const recovered: PublishJobRow[] = [];
+
+  for (const job of staleJobs) {
+    const [updated] = await db
+      .update(publishJobs)
+      .set({
+        status: "failed",
+        lastError: detail,
+        completedAt: now,
+        updatedAt: now,
+        events: appendPublishJobEvent(job.events, {
+          type: "failed",
+          attempt: job.attempts || undefined,
+          detail,
+          at: now.toISOString(),
+        }),
+      })
+      .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "processing")))
+      .returning();
+
+    if (updated) {
+      recovered.push(updated);
+    }
+  }
+
+  return recovered;
 };
 
 export const completePublishJobSuccess = async (
