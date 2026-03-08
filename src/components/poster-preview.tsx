@@ -206,10 +206,10 @@ const OverlayBlockBody = ({
       return;
     }
     if (!onTextCommit || !spanRef.current) return;
-    // Measure span's natural height (not the min-h-full wrapper) for auto-sizing.
-    // Add p-3 padding (24px) from the body container.
-    const spanHeight = spanRef.current.scrollHeight;
-    onTextCommit(spanRef.current.textContent ?? "", spanHeight ? spanHeight + 24 : undefined);
+    // Measure the span's natural height (not the min-h-full wrapper) for auto-sizing
+    const contentHeight = spanRef.current.scrollHeight;
+    // Add padding from the body container (p-3 = 12px * 2 = 24px)
+    onTextCommit(spanRef.current.textContent ?? "", contentHeight ? contentHeight + 24 : undefined);
   }, [block.text, onTextCommit]);
 
   const handleKeyDown = useCallback(
@@ -488,25 +488,6 @@ const EditorOverlay = ({
     [layout, onChange, frame.height],
   );
 
-  const updateBlockRadius = useCallback(
-    (block: OverlayCanvasBlock, borderRadius: number) => {
-      if (block.type === "canonical" && block.key) {
-        onChange({
-          ...layout,
-          [block.key]: { ...layout[block.key], borderRadius },
-        });
-      } else {
-        onChange({
-          ...layout,
-          custom: (layout.custom ?? []).map((item) =>
-            item.id === block.id ? { ...item, borderRadius } : item,
-          ),
-        });
-      }
-    },
-    [layout, onChange],
-  );
-
   const removeBlock = (block: OverlayCanvasBlock) => {
     if (block.type === "canonical" && block.key) {
       onChange({
@@ -567,17 +548,6 @@ const EditorOverlay = ({
               style={{ borderRadius: Math.min(block.borderRadius, 28) }}
             >
               <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
-                <input
-                  type="range"
-                  min={0}
-                  max={48}
-                  value={Math.min(block.borderRadius, 48)}
-                  onChange={(e) => updateBlockRadius(block, parseInt(e.target.value))}
-                  className="h-3 w-12 accent-orange-300"
-                  title={`Corner radius: ${block.borderRadius}px`}
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                />
                 <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
                   {block.label}
                 </span>

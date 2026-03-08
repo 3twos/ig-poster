@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutTemplate, Save } from "lucide-react";
+import { Pencil, Save } from "lucide-react";
 import { motion } from "framer-motion";
 import type { RefObject } from "react";
 
@@ -117,17 +117,56 @@ export function PosterSection({
               editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100",
             )}
           >
-            <LayoutTemplate className="h-3.5 w-3.5" />
-            {editorMode ? "Editor On" : "Editor Off"}
+            {editorMode ? (
+              <>
+                <Save className="h-3.5 w-3.5" />
+                Save
+              </>
+            ) : (
+              <>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </>
+            )}
           </Button>
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={onResetTextLayout}
-          >
-            <LayoutTemplate className="h-3.5 w-3.5" />
-            Reset Layout
-          </Button>
+          {editorMode ? (
+            <>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={onResetTextLayout}
+              >
+                Reset Layout
+              </Button>
+              <label className="flex items-center gap-1.5 text-[10px] text-slate-300 uppercase">
+                Corners
+                <input
+                  type="range"
+                  min={0}
+                  max={48}
+                  value={overlayLayout?.hook?.borderRadius ?? 16}
+                  onChange={(e) => {
+                    if (!overlayLayout) return;
+                    const r = parseInt(e.target.value);
+                    dispatch({
+                      type: "UPDATE_OVERLAY",
+                      variantId: activeVariant.id,
+                      layout: {
+                        ...overlayLayout,
+                        hook: { ...overlayLayout.hook, borderRadius: r },
+                        headline: { ...overlayLayout.headline, borderRadius: r },
+                        supportingText: { ...overlayLayout.supportingText, borderRadius: r },
+                        cta: { ...overlayLayout.cta, borderRadius: r },
+                        custom: (overlayLayout.custom ?? []).map((b) => ({ ...b, borderRadius: r })),
+                      },
+                    });
+                  }}
+                  className="h-3 w-16 accent-orange-300"
+                  title={`Corner radius: ${overlayLayout?.hook?.borderRadius ?? 16}px`}
+                />
+              </label>
+            </>
+          ) : null}
         </div>
         {editorMode ? (
           <div className="flex items-center gap-2">
