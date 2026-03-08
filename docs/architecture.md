@@ -40,7 +40,7 @@ flowchart LR
   - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
-  - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, and adaptive logo-chip contrast.
+- `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, and adaptive logo-chip contrast.
   - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, and refine/caption controls.
   - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, and sidebar summary refresh behavior.
 - API layer:
@@ -163,7 +163,7 @@ Why this shape:
 
 - Primary relational persistence: Postgres via Drizzle ORM (`posts`, `brand_kits`, private credentials).
   - `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`).
-  - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, logo URL, and default flag.
+  - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, an ordered array of named logos, legacy `logoUrl` compatibility, and default flag.
 - Blob persistence: binary media, shared project snapshots, publish outcomes, and chat conversation blobs.
 - Typical paths:
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`

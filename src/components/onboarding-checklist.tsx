@@ -51,8 +51,8 @@ const STEPS: Step[] = [
   },
   {
     id: "logo",
-    label: "Upload your logo",
-    description: "Add a logo for poster overlays.",
+    label: "Add brand logos",
+    description: "Upload one or more logos to your brand kit.",
     icon: <ImagePlus className="h-4 w-4" />,
     action: "ig:open-brand-kits",
   },
@@ -113,11 +113,27 @@ export function OnboardingChecklist() {
       }
 
       try {
-        const settingsRes = await fetch("/api/settings", { cache: "no-store" });
-        if (settingsRes.ok) {
-          const settings = await settingsRes.json();
-          if (settings?.brand?.brandName) detected.push("brand");
-          if (settings?.logoUrl) detected.push("logo");
+        const brandKitsRes = await fetch("/api/brand-kits", { cache: "no-store" });
+        if (brandKitsRes.ok) {
+          const json = await brandKitsRes.json();
+          const kits = Array.isArray(json?.kits)
+            ? (json.kits as Array<{
+                brand?: { brandName?: string };
+                logos?: unknown[];
+                logoUrl?: string | null;
+              }>)
+            : [];
+          if (kits.some((kit) => kit?.brand?.brandName)) {
+            detected.push("brand");
+          }
+          if (
+            kits.some(
+              (kit) =>
+                Array.isArray(kit?.logos) ? kit.logos.length > 0 : Boolean(kit?.logoUrl),
+            )
+          ) {
+            detected.push("logo");
+          }
         }
       } catch {
         // ignore

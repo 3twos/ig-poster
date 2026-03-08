@@ -50,7 +50,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { usePostContext } from "@/contexts/post-context";
+import type { BrandKitRow } from "@/db/schema";
 import { useGeneration } from "@/hooks/use-generation";
+import { inferLogoNameFromUrl } from "@/lib/brand-kit";
 import {
   createDefaultOverlayLayout,
   type GenerationResponse,
@@ -97,7 +99,6 @@ export default function Home() {
   } = usePostContext();
 
   const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
-  const [localLogo, setLocalLogo] = useState<LocalAsset | null>(null);
   const [editorMode, setEditorMode] = useState(false);
   const [uploadingAssetsForPostId, setUploadingAssetsForPostId] = useState<string | null>(null);
   const [sharingForPostId, setSharingForPostId] = useState<string | null>(null);
@@ -113,7 +114,7 @@ export default function Home() {
   const [mobileAgentSheetOpen, setMobileAgentSheetOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<"agent" | "chat">("agent");
-  const [brandKitOptions, setBrandKitOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [brandKits, setBrandKits] = useState<BrandKitRow[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [brandKitsOpen, setBrandKitsOpen] = useState(false);
   const [hydratedAssetsPostId, setHydratedAssetsPostId] = useState<string | null>(null);
@@ -125,14 +126,12 @@ export default function Home() {
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
   const assetCleanupRef = useRef<LocalAsset[]>([]);
-  const logoCleanupRef = useRef<LocalAsset | null>(null);
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
   const publishImagePreviewRenderIdRef = useRef(0);
   const publishImagePreviewBlobUrlRef = useRef<string | null>(null);
   const activePostIdRef = useRef<string | null>(activePost?.id ?? null);
   const assetUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
-  const logoUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   activePostIdRef.current = activePost?.id ?? null;
@@ -159,6 +158,27 @@ export default function Home() {
     }),
     [activePost?.promptConfig],
   );
+  const activeBrandKit = useMemo(
+    () => brandKits.find((kit) => kit.id === activePost?.brandKitId) ?? null,
+    [activePost?.brandKitId, brandKits],
+  );
+  const selectedLogo = useMemo<LocalAsset | null>(() => {
+    const logoUrl = activePost?.logoUrl;
+    if (!logoUrl) {
+      return null;
+    }
+
+    const matchingLogo = activeBrandKit?.logos.find((logo) => logo.url === logoUrl);
+
+    return {
+      id: matchingLogo?.id ?? "selected-logo",
+      name: matchingLogo?.name ?? inferLogoNameFromUrl(logoUrl),
+      mediaType: "image",
+      previewUrl: logoUrl,
+      storageUrl: logoUrl,
+      status: "uploaded",
+    };
+  }, [activeBrandKit?.logos, activePost?.logoUrl]);
   const localTimeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "local time",
     [],
@@ -177,7 +197,7 @@ export default function Home() {
     brand,
     post,
     localAssets,
-    localLogo,
+    localLogo: selectedLogo,
     promptConfig,
     dispatch: typedDispatch,
   });
@@ -185,7 +205,6 @@ export default function Home() {
   useEffect(() => {
     if (!activePost) {
       setLocalAssets([]);
-      setLocalLogo(null);
       setHydratedAssetsPostId(null);
       return;
     }
@@ -200,11 +219,6 @@ export default function Home() {
       durationSec: a.durationSec,
     }));
     setLocalAssets(hydrated);
-    if (activePost.logoUrl) {
-      setLocalLogo({ id: "saved-logo", name: "Logo", mediaType: "image", previewUrl: activePost.logoUrl, storageUrl: activePost.logoUrl, status: "uploaded" });
-    } else {
-      setLocalLogo(null);
-    }
     setHydratedAssetsPostId(activePost.id);
     generation.setError(null);
     setPublishMessageState({ postId: activePost.id, text: null });
@@ -237,29 +251,19 @@ export default function Home() {
       assetUploadAbortRef.current = null;
     }
 
-    if (logoUploadAbortRef.current?.postId === postId) {
-      logoUploadAbortRef.current.controller.abort("post-switch");
-      logoUploadAbortRef.current = null;
-    }
-
     setUploadingAssetsForPostId((current) => current === postId ? null : current);
   }, []);
 
   useEffect(() => { assetCleanupRef.current = localAssets; }, [localAssets]);
-  useEffect(() => { logoCleanupRef.current = localLogo; }, [localLogo]);
   useEffect(() => {
     return () => {
       assetUploadAbortRef.current?.controller.abort("unmount");
-      logoUploadAbortRef.current?.controller.abort("unmount");
       assetCleanupRef.current.forEach((a) => {
         revokeObjectUrlIfNeeded(a.previewUrl);
         if (a.posterUrl) {
           revokeObjectUrlIfNeeded(a.posterUrl);
         }
       });
-      if (logoCleanupRef.current) {
-        revokeObjectUrlIfNeeded(logoCleanupRef.current.previewUrl);
-      }
     };
   }, []);
 
@@ -271,13 +275,6 @@ export default function Home() {
   const setLocalAssetsForPost = useCallback(
     (postId: string | null, update: (current: LocalAsset[]) => LocalAsset[]) => {
       setLocalAssets((current) => (isPostStillActive(postId) ? update(current) : current));
-    },
-    [isPostStillActive],
-  );
-
-  const setLocalLogoForPost = useCallback(
-    (postId: string | null, update: (current: LocalAsset | null) => LocalAsset | null) => {
-      setLocalLogo((current) => (isPostStillActive(postId) ? update(current) : current));
     },
     [isPostStillActive],
   );
@@ -310,34 +307,35 @@ export default function Home() {
       const r = await fetch("/api/brand-kits", { cache: "no-store" });
       if (r.ok) {
         const j = await r.json();
-        const kits = (j.kits ?? []) as Array<{ id: string; name: string }>;
-        setBrandKitOptions(kits.map((k) => ({ id: k.id, name: k.name })));
+        setBrandKits((j.kits ?? []) as BrandKitRow[]);
       }
     } catch { /* ignore */ }
   }, []);
 
-  const handleSelectBrandKit = useCallback(async (kitId: string) => {
+  const handleSelectBrandKit = useCallback((kitId: string) => {
     const postId = activePostIdRef.current;
-    try {
-      const r = await fetch(`/api/brand-kits/${kitId}`, { cache: "no-store" });
-      if (!r.ok) return;
-      const kit = await r.json();
-      if (!isPostStillActive(postId)) return;
-      dispatch({
-        type: "SET_BRAND_KIT",
-        postId: postId ?? undefined,
-        brandKitId: kitId,
-        brand: kit.brand ?? {},
-        logoUrl: kit.logoUrl ?? null,
-        promptConfig: kit.promptConfig ?? null,
-      });
-      if (kit.logoUrl) {
-        setLocalLogoForPost(postId, () => ({ id: "kit-logo", name: "Logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" }));
-      } else {
-        setLocalLogoForPost(postId, () => null);
-      }
-    } catch { /* ignore */ }
-  }, [dispatch, isPostStillActive, setLocalLogoForPost]);
+    const kit = brandKits.find((candidate) => candidate.id === kitId);
+    if (!kit || !isPostStillActive(postId)) {
+      return;
+    }
+
+    dispatch({
+      type: "SET_BRAND_KIT",
+      postId: postId ?? undefined,
+      brandKitId: kitId,
+      brand: kit.brand ?? {},
+      logoUrl: kit.logos[0]?.url ?? kit.logoUrl ?? null,
+      promptConfig: kit.promptConfig ?? null,
+    });
+  }, [brandKits, dispatch, isPostStillActive]);
+
+  const handleSelectLogo = useCallback((logoUrl: string | null) => {
+    dispatch({
+      type: "SET_LOGO",
+      postId: activePostIdRef.current ?? undefined,
+      logoUrl,
+    });
+  }, [dispatch]);
 
   useEffect(() => {
     void loadAuthStatus();
@@ -496,41 +494,6 @@ export default function Home() {
     }
   };
 
-  const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const postId = activePostIdRef.current;
-    const file = event.target.files?.[0]; event.target.value = "";
-    if (!postId || !file) return;
-    generation.setError(null);
-    setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current);
-    const previousLogo = localLogo;
-    const next: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
-    const uploadController = new AbortController();
-    logoUploadAbortRef.current = { postId, controller: uploadController };
-    setLocalLogoForPost(postId, () => next);
-    try {
-      const url = await uploadFileToStorage(file, "logos", uploadController.signal);
-      if (previousLogo) {
-        revokeObjectUrlIfNeeded(previousLogo.previewUrl);
-      }
-      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "uploaded" as const, storageUrl: url } : null);
-      dispatch({ type: "SET_LOGO", postId, logoUrl: url });
-    }
-    catch (e) {
-      if (isAbortError(e)) {
-        revokeObjectUrlIfNeeded(next.previewUrl);
-        setLocalLogoForPost(postId, (current) => current?.id === next.id ? previousLogo : current);
-        return;
-      }
-      if (previousLogo) {
-        revokeObjectUrlIfNeeded(previousLogo.previewUrl);
-      }
-      setLocalLogoForPost(postId, (current) => current ? { ...current, status: "local" as const, error: e instanceof Error ? e.message : "Upload failed" } : null);
-    } finally {
-      if (logoUploadAbortRef.current?.controller === uploadController) {
-        logoUploadAbortRef.current = null;
-      }
-    }
-  };
   const removeAsset = useCallback((id: string) => {
     const postId = activePostIdRef.current;
     setLocalAssetsForPost(postId, (current) => {
@@ -554,17 +517,6 @@ export default function Home() {
       return reordered;
     });
   }, [setLocalAssetsForPost, syncAssetsToPost]);
-
-  const removeLogo = useCallback(() => {
-    const postId = activePostIdRef.current;
-    setLocalLogoForPost(postId, (current) => {
-      if (current) {
-        revokeObjectUrlIfNeeded(current.previewUrl);
-      }
-      return null;
-    });
-    dispatch({ type: "SET_LOGO", postId: postId ?? undefined, logoUrl: null });
-  }, [dispatch, setLocalLogoForPost]);
 
   const generateRef = useRef<(() => Promise<void>) | null>(null);
   const isAgentBusyRef = useRef(isAgentBusy);
@@ -667,12 +619,12 @@ export default function Home() {
     activeOverlayLayout,
     activeVariant,
     brand.brandName,
-    localLogo?.previewUrl,
+    selectedLogo?.previewUrl,
     post.aspectRatio,
     primaryVisual,
     renderPosterToPreviewUrl,
     replacePublishImagePreviewUrl,
-    revokePreviewUrlIfNeeded,
+      revokePreviewUrlIfNeeded,
     secondaryVisual,
   ]);
 
@@ -718,7 +670,7 @@ export default function Home() {
     generation.setError(null); setSharingForPostId(postId);
     try {
       const pu = await uploadRenderedPoster();
-      const r = await fetch("/api/projects/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brand, post, assets: localAssets.filter((a) => a.storageUrl).map((a) => ({ id: a.id, name: a.name, mediaType: a.mediaType, durationSec: a.durationSec, posterUrl: a.posterUrl, url: a.storageUrl })), logoUrl: localLogo?.storageUrl, result, activeVariantId: activeVariant.id, overlayLayouts, renderedPosterUrl: pu }) });
+      const r = await fetch("/api/projects/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brand, post, assets: localAssets.filter((a) => a.storageUrl).map((a) => ({ id: a.id, name: a.name, mediaType: a.mediaType, durationSec: a.durationSec, posterUrl: a.posterUrl, url: a.storageUrl })), logoUrl: selectedLogo?.storageUrl, result, activeVariantId: activeVariant.id, overlayLayouts, renderedPosterUrl: pu }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as { shareUrl?: string }; if (!j.shareUrl) throw new Error("No share link returned");
       if (!isPostStillActive(postId)) return;
@@ -968,7 +920,7 @@ export default function Home() {
           </div>
         </AppShell>
         <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} onMetaAuthChanged={handleMetaAuthChanged} />
-        <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); }} />
+        <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); void loadBrandKits(); }} />
       </>
     );
   }
@@ -1007,7 +959,7 @@ export default function Home() {
                     <section className="border-b border-white/10 pb-6">
                       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,27rem)_minmax(0,1fr)]">
                         <div className="min-w-0 max-w-[27rem]">
-                          <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} compact showHeader={false} showActions={false} showAspectRatio={false} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
+                          <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} compact showHeader={false} showActions={false} showAspectRatio={false} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} />
                         </div>
                         <div className="min-w-0 space-y-4">
                           <div className="w-full max-w-[40rem] space-y-4">
@@ -1016,12 +968,12 @@ export default function Home() {
                               <PostBriefAspectRatio aspectRatio={post.aspectRatio} disabled={generation.isGenerating} onChange={(value) => typedDispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value } })} />
                             </div>
                           </div>
-                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
                         </div>
                       </div>
                     </section>
                     <section className="border-b border-white/10 pb-6">
-                      <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
+                      <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
                     </section>
                     {result && (
                       <section className="border-b border-white/10 pb-6">
@@ -1075,9 +1027,9 @@ export default function Home() {
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
-            <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
-            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
+            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} />
+            <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
+            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
               if (!activeVariant) return;
               dispatch({
@@ -1140,7 +1092,7 @@ export default function Home() {
       </div>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} onMetaAuthChanged={handleMetaAuthChanged} />
-      <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); }} />
+      <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); void loadBrandKits(); }} />
     </>
   );
 }

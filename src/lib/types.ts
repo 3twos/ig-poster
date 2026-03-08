@@ -32,6 +32,12 @@ export type BrandState = {
   logoNotes: string;
 };
 
+export type BrandKitLogo = {
+  id: string;
+  name: string;
+  url: string;
+};
+
 export type PostState = {
   theme: string;
   subject: string;

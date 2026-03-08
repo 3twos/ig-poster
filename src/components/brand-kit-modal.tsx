@@ -26,6 +26,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import type { BrandKitRow } from "@/db/schema";
+import {
+  getPrimaryBrandKitLogoUrl,
+  inferLogoNameFromUrl,
+  normalizeBrandKitLogos,
+} from "@/lib/brand-kit";
 import { DEFAULT_GENERATION_SYSTEM_PROMPT } from "@/lib/creative";
 import {
   type BrandState,
@@ -47,7 +52,7 @@ interface BrandKitModalProps {
 
 export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
   const [brand, setBrand] = useState<BrandState>(INITIAL_BRAND);
-  const [logo, setLogo] = useState<LocalAsset | null>(null);
+  const [logos, setLogos] = useState<LocalAsset[]>([]);
   const [promptConfig, setPromptConfig] = useState<PromptConfigState>({
     systemPrompt: "",
     customInstructions: "",
@@ -64,13 +69,39 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
   const [activeKitId, setActiveKitId] = useState<string | null>(null);
   const [kitName, setKitName] = useState("Default");
 
-  const logoCleanupRef = useRef<LocalAsset | null>(null);
+  const logoCleanupRef = useRef<LocalAsset[]>([]);
   const logoInputId = useId();
   const logoInputRef = useRef<HTMLInputElement>(null);
 
+  const serializeLogos = useCallback(
+    (currentLogos: LocalAsset[]) =>
+      currentLogos.flatMap((currentLogo) => {
+        const url = currentLogo.storageUrl?.trim();
+        if (!url) {
+          return [];
+        }
+
+        return [
+          {
+            id: currentLogo.id,
+            name:
+              currentLogo.name.trim() || inferLogoNameFromUrl(url),
+            url,
+          },
+        ];
+      }),
+    [],
+  );
+
   const computeSnapshot = useCallback(() => {
-    return JSON.stringify({ brand, promptConfig, logoUrl: logo?.storageUrl });
-  }, [brand, promptConfig, logo?.storageUrl]);
+    return JSON.stringify({
+      brand,
+      promptConfig,
+      logos: serializeLogos(logos),
+    });
+  }, [brand, promptConfig, logos, serializeLogos]);
+
+  const hasUnsyncedLogos = logos.some((currentLogo) => !currentLogo.storageUrl);
 
   const prevKitIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -83,26 +114,40 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
 
   const isDirty = isLoaded && computeSnapshot() !== savedSnapshotRef.current;
 
-  useEffect(() => { logoCleanupRef.current = logo; }, [logo]);
+  const clearCurrentLogos = useCallback(() => {
+    logoCleanupRef.current.forEach((currentLogo) => {
+      revokeObjectUrlIfNeeded(currentLogo.previewUrl);
+    });
+  }, []);
+
+  useEffect(() => {
+    logoCleanupRef.current = logos;
+  }, [logos]);
   useEffect(() => {
     return () => {
-      if (logoCleanupRef.current) {
-        revokeObjectUrlIfNeeded(logoCleanupRef.current.previewUrl);
-      }
+      logoCleanupRef.current.forEach((currentLogo) => {
+        revokeObjectUrlIfNeeded(currentLogo.previewUrl);
+      });
     };
   }, []);
 
   const loadKitData = useCallback((kit: BrandKitRow) => {
+    clearCurrentLogos();
     setActiveKitId(kit.id);
     setKitName(kit.name);
     setBrand(kit.brand ? { ...INITIAL_BRAND, ...kit.brand } : INITIAL_BRAND);
     setPromptConfig(kit.promptConfig ? { systemPrompt: "", customInstructions: "", ...kit.promptConfig } : { systemPrompt: "", customInstructions: "" });
-    if (kit.logoUrl) {
-      setLogo({ id: "saved-logo", name: "Logo", mediaType: "image", previewUrl: kit.logoUrl, storageUrl: kit.logoUrl, status: "uploaded" });
-    } else {
-      setLogo(null);
-    }
-  }, []);
+    setLogos(
+      normalizeBrandKitLogos(kit.logos, kit.logoUrl).map((logo) => ({
+        id: logo.id,
+        name: logo.name,
+        mediaType: "image",
+        previewUrl: logo.url,
+        storageUrl: logo.url,
+        status: "uploaded",
+      })),
+    );
+  }, [clearCurrentLogos]);
 
   useEffect(() => {
     if (!open) return;
@@ -112,7 +157,8 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     setKitName("New Kit");
     setBrand(INITIAL_BRAND);
     setPromptConfig({ systemPrompt: "", customInstructions: "" });
-    setLogo(null);
+    clearCurrentLogos();
+    setLogos([]);
     const loadAll = async () => {
       try {
         const kitsRes = await fetch("/api/brand-kits", { cache: "no-store" });
@@ -130,26 +176,38 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
       finally { setIsLoaded(true); }
     };
     void loadAll();
-  }, [open, loadKitData]);
+  }, [clearCurrentLogos, open, loadKitData]);
 
   const saveSettings = async () => {
     setIsSaving(true);
     try {
+      const persistedLogos = serializeLogos(logos);
+      const primaryLogoUrl = getPrimaryBrandKitLogoUrl(persistedLogos);
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand, promptConfig, logoUrl: logo?.storageUrl }),
+        body: JSON.stringify({
+          brand,
+          promptConfig,
+          logoUrl: primaryLogoUrl,
+        }),
       });
       if (!response.ok) throw new Error(await parseApiError(response));
       if (activeKitId) {
         const kitRes = await fetch(`/api/brand-kits/${activeKitId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: kitName, brand, promptConfig, logoUrl: logo?.storageUrl }),
+          body: JSON.stringify({
+            name: kitName,
+            brand,
+            promptConfig,
+            logos: persistedLogos,
+            logoUrl: primaryLogoUrl,
+          }),
         });
         if (!kitRes.ok) throw new Error(await parseApiError(kitRes));
-          const updatedKit = await kitRes.json();
-          setKits((prev) => prev.map((k) => (k.id === activeKitId ? updatedKit : k)));
+        const updatedKit = (await kitRes.json()) as BrandKitRow;
+        setKits((prev) => prev.map((k) => (k.id === activeKitId ? updatedKit : k)));
       }
       savedSnapshotRef.current = computeSnapshot();
       toast.success("Brand kit saved.");
@@ -172,24 +230,74 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
   };
 
   const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
-    const nextLogo: LocalAsset = { id: `${Date.now()}-${file.name}`, name: file.name, mediaType: "image", previewUrl: URL.createObjectURL(file), status: "uploading" };
-    setLogo((current) => {
-      if (current) {
-        revokeObjectUrlIfNeeded(current.previewUrl);
-      }
-      return nextLogo;
-    });
-    try {
-      const url = await uploadFileToStorage(file, "logos");
-      setLogo((current) => current ? { ...current, status: "uploaded", storageUrl: url } : null);
-      toast.success("Logo uploaded.");
-    } catch (uploadError) {
-      setLogo((current) => current ? { ...current, status: "local", error: uploadError instanceof Error ? uploadError.message : "Upload failed" } : null);
-      toast.error("Logo upload failed.");
+    if (!files.length) return;
+
+    const stagedLogos = files.map((file) => ({
+      id: crypto.randomUUID(),
+      name: file.name,
+      mediaType: "image" as const,
+      previewUrl: URL.createObjectURL(file),
+      status: "uploading" as const,
+    }));
+
+    setLogos((current) => [...current, ...stagedLogos]);
+
+    let failureCount = 0;
+
+    await Promise.all(
+      files.map(async (file, index) => {
+        const stagedLogo = stagedLogos[index];
+        try {
+          const url = await uploadFileToStorage(file, "logos");
+          setLogos((current) =>
+            current.map((existingLogo) => {
+              if (existingLogo.id !== stagedLogo.id) {
+                return existingLogo;
+              }
+
+              revokeObjectUrlIfNeeded(existingLogo.previewUrl);
+              return {
+                ...existingLogo,
+                previewUrl: url,
+                storageUrl: url,
+                status: "uploaded",
+                error: undefined,
+              };
+            }),
+          );
+        } catch (uploadError) {
+          failureCount += 1;
+          setLogos((current) =>
+            current.map((existingLogo) =>
+              existingLogo.id === stagedLogo.id
+                ? {
+                    ...existingLogo,
+                    status: "local",
+                    error:
+                      uploadError instanceof Error
+                        ? uploadError.message
+                        : "Upload failed",
+                  }
+                : existingLogo,
+            ),
+          );
+        }
+      }),
+    );
+
+    if (failureCount === 0) {
+      toast.success(files.length === 1 ? "Logo uploaded." : "Logos uploaded.");
+      return;
     }
+
+    if (failureCount === files.length) {
+      toast.error(files.length === 1 ? "Logo upload failed." : "Logo uploads failed.");
+      return;
+    }
+
+    toast.warning("Some logos failed to upload.");
   };
 
   const autofillBrandFromWebsite = useCallback(
@@ -271,7 +379,10 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
               </Button>
               <h1 className="text-lg font-semibold text-white">Brand Kits</h1>
             </div>
-            <Button onClick={() => void saveSettings()} disabled={isSaving || !isDirty || !activeKitId}>
+            <Button
+              onClick={() => void saveSettings()}
+              disabled={isSaving || !isDirty || !activeKitId || hasUnsyncedLogos}
+            >
               {isSaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               {isSaving ? "Saving..." : "Save"}
             </Button>
@@ -364,39 +475,136 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
 
                 {/* Logo */}
                 <div className="mb-5">
-                  <Label className="mb-1.5 block">Logo</Label>
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <Label className="block">Logos</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      onClick={() => logoInputRef.current?.click()}
+                    >
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      Add logos
+                    </Button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => logoInputRef.current?.click()}
                     className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/30 bg-white/5 p-4 text-xs font-medium text-slate-200 transition hover:border-orange-300 focus-visible:border-orange-300"
                   >
-                    {logo ? (
-                      <div className="flex items-center gap-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={logo.previewUrl} alt="Logo preview" className="h-16 max-w-[10rem] object-contain" />
-                        <div className="text-left">
-                          <span className={cn("rounded-full border px-3 py-1 text-[11px] font-medium", statusChip(logo.status))}>
-                            {logo.name === "Logo" ? "Logo ready" : logo.name}
-                            {logo.status === "uploading" ? " (syncing)" : ""}
-                          </span>
-                          <p className="mt-1 text-[11px] text-slate-400">Click to replace</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <ImagePlus className="h-4 w-4 text-orange-300" />
-                        Attach logo
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-2">
+                      <ImagePlus className="h-4 w-4 text-orange-300" />
+                      Upload one or more logos
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Each logo gets its own editable display name.
+                    </span>
                   </button>
                   <input
                     id={logoInputId}
                     ref={logoInputRef}
                     type="file"
                     accept="image/*"
+                    multiple
                     className="sr-only"
                     onChange={(event) => void handleLogoUpload(event)}
                   />
+                  {logos.length > 0 ? (
+                    <div className="mt-3 space-y-3">
+                      {logos.map((logo, index) => (
+                        <div
+                          key={logo.id}
+                          className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3"
+                        >
+                          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/15 bg-black/30 p-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={logo.previewUrl}
+                              alt={`${logo.name || `Logo ${index + 1}`} preview`}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span
+                                className={cn(
+                                  "rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                                  statusChip(logo.status),
+                                )}
+                              >
+                                {logo.status === "uploading"
+                                  ? "Uploading"
+                                  : logo.error
+                                    ? "Needs attention"
+                                    : "Ready"}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() =>
+                                  setLogos((current) => {
+                                    const removingLogo = current.find(
+                                      (existingLogo) => existingLogo.id === logo.id,
+                                    );
+                                    if (removingLogo) {
+                                      revokeObjectUrlIfNeeded(removingLogo.previewUrl);
+                                    }
+                                    return current.filter(
+                                      (existingLogo) => existingLogo.id !== logo.id,
+                                    );
+                                  })
+                                }
+                                aria-label={`Remove ${logo.name || `logo ${index + 1}`}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`logo-name-${logo.id}`}
+                                className="text-[11px] text-slate-300"
+                              >
+                                Logo name
+                              </Label>
+                              <Input
+                                id={`logo-name-${logo.id}`}
+                                value={logo.name}
+                                onChange={(event) =>
+                                  setLogos((current) =>
+                                    current.map((existingLogo) =>
+                                      existingLogo.id === logo.id
+                                        ? {
+                                            ...existingLogo,
+                                            name: event.target.value,
+                                          }
+                                        : existingLogo,
+                                    ),
+                                  )
+                                }
+                                placeholder={`Logo ${index + 1}`}
+                              />
+                            </div>
+                            <p className="text-[11px] text-slate-400">
+                              {logo.error ||
+                                (logo.status === "uploading"
+                                  ? "Syncing to storage..."
+                                  : logo.storageUrl)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-slate-400">
+                      No logos uploaded yet.
+                    </p>
+                  )}
+                  {hasUnsyncedLogos ? (
+                    <p className="mt-2 text-[11px] text-amber-200">
+                      Wait for uploads to finish or remove failed logos before saving.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">

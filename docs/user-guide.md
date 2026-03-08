@@ -39,18 +39,18 @@
 4. Fill brand and post details
    - Brand fields: name, values, principles, story, voice, visual direction, palette (color picker swatches), fonts, logo notes.
    - Post fields: theme, subject, thought, objective, audience, mood, aspect ratio.
-   - Select a brand kit from the dropdown in the post brief form to pre-fill brand fields and logo.
+   - Brand kits can store multiple named logos. Upload them in Brand Kits, edit the display names, then select both the brand kit and logo from the post brief form.
    - New posts default to the first available brand kit in the database when one exists.
    - The post subject field is used as the post title in the sidebar list, falling back to theme or the first generated variant headline.
 
 5. (Optional) Autofill brand from website
    - Enter website URL and use autofill to populate brand fields (including fonts) from website cues.
 
-6. Upload assets and logo
+6. Upload assets
    - Use the Asset Manager `Attach assets` control to upload images and/or videos (up to 20 assets).
    - Reorder assets by dragging in the asset manager; each item shows a thumbnail, file size, and media type.
    - Remove individual assets with the X button.
-   - Use one-click icon controls in the logo panel to upload/replace or remove the logo.
+   - Logo uploads now live in Brand Kits rather than the post composer.
 
 7. Generate creative variants
    - Click generate to create 3 variants with:

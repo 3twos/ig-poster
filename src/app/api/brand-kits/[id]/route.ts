@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { brandKits } from "@/db/schema";
+import {
+  getPrimaryBrandKitLogoUrl,
+  normalizeBrandKitLogos,
+  normalizeBrandKitRow,
+} from "@/lib/brand-kit";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
@@ -30,7 +35,7 @@ export async function GET(req: Request, { params }: Params) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json(row);
+    return NextResponse.json(normalizeBrandKitRow(row));
   } catch (err) {
     console.error("[api/brand-kits/id]", err);
     return NextResponse.json(
@@ -51,6 +56,10 @@ export async function PUT(req: Request, { params }: Params) {
     const ownerHash = hashEmail(session.email);
     const body = await req.json();
     const db = getDb();
+    const normalizedLogos =
+      body.logos !== undefined || body.logoUrl !== undefined
+        ? normalizeBrandKitLogos(body.logos, body.logoUrl)
+        : undefined;
 
     // Build update object with only provided fields
     const updateData: Partial<typeof brandKits.$inferInsert> = {
@@ -60,7 +69,12 @@ export async function PUT(req: Request, { params }: Params) {
     if (body.name !== undefined) updateData.name = body.name;
     if (body.brand !== undefined) updateData.brand = body.brand;
     if (body.promptConfig !== undefined) updateData.promptConfig = body.promptConfig;
-    if (body.logoUrl !== undefined) updateData.logoUrl = body.logoUrl;
+    if (normalizedLogos !== undefined) {
+      updateData.logos = normalizedLogos;
+      updateData.logoUrl = getPrimaryBrandKitLogoUrl(normalizedLogos, body.logoUrl);
+    } else if (body.logoUrl !== undefined) {
+      updateData.logoUrl = body.logoUrl;
+    }
     if (body.isDefault !== undefined) updateData.isDefault = body.isDefault;
 
     const [row] = await db
@@ -73,7 +87,7 @@ export async function PUT(req: Request, { params }: Params) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json(row);
+    return NextResponse.json(normalizeBrandKitRow(row));
   } catch (err) {
     console.error("[api/brand-kits/id]", err);
     return NextResponse.json(

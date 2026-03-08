@@ -13,7 +13,12 @@ import {
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
 import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
 import type { StoredAsset } from "@/lib/project";
-import type { BrandState, PostState, PromptConfigState } from "@/lib/types";
+import type {
+  BrandKitLogo,
+  BrandState,
+  PostState,
+  PromptConfigState,
+} from "@/lib/types";
 
 export type PublishHistoryEntry = {
   publishedAt: string;
@@ -149,6 +154,7 @@ export const brandKits = pgTable(
     name: varchar("name", { length: 80 }).notNull().default("Default"),
     brand: jsonb("brand").$type<Partial<BrandState>>(),
     promptConfig: jsonb("prompt_config").$type<Partial<PromptConfigState>>(),
+    logos: jsonb("logos").$type<BrandKitLogo[]>().notNull().default([]),
     logoUrl: text("logo_url"),
     isDefault: boolean("is_default").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
