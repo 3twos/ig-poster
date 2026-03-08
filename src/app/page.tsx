@@ -683,12 +683,13 @@ export default function Home() {
   ]);
   const hasIncompletePublishUserTags = useMemo(
     () =>
-      mediaComposition.items.some((item) =>
-        (item.userTags ?? []).some(
-          (tag) => normalizeTagUsername(tag.username).length === 0,
-        ),
+      [
+        ...(singlePublishTagAsset ? [singlePublishTagAsset.userTags] : []),
+        ...carouselTagAssets.map((asset) => asset.userTags),
+      ].some((tags) =>
+        tags.some((tag) => normalizeTagUsername(tag.username).length === 0),
       ),
-    [mediaComposition.items],
+    [carouselTagAssets, singlePublishTagAsset],
   );
 
   const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
