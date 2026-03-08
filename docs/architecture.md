@@ -108,7 +108,7 @@ Before submitting, single-image clients can call `GET /api/meta/locations?q=<que
 4. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
 5. Otherwise route publishes immediately through Meta Graph API helpers.
 6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` and `userTags` are passed through for image-mode publish jobs, while optional reel `shareToFeed` is passed through for reel-mode publish jobs.
-7. Cron route (`GET /api/cron/publish`) claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
+7. Cron route (`GET /api/cron/publish`) first fails stale `processing` jobs for manual review, then claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
 
 Why this shape:
 - Separates interactive request latency from scheduled execution.
@@ -198,7 +198,7 @@ Why this shape:
 - First-comment posting failures are captured as publish warnings/events and do not roll back successful media publishes.
 - Location/user-tag metadata is validated as image-only across schedule, queue-edit, and publish runtime paths.
 - Location search uses the same Meta auth context as publish requests, so suggestions reflect the connected account/token path.
-- Scheduling: cron claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
+- Scheduling: cron fails stale `processing` jobs, claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
 - Failed jobs remain queryable in Postgres for inspection/recovery.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
 - Blob-dependent features return clear 503 errors when storage is not configured (uploads, share snapshots, outcomes sync).

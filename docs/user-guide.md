@@ -90,6 +90,7 @@
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
    - The publish section also shows a workspace queue for queued, processing, and failed jobs.
    - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata, including visual tag placement and location search assist, plus reel feed-sharing) without leaving the editor.
+   - Each queue card now shows recent activity entries so you can see retries, deferrals, failures, and manual edits without checking the database.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -118,6 +119,7 @@
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.
 - Scheduled posts are processed by `/api/cron/publish` (every 15 minutes in Vercel cron config).
 - Scheduled queue processing claims due jobs from Postgres-backed publish jobs.
+- If a job gets stranded in `processing` for too long, the cron hardening sweep marks it `failed` with a diagnostic note so it can be reviewed and retried manually instead of silently blocking capacity.
 - Failed jobs stay visible in the publish queue with their latest error so they can be retried immediately or edited and re-queued.
 - If the 24-hour publish window is saturated, immediate publish returns a clear limit message and due queued jobs are deferred automatically (without consuming retry attempts) until capacity returns.
 - First-comment posting is best effort: publish success is preserved even if first-comment posting fails.

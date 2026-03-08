@@ -40,18 +40,19 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
    - Added Meta place search that fills the existing `locationId` field while preserving manual ID entry as fallback.
    - Reference: merged in PR `#79`.
 
+9. Additional Meta publishing controls
+   - Exposed reel `share_to_feed` as a user-facing toggle in the publish form, queue edit flow, and runtime publish pipeline.
+   - Reference: merged in PR `#80`.
+
 ## In Progress
 
-1. Additional Meta publishing controls
-   - First slice: expose reel `share_to_feed` as a user-facing toggle in the publish form, queue edit flow, and runtime publish pipeline.
-   - Candidate follow-ons inside this phase: collaborator workflows and other Graph API publish metadata worth exposing.
-   - Reference: PR `#80`.
+1. Operational hardening
+   - First slice: fail stale `processing` jobs after a timeout so quota does not stay wedged behind abandoned work, and expose recent publish-job activity in the queue UI.
+   - Goal: make retries, deferrals, and downstream failures easier to diagnose and safer to recover.
 
 ## Remaining phases
 
-1. Operational hardening
-   - Strengthen idempotency, diagnostics, and publish-history observability around retries, deferred jobs, and downstream failures.
-   - Goal: make the queue safer and easier to operate under real publishing load.
+- No additional phases are queued right now. Extend this roadmap when the next concrete Meta publishing slice is selected.
 
 ## Notes
 

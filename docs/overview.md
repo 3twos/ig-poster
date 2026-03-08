@@ -23,6 +23,7 @@
 - Surfaces a publish queue in the publish section so users can review queued/processing/failed jobs, cancel jobs, retry failed jobs immediately, and edit queued/failed publish details (caption, first comment, publish time, media URLs, image metadata, and reel feed-sharing) without leaving the editor.
 - For single-image posts, supports Meta location search assist and click-to-place user tagging on the rendered poster preview, with numeric x/y fallback for fine tuning.
 - For reels, supports choosing whether the publish should also appear on the main feed (`share_to_feed`), with the default remaining on.
+- Automatically fails stale `processing` publish jobs after a timeout so abandoned work does not keep consuming publish-window capacity, and shows recent job activity directly in the queue UI.
 - Enforces Meta Content Publishing throughput guardrails (50 published posts per rolling 24-hour window) for immediate publishes, and automatically defers queued jobs when the window is saturated.
 - Runs media preflight checks before scheduling or publishing (public HTTPS URL requirement + remote content-type probing for image/video compatibility).
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.

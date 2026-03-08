@@ -7,7 +7,9 @@ import {
   completePublishJobSuccess,
   deferProcessingPublishJob,
   getPublishWindowUsage,
+  recoverStaleProcessingJobs,
   reserveImmediatePublishJob,
+  STALE_PROCESSING_TIMEOUT_MS,
   type AppDb,
 } from "@/lib/publish-jobs";
 
@@ -313,6 +315,56 @@ describe("deferProcessingPublishJob", () => {
     expect(setPayload.events.at(-1)).toMatchObject({
       type: "retry-scheduled",
       attempt: 1,
+    });
+  });
+});
+
+describe("recoverStaleProcessingJobs", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("marks stale processing jobs failed for manual review", async () => {
+    vi.useFakeTimers();
+    const now = new Date("2026-03-06T21:00:00.000Z");
+    vi.setSystemTime(now);
+    const job = {
+      ...baseJob(),
+      attempts: 2,
+      lastAttemptAt: new Date(now.getTime() - STALE_PROCESSING_TIMEOUT_MS - 60_000),
+      updatedAt: new Date(now.getTime() - STALE_PROCESSING_TIMEOUT_MS - 60_000),
+    };
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([job]),
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{ ...job, status: "failed" as const }]),
+    };
+    const db = {
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as AppDb;
+
+    const recovered = await recoverStaleProcessingJobs(db, now);
+
+    expect(recovered).toHaveLength(1);
+    const setPayload = updateChain.set.mock.calls[0]?.[0] as {
+      status: string;
+      lastError: string;
+      completedAt: Date;
+      events: Array<{ type: string; detail?: string; attempt?: number }>;
+    };
+    expect(setPayload.status).toBe("failed");
+    expect(setPayload.completedAt.toISOString()).toBe(now.toISOString());
+    expect(setPayload.lastError).toContain("marked failed to avoid duplicate publish risk");
+    expect(setPayload.events.at(-1)).toMatchObject({
+      type: "failed",
+      attempt: 2,
     });
   });
 });

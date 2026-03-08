@@ -26,6 +26,7 @@ vi.mock("@/lib/publish-jobs", () => ({
   deferProcessingPublishJob: vi.fn(),
   getPublishWindowUsage: vi.fn(),
   markPostPublished: vi.fn(),
+  recoverStaleProcessingJobs: vi.fn(),
 }));
 
 vi.mock("@/lib/app-encryption", () => ({
@@ -51,6 +52,7 @@ import {
   deferProcessingPublishJob,
   getPublishWindowUsage,
   markPostPublished,
+  recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
 
 const mockedGetDb = vi.mocked(getDb);
@@ -64,6 +66,7 @@ const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
 const mockedDeferProcessingPublishJob = vi.mocked(deferProcessingPublishJob);
 const mockedGetPublishWindowUsage = vi.mocked(getPublishWindowUsage);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
+const mockedRecoverStaleProcessingJobs = vi.mocked(recoverStaleProcessingJobs);
 
 const baseJob = {
   id: "job_1",
@@ -101,6 +104,7 @@ describe("GET /api/cron/publish", () => {
     mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
     mockedIsBlobEnabled.mockReturnValue(false);
     mockedPublishInstagramFirstComment.mockResolvedValue("comment_1");
+    mockedRecoverStaleProcessingJobs.mockResolvedValue([]);
     mockedGetPublishWindowUsage.mockResolvedValue({
       limit: 50,
       used: 0,
@@ -143,6 +147,7 @@ describe("GET /api/cron/publish", () => {
     const res = await GET(req);
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({
+      staleFailed: 0,
       claimed: 1,
       published: 1,
       errorCount: 0,
@@ -158,6 +163,27 @@ describe("GET /api/cron/publish", () => {
       baseJob.postId,
       "publish_1",
     );
+  });
+
+  it("reports stale processing jobs recovered before new claims", async () => {
+    mockedRecoverStaleProcessingJobs.mockResolvedValue([
+      { ...baseJob, id: "stale_1", status: "failed" },
+    ]);
+    mockedClaimDuePublishJobs.mockResolvedValue([]);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      staleFailed: 1,
+      claimed: 0,
+      published: 0,
+      errorCount: 0,
+    });
+    expect(mockedRecoverStaleProcessingJobs).toHaveBeenCalledTimes(1);
   });
 
   it("passes image metadata fields when present on queued jobs", async () => {

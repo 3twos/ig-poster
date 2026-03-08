@@ -19,6 +19,7 @@ import {
   deferProcessingPublishJob,
   getPublishWindowUsage,
   markPostPublished,
+  recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
 import { decryptString } from "@/lib/secure";
 
@@ -44,6 +45,9 @@ export async function GET(req: Request) {
     }
 
     const db = getDb();
+    const staleRecovered = await recoverStaleProcessingJobs(db, new Date(), {
+      limit: 100,
+    });
     const claimed = await claimDuePublishJobs(db, new Date(), 100);
 
     let published = 0;
@@ -184,6 +188,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({
+      staleFailed: staleRecovered.length,
       claimed: claimed.length,
       published,
       retried,

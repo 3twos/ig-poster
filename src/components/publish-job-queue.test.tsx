@@ -81,7 +81,16 @@ describe("PublishJobQueue", () => {
 
   it("renders queued and failed publish jobs for the workspace", async () => {
     mockQueueLoad(
-      [makeJob()],
+      [makeJob({
+        events: [
+          {
+            at: "2026-03-10T17:05:00.000Z",
+            type: "retry-scheduled",
+            attempt: 1,
+            detail: "Attempt failed: upstream timeout. Next retry at 2026-03-10T18:30:00.000Z.",
+          },
+        ],
+      })],
       [
         makeJob({
           id: "job-2",
@@ -112,6 +121,9 @@ describe("PublishJobQueue", () => {
     expect(screen.getByText("This post")).not.toBeNull();
     expect(screen.getByText("OAuth token expired")).not.toBeNull();
     expect(screen.getByText("Failed")).not.toBeNull();
+    expect(screen.getByText("Recent activity")).not.toBeNull();
+    expect(screen.getByText(/Retry scheduled/)).not.toBeNull();
+    expect(screen.getByText(/Attempt failed: upstream timeout/)).not.toBeNull();
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/publish-jobs?status=queued,processing&limit=8");
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/publish-jobs?status=failed&limit=4");
   });
