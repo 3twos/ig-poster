@@ -2205,6 +2205,14 @@ refresh_project_deployments() {
       continue
     fi
 
+    # Skip preview deployments — previews are disabled in Vercel.
+    local dep_target_lower
+    dep_target_lower="$(printf '%s' "$dep_target" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$dep_target_lower" == "preview" ]]; then
+      log_line "Skipping preview deployment: id=${dep_id}"
+      continue
+    fi
+
     old_idx="$(deployment_index_by_id "$dep_id")"
     if (( old_idx >= 0 )); then
       first_seen="${DEP_FIRST_SEEN_EPOCH[old_idx]}"
