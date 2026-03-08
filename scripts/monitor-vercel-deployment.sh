@@ -2206,18 +2206,20 @@ refresh_project_deployments() {
     fi
 
     # Skip "Ignored Build Step" cancellations: preview deployments that were
-    # immediately canceled (0s duration) by the Vercel build-step ignore rule.
+    # canceled very quickly (<5s duration) by the Vercel build-step ignore rule.
     if [[ "$dep_status" == "CANCELED" ]]; then
       local dep_target_lower
       dep_target_lower="$(printf '%s' "$dep_target" | tr '[:upper:]' '[:lower:]')"
       if [[ "$dep_target_lower" == "preview" || -z "$dep_target_lower" ]]; then
-        local cancel_duration=0
+        # Only skip when both timestamps are valid, positive integers and we can
+        # compute a short (sub-5s) duration. Otherwise, treat it as a real cancel.
         if [[ "$dep_created_at" =~ ^[0-9]+$ ]] && [[ "$dep_ready_at" =~ ^[0-9]+$ ]] && (( dep_ready_at > 0 && dep_created_at > 0 )); then
+          local cancel_duration
           cancel_duration=$(( dep_ready_at - dep_created_at ))
-        fi
-        if (( cancel_duration < 5000 )); then
-          log_line "Skipping ignored build step: id=${dep_id} target=${dep_target:-preview}"
-          continue
+          if (( cancel_duration >= 0 && cancel_duration < 5000 )); then
+            log_line "Skipping ignored build step: id=${dep_id} target=${dep_target:-preview}"
+            continue
+          fi
         fi
       fi
     fi
