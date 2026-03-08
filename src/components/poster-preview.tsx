@@ -1,14 +1,24 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Rnd } from "react-rnd";
 
 import {
+  DEFAULT_LOGO_POSITION,
   normalizeOverlayLayout,
   type AspectRatio,
   type CanonicalOverlayKey,
   type CreativeVariant,
+  type LogoPosition,
   type OverlayLayout,
 } from "@/lib/creative";
 import { cn, hexToRgba } from "@/lib/utils";
@@ -163,29 +173,102 @@ const buildOverlayBlocks = (
   );
 };
 
+/* ── Phase 2: OverlayBlockBody uses min-h instead of fixed h ── */
+
 const OverlayBlockBody = ({
   block,
+  isEditing,
+  onTextCommit,
+  onEditStart,
 }: {
   block: OverlayCanvasBlock;
-}) => (
-  <div
-    className={cn(
-      "flex h-full w-full p-3",
-      block.containerClassName,
-      block.key === "cta" ? "items-start" : "items-stretch",
-    )}
-  >
+  isEditing?: boolean;
+  onTextCommit?: (text: string) => void;
+  onEditStart?: () => void;
+}) => {
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const cancelledRef = useRef(false);
+
+  const handleBlur = useCallback(() => {
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      // Restore original text on cancel
+      if (spanRef.current) {
+        spanRef.current.textContent = block.text;
+      }
+      return;
+    }
+    if (!onTextCommit || !spanRef.current) return;
+    onTextCommit(spanRef.current.textContent ?? "");
+  }, [block.text, onTextCommit]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelledRef.current = true;
+        (e.target as HTMLElement).blur();
+      }
+    },
+    [],
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      e.preventDefault();
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+
+      const range = selection.getRangeAt(0);
+      if (!spanRef.current || !spanRef.current.contains(range.commonAncestorContainer)) return;
+
+      range.deleteContents();
+      const textNode = document.createTextNode(text);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    },
+    [],
+  );
+
+  return (
     <div
       className={cn(
-        "flex h-full w-full whitespace-pre-wrap break-words",
-        block.contentClassName,
+        "flex min-h-full w-full p-3",
+        block.containerClassName,
+        block.key === "cta" ? "items-start" : "items-stretch",
       )}
-      style={{ fontSize: `${block.fontScale}em` }}
+      onDoubleClick={onEditStart}
     >
-      <span className={block.className}>{block.text}</span>
+      <div
+        className={cn(
+          "flex min-h-full w-full whitespace-pre-wrap break-words",
+          block.contentClassName,
+        )}
+        style={{ fontSize: `${block.fontScale}em` }}
+      >
+        <span
+          ref={spanRef}
+          className={cn(block.className, isEditing && "outline-none ring-1 ring-orange-300/60 rounded px-0.5")}
+          contentEditable={isEditing}
+          suppressContentEditableWarning
+          onBlur={isEditing ? handleBlur : undefined}
+          onKeyDown={isEditing ? handleKeyDown : undefined}
+          onPaste={isEditing ? handlePaste : undefined}
+        >
+          {block.text}
+        </span>
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+/* ── Phase 2: OverlayBlock uses minHeight instead of fixed height ── */
 
 const OverlayBlock = ({
   block,
@@ -195,19 +278,129 @@ const OverlayBlock = ({
   editable: boolean;
 }) => (
   <div
-    className="pointer-events-none absolute z-20 overflow-hidden"
+    className="pointer-events-none absolute z-20"
     style={{
       left: `${block.x}%`,
       top: `${block.y}%`,
       width: `${block.width}%`,
-      height: `${block.height}%`,
+      minHeight: `${block.height}%`,
     }}
   >
-    <div className={cn("h-full w-full", editable && "border border-white/10")}>
+    <div className={cn("min-h-full w-full", editable && "border border-white/10")}>
       <OverlayBlockBody block={block} />
     </div>
   </div>
 );
+
+/* ── Phase 4: LogoBadge component ── */
+
+const LogoBadge = ({
+  logoImage,
+  brandName,
+  logoTone,
+  logoPos,
+  editorMode,
+  frame,
+  onPositionChange,
+}: {
+  logoImage?: string;
+  brandName: string;
+  logoTone: "light" | "dark";
+  logoPos: LogoPosition;
+  editorMode: boolean;
+  frame: { width: number; height: number };
+  onPositionChange?: (pos: LogoPosition) => void;
+}) => {
+  const badgeContent = (
+    <div
+      className={cn(
+        "flex h-full w-full items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] uppercase shadow-lg backdrop-blur-sm",
+        logoImage
+          ? logoTone === "light"
+            ? "border-white/15 bg-slate-950/78 text-white"
+            : "border-black/10 bg-white/92 text-slate-950"
+          : "border-black/10 bg-white/90 text-slate-900",
+      )}
+    >
+      {logoImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoImage}
+          alt={`${brandName} logo`}
+          className="h-6 max-w-[4rem] object-contain"
+        />
+      ) : (
+        brandName
+      )}
+    </div>
+  );
+
+  if (!editorMode || !onPositionChange || frame.width === 0) {
+    return (
+      <div
+        className="absolute z-20"
+        style={{
+          left: `${logoPos.x}%`,
+          top: `${logoPos.y}%`,
+          width: `${logoPos.width}%`,
+          height: `${logoPos.height}%`,
+        }}
+      >
+        {badgeContent}
+      </div>
+    );
+  }
+
+  const toPercentRect = (data: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => ({
+    x: Math.max(0, Math.min(100, (data.x / frame.width) * 100)),
+    y: Math.max(0, Math.min(100, (data.y / frame.height) * 100)),
+    width: Math.max(3, Math.min(100, (data.width / frame.width) * 100)),
+    height: Math.max(2, Math.min(100, (data.height / frame.height) * 100)),
+  });
+
+  const x = (logoPos.x / 100) * frame.width;
+  const y = (logoPos.y / 100) * frame.height;
+  const width = (logoPos.width / 100) * frame.width;
+  const height = (logoPos.height / 100) * frame.height;
+
+  return (
+    <Rnd
+      bounds="parent"
+      size={{ width, height }}
+      position={{ x, y }}
+      minWidth={Math.max(frame.width * 0.08, 48)}
+      minHeight={Math.max(frame.height * 0.03, 24)}
+      onDragStop={(_event, data) => {
+        const next = toPercentRect({ x: data.x, y: data.y, width, height });
+        onPositionChange({ ...logoPos, ...next });
+      }}
+      onResizeStop={(_event, _dir, ref, _delta, position) => {
+        const next = toPercentRect({
+          x: position.x,
+          y: position.y,
+          width: ref.offsetWidth,
+          height: ref.offsetHeight,
+        });
+        onPositionChange({ ...logoPos, ...next });
+      }}
+      className="z-20"
+    >
+      <div className="relative h-full w-full rounded-xl border border-orange-300/70 p-0.5">
+        <span className="absolute -top-4 left-1 rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
+          Logo
+        </span>
+        {badgeContent}
+      </div>
+    </Rnd>
+  );
+};
+
+/* ── Phase 2+3: EditorOverlay with auto-resize and inline editing ── */
 
 const EditorOverlay = ({
   blocks,
@@ -220,6 +413,8 @@ const EditorOverlay = ({
   onChange: (next: OverlayLayout) => void;
   frame: { width: number; height: number };
 }) => {
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+
   const toPercentRect = (data: {
     x: number;
     y: number;
@@ -257,6 +452,29 @@ const EditorOverlay = ({
     });
   };
 
+  const updateBlockText = useCallback(
+    (block: OverlayCanvasBlock, text: string) => {
+      if (block.type === "canonical" && block.key) {
+        onChange({
+          ...layout,
+          [block.key]: {
+            ...layout[block.key],
+            text,
+          },
+        });
+      } else {
+        onChange({
+          ...layout,
+          custom: (layout.custom ?? []).map((item) =>
+            item.id === block.id ? { ...item, text } : item,
+          ),
+        });
+      }
+      setEditingBlockId(null);
+    },
+    [layout, onChange],
+  );
+
   const removeBlock = (block: OverlayCanvasBlock) => {
     if (block.type === "canonical" && block.key) {
       onChange({
@@ -281,23 +499,26 @@ const EditorOverlay = ({
         const x = (block.x / 100) * frame.width;
         const y = (block.y / 100) * frame.height;
         const width = (block.width / 100) * frame.width;
-        const height = (block.height / 100) * frame.height;
+        const minHeight = (block.height / 100) * frame.height;
+        const isEditing = editingBlockId === block.id;
 
         return (
           <Rnd
             key={block.id}
             bounds="parent"
-            size={{ width, height }}
+            size={{ width, height: minHeight }}
             position={{ x, y }}
             minWidth={Math.max(frame.width * 0.16, 96)}
             minHeight={Math.max(frame.height * 0.06, 48)}
             dragHandleClassName={`drag-${block.id}`}
+            disableDragging={isEditing}
+            enableResizing={!isEditing}
             onDragStop={(_event, data) => {
               updateBlockRect(block, {
                 x: data.x,
                 y: data.y,
                 width,
-                height,
+                height: minHeight,
               });
             }}
             onResizeStop={(_event, _dir, ref, _delta, position) => {
@@ -308,7 +529,6 @@ const EditorOverlay = ({
                 height: ref.offsetHeight,
               });
             }}
-            className="overflow-hidden"
           >
             <div className="relative h-full w-full rounded-xl border border-orange-300/70 bg-black/24 p-2 backdrop-blur-sm">
               <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
@@ -327,8 +547,13 @@ const EditorOverlay = ({
                   <X className="h-3 w-3" />
                 </button>
               </div>
-              <div className={cn(`drag-${block.id} h-full w-full cursor-move`)}>
-                <OverlayBlockBody block={block} />
+              <div className={cn(`drag-${block.id} h-full w-full`, !isEditing && "cursor-move")}>
+                <OverlayBlockBody
+                  block={block}
+                  isEditing={isEditing}
+                  onEditStart={() => setEditingBlockId(block.id)}
+                  onTextCommit={(text) => updateBlockText(block, text)}
+                />
               </div>
             </div>
           </Rnd>
@@ -458,6 +683,8 @@ export const PosterPreview = memo(
         [overlayLayout, variant.layout],
       );
 
+      const logoPos = resolvedOverlayLayout.logo ?? DEFAULT_LOGO_POSITION;
+
       const navLength =
         variant.postType === "carousel"
           ? Math.min(
@@ -484,6 +711,17 @@ export const PosterPreview = memo(
         Boolean(onOverlayLayoutChange) &&
         frameSize.width > 0 &&
         frameSize.height > 0;
+
+      const handleLogoPositionChange = useCallback(
+        (pos: LogoPosition) => {
+          if (!onOverlayLayoutChange) return;
+          onOverlayLayoutChange({
+            ...resolvedOverlayLayout,
+            logo: pos,
+          });
+        },
+        [onOverlayLayoutChange, resolvedOverlayLayout],
+      );
 
       return (
         <div
@@ -577,27 +815,17 @@ export const PosterPreview = memo(
             </>
           ) : null}
 
-          <div
-            className={cn(
-              "absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] uppercase shadow-lg backdrop-blur-sm",
-              logoImage
-                ? logoTone === "light"
-                  ? "border-white/15 bg-slate-950/78 text-white"
-                  : "border-black/10 bg-white/92 text-slate-950"
-                : "border-black/10 bg-white/90 text-slate-900",
-            )}
-          >
-            {logoImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoImage}
-                alt="Brand logo"
-                className="h-6 max-w-[4rem] object-contain"
-              />
-            ) : (
-              brandName
-            )}
-          </div>
+          {logoPos.visible !== false ? (
+            <LogoBadge
+              logoImage={logoImage}
+              brandName={brandName}
+              logoTone={logoTone}
+              logoPos={logoPos}
+              editorMode={canEdit}
+              frame={frameSize}
+              onPositionChange={canEdit ? handleLogoPositionChange : undefined}
+            />
+          ) : null}
         </div>
       );
     },

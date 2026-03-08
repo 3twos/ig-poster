@@ -4,7 +4,6 @@ import {
   Copy,
   Eye,
   EyeOff,
-  LayoutTemplate,
   LoaderCircle,
   Plus,
   Save,
@@ -23,11 +22,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { SaveStatus } from "@/hooks/use-auto-save";
-import type {
-  CanonicalOverlayKey,
-  CreativeVariant,
-  GenerationResponse,
-  OverlayLayout,
+import {
+  DEFAULT_LOGO_POSITION,
+  type CanonicalOverlayKey,
+  type CreativeVariant,
+  type GenerationResponse,
+  type OverlayLayout,
 } from "@/lib/creative";
 import { cn } from "@/lib/utils";
 
@@ -76,8 +76,6 @@ type Props = {
   editorMode: boolean;
   isRefining: boolean;
   dispatch: (action: Record<string, unknown>) => void;
-  setEditorMode: (v: boolean) => void;
-  onResetTextLayout: () => void;
   onRefineVariant: (instruction?: string) => void;
   onCopyCaption: () => void;
   copyState: "idle" | "done";
@@ -399,6 +397,42 @@ function EditorInspector({
           </p>
         )}
       </div>
+
+      <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold tracking-[0.16em] text-slate-200 uppercase">
+            Logo
+          </p>
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() =>
+              onOverlayLayoutChange({
+                ...overlayLayout,
+                logo: {
+                  ...(overlayLayout.logo ?? DEFAULT_LOGO_POSITION),
+                  visible: !(overlayLayout.logo?.visible ?? true),
+                },
+              })
+            }
+          >
+            {(overlayLayout.logo?.visible ?? true) ? (
+              <>
+                <EyeOff className="h-3.5 w-3.5" />
+                Hide
+              </>
+            ) : (
+              <>
+                <Eye className="h-3.5 w-3.5" />
+                Show
+              </>
+            )}
+          </Button>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Drag the logo on the canvas to reposition it.
+        </p>
+      </div>
     </div>
   );
 }
@@ -409,8 +443,6 @@ export function StrategySection({
   editorMode,
   isRefining,
   dispatch,
-  setEditorMode,
-  onResetTextLayout,
   onRefineVariant,
   onCopyCaption,
   copyState,
@@ -427,40 +459,6 @@ export function StrategySection({
         <p className="text-xs font-semibold tracking-[0.2em] text-orange-200 uppercase">
           Strategy
         </p>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {editorMode ? (
-            <Badge variant="outline" className="text-[10px] uppercase">
-              {saveStatusLabel(saveStatus)}
-            </Badge>
-          ) : null}
-          {editorMode ? (
-            <Button variant="outline" size="xs" onClick={() => void onSaveNow()}>
-              <Save className="h-3.5 w-3.5" />
-              Save now
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() => setEditorMode(!editorMode)}
-            className={cn(
-              "uppercase",
-              editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100",
-            )}
-          >
-            <LayoutTemplate className="h-3.5 w-3.5" />
-            {editorMode ? "Editor On" : "Editor Off"}
-          </Button>
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={!activeVariant}
-            onClick={onResetTextLayout}
-          >
-            <LayoutTemplate className="h-3.5 w-3.5" />
-            Reset Text Layout
-          </Button>
-        </div>
       </div>
 
       <p className="text-sm leading-relaxed text-slate-200">{result.strategy}</p>

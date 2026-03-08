@@ -54,8 +54,6 @@ function StrategyHarness() {
         editorMode
         isRefining={false}
         dispatch={vi.fn()}
-        setEditorMode={vi.fn()}
-        onResetTextLayout={vi.fn()}
         onRefineVariant={vi.fn()}
         onCopyCaption={vi.fn()}
         copyState="idle"
@@ -104,5 +102,16 @@ describe("StrategySection editor inspector", () => {
 
     const firstCustomText = screen.getAllByDisplayValue("New text")[0] as HTMLTextAreaElement;
     expect(firstCustomText.getAttribute("maxLength")).toBe("320");
+  });
+
+  it("toggles logo visibility", () => {
+    render(<StrategyHarness />);
+
+    const hideButton = screen.getAllByRole("button", { name: "Hide" });
+    // The last Hide button is the logo toggle
+    const logoHide = hideButton[hideButton.length - 1];
+    fireEvent.click(logoHide);
+
+    expect(screen.getAllByRole("button", { name: "Show" }).length).toBeGreaterThanOrEqual(1);
   });
 });
