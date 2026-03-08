@@ -173,12 +173,9 @@ export function CarouselComposer({
       </div>
 
       <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-2">
           <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
             Included
-          </p>
-          <p className="text-[11px] text-slate-500">
-            {includedAssets.length}/10 items
           </p>
         </div>
 
@@ -323,7 +320,7 @@ function ComposerTile({
             onClick={onRemove}
             aria-label={`Remove ${asset.name} from carousel`}
             className={cn(
-              "absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/60 text-white transition hover:bg-red-500/90",
+              "absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/60 text-white transition hover:bg-red-500/90 focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:outline-none",
               (!removable || disabled) && "cursor-not-allowed opacity-50",
             )}
           >
@@ -356,7 +353,7 @@ function ComposerTile({
             onClick={onMoveLeft}
             aria-label={`Move ${asset.name} left`}
             className={cn(
-              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white",
+              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:outline-none",
               (disabled || !onMoveLeft || index === 0) &&
                 "pointer-events-none opacity-30",
             )}
@@ -380,7 +377,7 @@ function ComposerTile({
             onClick={onMoveRight}
             aria-label={`Move ${asset.name} right`}
             className={cn(
-              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white",
+              "inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:outline-none",
               (disabled ||
                 !onMoveRight ||
                 typeof index !== "number" ||
