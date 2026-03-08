@@ -17,6 +17,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PublishJobClient } from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
+import {
+  formatDateTimeLocalInput,
+  parseDateTimeLocalInput,
+} from "@/lib/time-zone";
 import { parseApiError } from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
 
@@ -91,13 +95,6 @@ const formatPublishTime = (iso: string, localTimeZone: string) => {
     hour: "numeric",
     minute: "2-digit",
   }).format(date)} (${localTimeZone})`;
-};
-
-const toInputValue = (iso: string) => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
 const shiftMonth = (monthKey: string, delta: number) => {
@@ -426,13 +423,18 @@ export function ScheduledPlanner({
                       <Button
                         variant="outline"
                         size="xs"
-                        onClick={() => {
-                          setRescheduleJobId((current) =>
-                            current === job.id ? null : job.id,
-                          );
-                          setRescheduleAt(toInputValue(job.publishAt));
-                        }}
-                        disabled={isBusy || job.status === "processing"}
+                          onClick={() => {
+                            setRescheduleJobId((current) =>
+                              current === job.id ? null : job.id,
+                            );
+                            setRescheduleAt(
+                              formatDateTimeLocalInput(
+                                job.publishAt,
+                                localTimeZone,
+                              ),
+                            );
+                          }}
+                          disabled={isBusy || job.status === "processing"}
                       >
                         <RotateCcw className="h-3.5 w-3.5" />
                         Reschedule
@@ -492,17 +494,28 @@ export function ScheduledPlanner({
                           <Button
                             size="xs"
                             disabled={!rescheduleAt || isBusy}
-                            onClick={() =>
+                            onClick={() => {
+                              const parsedPublishAt = parseDateTimeLocalInput(
+                                rescheduleAt,
+                                localTimeZone,
+                              );
+                              if (!parsedPublishAt) {
+                                toast.error(
+                                  `Choose a valid publish time in ${localTimeZone}.`,
+                                );
+                                return;
+                              }
+
                               void patchJob(
                                 job,
                                 {
                                   action: "reschedule",
-                                  publishAt: new Date(rescheduleAt).toISOString(),
+                                  publishAt: parsedPublishAt.toISOString(),
                                 },
                                 "reschedule",
                                 "Publish time updated.",
-                              )
-                            }
+                              );
+                            }}
                           >
                             {isBusy ? (
                               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />

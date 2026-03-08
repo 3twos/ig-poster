@@ -13,6 +13,8 @@ import {
 } from "react";
 
 import type { PostSummary } from "@/lib/post";
+import { DuplicatePostResponseSchema } from "@/lib/post-api";
+import type { PostRow } from "@/db/schema";
 import {
   postReducer,
   type PostAction,
@@ -248,7 +250,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
     const json = await res.json();
     const id = json.id as string;
 
-    dispatch({ type: "LOAD_POST", row: json.post });
+    dispatch({ type: "LOAD_POST", row: json.post as PostRow });
     // markSaved is called in a separate effect that fires after LOAD_POST
     // updates the draft, ensuring the snapshot matches the loaded state
 
@@ -270,10 +272,10 @@ export function PostProvider({ children }: { children: ReactNode }) {
       throw new Error("Failed to duplicate post");
     }
 
-    const json = await res.json();
-    const duplicatedId = json.id as string;
+    const json = DuplicatePostResponseSchema.parse(await res.json());
+    const duplicatedId = json.id;
 
-    dispatch({ type: "LOAD_POST", row: json.post });
+    dispatch({ type: "LOAD_POST", row: json.post as PostRow });
 
     const url = new URL(window.location.href);
     url.searchParams.set("post", duplicatedId);

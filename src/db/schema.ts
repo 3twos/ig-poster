@@ -13,7 +13,10 @@ import {
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
 import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
 import type { MediaComposition } from "@/lib/media-composer";
-import type { PublishSettings } from "@/lib/publish-settings";
+import {
+  DEFAULT_PUBLISH_SETTINGS,
+  type PublishSettings,
+} from "@/lib/publish-settings";
 import type { StoredAsset } from "@/lib/project";
 import type {
   BrandKitLogo,
@@ -72,7 +75,7 @@ export const posts = pgTable(
     publishSettings: jsonb("publish_settings")
       .$type<PublishSettings>()
       .notNull()
-      .default({ reelShareToFeed: true }),
+      .default(DEFAULT_PUBLISH_SETTINGS),
 
     renderedPosterUrl: text("rendered_poster_url"),
     shareUrl: text("share_url"),

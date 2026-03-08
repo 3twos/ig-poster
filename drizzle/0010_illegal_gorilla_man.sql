@@ -1,0 +1,1 @@
+ALTER TABLE "posts" ALTER COLUMN "publish_settings" SET DEFAULT '{"caption":"","firstComment":"","locationId":"","reelShareToFeed":true}'::jsonb;

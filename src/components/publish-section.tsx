@@ -199,8 +199,11 @@ export function PublishSection({
               localTimeZone={localTimeZone}
               onJobsMutated={onPublishJobsMutated}
               onSelectPost={async (postId) => {
-                await onSelectPlannerPost?.(postId);
-                setPlannerOpen(false);
+                try {
+                  await onSelectPlannerPost?.(postId);
+                } finally {
+                  setPlannerOpen(false);
+                }
               }}
               refreshKey={publishJobsRefreshKey}
             />

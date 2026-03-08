@@ -187,6 +187,32 @@ describe("PATCH /api/publish-jobs/:id", () => {
     );
   });
 
+  it("returns an action-specific conflict for move-to-draft on published jobs", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([
+        { ...baseJob, status: "published" as const, postId: "post_1" },
+      ]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "move-to-draft" }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Cannot move a published job back to draft.",
+    });
+  });
+
   it("resets attempts when rescheduling a failed job", async () => {
     mockedReadWorkspace.mockResolvedValue(session);
     const selectChain = {

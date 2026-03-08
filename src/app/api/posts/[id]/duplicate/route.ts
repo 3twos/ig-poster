@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -11,11 +13,7 @@ export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-const randomId = () =>
-  Array.from(crypto.getRandomValues(new Uint8Array(9)))
-    .map((b) => b.toString(36).padStart(2, "0"))
-    .join("")
-    .slice(0, 18);
+const randomId = () => randomUUID().replace(/-/g, "").slice(0, 18);
 
 const duplicateTitle = (source: Pick<PostRow, "title" | "brief" | "result">) => {
   const base = deriveTitle(source).trim() || "Untitled Post";
@@ -59,9 +57,9 @@ export async function POST(req: Request, ctx: Ctx) {
         result: existing.result ?? null,
         activeVariantId: existing.activeVariantId,
         overlayLayouts: existing.overlayLayouts ?? {},
-        mediaComposition: existing.mediaComposition ?? undefined,
-        publishSettings: existing.publishSettings ?? undefined,
-        renderedPosterUrl: existing.renderedPosterUrl,
+        mediaComposition: existing.mediaComposition,
+        publishSettings: existing.publishSettings,
+        renderedPosterUrl: null,
         shareUrl: null,
         shareProjectId: null,
         publishHistory: [],

@@ -54,7 +54,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (payload.action === "cancel" || payload.action === "move-to-draft") {
       if (existing.status === "published" || existing.status === "canceled") {
         return NextResponse.json(
-          { error: `Cannot cancel a ${existing.status} job.` },
+          {
+            error:
+              payload.action === "move-to-draft"
+                ? `Cannot move a ${existing.status} job back to draft.`
+                : `Cannot cancel a ${existing.status} job.`,
+          },
           { status: 409 },
         );
       }

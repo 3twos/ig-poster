@@ -27,6 +27,11 @@ import type {
   PublishJobClient,
 } from "@/lib/meta-schemas";
 import { PublishJobListResponseSchema } from "@/lib/meta-schemas";
+import {
+  formatDateTimeInTimeZone,
+  formatDateTimeLocalInput,
+  parseDateTimeLocalInput,
+} from "@/lib/time-zone";
 import { parseApiError } from "@/lib/upload-helpers";
 import { cn } from "@/lib/utils";
 
@@ -76,14 +81,10 @@ const statusLabel = (status: PublishJobClient["status"]) => {
 const formatTimestamp = (iso: string, localTimeZone: string) => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return `${date.toLocaleString()} (${localTimeZone})`;
-};
-
-const toInputValue = (iso: string) => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${formatDateTimeInTimeZone(iso, localTimeZone, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })} (${localTimeZone})`;
 };
 
 type EditableCarouselItem = {
@@ -394,7 +395,10 @@ export function PublishJobQueue({
       return;
     }
 
-    const currentPublishAtInput = toInputValue(job.publishAt);
+    const currentPublishAtInput = formatDateTimeLocalInput(
+      job.publishAt,
+      localTimeZone,
+    );
     const publishAtChanged = editPublishAt !== currentPublishAtInput;
     const normalizedFirstComment = editFirstComment.trim();
     const nextFirstComment = normalizedFirstComment ? normalizedFirstComment : null;
@@ -445,9 +449,12 @@ export function PublishJobQueue({
     }
 
     if (publishAtChanged) {
-      const parsedPublishAt = new Date(editPublishAt);
-      if (Number.isNaN(parsedPublishAt.getTime())) {
-        toast.error("Choose a valid publish time.");
+      const parsedPublishAt = parseDateTimeLocalInput(
+        editPublishAt,
+        localTimeZone,
+      );
+      if (!parsedPublishAt) {
+        toast.error(`Choose a valid publish time in ${localTimeZone}.`);
         return;
       }
       body.publishAt = parsedPublishAt.toISOString();
@@ -635,7 +642,12 @@ export function PublishJobQueue({
                           disabled={isBusy}
                           onClick={() => {
                             setEditingJobId(job.id);
-                            setEditPublishAt(toInputValue(job.publishAt));
+                            setEditPublishAt(
+                              formatDateTimeLocalInput(
+                                job.publishAt,
+                                localTimeZone,
+                              ),
+                            );
                             setEditCaption(job.caption);
                             setEditFirstComment(job.firstComment ?? "");
                             setEditLocationId(job.locationId ?? "");

@@ -112,6 +112,25 @@ export const reconcileMediaComposition = (
   };
 };
 
+export const alignMediaCompositionOrientation = (
+  composition: MediaComposition,
+  aspectRatio: AspectRatio,
+): MediaComposition => {
+  if (aspectRatio === "9:16") {
+    return composition;
+  }
+
+  const orientation = orientationFromAspectRatio(aspectRatio);
+  if (composition.orientation === orientation) {
+    return composition;
+  }
+
+  return {
+    ...composition,
+    orientation,
+  };
+};
+
 export const normalizeAssetSequence = (
   assetSequence: string[],
   availableAssetIds: string[],

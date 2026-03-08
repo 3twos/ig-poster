@@ -74,10 +74,10 @@ import {
   INITIAL_PUBLISH_SETTINGS,
 } from "@/lib/types";
 import {
+  alignMediaCompositionOrientation,
   aspectRatioFromOrientation,
   mediaCompositionEquals,
   normalizeAssetSequence,
-  orientationFromAspectRatio,
   reconcileMediaComposition,
   type MediaComposition,
 } from "@/lib/media-composer";
@@ -88,6 +88,10 @@ import {
   revokeObjectUrlIfNeeded,
 } from "@/lib/upload-helpers";
 import { withPerf } from "@/lib/perf";
+import {
+  formatDateTimeInTimeZone,
+  parseDateTimeLocalInput,
+} from "@/lib/time-zone";
 import { cn, slugify } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -176,9 +180,12 @@ export default function Home() {
   );
   const mediaComposition = useMemo(
     () =>
-      reconcileMediaComposition(
-        activePost?.mediaComposition,
-        localAssetIds,
+      alignMediaCompositionOrientation(
+        reconcileMediaComposition(
+          activePost?.mediaComposition,
+          localAssetIds,
+          post.aspectRatio,
+        ),
         post.aspectRatio,
       ),
     [activePost?.mediaComposition, localAssetIds, post.aspectRatio],
@@ -277,20 +284,6 @@ export default function Home() {
       mediaComposition,
     });
   }, [activePost, dispatch, mediaComposition]);
-
-  useEffect(() => {
-    if (!activePost || post.aspectRatio === "9:16") return;
-    const nextOrientation = orientationFromAspectRatio(post.aspectRatio);
-    if (mediaComposition.orientation === nextOrientation) return;
-    dispatch({
-      type: "SET_MEDIA_COMPOSITION",
-      postId: activePost.id,
-      mediaComposition: {
-        ...mediaComposition,
-        orientation: nextOrientation,
-      },
-    });
-  }, [activePost, dispatch, mediaComposition, post.aspectRatio]);
 
   const syncAssetsToPost = useCallback(
     (postId: string | null, assets: LocalAsset[]) => {
@@ -1046,7 +1039,20 @@ export default function Home() {
         userTags = primaryAssetUserTags.length ? primaryAssetUserTags : undefined;
       }
       const caption = effectiveCaption;
-      const publishAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
+      const publishAt = scheduleAt
+        ? (() => {
+            const parsedScheduleAt = parseDateTimeLocalInput(
+              scheduleAt,
+              localTimeZone,
+            );
+            if (!parsedScheduleAt) {
+              throw new Error(
+                `Choose a valid publish time in ${localTimeZone}.`,
+              );
+            }
+            return parsedScheduleAt.toISOString();
+          })()
+        : undefined;
       const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as {
@@ -1059,9 +1065,11 @@ export default function Home() {
       };
       if (j.status === "scheduled") {
         const scheduledIso = j.publishAt ?? publishAt;
-        const scheduledDate = scheduledIso ? new Date(scheduledIso) : null;
-        const scheduledText = scheduledDate && !Number.isNaN(scheduledDate.getTime())
-          ? scheduledDate.toLocaleString()
+        const scheduledText = scheduledIso
+          ? formatDateTimeInTimeZone(scheduledIso, localTimeZone, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })
           : "the selected time";
         const m = normalizedFirstComment
           ? `Scheduled for ${scheduledText} (${localTimeZone}). First comment will post after publish.`
@@ -1200,22 +1208,47 @@ export default function Home() {
           await jobsResponse.json(),
         ).jobs.filter((job) => job.postId === activePost.id);
 
-        for (const job of scheduledJobs) {
-          const moveResponse = await fetch(`/api/publish-jobs/${job.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "move-to-draft" }),
-          });
-          if (!moveResponse.ok) {
-            throw new Error(await parseApiError(moveResponse));
-          }
-        }
-
         if (scheduledJobs.length > 0) {
-          await handlePublishJobsMutated(activePost.id, "move-to-draft");
           setPublishJobsRefreshKey((value) => value + 1);
-          toast.success("Moved scheduled post back to drafts.");
-          return;
+          const moveResults = await Promise.allSettled(
+            scheduledJobs.map(async (job) => {
+              const moveResponse = await fetch(`/api/publish-jobs/${job.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "move-to-draft" }),
+              });
+              if (!moveResponse.ok) {
+                throw new Error(await parseApiError(moveResponse));
+              }
+            }),
+          );
+          const failedMoves = moveResults.filter(
+            (result): result is PromiseRejectedResult =>
+              result.status === "rejected",
+          );
+
+          if (failedMoves.length === 0) {
+            await handlePublishJobsMutated(activePost.id, "move-to-draft");
+            toast.success("Moved scheduled post back to drafts.");
+            return;
+          }
+
+          await refreshPosts();
+
+          const movedCount = scheduledJobs.length - failedMoves.length;
+          const firstFailure = failedMoves[0]?.reason;
+          const failureMessage =
+            firstFailure instanceof Error
+              ? firstFailure.message
+              : "Unknown error";
+
+          if (movedCount > 0) {
+            throw new Error(
+              `Moved ${movedCount} of ${scheduledJobs.length} scheduled jobs back to drafts. ${failedMoves.length} failed: ${failureMessage}`,
+            );
+          }
+
+          throw new Error(failureMessage);
         }
       }
 

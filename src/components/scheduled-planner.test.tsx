@@ -112,7 +112,7 @@ describe("ScheduledPlanner", () => {
     render(
       <ScheduledPlanner
         activePostId="post-9"
-        localTimeZone="UTC"
+        localTimeZone="America/New_York"
         onJobsMutated={onJobsMutated}
         refreshKey={0}
       />,
@@ -134,7 +134,7 @@ describe("ScheduledPlanner", () => {
     expect(patchCall?.[0]).toBe("/api/publish-jobs/job-1");
     expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
       action: "reschedule",
-      publishAt: new Date("2026-03-11T09:45").toISOString(),
+      publishAt: "2026-03-11T13:45:00.000Z",
     });
     expect(onJobsMutated).toHaveBeenCalledWith("post-1", "reschedule");
     expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Publish time updated.");

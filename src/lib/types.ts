@@ -1,5 +1,11 @@
 import type { AspectRatio } from "@/lib/creative";
 import type { LlmProvider, MultiModelMode } from "@/lib/llm-constants";
+import {
+  DEFAULT_PUBLISH_SETTINGS,
+  type PublishSettingsState as PublishSettingsStateType,
+} from "@/lib/publish-settings";
+
+export type PublishSettingsState = PublishSettingsStateType;
 
 export type UploadStatus = "uploading" | "uploaded" | "local" | "failed";
 export type AssetMediaType = "image" | "video";
@@ -95,13 +101,6 @@ export type PromptConfigState = {
   customInstructions: string;
 };
 
-export type PublishSettingsState = {
-  caption: string;
-  firstComment: string;
-  locationId: string;
-  reelShareToFeed: boolean;
-};
-
 export type WorkspaceAuthStatus = {
   authenticated: boolean;
   user?: {
@@ -139,12 +138,8 @@ export const INITIAL_POST: PostState = {
   aspectRatio: "4:5",
 };
 
-export const INITIAL_PUBLISH_SETTINGS: PublishSettingsState = {
-  caption: "",
-  firstComment: "",
-  locationId: "",
-  reelShareToFeed: true,
-};
+export const INITIAL_PUBLISH_SETTINGS: PublishSettingsState =
+  DEFAULT_PUBLISH_SETTINGS;
 
 export const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
   { value: "1:1", label: "Square (1:1)" },

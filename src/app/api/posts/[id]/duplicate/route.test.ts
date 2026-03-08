@@ -117,6 +117,7 @@ describe("POST /api/posts/:id/duplicate", () => {
         publishHistory: [],
         publishSettings: existing.publishSettings,
         mediaComposition: existing.mediaComposition,
+        renderedPosterUrl: null,
       }),
     );
     await expect(res.json()).resolves.toMatchObject({
