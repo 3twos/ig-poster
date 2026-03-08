@@ -79,8 +79,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .next/cache
-          key: nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**') }}
-          restore-keys: nextjs-${{ hashFiles('package-lock.json') }}-
+          key: nextjs-${{ hashFiles('package-lock.json', 'next.config.*', 'tsconfig.json', 'postcss.config.*', 'tailwind.config.*', 'public/**', 'src/**') }}
+          restore-keys: nextjs-${{ hashFiles('package-lock.json', 'next.config.*', 'tsconfig.json', 'postcss.config.*', 'tailwind.config.*') }}-
       - run: npm run build
 
   # Merge gate — matches the required status check name
