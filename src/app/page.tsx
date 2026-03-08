@@ -939,7 +939,7 @@ export default function Home() {
           <div className="mx-4 md:mx-8"><OnboardingChecklist /></div>
 
           {/* Desktop 3-column layout */}
-          <div className="hidden lg:block" style={{ height: "calc(100vh - 140px)" }}>
+          <div className="hidden lg:block" style={{ height: "calc(100dvh - 82px)" }}>
             <ResizablePanelGroup orientation="horizontal" className="h-full">
               <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} collapsible collapsedSize={0} onResize={(size) => setLeftCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div className="flex h-full flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl ml-4">
