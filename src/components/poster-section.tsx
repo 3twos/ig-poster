@@ -1,6 +1,5 @@
 "use client";
 
-import { Save } from "lucide-react";
 import { motion } from "framer-motion";
 import type { RefObject } from "react";
 
@@ -35,7 +34,6 @@ type Props = {
   editorMode: boolean;
   onResetTextLayout: () => void;
   saveStatus: SaveStatus;
-  onSaveNow: () => Promise<void>;
   overlayLayout?: OverlayLayout;
   activeSlideIndex: number;
   previewClassName?: string;
@@ -53,7 +51,6 @@ export function PosterSection({
   editorMode,
   onResetTextLayout,
   saveStatus,
-  onSaveNow,
   overlayLayout,
   activeSlideIndex,
   previewClassName,
@@ -142,15 +139,9 @@ export function PosterSection({
               />
             </label>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px] uppercase">
-              {saveStatusLabel(saveStatus)}
-            </Badge>
-            <Button variant="outline" size="xs" onClick={() => void onSaveNow()}>
-              <Save className="h-3.5 w-3.5" />
-              Save now
-            </Button>
-          </div>
+          <Badge variant="outline" className="text-[10px] uppercase">
+            {saveStatusLabel(saveStatus)}
+          </Badge>
         </div>
       ) : null}
     </motion.div>
