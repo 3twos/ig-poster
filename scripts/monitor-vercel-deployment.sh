@@ -959,6 +959,85 @@ friendly_pull_request_label() {
   printf '%s:%s' "$kind" "$candidate"
 }
 
+# Cache for branch→PR lookups via gh CLI (avoids repeated API calls).
+# Uses two parallel indexed arrays for keys and values since associative arrays have portability issues.
+# Successful lookups (pr:<number>) are cached permanently. Failed lookups (n/a) are cached with a
+# timestamp and retried after _BRANCH_PR_MISS_TTL seconds so the PR becomes discoverable once created.
+_BRANCH_PR_CACHE_KEYS=()
+_BRANCH_PR_CACHE_VALS=()
+_BRANCH_PR_CACHE_EPOCH=()
+_BRANCH_PR_MISS_TTL=120
+GH_CLI_AVAILABLE=""
+
+_branch_pr_cache_get() {
+  local key="$1" i now
+  for (( i = 0; i < ${#_BRANCH_PR_CACHE_KEYS[@]}; i++ )); do
+    if [[ "${_BRANCH_PR_CACHE_KEYS[i]}" == "$key" ]]; then
+      # Expire n/a entries after TTL so we retry failed lookups.
+      if [[ "${_BRANCH_PR_CACHE_VALS[i]}" == "n/a" ]]; then
+        now="$(date +%s)"
+        if (( now - ${_BRANCH_PR_CACHE_EPOCH[i]:-0} >= _BRANCH_PR_MISS_TTL )); then
+          # Remove stale entry by clearing the key so it won't match again.
+          _BRANCH_PR_CACHE_KEYS[i]=""
+          return 1
+        fi
+      fi
+      printf '%s' "${_BRANCH_PR_CACHE_VALS[i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_branch_pr_cache_set() {
+  _BRANCH_PR_CACHE_KEYS+=("$1")
+  _BRANCH_PR_CACHE_VALS+=("$2")
+  _BRANCH_PR_CACHE_EPOCH+=("$(date +%s)")
+}
+
+resolve_pr_for_branch() {
+  local branch="$1"
+  local normalized pr_number cached
+
+  normalized="$(normalize_branch_context "$branch")"
+  if [[ -z "$normalized" ]]; then
+    printf '%s' "n/a"
+    return
+  fi
+
+  # Check cache first.
+  if cached="$(_branch_pr_cache_get "$normalized")"; then
+    printf '%s' "$cached"
+    return
+  fi
+
+  # Detect gh CLI once.
+  if [[ -z "$GH_CLI_AVAILABLE" ]]; then
+    if command -v gh >/dev/null 2>&1; then
+      GH_CLI_AVAILABLE="yes"
+    else
+      GH_CLI_AVAILABLE="no"
+    fi
+  fi
+
+  if [[ "$GH_CLI_AVAILABLE" != "yes" ]]; then
+    _branch_pr_cache_set "$normalized" "n/a"
+    printf '%s' "n/a"
+    return
+  fi
+
+  pr_number="$(gh pr list --head "$normalized" --json number --jq '.[0].number' 2>/dev/null || true)"
+  pr_number="$(sanitize_field "$pr_number")"
+
+  if [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+    _branch_pr_cache_set "$normalized" "pr:${pr_number}"
+    printf '%s' "pr:${pr_number}"
+  else
+    _branch_pr_cache_set "$normalized" "n/a"
+    printf '%s' "n/a"
+  fi
+}
+
 friendly_change_title() {
   local title="$1"
   local lowered
@@ -2143,6 +2222,9 @@ refresh_project_deployments() {
     actor_label="$(friendly_actor_label "$dep_actor")"
     commit_label="$(friendly_commit_label "$dep_commit_sha")"
     pull_request_label="$(friendly_pull_request_label "$dep_pull_request")"
+    if [[ "$pull_request_label" == "n/a" && -n "$dep_branch" ]]; then
+      pull_request_label="$(resolve_pr_for_branch "$dep_branch")"
+    fi
     change_title_label="$(friendly_change_title "$dep_change_title")"
 
     next_ids+=("$dep_id")
@@ -2249,7 +2331,12 @@ refresh_single_deployment() {
   DEP_SOURCE=("$(friendly_source_label "$dep_source")")
   DEP_ACTOR=("$(friendly_actor_label "$dep_actor")")
   DEP_COMMIT_SHA=("$(friendly_commit_label "$dep_commit_sha")")
-  DEP_PULL_REQUEST=("$(friendly_pull_request_label "$dep_pull_request")")
+  local _single_pr_label
+  _single_pr_label="$(friendly_pull_request_label "$dep_pull_request")"
+  if [[ "$_single_pr_label" == "n/a" && -n "$dep_branch" ]]; then
+    _single_pr_label="$(resolve_pr_for_branch "$dep_branch")"
+  fi
+  DEP_PULL_REQUEST=("$_single_pr_label")
   DEP_CHANGE_TITLE=("$(friendly_change_title "$dep_change_title")")
   DEP_FIRST_SEEN_EPOCH=("$first_seen")
   DEP_LAST_STATUS=("$last_status")
