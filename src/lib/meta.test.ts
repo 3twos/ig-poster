@@ -139,7 +139,22 @@ describe("publishInstagramContent", () => {
     expect(createBody.get("access_token")).toBe("token");
   });
 
-  it("rejects location metadata for non-image modes", async () => {
+  it("passes reel location metadata and user tags to Meta", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "creation_1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status_code: "FINISHED" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "publish_1" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
     await expect(
       publishInstagramContent(
         {
@@ -148,6 +163,7 @@ describe("publishInstagramContent", () => {
           shareToFeed: true,
           caption: "Caption",
           locationId: "12345",
+          userTags: [{ username: "handle", x: 0.4, y: 0.6 }],
         },
         {
           accessToken: "token",
@@ -155,8 +171,17 @@ describe("publishInstagramContent", () => {
           graphVersion: "v22.0",
         },
       ),
-    ).rejects.toThrow(
-      "Location and user tags are currently supported only for image posts.",
+    ).resolves.toMatchObject({
+      mode: "reel",
+      creationId: "creation_1",
+      publishId: "publish_1",
+    });
+
+    const createCall = fetchMock.mock.calls[0];
+    const createBody = createCall?.[1]?.body as URLSearchParams;
+    expect(createBody.get("location_id")).toBe("12345");
+    expect(createBody.get("user_tags")).toBe(
+      JSON.stringify([{ username: "handle", x: 0.4, y: 0.6 }]),
     );
   });
 

@@ -7,6 +7,7 @@ import {
   PostInputSchema,
 } from "@/lib/creative";
 import { MediaCompositionSchema } from "@/lib/media-composer";
+import { PublishSettingsSchema } from "@/lib/publish-settings";
 
 export { ScheduledJobSchema, type ScheduledJob } from "@/lib/meta-schemas";
 
@@ -30,6 +31,9 @@ export const SavedProjectPayloadSchema = z.object({
   mediaComposition: MediaCompositionSchema.default({
     orientation: "portrait",
     items: [],
+  }),
+  publishSettings: PublishSettingsSchema.default({
+    reelShareToFeed: true,
   }),
   renderedPosterUrl: z.string().url().optional().default(""),
 });

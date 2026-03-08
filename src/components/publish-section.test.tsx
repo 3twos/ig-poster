@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from "@testing-library/react";
+import { waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PublishSection } from "./publish-section";
@@ -9,8 +10,30 @@ vi.mock("./publish-job-queue", () => ({
   PublishJobQueue: () => <div data-testid="publish-job-queue" />,
 }));
 
+vi.mock("./scheduled-planner", () => ({
+  ScheduledPlanner: ({
+    onSelectPost,
+  }: {
+    onSelectPost?: (postId: string) => Promise<void> | void;
+  }) => (
+    <div data-testid="scheduled-planner">
+      <button
+        type="button"
+        onClick={() => {
+          const maybePromise = onSelectPost?.("post-from-planner");
+          if (maybePromise && "catch" in maybePromise) {
+            void maybePromise.catch(() => undefined);
+          }
+        }}
+      >
+        Select planner post
+      </button>
+    </div>
+  ),
+}));
+
 describe("PublishSection", () => {
-  it("submits reel share-to-feed preference from the main publish form", () => {
+  it("blocks publish actions when the composer reports validation errors", () => {
     const onPostNow = vi.fn();
 
     render(
@@ -24,8 +47,8 @@ describe("PublishSection", () => {
         shareUrl={null}
         shareCopyState="idle"
         localTimeZone="America/Los_Angeles"
-        supportsImageMetadata={false}
-        supportsReelControls
+        hasBlockingValidationError
+        validationMessage="Fix incomplete user tag rows before posting or scheduling."
         onOpenSettings={vi.fn()}
         onCreateShareLink={vi.fn()}
         onPostNow={onPostNow}
@@ -33,13 +56,40 @@ describe("PublishSection", () => {
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Share reel to main feed"));
-    fireEvent.click(screen.getByRole("button", { name: /post now/i }));
+    expect(screen.getByText(/Fix incomplete user tag rows/)).not.toBeNull();
+    const postNowButton = screen.getByRole("button", { name: /post now/i }) as HTMLButtonElement;
+    expect(postNowButton.disabled).toBe(true);
+    fireEvent.click(postNowButton);
+    expect(onPostNow).not.toHaveBeenCalled();
+  });
 
-    expect(onPostNow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reelShareToFeed: false,
-      }),
+  it("closes the planner even when selecting a post fails", async () => {
+    render(
+      <PublishSection
+        activePostId="post-1"
+        authStatus={{ connected: true, source: "oauth" }}
+        isAuthLoading={false}
+        isSharing={false}
+        isPublishing={false}
+        publishJobsRefreshKey={0}
+        shareUrl={null}
+        shareCopyState="idle"
+        localTimeZone="America/Los_Angeles"
+        onOpenSettings={vi.fn()}
+        onCreateShareLink={vi.fn()}
+        onPostNow={vi.fn()}
+        onSchedulePost={vi.fn()}
+        onSelectPlannerPost={vi.fn().mockRejectedValue(new Error("boom"))}
+      />,
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /planner/i }));
+    expect(screen.getByTestId("scheduled-planner")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /select planner post/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("scheduled-planner")).toBeNull();
+    });
   });
 });

@@ -201,6 +201,8 @@ const publishReel = async (
     caption: string;
     coverUrl?: string;
     shareToFeed?: boolean;
+    locationId?: string;
+    userTags?: MetaUserTag[];
   },
   auth: MetaAuthContext,
 ) => {
@@ -213,6 +215,12 @@ const publishReel = async (
 
   if (payload.coverUrl) {
     params.set("cover_url", payload.coverUrl);
+  }
+  if (payload.locationId) {
+    params.set("location_id", payload.locationId);
+  }
+  if (payload.userTags?.length) {
+    params.set("user_tags", JSON.stringify(payload.userTags));
   }
 
   const createMedia = await createMediaContainer(params, auth);
@@ -237,10 +245,16 @@ const createCarouselChild = async (item: CarouselItem, auth: MetaAuthContext) =>
   });
 
   if (item.mediaType === "video") {
+    if (item.userTags?.length) {
+      throw new Error("Meta does not support user tags on carousel videos.");
+    }
     params.set("media_type", "VIDEO");
     params.set("video_url", item.url);
   } else {
     params.set("image_url", item.url);
+    if (item.userTags?.length) {
+      params.set("user_tags", JSON.stringify(item.userTags));
+    }
   }
 
   const child = await createMediaContainer(params, auth);
@@ -256,7 +270,11 @@ const createCarouselChild = async (item: CarouselItem, auth: MetaAuthContext) =>
 };
 
 const publishCarousel = async (
-  payload: { items: CarouselItem[]; caption: string },
+  payload: {
+    items: CarouselItem[];
+    caption: string;
+    locationId?: string;
+  },
   auth: MetaAuthContext,
 ) => {
   const limitedItems = payload.items.slice(0, 10);
@@ -279,6 +297,7 @@ const publishCarousel = async (
       media_type: "CAROUSEL",
       children: children.join(","),
       caption: payload.caption,
+      ...(payload.locationId ? { location_id: payload.locationId } : {}),
     }),
     auth,
   );
@@ -323,10 +342,6 @@ export const publishInstagramContent = async (
     );
   }
 
-  if (payload.locationId || payload.userTags?.length) {
-    throw new Error("Location and user tags are currently supported only for image posts.");
-  }
-
   if (payload.mode === "reel") {
     return publishReel(
       {
@@ -334,6 +349,8 @@ export const publishInstagramContent = async (
         caption: payload.caption,
         coverUrl: payload.coverUrl,
         shareToFeed: payload.shareToFeed,
+        locationId: payload.locationId,
+        userTags: payload.userTags,
       },
       resolvedAuth,
     );
@@ -343,6 +360,7 @@ export const publishInstagramContent = async (
     {
       items: payload.items,
       caption: payload.caption,
+      locationId: payload.locationId,
     },
     resolvedAuth,
   );

@@ -13,6 +13,8 @@ import {
 } from "react";
 
 import type { PostSummary } from "@/lib/post";
+import { DuplicatePostResponseSchema } from "@/lib/post-api";
+import type { PostRow } from "@/db/schema";
 import {
   postReducer,
   type PostAction,
@@ -35,6 +37,7 @@ type PostContextValue = {
   // Navigation
   selectPost: (id: string) => Promise<void>;
   createNewPost: () => Promise<string>;
+  duplicatePost: (id: string) => Promise<string>;
   archivePost: (id: string) => Promise<void>;
   deletePost: (id: string) => Promise<void>;
 
@@ -247,7 +250,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
     const json = await res.json();
     const id = json.id as string;
 
-    dispatch({ type: "LOAD_POST", row: json.post });
+    dispatch({ type: "LOAD_POST", row: json.post as PostRow });
     // markSaved is called in a separate effect that fires after LOAD_POST
     // updates the draft, ensuring the snapshot matches the loaded state
 
@@ -258,6 +261,29 @@ export function PostProvider({ children }: { children: ReactNode }) {
     await refreshPosts();
     return id;
   }, [notifyBeforePostSwitch, refreshPosts]);
+
+  const duplicatePost = useCallback(async (id: string): Promise<string> => {
+    await saveNowRef.current();
+
+    const res = await fetch(`/api/posts/${id}/duplicate`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      throw new Error("Failed to duplicate post");
+    }
+
+    const json = DuplicatePostResponseSchema.parse(await res.json());
+    const duplicatedId = json.id;
+
+    dispatch({ type: "LOAD_POST", row: json.post as PostRow });
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("post", duplicatedId);
+    window.history.replaceState({}, "", url.toString());
+
+    await refreshPosts();
+    return duplicatedId;
+  }, [refreshPosts]);
 
   const archivePost = useCallback(
     async (id: string) => {
@@ -363,6 +389,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       dispatch,
       selectPost,
       createNewPost,
+      duplicatePost,
       archivePost,
       deletePost,
       saveStatus,
@@ -380,6 +407,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       activePost,
       selectPost,
       createNewPost,
+      duplicatePost,
       archivePost,
       deletePost,
       saveStatus,

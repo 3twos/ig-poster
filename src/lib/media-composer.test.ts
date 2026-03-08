@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  alignMediaCompositionOrientation,
   aspectRatioFromOrientation,
   normalizeAssetSequence,
   orientationFromAspectRatio,
@@ -73,6 +74,31 @@ describe("orientation mapping", () => {
     expect(aspectRatioFromOrientation("square")).toBe("1:1");
     expect(aspectRatioFromOrientation("portrait")).toBe("4:5");
     expect(aspectRatioFromOrientation("landscape")).toBe("1.91:1");
+  });
+
+  it("aligns feed composer orientation to the current aspect ratio", () => {
+    expect(
+      alignMediaCompositionOrientation(
+        {
+          orientation: "landscape",
+          items: [{ assetId: "asset-1", rotation: 0, excludedFromPost: false }],
+        },
+        "1:1",
+      ),
+    ).toMatchObject({
+      orientation: "square",
+    });
+    expect(
+      alignMediaCompositionOrientation(
+        {
+          orientation: "landscape",
+          items: [{ assetId: "asset-1", rotation: 0, excludedFromPost: false }],
+        },
+        "9:16",
+      ),
+    ).toMatchObject({
+      orientation: "landscape",
+    });
   });
 });
 

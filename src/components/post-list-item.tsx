@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, CalendarClock, ImageIcon, MoreHorizontal, Send, Trash2 } from "lucide-react";
+import { Archive, CalendarClock, Copy, ImageIcon, MoreHorizontal, Send, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -149,6 +149,7 @@ type Props = {
   onGenerate?: () => void;
   onPostNow?: () => void;
   onSchedulePost?: (scheduleAt: string) => void;
+  onDuplicate?: () => void;
   onArchive: () => void;
   onDelete: () => void;
 };
@@ -161,6 +162,7 @@ export function PostListItem({
   onGenerate,
   onPostNow,
   onSchedulePost,
+  onDuplicate,
   onArchive,
   onDelete,
 }: Props) {
@@ -391,6 +393,17 @@ export function PostListItem({
                   ) : null}
                   <DropdownMenuSeparator />
                 </>
+              ) : null}
+              {onDuplicate ? (
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.stopPropagation();
+                    onDuplicate();
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Duplicate
+                </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem
                 onSelect={(event) => {
