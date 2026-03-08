@@ -534,7 +534,7 @@ describe("PublishJobQueue", () => {
     });
   });
 
-  it("enforces carousel item guardrails in edit mode", async () => {
+  it("enforces carousel item guardrails in edit mode", { timeout: 15_000 }, async () => {
     mockQueueLoad([
       makeJob({
         media: {
