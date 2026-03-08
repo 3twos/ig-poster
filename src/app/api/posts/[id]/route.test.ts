@@ -80,7 +80,10 @@ describe("PUT /api/posts/:id", () => {
       { ...existing, title: "Updated" },
     ]);
     const updateWhere = vi.fn(() => ({ returning: updateReturning }));
-    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    const updateSet = vi.fn((payload: Record<string, unknown>) => {
+      void payload;
+      return { where: updateWhere };
+    });
 
     mockedGetDb.mockReturnValue({
       select: vi.fn(() => ({ from: selectFrom })),
@@ -100,7 +103,8 @@ describe("PUT /api/posts/:id", () => {
 
     expect(res.status).toBe(200);
     expect(updateSet).toHaveBeenCalledTimes(1);
-    expect(updateSet.mock.calls[0]?.[0]).not.toHaveProperty("mediaComposition");
+    const [updatePayload] = updateSet.mock.calls[0];
+    expect(updatePayload).not.toHaveProperty("mediaComposition");
     await expect(res.json()).resolves.toMatchObject({ title: "Updated" });
   });
 });
