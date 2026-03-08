@@ -40,7 +40,8 @@ flowchart LR
   - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
-  - `src/components/poster-preview.tsx` renders and edits overlay layouts.
+  - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, and adaptive logo-chip contrast.
+  - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, and refine/caption controls.
   - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
@@ -67,6 +68,7 @@ flowchart LR
 Why this shape:
 - Keeps long-lived drafts out of browser memory and enables multi-post workflow.
 - Supports reliable autosave and recent-post retrieval per authenticated workspace user.
+- Keeps canvas edits (`overlayLayouts`) in the same persisted draft object as the creative result, so layout/text adjustments survive preview toggles, shared snapshots, and post switching.
 
 ### 2) Generate Creative
 
