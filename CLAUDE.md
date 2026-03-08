@@ -107,5 +107,5 @@ Zod schemas are used pervasively for request validation in API routes and for ty
 ## CI/CD
 
 - `.github/workflows/ci.yml` — lint + test + build on PRs and main pushes (Node 22)
-- `.github/workflows/vercel.yml` — Vercel preview deploys on PRs, production on main
+- Vercel Git integration — automatic production deploys on push to main
 - `vercel.json` — Cron config for `/api/cron/publish` every 15 minutes
