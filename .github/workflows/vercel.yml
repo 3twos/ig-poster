@@ -1,54 +1,12 @@
 name: Vercel
 
 on:
-  pull_request:
   push:
     branches:
       - main
 
 jobs:
-  deploy-preview:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-    steps:
-      - name: Check Vercel Secrets
-        id: preflight
-        run: |
-          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Skip (Missing Secrets)
-        if: steps.preflight.outputs.configured != 'true'
-        run: echo "Skipping Vercel preview deploy. Configure VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID."
-
-      - name: Checkout
-        if: steps.preflight.outputs.configured == 'true'
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        if: steps.preflight.outputs.configured == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-
-      - name: Pull Vercel Environment (Preview)
-        if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
-
-      - name: Deploy Preview
-        if: steps.preflight.outputs.configured == 'true'
-        run: npx vercel deploy --token=$VERCEL_TOKEN
-
   deploy-production:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
