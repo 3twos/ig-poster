@@ -18,11 +18,7 @@ export function AppShell({
       >
         Skip to main content
       </a>
-      <div className="px-4 py-3 md:px-8 md:py-4">
-        <div className="mx-auto max-w-[1440px]">
-          <AppNav />
-        </div>
-      </div>
+      <AppNav />
       <main id="main-content" className="min-w-0 flex-1">
         {children}
       </main>

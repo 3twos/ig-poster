@@ -962,11 +962,12 @@ export default function Home() {
                           <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} compact showHeader={false} showActions={false} showAspectRatio={false} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} />
                         </div>
                         <div className="min-w-0 space-y-4">
-                          <div className="w-full max-w-[40rem] space-y-4">
-                            <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} />
-                            <div className="max-w-[18rem]">
-                              <PostBriefAspectRatio aspectRatio={post.aspectRatio} disabled={generation.isGenerating} onChange={(value) => typedDispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value } })} />
-                            </div>
+                          <div className="w-full max-w-[40rem]">
+                            <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()}>
+                              <div className="w-36">
+                                <PostBriefAspectRatio aspectRatio={post.aspectRatio} disabled={generation.isGenerating} showLabel={false} onChange={(value) => typedDispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value } })} />
+                              </div>
+                            </PostBriefActions>
                           </div>
                           <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
                         </div>
