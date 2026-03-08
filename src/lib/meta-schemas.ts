@@ -19,6 +19,20 @@ export const MetaUserTagSchema = z.object({
 });
 const UserTagsSchema = z.array(MetaUserTagSchema).min(1).max(20);
 
+export const MetaLocationSearchResultSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  city: z.string().min(1).optional(),
+  state: z.string().min(1).optional(),
+  country: z.string().min(1).optional(),
+  street: z.string().min(1).optional(),
+  zip: z.string().min(1).optional(),
+});
+
+export const MetaLocationSearchResponseSchema = z.object({
+  locations: z.array(MetaLocationSearchResultSchema),
+});
+
 export const CarouselItemSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   url: z.string().url(),
@@ -51,6 +65,7 @@ export const MetaScheduleRequestSchema = z
         mode: z.literal("reel"),
         videoUrl: z.string().url(),
         coverUrl: z.string().url().optional(),
+        shareToFeed: z.boolean().default(true),
       }),
       z.object({
         mode: z.literal("carousel"),
@@ -186,6 +201,9 @@ export const ScheduledJobSchema = z.object({
 export type MetaScheduleRequest = z.infer<typeof MetaScheduleRequestSchema>;
 export type CarouselItem = z.infer<typeof CarouselItemSchema>;
 export type MetaUserTag = z.infer<typeof MetaUserTagSchema>;
+export type MetaLocationSearchResult = z.infer<
+  typeof MetaLocationSearchResultSchema
+>;
 export type ScheduledJob = z.infer<typeof ScheduledJobSchema>;
 export type PublishJobStatus = z.infer<typeof PublishJobStatusSchema>;
 export type PublishJobEvent = z.infer<typeof PublishJobEventSchema>;

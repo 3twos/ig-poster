@@ -64,6 +64,7 @@ describe("preflightMetaMediaForPublish", () => {
     await expect(
       preflightMetaMediaForPublish({
         mode: "reel",
+        shareToFeed: true,
         videoUrl: "https://cdn.example.com/reel.mp4",
       }),
     ).resolves.toBeUndefined();
