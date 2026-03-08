@@ -25,7 +25,7 @@
    - If you skip this and no env keys are set, generation uses deterministic fallback concepts.
 
 3. Navigate the 3-column layout
-   - Left panel: posts list with thumbnails — browse, select, post now/schedule, archive, or delete posts.
+   - Left panel: posts list with thumbnails — browse, select, post now/schedule, duplicate, archive, or delete posts.
    - Each post row is fully clickable (title, thumbnail, and metadata), and hover on a thumbnail shows a larger preview.
    - Post rows show visual state chips (`Unposted`, `Dirty`, `Posted`, plus `Scheduled`/`Archived` where applicable).
    - Filter tabs include All, Drafts, Generated, Scheduled, Published, and Archived.
@@ -73,6 +73,8 @@
      - adjust text scale per box
    - Turning editor mode off keeps the edited layout visible in the normal preview and in shared snapshots.
    - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
+   - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.
+   - Use `Finish later` to explicitly move the current work back into Drafts, or `Duplicate post` to fork the current post into a new editable copy.
 
 9. Export or copy content
    - Export poster as PNG.
@@ -84,14 +86,16 @@
 11. Publish or schedule to Instagram
    - Connect Instagram via Meta OAuth in Settings (if not already connected).
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
+   - Use the dedicated `Post Caption` field as the source of truth for publish/schedule; the generated caption stays available as a suggestion.
    - Optionally add a `First comment` in the publish section; it is posted right after media publish.
    - For reel posts, choose whether `Share reel to main feed` stays on or off before posting or scheduling.
-   - For image posts, optionally search Meta places to fill `Location ID` (or paste the ID manually).
-   - For image posts, optionally add `User tags` with structured rows and click directly on the image preview to place each tag before fine-tuning x/y values.
+   - For single-image posts and reels, optionally search Meta places to fill `Location ID` (or paste the ID manually) and add structured `User tags`.
+   - For carousel posts, tag each included image individually from the publish metadata editor. Carousel video items remain schedulable, but Meta does not accept user tags on carousel videos.
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
+   - Open `Planner` from the publish section to review scheduled posts on a calendar, reschedule them, open the linked post, or move them back to draft.
    - The publish section also shows a workspace queue for queued, processing, and failed jobs.
-   - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata, including visual tag placement and location search assist, plus reel feed-sharing) without leaving the editor.
+   - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata, including visual tag placement and location search assist, plus reel feed-sharing and per-item carousel tags) without leaving the editor.
    - Each queue card now shows recent activity entries so you can see retries, deferrals, failures, and manual edits without checking the database.
 
 12. Use the AI Chat assistant
@@ -107,15 +111,18 @@
 - If you click multiple posts quickly, stale responses are ignored and only the latest selection is applied.
 - Sidebar list refreshes keep existing entries visible to avoid flicker while background updates run.
 - Editor text/layout changes and carousel composition changes are part of the same autosaved draft state as your brief, assets, and selected variant.
+- Duplicating a post creates a new draft copy with the current creative result, media composition, and publish settings, but without old share links or publish history.
+- `Finish later` can be used before or after generation; if the post was already scheduled, the app first removes the pending schedule and then returns the post to Drafts.
 
 ## Publishing Behavior
 
 - `single-image` variant publishes a rendered poster image.
 - `carousel` variant uses the Carousel Composer sequence (minimum 2 items, up to 10) and the selected feed orientation.
 - `reel` variant requires at least one uploaded video and includes a `Share reel to main feed` toggle. The default is on, matching the previous hardcoded behavior.
-- Location ID and user tags are supported only for single-image posts (including queue edits).
+- Location ID is supported for single-image posts, reels, and carousel parents.
+- User tags are supported for single-image posts, reels, and carousel image items. Carousel videos cannot carry user tags.
 - Location search suggestions populate the same `locationId` field sent to Meta; if search fails, you can still paste the raw ID manually.
-- User-tag placement uses the rendered poster preview in the main composer and the stored published image URL in queue edits, while x/y inputs remain available for precision edits.
+- User-tag placement uses the rendered poster preview in the main composer and the stored published image URL in queue edits when an image preview exists, while x/y inputs remain available for precision edits.
 - Instagram API throughput is capped at 50 published posts per rolling 24-hour window per account.
 - Media URL preflight runs before scheduling/publishing and queue media edits: URLs must be public HTTPS and must probe as the expected media type (`image/*` or `video/*`).
 - If `publishAt` is more than ~2 minutes in the future, the app schedules it.

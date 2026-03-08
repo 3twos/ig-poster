@@ -45,6 +45,7 @@ const result: GenerationResponse = {
 
 function StrategyHarness() {
   const [layout, setLayout] = useState(createDefaultOverlayLayout(variant.layout));
+  const [caption, setCaption] = useState("");
 
   return (
     <TooltipProvider>
@@ -54,6 +55,9 @@ function StrategyHarness() {
         editorMode
         isRefining={false}
         dispatch={vi.fn()}
+        captionValue={caption}
+        onCaptionChange={setCaption}
+        onUseGeneratedCaption={() => setCaption(`${variant.caption}\n\n${variant.hashtags.join(" ")}`)}
         onRefineVariant={vi.fn()}
         onCopyCaption={vi.fn()}
         copyState="idle"

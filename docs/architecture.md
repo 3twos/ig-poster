@@ -33,7 +33,7 @@ flowchart LR
 - UI layer:
   - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity or chat) using `react-resizable-panels`. The right panel has Agent/Chat tab switching.
   - `src/components/app-shell.tsx` hosts nav + main area and can optionally hide the global footer status bar when a route renders its own fixed workflow status bar.
-  - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `carousel-composer.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-section.tsx`, `agent-activity-panel.tsx`.
+  - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `carousel-composer.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-metadata-editor.tsx`, `publish-section.tsx`, `scheduled-planner.tsx`, `agent-activity-panel.tsx`.
   - Settings and brand kit management use controlled full-screen dialog components (`settings-modal.tsx`, `brand-kit-modal.tsx`) mounted from the home route for in-context editing with modal focus management.
   - `src/components/chat/` contains the chat module: `chat-panel.tsx` (embeddable right-panel version), `chat-container.tsx` (full standalone with sidebar), message rendering, markdown, code blocks, and input components.
   - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
@@ -42,7 +42,7 @@ flowchart LR
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, adaptive logo-chip contrast, and feed landscape ratio support.
   - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, and refine/caption controls.
-  - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, and sidebar summary refresh behavior.
+- `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
   - Zod schemas enforce request and response validity.
@@ -69,7 +69,7 @@ flowchart LR
 Why this shape:
 - Keeps long-lived drafts out of browser memory and enables multi-post workflow.
 - Supports reliable autosave and recent-post retrieval per authenticated workspace user.
-- Keeps canvas edits (`overlayLayouts`) and carousel media composition (`mediaComposition`) in the same persisted draft object as the creative result, so layout/order/orientation adjustments survive preview toggles, shared snapshots, and post switching.
+- Keeps canvas edits (`overlayLayouts`), carousel media composition (`mediaComposition`), and publish metadata (`publishSettings`) in the same persisted draft object as the creative result, so layout/order/orientation/caption/tagging adjustments survive preview toggles, planner actions, shared snapshots, and post switching.
 
 ### 2) Generate Creative
 
@@ -102,20 +102,20 @@ Why this shape:
 
 ### 4) Publish / Schedule
 
-Before submitting, single-image clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`. Reel clients can also choose whether Meta should `share_to_feed`.
+Before submitting, clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`. Reel clients can also choose whether Meta should `share_to_feed`, and carousel clients store per-item user tags in persisted media composition.
 
-1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment, optional image metadata, and optional reel `shareToFeed` control).
+1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment, optional location metadata, optional user tags, and optional reel `shareToFeed` control).
 2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
 3. Route resolves auth context (OAuth connection first, env fallback second).
 4. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
 5. Otherwise route publishes immediately through Meta Graph API helpers.
-6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` and `userTags` are passed through for image-mode publish jobs, while optional reel `shareToFeed` is passed through for reel-mode publish jobs.
+6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` is passed through for feed/reel publish jobs, optional top-level `userTags` are passed through for single-image and reel jobs, and carousel image-item tags are passed through per child item. Optional reel `shareToFeed` is passed through for reel-mode publish jobs.
 7. Cron route (`GET /api/cron/publish`) first fails stale `processing` jobs for manual review, then claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
 
 Why this shape:
 - Separates interactive request latency from scheduled execution.
 - Keeps scheduling durable and queryable via relational job records.
-- Keeps Meta-only lookup logic server-side while the UI stays lightweight for location search and visual tag authoring.
+- Keeps Meta-only lookup logic server-side while the UI stays lightweight for location search, planner controls, and visual tag authoring.
 
 ### 4) Chat Conversations
 
@@ -164,7 +164,7 @@ Why this shape:
 ## Storage Model
 
 - Primary relational persistence: Postgres via Drizzle ORM (`posts`, `brand_kits`, private credentials).
-- `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`), and persisted media composition for carousel order/orientation/crop foundations.
+- `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`), persisted media composition for carousel order/orientation/crop foundations, and persisted publish settings (`caption`, `firstComment`, `locationId`, `reelShareToFeed`).
   - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, an ordered array of named logos, legacy `logoUrl` compatibility, and default flag.
 - Blob persistence: binary media, shared project snapshots, publish outcomes, and chat conversation blobs.
 - Typical paths:
@@ -198,7 +198,7 @@ Why this shape:
 - Generation: in Fallback mode, provider errors cascade to the next model in priority order before degrading to deterministic fallback output. In Parallel mode, partial model failures are tolerated as long as at least one model succeeds.
 - Publishing: route returns detailed error context; scheduled failures are reported in cron response.
 - First-comment posting failures are captured as publish warnings/events and do not roll back successful media publishes.
-- Location/user-tag metadata is validated as image-only across schedule, queue-edit, and publish runtime paths.
+- Location/user-tag metadata is validated against the publish-media mode across schedule, queue-edit, planner, and publish runtime paths (for example, carousel tags must be per-image item and carousel videos cannot be tagged).
 - Location search uses the same Meta auth context as publish requests, so suggestions reflect the connected account/token path.
 - Scheduling: cron fails stale `processing` jobs, claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
 - Failed jobs remain queryable in Postgres for inspection/recovery.
@@ -206,6 +206,7 @@ Why this shape:
 - Blob-dependent features return clear 503 errors when storage is not configured (uploads, share snapshots, outcomes sync).
 - Post selection: stale async responses are ignored so rapid switching cannot overwrite the latest selected draft.
 - Sidebar refresh: summary reconciliation preserves stable list items to avoid unnecessary list re-renders.
+- Draft/save failures are surfaced in the fixed status bar so autosave regressions are visible even when the sidebar is collapsed.
 
 ## Deployment and Operations
 

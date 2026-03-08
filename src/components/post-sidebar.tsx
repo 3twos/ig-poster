@@ -50,6 +50,7 @@ export function SidebarContent({
     activePost,
     selectPost,
     createNewPost,
+    duplicatePost,
     archivePost,
     deletePost,
     refreshArchivedPosts,
@@ -174,6 +175,7 @@ export function SidebarContent({
                 onSchedulePost={(scheduleAt) =>
                   onSchedulePost?.(post.id, scheduleAt)
                 }
+                onDuplicate={() => void duplicatePost(post.id)}
                 onArchive={() => void archivePost(post.id)}
                 onDelete={() => void deletePost(post.id)}
               />

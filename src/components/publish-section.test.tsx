@@ -9,8 +9,12 @@ vi.mock("./publish-job-queue", () => ({
   PublishJobQueue: () => <div data-testid="publish-job-queue" />,
 }));
 
+vi.mock("./scheduled-planner", () => ({
+  ScheduledPlanner: () => <div data-testid="scheduled-planner" />,
+}));
+
 describe("PublishSection", () => {
-  it("submits reel share-to-feed preference from the main publish form", () => {
+  it("blocks publish actions when the composer reports validation errors", () => {
     const onPostNow = vi.fn();
 
     render(
@@ -24,8 +28,8 @@ describe("PublishSection", () => {
         shareUrl={null}
         shareCopyState="idle"
         localTimeZone="America/Los_Angeles"
-        supportsImageMetadata={false}
-        supportsReelControls
+        hasBlockingValidationError
+        validationMessage="Fix incomplete user tag rows before posting or scheduling."
         onOpenSettings={vi.fn()}
         onCreateShareLink={vi.fn()}
         onPostNow={onPostNow}
@@ -33,13 +37,10 @@ describe("PublishSection", () => {
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Share reel to main feed"));
-    fireEvent.click(screen.getByRole("button", { name: /post now/i }));
-
-    expect(onPostNow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reelShareToFeed: false,
-      }),
-    );
+    expect(screen.getByText(/Fix incomplete user tag rows/)).not.toBeNull();
+    const postNowButton = screen.getByRole("button", { name: /post now/i }) as HTMLButtonElement;
+    expect(postNowButton.disabled).toBe(true);
+    fireEvent.click(postNowButton);
+    expect(onPostNow).not.toHaveBeenCalled();
   });
 });

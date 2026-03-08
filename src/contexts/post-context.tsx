@@ -35,6 +35,7 @@ type PostContextValue = {
   // Navigation
   selectPost: (id: string) => Promise<void>;
   createNewPost: () => Promise<string>;
+  duplicatePost: (id: string) => Promise<string>;
   archivePost: (id: string) => Promise<void>;
   deletePost: (id: string) => Promise<void>;
 
@@ -259,6 +260,29 @@ export function PostProvider({ children }: { children: ReactNode }) {
     return id;
   }, [notifyBeforePostSwitch, refreshPosts]);
 
+  const duplicatePost = useCallback(async (id: string): Promise<string> => {
+    await saveNowRef.current();
+
+    const res = await fetch(`/api/posts/${id}/duplicate`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      throw new Error("Failed to duplicate post");
+    }
+
+    const json = await res.json();
+    const duplicatedId = json.id as string;
+
+    dispatch({ type: "LOAD_POST", row: json.post });
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("post", duplicatedId);
+    window.history.replaceState({}, "", url.toString());
+
+    await refreshPosts();
+    return duplicatedId;
+  }, [refreshPosts]);
+
   const archivePost = useCallback(
     async (id: string) => {
       await fetch(`/api/posts/${id}/archive`, { method: "POST" });
@@ -363,6 +387,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       dispatch,
       selectPost,
       createNewPost,
+      duplicatePost,
       archivePost,
       deletePost,
       saveStatus,
@@ -380,6 +405,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       activePost,
       selectPost,
       createNewPost,
+      duplicatePost,
       archivePost,
       deletePost,
       saveStatus,

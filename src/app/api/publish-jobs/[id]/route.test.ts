@@ -133,6 +133,60 @@ describe("PATCH /api/publish-jobs/:id", () => {
     });
   });
 
+  it("moves queued jobs back to draft when requested", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const queuedJob = { ...baseJob, status: "queued" as const, postId: "post_1" };
+    const jobSelectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([queuedJob]),
+    };
+    const postSelectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ result: { variants: [{ id: "variant-1" }] } }]),
+    };
+    const jobUpdateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([
+        { ...queuedJob, status: "canceled" as const, canceledAt: new Date() },
+      ]),
+    };
+    const postUpdateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue(undefined),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn()
+        .mockReturnValueOnce(jobSelectChain)
+        .mockReturnValueOnce(postSelectChain),
+      update: vi.fn()
+        .mockReturnValueOnce(jobUpdateChain)
+        .mockReturnValueOnce(postUpdateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "move-to-draft" }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+
+    expect(res.status).toBe(200);
+    expect(jobUpdateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "canceled",
+        canceledAt: expect.any(Date),
+      }),
+    );
+    expect(postUpdateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "draft",
+      }),
+    );
+  });
+
   it("resets attempts when rescheduling a failed job", async () => {
     mockedReadWorkspace.mockResolvedValue(session);
     const selectChain = {
@@ -384,7 +438,7 @@ describe("PATCH /api/publish-jobs/:id", () => {
     );
   });
 
-  it("rejects non-image metadata edits with location/user tags", async () => {
+  it("stores reel location id and user tags during edit", async () => {
     mockedReadWorkspace.mockResolvedValue(session);
     const selectChain = {
       from: vi.fn().mockReturnThis(),
@@ -396,6 +450,65 @@ describe("PATCH /api/publish-jobs/:id", () => {
             mode: "reel" as const,
             videoUrl: "https://cdn.example.com/reel.mp4",
             shareToFeed: true,
+          },
+        },
+      ]),
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([
+        {
+          ...baseJob,
+          status: "queued" as const,
+          locationId: "12345",
+          userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+          media: {
+            mode: "reel" as const,
+            videoUrl: "https://cdn.example.com/reel.mp4",
+            shareToFeed: true,
+          },
+        },
+      ]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        locationId: "12345",
+        userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(200);
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locationId: "12345",
+        userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+      }),
+    );
+  });
+
+  it("rejects post-level user tags for carousel jobs", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([
+        {
+          ...baseJob,
+          media: {
+            mode: "carousel" as const,
+            items: [
+              { mediaType: "image" as const, url: "https://cdn.example.com/c1.jpg" },
+              { mediaType: "image" as const, url: "https://cdn.example.com/c2.jpg" },
+            ],
           },
         },
       ]),
@@ -415,13 +528,60 @@ describe("PATCH /api/publish-jobs/:id", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         action: "edit",
-        locationId: "12345",
+        userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
       }),
     });
     const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({
-      error: "Location and user tags are currently supported only for image posts.",
+      error: "Carousel posts use per-item user tags instead of a single post-level tag list.",
+    });
+    expect(updateChain.set).not.toHaveBeenCalled();
+  });
+
+  it("rejects user tags on carousel video items", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([baseJob]),
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        media: {
+          mode: "carousel",
+          items: [
+            {
+              mediaType: "image",
+              url: "https://cdn.example.com/c1.jpg",
+              userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+            },
+            {
+              mediaType: "video",
+              url: "https://cdn.example.com/c2.mp4",
+              userTags: [{ username: "friend", x: 0.5, y: 0.5 }],
+            },
+          ],
+        },
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "User tags are not supported on carousel videos.",
     });
     expect(updateChain.set).not.toHaveBeenCalled();
   });

@@ -35,7 +35,7 @@ type Props = {
   localTimeZone: string;
   onJobsMutated?: (
     postId: string | undefined,
-    action: "cancel" | "reschedule" | "edit" | "retry-now",
+    action: "cancel" | "reschedule" | "edit" | "move-to-draft" | "retry-now",
   ) => Promise<void> | void;
   refreshKey: number;
 };
@@ -90,6 +90,7 @@ type EditableCarouselItem = {
   clientId: string;
   mediaType: "image" | "video";
   url: string;
+  userTags?: MetaUserTag[];
 };
 
 type EditableMedia =
@@ -123,6 +124,7 @@ const cloneMedia = (
         clientId: createClientId(),
         mediaType: item.mediaType,
         url: item.url,
+        userTags: item.userTags,
       })),
     };
   }
@@ -157,6 +159,7 @@ const normalizeMedia = (
     items: media.items.map((item) => ({
       mediaType: item.mediaType,
       url: item.url.trim(),
+      userTags: item.userTags?.length ? item.userTags : undefined,
     })),
   };
 };
@@ -220,7 +223,8 @@ const isSameMedia = (
     if (left.items.length !== right.items.length) return false;
     return left.items.every((item, index) =>
       item.mediaType === right.items[index]?.mediaType &&
-      item.url === right.items[index]?.url
+      item.url === right.items[index]?.url &&
+      userTagsEqual(item.userTags ?? null, right.items[index]?.userTags ?? null)
     );
   }
 
@@ -259,7 +263,11 @@ export function PublishJobQueue({
   const normalizeTagUsername = (value: string) => value.trim().replace(/^@/, "");
   const hasIncompleteEditUserTags = editUserTags.some((tag) =>
     normalizeTagUsername(tag.username).length === 0
-  );
+  ) || (editMedia?.mode === "carousel"
+    ? editMedia.items.some((item) =>
+        (item.userTags ?? []).some((tag) => normalizeTagUsername(tag.username).length === 0)
+      )
+    : false);
 
   const resetEditState = () => {
     setEditingJobId(null);
@@ -405,7 +413,11 @@ export function PublishJobQueue({
       toast.error("Fill username for each user tag row or remove incomplete rows.");
       return;
     }
-    const nextUserTags = normalizedUserTags.length > 0 ? normalizedUserTags : null;
+    const nextUserTags = normalizedMedia.mode === "carousel"
+      ? null
+      : normalizedUserTags.length > 0
+        ? normalizedUserTags
+        : null;
     const currentUserTags = job.userTags ?? null;
     const body: {
       action: "edit";
@@ -682,42 +694,97 @@ export function PublishJobQueue({
                       </div>
                       <div className="mt-3">
                         <LabelLine>Publish metadata</LabelLine>
-                        {editMedia?.mode === "image" ? (
-                          <div className="mt-2 space-y-2">
-                            <Input
-                              aria-label={`Edit location ID for ${job.id}`}
-                              value={editLocationId}
-                              onChange={(event) => setEditLocationId(event.target.value)}
-                              className="text-xs"
-                              placeholder="Location ID (optional)"
-                            />
-                            <MetaLocationSearchField
-                              ariaLabel={`Search Meta locations for ${job.id}`}
-                              locationId={editLocationId}
-                              onSelectLocationId={setEditLocationId}
-                              disabled={isBusy}
-                            />
-                            <MetaUserTagsEditor
-                              ariaLabelPrefix={`Edit ${job.id}`}
-                              imageUrl={editMedia.imageUrl}
-                              tags={editUserTags}
-                              onChange={setEditUserTags}
-                              disabled={isBusy}
-                            />
-                            <p className="text-[11px] text-slate-400">
-                              Place tags visually on the image, or fine-tune x/y values between 0 and 1.
-                            </p>
-                            {hasIncompleteEditUserTags ? (
-                              <p className="text-[11px] text-amber-200">
-                                Fill username for each tag row or remove incomplete rows before saving.
+                        <div className="mt-2 space-y-2">
+                          <Input
+                            aria-label={`Edit location ID for ${job.id}`}
+                            value={editLocationId}
+                            onChange={(event) => setEditLocationId(event.target.value)}
+                            className="text-xs"
+                            placeholder="Location ID (optional)"
+                          />
+                          <MetaLocationSearchField
+                            ariaLabel={`Search Meta locations for ${job.id}`}
+                            locationId={editLocationId}
+                            onSelectLocationId={setEditLocationId}
+                            disabled={isBusy}
+                          />
+                          {editMedia?.mode === "image" ? (
+                            <>
+                              <MetaUserTagsEditor
+                                ariaLabelPrefix={`Edit ${job.id}`}
+                                imageUrl={editMedia.imageUrl}
+                                tags={editUserTags}
+                                onChange={setEditUserTags}
+                                disabled={isBusy}
+                              />
+                              <p className="text-[11px] text-slate-400">
+                                Place tags visually on the image, or fine-tune x/y values between 0 and 1.
                               </p>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <p className="mt-2 text-[11px] text-slate-400">
-                            Location and user tags are available for single-image posts only.
-                          </p>
-                        )}
+                            </>
+                          ) : null}
+                          {editMedia?.mode === "reel" ? (
+                            <>
+                              <MetaUserTagsEditor
+                                ariaLabelPrefix={`Edit ${job.id}`}
+                                imageUrl={editMedia.coverUrl}
+                                tags={editUserTags}
+                                onChange={setEditUserTags}
+                                disabled={isBusy}
+                              />
+                              <p className="text-[11px] text-slate-400">
+                                Reels accept user tags too. If no cover URL is available, you can still edit usernames and coordinates directly.
+                              </p>
+                            </>
+                          ) : null}
+                          {editMedia?.mode === "carousel" ? (
+                            <div className="space-y-3">
+                              <p className="text-[11px] text-slate-400">
+                                Set user tags per carousel image. Meta will reject tags on carousel videos.
+                              </p>
+                              {editMedia.items.map((item, index) => (
+                                <div
+                                  key={`${item.clientId}-tags`}
+                                  className="rounded-md border border-white/10 bg-slate-950/40 p-2"
+                                >
+                                  <p className="mb-2 text-[11px] font-medium text-slate-200">
+                                    Carousel item {index + 1}
+                                  </p>
+                                  {item.mediaType === "video" ? (
+                                    <p className="text-[11px] text-slate-400">
+                                      Videos can stay in the carousel, but Meta does not support user tags on carousel videos.
+                                    </p>
+                                  ) : (
+                                    <MetaUserTagsEditor
+                                      ariaLabelPrefix={`Edit ${job.id} carousel item ${index + 1}`}
+                                      imageUrl={item.url}
+                                      tags={item.userTags ?? []}
+                                      onChange={(tags) => {
+                                        setEditMedia((current) => {
+                                          if (!current || current.mode !== "carousel") return current;
+                                          const items = current.items.map((entry) =>
+                                            entry.clientId === item.clientId
+                                              ? {
+                                                  ...entry,
+                                                  userTags: tags.length ? tags : undefined,
+                                                }
+                                              : entry
+                                          );
+                                          return { mode: "carousel", items };
+                                        });
+                                      }}
+                                      disabled={isBusy}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          {hasIncompleteEditUserTags ? (
+                            <p className="text-[11px] text-amber-200">
+                              Fill username for each user tag row or remove incomplete rows before saving.
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="mt-3">
                         <LabelLine>Media</LabelLine>
@@ -821,7 +888,14 @@ export function PublishJobQueue({
                                         if (!current || current.mode !== "carousel") return current;
                                         const items = current.items.map((entry, entryIndex) =>
                                           entryIndex === index
-                                            ? { ...entry, mediaType }
+                                            ? {
+                                                ...entry,
+                                                mediaType,
+                                                userTags:
+                                                  mediaType === "video"
+                                                    ? undefined
+                                                    : entry.userTags,
+                                              }
                                             : entry
                                         );
                                         return { mode: "carousel", items };

@@ -36,6 +36,7 @@ export const MetaLocationSearchResponseSchema = z.object({
 export const CarouselItemSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   url: z.string().url(),
+  userTags: UserTagsSchema.optional(),
 });
 
 export const OutcomeContextSchema = z.object({
@@ -47,6 +48,50 @@ export const OutcomeContextSchema = z.object({
   brandName: z.string(),
   score: z.number().optional(),
 });
+
+type MetaMetadataValidationIssue = {
+  path: Array<string | number>;
+  message: string;
+};
+
+export const getMetaMetadataValidationIssues = (input: {
+  media: {
+    mode: "image";
+    imageUrl: string;
+  } | {
+    mode: "reel";
+    videoUrl: string;
+    coverUrl?: string;
+    shareToFeed?: boolean;
+  } | {
+    mode: "carousel";
+    items: Array<z.infer<typeof CarouselItemSchema>>;
+  };
+  locationId?: string | null;
+  userTags?: MetaUserTag[] | null;
+}): MetaMetadataValidationIssue[] => {
+  const issues: MetaMetadataValidationIssue[] = [];
+
+  if (input.media.mode === "carousel" && input.userTags !== undefined && input.userTags !== null) {
+    issues.push({
+      path: ["userTags"],
+      message: "Carousel posts use per-item user tags instead of a single post-level tag list.",
+    });
+  }
+
+  if (input.media.mode === "carousel") {
+    input.media.items.forEach((item, index) => {
+      if (item.mediaType === "video" && (item.userTags?.length ?? 0) > 0) {
+        issues.push({
+          path: ["media", "items", index, "userTags"],
+          message: "User tags are not supported on carousel videos.",
+        });
+      }
+    });
+  }
+
+  return issues;
+};
 
 export const MetaScheduleRequestSchema = z
   .object({
@@ -75,25 +120,12 @@ export const MetaScheduleRequestSchema = z
     outcomeContext: OutcomeContextSchema.optional(),
   })
   .superRefine((value, ctx) => {
-    const hasLocation = value.locationId !== undefined;
-    const hasUserTags = value.userTags !== undefined;
-
-    if (value.media.mode !== "image" && (hasLocation || hasUserTags)) {
-      if (hasLocation) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Location and user tags are currently supported only for image posts.",
-          path: ["locationId"],
-        });
-      }
-
-      if (hasUserTags) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Location and user tags are currently supported only for image posts.",
-          path: ["userTags"],
-        });
-      }
+    for (const issue of getMetaMetadataValidationIssues(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: issue.message,
+        path: issue.path,
+      });
     }
   });
 
@@ -123,6 +155,9 @@ export const PublishJobEventSchema = z.object({
 export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("cancel"),
+  }),
+  z.object({
+    action: z.literal("move-to-draft"),
   }),
   z.object({
     action: z.literal("retry-now"),

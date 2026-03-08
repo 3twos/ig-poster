@@ -4,6 +4,7 @@ import { toBlob, toPng } from "html-to-image";
 import {
   ChevronLeft,
   ChevronRight,
+  Copy,
   LoaderCircle,
   Sparkles,
   Square,
@@ -23,6 +24,7 @@ import { AgentActivityPanel } from "@/components/agent-activity-panel";
 import { BrandKitModal } from "@/components/brand-kit-modal";
 import { CarouselComposer } from "@/components/carousel-composer";
 import { ChatPanel } from "@/components/chat";
+import { PublishMetadataEditor } from "@/components/publish-metadata-editor";
 import { AppShell } from "@/components/app-shell";
 import { AssetManager } from "@/components/asset-manager";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
@@ -66,8 +68,10 @@ import {
   type LocalAsset,
   type PostState,
   type PromptConfigState,
+  type PublishSettingsState,
   INITIAL_BRAND,
   INITIAL_POST,
+  INITIAL_PUBLISH_SETTINGS,
 } from "@/lib/types";
 import {
   aspectRatioFromOrientation,
@@ -86,14 +90,21 @@ import {
 import { withPerf } from "@/lib/perf";
 import { cn, slugify } from "@/lib/utils";
 import { toast } from "sonner";
-import type { MetaUserTag } from "@/lib/meta-schemas";
+import {
+  PublishJobListResponseSchema,
+  type MetaUserTag,
+} from "@/lib/meta-schemas";
 
-type PublishMetadataInput = {
-  firstComment?: string;
-  locationId?: string;
-  reelShareToFeed?: boolean;
-  userTags?: MetaUserTag[];
-};
+const normalizeTagUsername = (value: string) => value.trim().replace(/^@/, "");
+
+const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
+  (tags ?? [])
+    .map((tag) => ({
+      username: normalizeTagUsername(tag.username),
+      x: tag.x,
+      y: tag.y,
+    }))
+    .filter((tag) => tag.username.length > 0);
 
 export default function Home() {
   const {
@@ -101,6 +112,7 @@ export default function Home() {
     posts,
     dispatch,
     createNewPost,
+    duplicatePost,
     refreshPosts,
     selectPost,
     saveNow,
@@ -179,6 +191,13 @@ export default function Home() {
       customInstructions: activePost?.promptConfig?.customInstructions ?? "",
     }),
     [activePost?.promptConfig],
+  );
+  const publishSettings: PublishSettingsState = useMemo(
+    () => ({
+      ...INITIAL_PUBLISH_SETTINGS,
+      ...(activePost?.publishSettings ?? {}),
+    }),
+    [activePost?.publishSettings],
   );
   const activeBrandKit = useMemo(
     () => brandKits.find((kit) => kit.id === activePost?.brandKitId) ?? null,
@@ -530,7 +549,41 @@ export default function Home() {
     [dispatch, updateMediaComposition],
   );
 
+  const updatePublishSettings = useCallback(
+    (nextSettings: Partial<PublishSettingsState>) => {
+      const postId = activePostIdRef.current;
+      if (!postId) return;
+      dispatch({
+        type: "SET_PUBLISH_SETTINGS",
+        postId,
+        publishSettings: nextSettings,
+      });
+    },
+    [dispatch],
+  );
+
+  const updateAssetUserTags = useCallback(
+    (assetId: string, userTags: MetaUserTag[]) => {
+      updateMediaComposition((current) => ({
+        ...current,
+        items: current.items.map((item) =>
+          item.assetId === assetId
+            ? {
+                ...item,
+                userTags: userTags.length ? userTags : undefined,
+              }
+            : item,
+        ),
+      }));
+    },
+    [updateMediaComposition],
+  );
+
   const assetMap = useMemo(() => new Map(localAssets.map((a) => [a.id, a])), [localAssets]);
+  const mediaCompositionItemsByAssetId = useMemo(
+    () => new Map(mediaComposition.items.map((item) => [item.assetId, item])),
+    [mediaComposition.items],
+  );
   const carouselComposerSequence = useMemo(() => {
     if (!activeVariant || activeVariant.postType !== "carousel") {
       return [];
@@ -557,6 +610,86 @@ export default function Home() {
   const primaryVisualIndex = activeVariant?.postType === "carousel" ? activeSlideIndex : 0;
   const primaryVisual = getDisplayVisual(orderedVariantAssets[primaryVisualIndex]);
   const secondaryVisual = getDisplayVisual(orderedVariantAssets[1]);
+  const generatedCaptionBundle = useMemo(() => {
+    if (!activeVariant) return "";
+    const hashtags = activeVariant.hashtags.join(" ");
+    return hashtags
+      ? `${activeVariant.caption}\n\n${hashtags}`
+      : activeVariant.caption;
+  }, [activeVariant]);
+  const effectiveCaption = useMemo(() => {
+    const trimmed = publishSettings.caption.trim();
+    return trimmed || generatedCaptionBundle;
+  }, [generatedCaptionBundle, publishSettings.caption]);
+  const primaryPublishAsset = useMemo(() => {
+    if (!activeVariant) return null;
+
+    const sequenceAssets = activeVariant.assetSequence
+      .map((id) => assetMap.get(id))
+      .filter((asset): asset is LocalAsset => Boolean(asset));
+
+    if (activeVariant.postType === "reel") {
+      return (
+        sequenceAssets.find((asset) => asset.mediaType === "video") ??
+        localAssets.find((asset) => asset.mediaType === "video") ??
+        null
+      );
+    }
+
+    return sequenceAssets[0] ?? null;
+  }, [activeVariant, assetMap, localAssets]);
+  const singlePublishTagAsset = useMemo(() => {
+    if (!activeVariant || activeVariant.postType === "carousel" || !primaryPublishAsset) {
+      return null;
+    }
+
+    return {
+      assetId: primaryPublishAsset.id,
+      name: primaryPublishAsset.name,
+      mediaType: primaryPublishAsset.mediaType,
+      previewUrl:
+        activeVariant.postType === "single-image"
+          ? (publishImagePreviewUrl ?? getDisplayVisual(primaryPublishAsset))
+          : getDisplayVisual(primaryPublishAsset),
+      userTags:
+        mediaCompositionItemsByAssetId.get(primaryPublishAsset.id)?.userTags ?? [],
+    };
+  }, [
+    activeVariant,
+    mediaCompositionItemsByAssetId,
+    primaryPublishAsset,
+    publishImagePreviewUrl,
+  ]);
+  const carouselTagAssets = useMemo(() => {
+    if (!activeVariant || activeVariant.postType !== "carousel") {
+      return [];
+    }
+
+    return carouselComposerSequence
+      .map((assetId) => assetMap.get(assetId))
+      .filter((asset): asset is LocalAsset => Boolean(asset))
+      .map((asset) => ({
+        assetId: asset.id,
+        name: asset.name,
+        mediaType: asset.mediaType,
+        previewUrl: getDisplayVisual(asset),
+        userTags: mediaCompositionItemsByAssetId.get(asset.id)?.userTags ?? [],
+      }));
+  }, [
+    activeVariant,
+    assetMap,
+    carouselComposerSequence,
+    mediaCompositionItemsByAssetId,
+  ]);
+  const hasIncompletePublishUserTags = useMemo(
+    () =>
+      mediaComposition.items.some((item) =>
+        (item.userTags ?? []).some(
+          (tag) => normalizeTagUsername(tag.username).length === 0,
+        ),
+      ),
+    [mediaComposition.items],
+  );
 
   const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
 
@@ -573,12 +706,15 @@ export default function Home() {
     if (isPublishing) return { tone: "active" as const, text: "Publishing to Instagram...", elapsedMs: undefined, showStop: false };
     if (isRefining) return { tone: "active" as const, text: "Refining selected variant...", elapsedMs: undefined, showStop: false };
     if (generation.error) return { tone: "error" as const, text: generation.error, elapsedMs: undefined, showStop: false };
+    if (saveStatus === "error") return { tone: "error" as const, text: "Autosave failed. Keep this tab open and use Save now before leaving.", elapsedMs: undefined, showStop: false };
+    if (saveStatus === "saving") return { tone: "active" as const, text: "Saving draft changes...", elapsedMs: undefined, showStop: false };
+    if (saveStatus === "unsaved") return { tone: "active" as const, text: "Draft changes pending autosave...", elapsedMs: undefined, showStop: false };
     if (generation.agentRun?.status === "success") return { tone: "success" as const, text: generation.agentRun.summary ?? "Concept generation complete.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
     if (generation.agentRun?.status === "cancelled") return { tone: "error" as const, text: generation.agentRun.summary ?? "Generation stopped.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
     if (publishMessage) return { tone: "success" as const, text: publishMessage, elapsedMs: undefined, showStop: false };
     if (shareUrl) return { tone: "success" as const, text: "Share link created.", elapsedMs: undefined, showStop: false };
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
-  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, shareUrl]);
+  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, saveStatus, shareUrl]);
 
   const uploadFileToStorage = async (
     file: File,
@@ -810,8 +946,8 @@ export default function Home() {
   };
 
   const copyCaption = async () => {
-    if (!activeVariant) return;
-    try { await navigator.clipboard.writeText(`${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`); setCopyState("done"); setTimeout(() => setCopyState("idle"), 1400); } catch { setCopyState("idle"); }
+    if (!effectiveCaption) return;
+    try { await navigator.clipboard.writeText(effectiveCaption); setCopyState("done"); setTimeout(() => setCopyState("idle"), 1400); } catch { setCopyState("idle"); }
   };
 
   const refineVariant = async (instruction?: string) => {
@@ -845,7 +981,7 @@ export default function Home() {
     generation.setError(null); setSharingForPostId(postId);
     try {
       const pu = await uploadRenderedPoster();
-      const r = await fetch("/api/projects/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brand, post, assets: localAssets.filter((a) => a.storageUrl).map((a) => ({ id: a.id, name: a.name, mediaType: a.mediaType, durationSec: a.durationSec, posterUrl: a.posterUrl, url: a.storageUrl })), logoUrl: selectedLogo?.storageUrl, result, activeVariantId: activeVariant.id, overlayLayouts, mediaComposition, renderedPosterUrl: pu }) });
+      const r = await fetch("/api/projects/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ brand, post, assets: localAssets.filter((a) => a.storageUrl).map((a) => ({ id: a.id, name: a.name, mediaType: a.mediaType, durationSec: a.durationSec, posterUrl: a.posterUrl, url: a.storageUrl })), logoUrl: selectedLogo?.storageUrl, result, activeVariantId: activeVariant.id, overlayLayouts, mediaComposition, publishSettings, renderedPosterUrl: pu }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as { shareUrl?: string }; if (!j.shareUrl) throw new Error("No share link returned");
       if (!isPostStillActive(postId)) return;
@@ -855,10 +991,7 @@ export default function Home() {
     finally { setSharingForPostId((current) => current === postId ? null : current); }
   };
 
-  const publishToInstagram = async (
-    scheduleAt?: string,
-    metadata?: PublishMetadataInput,
-  ) => {
+  const publishToInstagram = async (scheduleAt?: string) => {
     const postId = activePostIdRef.current;
     if (!activeVariant) {
       const m = "Generate and select a variant before posting.";
@@ -870,36 +1003,50 @@ export default function Home() {
     generation.setError(null); setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current); setPublishingForPostId(postId);
     try {
       const seq = activeVariant.assetSequence.map((id) => assetMap.get(id)).filter((a): a is LocalAsset => Boolean(a));
+      const normalizedFirstComment = publishSettings.firstComment.trim() || undefined;
+      const locationId = publishSettings.locationId.trim() || undefined;
+      const primaryAssetUserTags = primaryPublishAsset
+        ? normalizeUserTags(
+            mediaCompositionItemsByAssetId.get(primaryPublishAsset.id)?.userTags,
+          )
+        : [];
       let media: { mode: string; [key: string]: unknown };
+      let userTags: MetaUserTag[] | undefined;
       if (activeVariant.postType === "reel") {
         const ra = seq.find((a) => a.mediaType === "video" && a.storageUrl) ?? localAssets.find((a) => a.mediaType === "video" && a.storageUrl);
         if (!ra?.storageUrl) throw new Error("Reel requires an uploaded video asset.");
         media = {
           mode: "reel",
           videoUrl: ra.storageUrl,
-          shareToFeed: metadata?.reelShareToFeed ?? true,
+          shareToFeed: publishSettings.reelShareToFeed ?? true,
         };
+        userTags = primaryAssetUserTags.length ? primaryAssetUserTags : undefined;
       } else if (activeVariant.postType === "carousel") {
-        const items = seq.filter((a): a is LocalAsset & { storageUrl: string } => Boolean(a.storageUrl)).slice(0, 10).map((a) => ({ mediaType: a.mediaType, url: a.storageUrl }));
+        const items = seq
+          .filter((a): a is LocalAsset & { storageUrl: string } => Boolean(a.storageUrl))
+          .slice(0, 10)
+          .map((a) => {
+            const itemUserTags = normalizeUserTags(
+              mediaCompositionItemsByAssetId.get(a.id)?.userTags,
+            );
+            return {
+              mediaType: a.mediaType,
+              url: a.storageUrl,
+              userTags:
+                a.mediaType === "image" && itemUserTags.length
+                  ? itemUserTags
+                  : undefined,
+            };
+          });
         if (items.length < 2) throw new Error("Carousel needs at least 2 uploaded media assets.");
         media = { mode: "carousel", items };
       } else {
         media = { mode: "image", imageUrl: await uploadRenderedPoster() };
+        userTags = primaryAssetUserTags.length ? primaryAssetUserTags : undefined;
       }
-      const caption = `${activeVariant.caption}\n\n${activeVariant.hashtags.join(" ")}`;
-      const normalizedFirstComment = metadata?.firstComment?.trim() || undefined;
-      const locationId = metadata?.locationId?.trim() || undefined;
-      const userTags = metadata?.userTags?.length
-        ? metadata.userTags
-        : undefined;
-      if (
-        activeVariant.postType !== "single-image" &&
-        (locationId || userTags?.length)
-      ) {
-        throw new Error("Location and user tags are currently supported only for image posts.");
-      }
+      const caption = effectiveCaption;
       const publishAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption: activeVariant.caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as {
         status?: string;
@@ -948,7 +1095,6 @@ export default function Home() {
 
   const publishToInstagramRef = useRef<(
     scheduleAt?: string,
-    metadata?: PublishMetadataInput,
   ) => Promise<void>>(async () => {});
   publishToInstagramRef.current = publishToInstagram;
 
@@ -1005,7 +1151,7 @@ export default function Home() {
 
   const handlePublishJobsMutated = useCallback(async (
     postId: string | undefined,
-    action: "cancel" | "reschedule" | "edit" | "retry-now",
+    action: "cancel" | "reschedule" | "edit" | "move-to-draft" | "retry-now",
   ) => {
     if (postId && activePost?.id === postId) {
       dispatch({
@@ -1014,7 +1160,9 @@ export default function Home() {
         status:
           action === "reschedule" || action === "edit" || action === "retry-now"
             ? "scheduled"
-            : activePost.result
+            : action === "move-to-draft"
+              ? "draft"
+              : activePost.result
               ? "generated"
               : "draft",
       });
@@ -1022,6 +1170,90 @@ export default function Home() {
 
     await refreshPosts();
   }, [activePost?.id, activePost?.result, dispatch, refreshPosts]);
+
+  const handleDuplicatePost = useCallback(async (postId: string) => {
+    try {
+      await duplicatePost(postId);
+      toast.success("Post duplicated.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not duplicate post.",
+      );
+    }
+  }, [duplicatePost]);
+
+  const handleFinishLater = useCallback(async () => {
+    if (!activePost) return;
+
+    try {
+      if (activePost.status === "scheduled") {
+        const jobsResponse = await fetch(
+          "/api/publish-jobs?status=queued,processing&limit=50",
+          { cache: "no-store" },
+        );
+        if (!jobsResponse.ok) {
+          throw new Error(await parseApiError(jobsResponse));
+        }
+
+        const scheduledJobs = PublishJobListResponseSchema.parse(
+          await jobsResponse.json(),
+        ).jobs.filter((job) => job.postId === activePost.id);
+
+        for (const job of scheduledJobs) {
+          const moveResponse = await fetch(`/api/publish-jobs/${job.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "move-to-draft" }),
+          });
+          if (!moveResponse.ok) {
+            throw new Error(await parseApiError(moveResponse));
+          }
+        }
+
+        if (scheduledJobs.length > 0) {
+          await handlePublishJobsMutated(activePost.id, "move-to-draft");
+          setPublishJobsRefreshKey((value) => value + 1);
+          toast.success("Moved scheduled post back to drafts.");
+          return;
+        }
+      }
+
+      dispatch({
+        type: "SET_STATUS",
+        postId: activePost.id,
+        status: "draft",
+      });
+      await saveNow();
+      await refreshPosts();
+      toast.success("Saved to drafts.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not move post to drafts.",
+      );
+    }
+  }, [activePost, dispatch, handlePublishJobsMutated, refreshPosts, saveNow]);
+
+  const postLifecycleActions = activePost ? (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void handleFinishLater()}
+        disabled={isAgentBusy}
+      >
+        Finish later
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void handleDuplicatePost(activePost.id)}
+        disabled={isAgentBusy}
+      >
+        <Copy className="h-3.5 w-3.5" />
+        Duplicate post
+      </Button>
+    </>
+  ) : null;
 
   useEffect(() => {
     if (!pendingGenerateRequest || activePost?.id !== pendingGenerateRequest.postId) {
@@ -1138,7 +1370,7 @@ export default function Home() {
                         </div>
                         <div className="min-w-0 space-y-4">
                           <div className="w-full max-w-[40rem]">
-                            <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()}>
+                            <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} extraActions={postLifecycleActions}>
                               <div className="w-36">
                                 <PostBriefAspectRatio aspectRatio={post.aspectRatio} disabled={generation.isGenerating} showLabel={false} onChange={(value) => typedDispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value } })} />
                               </div>
@@ -1163,7 +1395,7 @@ export default function Home() {
                     </section>
                     {result && (
                       <section className="border-b border-white/10 pb-6">
-                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
+                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
                           if (!activeVariant) return;
                           dispatch({
                             type: "UPDATE_OVERLAY",
@@ -1175,7 +1407,10 @@ export default function Home() {
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} supportsReelControls={activeVariant.postType === "reel"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />
+                        <div className="space-y-4">
+                          <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
+                          <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+                        </div>
                       </section>
                     )}
                   </div>
@@ -1213,7 +1448,7 @@ export default function Home() {
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} />
+            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} extraActions={postLifecycleActions} />
             <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} onSaveNow={saveNow} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {activeVariant?.postType === "carousel" ? (
@@ -1226,7 +1461,7 @@ export default function Home() {
                 disabled={isAgentBusy}
               />
             ) : null}
-            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
+            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
               if (!activeVariant) return;
               dispatch({
                 type: "UPDATE_OVERLAY",
@@ -1234,7 +1469,12 @@ export default function Home() {
                 layout,
               });
             }} saveStatus={saveStatus} onSaveNow={saveNow} />}
-            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} supportsReelControls={activeVariant.postType === "reel"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />}
+            {activeVariant && (
+              <div className="space-y-4">
+                <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
+                <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+              </div>
+            )}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

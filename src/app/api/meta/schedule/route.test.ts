@@ -175,14 +175,20 @@ describe("POST /api/meta/schedule", () => {
     expect(mockedGetDb).not.toHaveBeenCalled();
   });
 
-  it("returns 400 when image-only metadata is provided for non-image media", async () => {
+  it("returns 400 when carousel metadata uses a post-level user-tag list", async () => {
     const req = new Request("https://app.example.com/api/meta/schedule", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         caption: "Invalid",
-        locationId: "12345",
-        media: { mode: "reel", videoUrl: "https://cdn.example.com/reel.mp4" },
+        userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+        media: {
+          mode: "carousel",
+          items: [
+            { mediaType: "image", url: "https://cdn.example.com/c1.jpg" },
+            { mediaType: "image", url: "https://cdn.example.com/c2.jpg" },
+          ],
+        },
       }),
     });
 

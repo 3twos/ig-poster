@@ -95,6 +95,13 @@ export type PromptConfigState = {
   customInstructions: string;
 };
 
+export type PublishSettingsState = {
+  caption: string;
+  firstComment: string;
+  locationId: string;
+  reelShareToFeed: boolean;
+};
+
 export type WorkspaceAuthStatus = {
   authenticated: boolean;
   user?: {
@@ -130,6 +137,13 @@ export const INITIAL_POST: PostState = {
   audience: "Startup founders and growth leads",
   mood: "High-energy and premium",
   aspectRatio: "4:5",
+};
+
+export const INITIAL_PUBLISH_SETTINGS: PublishSettingsState = {
+  caption: "",
+  firstComment: "",
+  locationId: "",
+  reelShareToFeed: true,
 };
 
 export const RATIO_OPTIONS: Array<{ value: AspectRatio; label: string }> = [
