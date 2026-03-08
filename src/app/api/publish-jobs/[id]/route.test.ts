@@ -395,6 +395,7 @@ describe("PATCH /api/publish-jobs/:id", () => {
           media: {
             mode: "reel" as const,
             videoUrl: "https://cdn.example.com/reel.mp4",
+            shareToFeed: true,
           },
         },
       ]),
@@ -423,6 +424,66 @@ describe("PATCH /api/publish-jobs/:id", () => {
       error: "Location and user tags are currently supported only for image posts.",
     });
     expect(updateChain.set).not.toHaveBeenCalled();
+  });
+
+  it("stores reel share-to-feed edits", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([
+        {
+          ...baseJob,
+          media: {
+            mode: "reel" as const,
+            videoUrl: "https://cdn.example.com/reel.mp4",
+            shareToFeed: true,
+          },
+        },
+      ]),
+    };
+    const updated = {
+      ...baseJob,
+      status: "queued" as const,
+      media: {
+        mode: "reel" as const,
+        videoUrl: "https://cdn.example.com/reel.mp4",
+        shareToFeed: false,
+      },
+    };
+    const updateChain = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([updated]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      update: vi.fn().mockReturnValue(updateChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        media: {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/reel.mp4",
+          shareToFeed: false,
+        },
+      }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+    expect(res.status).toBe(200);
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        media: {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/reel.mp4",
+          shareToFeed: false,
+        },
+      }),
+    );
   });
 
   it("preflights media URLs when editing media payload", async () => {

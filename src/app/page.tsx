@@ -1,6 +1,6 @@
 "use client";
 
-import { toPng } from "html-to-image";
+import { toBlob, toPng } from "html-to-image";
 import {
   ChevronLeft,
   ChevronRight,
@@ -76,6 +76,7 @@ import type { MetaUserTag } from "@/lib/meta-schemas";
 type PublishMetadataInput = {
   firstComment?: string;
   locationId?: string;
+  reelShareToFeed?: boolean;
   userTags?: MetaUserTag[];
 };
 
@@ -87,6 +88,8 @@ export default function Home() {
     createNewPost,
     refreshPosts,
     selectPost,
+    saveNow,
+    saveStatus,
   } = usePostContext();
 
   const [localAssets, setLocalAssets] = useState<LocalAsset[]>([]);
@@ -113,6 +116,7 @@ export default function Home() {
   const [pendingGenerateRequest, setPendingGenerateRequest] = useState<{ postId: string } | null>(null);
   const [pendingPublishRequest, setPendingPublishRequest] = useState<{ postId: string; scheduleAt?: string } | null>(null);
   const [publishJobsRefreshKey, setPublishJobsRefreshKey] = useState(0);
+  const [publishImagePreviewUrl, setPublishImagePreviewUrl] = useState<string | null>(null);
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
@@ -120,6 +124,8 @@ export default function Home() {
   const logoCleanupRef = useRef<LocalAsset | null>(null);
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
+  const publishImagePreviewRenderIdRef = useRef(0);
+  const publishImagePreviewBlobUrlRef = useRef<string | null>(null);
   const activePostIdRef = useRef<string | null>(activePost?.id ?? null);
   const assetUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
   const logoUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
@@ -350,7 +356,10 @@ export default function Home() {
 
   const activeOverlayLayout = useMemo(() => {
     if (!activeVariant) return undefined;
-    return overlayLayouts[activeVariant.id] ?? createDefaultOverlayLayout(activeVariant.layout);
+    return (
+      overlayLayouts[activeVariant.id] ??
+      createDefaultOverlayLayout(activeVariant.layout)
+    );
   }, [activeVariant, overlayLayouts]);
 
   const assetMap = useMemo(() => new Map(localAssets.map((a) => [a.id, a])), [localAssets]);
@@ -585,14 +594,83 @@ export default function Home() {
     return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:open-settings", onOpenSettings); window.removeEventListener("ig:open-brand-kits", onOpenBrandKits); window.removeEventListener("ig:before-post-switch", onBeforePostSwitch); };
   }, [abortUploadsForPostSwitch, dispatch]);
 
-  const renderPosterToDataUrl = async () => {
+  const renderPosterToDataUrl = useCallback(async () => {
     if (!posterRef.current || !activeVariant) throw new Error("No poster selected");
     return withPerf("toPng", () => toPng(posterRef.current!, { cacheBust: true, pixelRatio: 2 }));
-  };
+  }, [activeVariant]);
+  const renderPosterToPreviewUrl = useCallback(async () => {
+    if (!posterRef.current || !activeVariant) throw new Error("No poster selected");
+    const blob = await withPerf("toBlob", () =>
+      toBlob(posterRef.current!, { cacheBust: true, pixelRatio: 1.5 }));
+    if (!blob) {
+      throw new Error("Could not render poster preview.");
+    }
+    return URL.createObjectURL(blob);
+  }, [activeVariant]);
   const uploadRenderedPoster = async () => {
     const d = await renderPosterToDataUrl(); const r = await fetch(d); const b = await r.blob();
     return uploadFileToStorage(new File([b], `${slugify(brand.brandName)}-${slugify(post.theme)}-${Date.now()}.png`, { type: "image/png" }), "renders");
   };
+
+  const revokePreviewUrlIfNeeded = useCallback((value: string | null) => {
+    if (value?.startsWith("blob:")) {
+      URL.revokeObjectURL(value);
+    }
+  }, []);
+
+  const replacePublishImagePreviewUrl = useCallback((nextUrl: string | null) => {
+    const previousUrl = publishImagePreviewBlobUrlRef.current;
+    publishImagePreviewBlobUrlRef.current = nextUrl;
+    if (previousUrl && previousUrl !== nextUrl) {
+      revokePreviewUrlIfNeeded(previousUrl);
+    }
+    setPublishImagePreviewUrl(nextUrl);
+  }, [revokePreviewUrlIfNeeded]);
+
+  useEffect(() => () => {
+    revokePreviewUrlIfNeeded(publishImagePreviewBlobUrlRef.current);
+    publishImagePreviewBlobUrlRef.current = null;
+  }, [revokePreviewUrlIfNeeded]);
+
+  useEffect(() => {
+    if (!activeVariant || activeVariant.postType !== "single-image") {
+      replacePublishImagePreviewUrl(null);
+      return;
+    }
+
+    const renderId = publishImagePreviewRenderIdRef.current + 1;
+    publishImagePreviewRenderIdRef.current = renderId;
+    const timer = window.setTimeout(() => {
+      void renderPosterToPreviewUrl()
+        .then((previewUrl) => {
+          if (publishImagePreviewRenderIdRef.current === renderId) {
+            replacePublishImagePreviewUrl(previewUrl);
+          } else {
+            revokePreviewUrlIfNeeded(previewUrl);
+          }
+        })
+        .catch(() => {
+          if (publishImagePreviewRenderIdRef.current === renderId) {
+            replacePublishImagePreviewUrl(null);
+          }
+        });
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeOverlayLayout,
+    activeVariant,
+    brand.brandName,
+    localLogo?.previewUrl,
+    post.aspectRatio,
+    primaryVisual,
+    renderPosterToPreviewUrl,
+    replacePublishImagePreviewUrl,
+    revokePreviewUrlIfNeeded,
+    secondaryVisual,
+  ]);
 
   const exportPoster = async () => {
     if (!activeVariant) return;
@@ -665,7 +743,11 @@ export default function Home() {
       if (activeVariant.postType === "reel") {
         const ra = seq.find((a) => a.mediaType === "video" && a.storageUrl) ?? localAssets.find((a) => a.mediaType === "video" && a.storageUrl);
         if (!ra?.storageUrl) throw new Error("Reel requires an uploaded video asset.");
-        media = { mode: "reel", videoUrl: ra.storageUrl };
+        media = {
+          mode: "reel",
+          videoUrl: ra.storageUrl,
+          shareToFeed: metadata?.reelShareToFeed ?? true,
+        };
       } else if (activeVariant.postType === "carousel") {
         const items = seq.filter((a): a is LocalAsset & { storageUrl: string } => Boolean(a.storageUrl)).slice(0, 10).map((a) => ({ mediaType: a.mediaType, url: a.storageUrl }));
         if (items.length < 2) throw new Error("Carousel needs at least 2 uploaded media assets.");
@@ -933,12 +1015,19 @@ export default function Home() {
                     </section>
                     {result && (
                       <section className="border-b border-white/10 pb-6">
-                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />
+                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
+                          if (!activeVariant) return;
+                          dispatch({
+                            type: "UPDATE_OVERLAY",
+                            variantId: activeVariant.id,
+                            layout,
+                          });
+                        }} saveStatus={saveStatus} onSaveNow={saveNow} />
                       </section>
                     )}
                     {activeVariant && (
                       <section className="pb-6">
-                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />
+                        <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} supportsReelControls={activeVariant.postType === "reel"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />
                       </section>
                     )}
                   </div>
@@ -979,8 +1068,15 @@ export default function Home() {
             <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKitOptions} activeBrandKitId={activePost?.brandKitId} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} />
             <AssetManager assets={localAssets} logo={localLogo} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} onLogoUpload={(e) => void handleLogoUpload(e)} onRemoveLogo={removeLogo} />
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={localLogo?.previewUrl} editorMode={editorMode} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
-            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />}
-            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />}
+            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
+              if (!activeVariant) return;
+              dispatch({
+                type: "UPDATE_OVERLAY",
+                variantId: activeVariant.id,
+                layout,
+              });
+            }} saveStatus={saveStatus} onSaveNow={saveNow} />}
+            {activeVariant && <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} supportsImageMetadata={activeVariant.postType === "single-image"} supportsReelControls={activeVariant.postType === "reel"} imageMetadataPreviewUrl={publishImagePreviewUrl ?? undefined} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={(metadata) => void publishToInstagram(undefined, metadata)} onSchedulePost={(scheduleAt, metadata) => void publishToInstagram(scheduleAt, metadata)} />}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

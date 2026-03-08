@@ -13,14 +13,16 @@
 - Accepts mixed media assets (images + short videos), with drag-and-drop reorderable asset management and automatic video metadata extraction for better planning.
 - Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
 - New posts default to the first available brand kit for that user (when one exists), so brand/prompt/logo context is prefilled consistently.
-- Supports drag-and-resize text overlay editing on the poster canvas, then PNG export.
+- Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
 - Sidebar post rows expose quick publish actions (`Post now`, `Post at`) in the context menu, in addition to archive/delete controls.
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed Postgres queue.
-- Surfaces a publish queue in the publish section so users can review queued/processing/failed jobs, cancel jobs, retry failed jobs immediately, and edit queued/failed publish details (caption, first comment, publish time, media URLs, image metadata) without leaving the editor.
+- Surfaces a publish queue in the publish section so users can review queued/processing/failed jobs, cancel jobs, retry failed jobs immediately, and edit queued/failed publish details (caption, first comment, publish time, media URLs, image metadata, and reel feed-sharing) without leaving the editor.
+- For single-image posts, supports Meta location search assist and click-to-place user tagging on the rendered poster preview, with numeric x/y fallback for fine tuning.
+- For reels, supports choosing whether the publish should also appear on the main feed (`share_to_feed`), with the default remaining on.
 - Enforces Meta Content Publishing throughput guardrails (50 published posts per rolling 24-hour window) for immediate publishes, and automatically defers queued jobs when the window is saturated.
 - Runs media preflight checks before scheduling or publishing (public HTTPS URL requirement + remote content-type probing for image/video compatibility).
 - Supports multi-model LLM configuration: connect multiple OpenAI and/or Anthropic keys simultaneously, reorder them by priority, and choose between Fallback mode (try models in order until one succeeds) or Parallel mode (query all models and merge/rank results). Environment-configured models auto-appear in the list.
@@ -48,14 +50,14 @@
    - Select a brand kit (or use the default), use the Asset Manager controls to attach assets/logo (replace/remove supported for logo), fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
-   - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, and iterate prompts.
+   - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, iterate prompts, and fine-tune the canvas layout or copy without regenerating.
 
 3. Collaborate asynchronously
    - Save a project snapshot and send a share link so teammates can review the selected concept.
 
 4. Publish immediately
    - Connect Instagram via OAuth (or env credentials), then publish selected concept directly.
-   - Optional metadata for image posts: location ID and guided user-tag rows (username + x/y coordinates).
+   - Optional metadata for image posts: search Meta places to fill `locationId`, or paste one manually, and place user tags visually on the rendered poster with x/y fallback fields.
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.

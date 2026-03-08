@@ -1,10 +1,13 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { forwardRef, memo, useEffect, useMemo, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
+
 import {
+  normalizeOverlayLayout,
   type AspectRatio,
+  type CanonicalOverlayKey,
   type CreativeVariant,
   type OverlayLayout,
 } from "@/lib/creative";
@@ -33,198 +36,264 @@ type PosterPreviewProps = {
   onSlideChange?: (index: number) => void;
 };
 
+type OverlayCanvasBlock = {
+  id: string;
+  label: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontScale: number;
+  visible: boolean;
+  type: "canonical" | "custom";
+  key?: CanonicalOverlayKey;
+  className: string;
+  containerClassName: string;
+  contentClassName: string;
+};
+
 const ASPECT_MAP: Record<AspectRatio, string> = {
   "1:1": "1 / 1",
   "4:5": "4 / 5",
   "9:16": "9 / 16",
 };
 
-const renderOverlayBlock = (
+const resolveCarouselCopy = (
   variant: CreativeVariant,
-  brandName: string,
-  options?: {
-    hasLogo?: boolean;
-  },
+  carouselSlides: CarouselSlide[] | undefined,
+  activeSlideIndex: number,
 ) => {
+  const slide = carouselSlides?.[activeSlideIndex];
+  const lastSlideIndex = Math.max((carouselSlides?.length ?? 1) - 1, 0);
+
+  if (!slide || variant.postType !== "carousel" || activeSlideIndex === 0) {
+    return {
+      hook: variant.hook,
+      headline: variant.headline,
+      supportingText: variant.supportingText,
+      cta: variant.cta,
+    };
+  }
+
+  return {
+    hook: slide.goal,
+    headline: slide.headline,
+    supportingText: slide.body,
+    cta: activeSlideIndex === lastSlideIndex ? variant.cta : "Swipe for more",
+  };
+};
+
+const buildOverlayBlocks = (
+  variant: CreativeVariant,
+  overlayLayout: OverlayLayout,
+  carouselSlides: CarouselSlide[] | undefined,
+  activeSlideIndex: number,
+): OverlayCanvasBlock[] => {
+  const resolvedCopy = resolveCarouselCopy(variant, carouselSlides, activeSlideIndex);
   const alignClass =
-    variant.textAlign === "center"
-      ? "items-center text-center"
-      : "items-start text-left";
+    variant.textAlign === "center" ? "items-center text-center" : "items-start text-left";
 
-  if (variant.layout === "split-story") {
-    return (
-      <div className="absolute inset-0 grid grid-cols-[1.25fr_0.75fr]">
-        <div className="flex h-full items-end p-6">
-          <div className="w-full rounded-2xl bg-black/35 p-5 backdrop-blur-sm">
-            {!options?.hasLogo && (
-              <p className="text-xs font-semibold tracking-[0.2em] text-white/75 uppercase">
-                {brandName}
-              </p>
-            )}
-            <h2 className="mt-2 text-3xl leading-tight font-semibold text-white">
-              {variant.headline}
-            </h2>
-            <p className="mt-3 text-sm leading-relaxed text-white/90">
-              {variant.supportingText}
-            </p>
-            <p className="mt-4 text-sm font-medium text-white">{variant.cta}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const canonicalBlocks: OverlayCanvasBlock[] = [
+    {
+      id: "hook",
+      label: "Hook",
+      key: "hook",
+      type: "canonical",
+      ...overlayLayout.hook,
+      text: overlayLayout.hook.text.trim() || resolvedCopy.hook,
+      className: "text-xs font-semibold tracking-[0.22em] uppercase text-white/80",
+      containerClassName: "rounded-2xl bg-black/28 backdrop-blur-sm",
+      contentClassName: alignClass,
+    },
+    {
+      id: "headline",
+      label: "Headline",
+      key: "headline",
+      type: "canonical",
+      ...overlayLayout.headline,
+      text: overlayLayout.headline.text.trim() || resolvedCopy.headline,
+      className: "text-3xl leading-tight font-semibold text-white",
+      containerClassName: "rounded-[26px] bg-black/42 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.9)] backdrop-blur-md",
+      contentClassName: alignClass,
+    },
+    {
+      id: "supportingText",
+      label: "Body",
+      key: "supportingText",
+      type: "canonical",
+      ...overlayLayout.supportingText,
+      text: overlayLayout.supportingText.text.trim() || resolvedCopy.supportingText,
+      className: "text-sm leading-relaxed text-white/90",
+      containerClassName: "rounded-[24px] bg-black/36 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur-md",
+      contentClassName: alignClass,
+    },
+    {
+      id: "cta",
+      label: "CTA",
+      key: "cta",
+      type: "canonical",
+      ...overlayLayout.cta,
+      text: overlayLayout.cta.text.trim() || resolvedCopy.cta,
+      className:
+        "inline-flex rounded-full border border-white/35 bg-black/20 px-3 py-1 text-xs font-semibold uppercase text-white",
+      containerClassName: "bg-transparent",
+      contentClassName: cn("justify-start", variant.textAlign === "center" && "justify-center"),
+    },
+  ];
 
-  if (variant.layout === "minimal-logo") {
-    return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-        <p className="text-xs font-semibold tracking-[0.28em] text-white/70 uppercase">
-          {variant.hook}
-        </p>
-        <h2 className="mt-3 max-w-[90%] text-4xl leading-tight font-semibold text-white md:text-5xl">
-          {variant.headline}
-        </h2>
-        <p className="mt-4 max-w-md text-sm text-white/90">{variant.supportingText}</p>
-        <p className="mt-6 rounded-full border border-white/35 px-4 py-2 text-xs font-semibold text-white uppercase">
-          {variant.cta}
-        </p>
-      </div>
-    );
-  }
+  const customBlocks = (overlayLayout.custom ?? []).map((block, index) => ({
+    id: block.id,
+    label: block.label || `Text Box ${index + 1}`,
+    type: "custom" as const,
+    text: block.text.trim(),
+    x: block.x,
+    y: block.y,
+    width: block.width,
+    height: block.height,
+    fontScale: block.fontScale,
+    visible: block.visible,
+    className: "text-sm leading-relaxed text-white",
+    containerClassName: "rounded-[24px] bg-black/34 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.88)] backdrop-blur-md",
+    contentClassName: alignClass,
+  }));
 
-  if (variant.layout === "magazine") {
-    return (
-      <div className="absolute inset-0 flex flex-col justify-between p-5">
-        <div className="flex items-start justify-between gap-4">
-          {!options?.hasLogo ? (
-            <span className="rounded-full bg-black/35 px-3 py-1 text-[10px] font-semibold tracking-[0.2em] text-white uppercase backdrop-blur-sm">
-              {brandName}
-            </span>
-          ) : (
-            <span />
-          )}
-          <span className="rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold tracking-[0.2em] text-black uppercase">
-            {variant.name}
-          </span>
-        </div>
-        <div className="rounded-2xl bg-black/45 p-5 backdrop-blur-md">
-          <p className="text-xs font-medium text-white/70 uppercase">{variant.hook}</p>
-          <h2 className="mt-2 text-3xl leading-tight font-semibold text-white">
-            {variant.headline}
-          </h2>
-          <p className="mt-3 text-sm text-white/90">{variant.supportingText}</p>
-          <p className="mt-4 text-sm font-semibold text-white">{variant.cta}</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={cn("absolute inset-0 flex justify-end", alignClass)}>
-      <div className="mt-auto w-full p-6">
-        <div className="rounded-2xl bg-black/45 p-5 backdrop-blur-sm">
-          <p className="text-xs font-semibold tracking-[0.2em] text-white/70 uppercase">
-            {variant.hook}
-          </p>
-          <h2 className="mt-2 text-3xl leading-tight font-semibold text-white">
-            {variant.headline}
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-white/90">
-            {variant.supportingText}
-          </p>
-          <p className="mt-4 text-sm font-semibold text-white">{variant.cta}</p>
-        </div>
-      </div>
-    </div>
+  return [...canonicalBlocks, ...customBlocks].filter(
+    (block) => block.visible && block.text.trim().length > 0,
   );
 };
 
+const OverlayBlockBody = ({
+  block,
+}: {
+  block: OverlayCanvasBlock;
+}) => (
+  <div
+    className={cn(
+      "flex h-full w-full p-3",
+      block.containerClassName,
+      block.key === "cta" ? "items-start" : "items-stretch",
+    )}
+  >
+    <div
+      className={cn(
+        "flex h-full w-full whitespace-pre-wrap break-words",
+        block.contentClassName,
+      )}
+      style={{ fontSize: `${block.fontScale}em` }}
+    >
+      <span className={block.className}>{block.text}</span>
+    </div>
+  </div>
+);
+
+const OverlayBlock = ({
+  block,
+  editable,
+}: {
+  block: OverlayCanvasBlock;
+  editable: boolean;
+}) => (
+  <div
+    className="pointer-events-none absolute z-20 overflow-hidden"
+    style={{
+      left: `${block.x}%`,
+      top: `${block.y}%`,
+      width: `${block.width}%`,
+      height: `${block.height}%`,
+    }}
+  >
+    <div className={cn("h-full w-full", editable && "border border-white/10")}>
+      <OverlayBlockBody block={block} />
+    </div>
+  </div>
+);
+
 const EditorOverlay = ({
-  variant,
+  blocks,
   layout,
   onChange,
   frame,
 }: {
-  variant: CreativeVariant;
+  blocks: OverlayCanvasBlock[];
   layout: OverlayLayout;
   onChange: (next: OverlayLayout) => void;
   frame: { width: number; height: number };
 }) => {
-  const blockMap = useMemo(
-    () =>
-      [
-        {
-          key: "hook" as const,
-          label: "Hook",
-          value: variant.hook,
-          className:
-            "text-xs font-semibold tracking-[0.22em] uppercase text-white/80",
-        },
-        {
-          key: "headline" as const,
-          label: "Headline",
-          value: variant.headline,
-          className: "text-3xl leading-tight font-semibold text-white",
-        },
-        {
-          key: "supportingText" as const,
-          label: "Body",
-          value: variant.supportingText,
-          className: "text-sm leading-relaxed text-white/90",
-        },
-        {
-          key: "cta" as const,
-          label: "CTA",
-          value: variant.cta,
-          className:
-            "inline-flex rounded-full border border-white/40 px-3 py-1 text-xs font-semibold text-white uppercase",
-        },
-      ] as const,
-    [variant.hook, variant.headline, variant.supportingText, variant.cta],
-  );
+  const toPercentRect = (data: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => ({
+    x: Math.max(0, Math.min(100, (data.x / frame.width) * 100)),
+    y: Math.max(0, Math.min(100, (data.y / frame.height) * 100)),
+    width: Math.max(5, Math.min(100, (data.width / frame.width) * 100)),
+    height: Math.max(5, Math.min(100, (data.height / frame.height) * 100)),
+  });
 
-  const commit = (
-    key: keyof OverlayLayout,
+  const updateBlockRect = (
+    block: OverlayCanvasBlock,
     data: { x: number; y: number; width: number; height: number },
   ) => {
-    const toPercent = {
-      x: (data.x / frame.width) * 100,
-      y: (data.y / frame.height) * 100,
-      width: (data.width / frame.width) * 100,
-      height: (data.height / frame.height) * 100,
-    };
+    const nextRect = toPercentRect(data);
+
+    if (block.type === "canonical" && block.key) {
+      onChange({
+        ...layout,
+        [block.key]: {
+          ...layout[block.key],
+          ...nextRect,
+        },
+      });
+      return;
+    }
 
     onChange({
       ...layout,
-      [key]: {
-        ...layout[key],
-        x: Math.max(0, Math.min(100, toPercent.x)),
-        y: Math.max(0, Math.min(100, toPercent.y)),
-        width: Math.max(5, Math.min(100, toPercent.width)),
-        height: Math.max(5, Math.min(100, toPercent.height)),
-      },
+      custom: (layout.custom ?? []).map((item) =>
+        item.id === block.id ? { ...item, ...nextRect } : item,
+      ),
+    });
+  };
+
+  const removeBlock = (block: OverlayCanvasBlock) => {
+    if (block.type === "canonical" && block.key) {
+      onChange({
+        ...layout,
+        [block.key]: {
+          ...layout[block.key],
+          visible: false,
+        },
+      });
+      return;
+    }
+
+    onChange({
+      ...layout,
+      custom: (layout.custom ?? []).filter((item) => item.id !== block.id),
     });
   };
 
   return (
     <>
-      {blockMap.map((block) => {
-        const current = layout[block.key];
-        const x = (current.x / 100) * frame.width;
-        const y = (current.y / 100) * frame.height;
-        const width = (current.width / 100) * frame.width;
-        const height = (current.height / 100) * frame.height;
+      {blocks.map((block) => {
+        const x = (block.x / 100) * frame.width;
+        const y = (block.y / 100) * frame.height;
+        const width = (block.width / 100) * frame.width;
+        const height = (block.height / 100) * frame.height;
 
         return (
           <Rnd
-            key={block.key}
+            key={block.id}
             bounds="parent"
             size={{ width, height }}
             position={{ x, y }}
             minWidth={Math.max(frame.width * 0.16, 96)}
             minHeight={Math.max(frame.height * 0.06, 48)}
-            dragHandleClassName={`drag-${block.key}`}
+            dragHandleClassName={`drag-${block.id}`}
             onDragStop={(_event, data) => {
-              commit(block.key, {
+              updateBlockRect(block, {
                 x: data.x,
                 y: data.y,
                 width,
@@ -232,7 +301,7 @@ const EditorOverlay = ({
               });
             }}
             onResizeStop={(_event, _dir, ref, _delta, position) => {
-              commit(block.key, {
+              updateBlockRect(block, {
                 x: position.x,
                 y: position.y,
                 width: ref.offsetWidth,
@@ -241,15 +310,25 @@ const EditorOverlay = ({
             }}
             className="overflow-hidden"
           >
-            <div className="relative h-full w-full rounded-xl border border-orange-300/70 bg-black/35 p-2 backdrop-blur-sm">
-              <span className="absolute top-1 right-1 rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
-                {block.label}
-              </span>
-              <div
-                className={cn(`drag-${block.key} h-full w-full cursor-move p-1`, block.className)}
-                style={{ fontSize: `${current.fontScale}em` }}
-              >
-                {block.key === "cta" ? <span>{block.value}</span> : block.value}
+            <div className="relative h-full w-full rounded-xl border border-orange-300/70 bg-black/24 p-2 backdrop-blur-sm">
+              <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
+                <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
+                  {block.label}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${block.label}`}
+                  className="rounded bg-slate-950/80 p-1 text-white transition hover:bg-slate-950"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    removeBlock(block);
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              <div className={cn(`drag-${block.id} h-full w-full cursor-move`)}>
+                <OverlayBlockBody block={block} />
               </div>
             </div>
           </Rnd>
@@ -259,170 +338,270 @@ const EditorOverlay = ({
   );
 };
 
-export const PosterPreview = memo(forwardRef<HTMLDivElement, PosterPreviewProps>(
-  (
-    {
-      variant,
-      brandName,
-      aspectRatio,
-      primaryImage,
-      secondaryImage,
-      logoImage,
-      overlayLayout,
-      editorMode,
-      onOverlayLayoutChange,
-      carouselSlides,
-      activeSlideIndex = 0,
-      onSlideChange,
-    },
-    ref,
-  ) => {
-    const [colorA, colorB] = variant.colorHexes;
-    const overlay = `linear-gradient(135deg, ${hexToRgba(colorA, variant.overlayStrength)} 0%, ${hexToRgba(
-      colorB || "#0F172A",
-      Math.max(variant.overlayStrength - 0.12, 0.16),
-    )} 100%)`;
+const sampleLogoTone = async (url: string): Promise<"light" | "dark"> => {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
 
-    const frameRef = useRef<HTMLDivElement>(null);
-    const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("logo-load-failed"));
+    image.src = url;
+  });
 
-    useEffect(() => {
-      const node = frameRef.current;
-      if (!node) {
-        return;
-      }
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return "light";
+  }
 
-      const update = () => {
-        setFrameSize({ width: node.clientWidth, height: node.clientHeight });
-      };
+  const sampleWidth = 48;
+  const sampleHeight = Math.max(1, Math.round((image.height / image.width) * sampleWidth));
+  canvas.width = sampleWidth;
+  canvas.height = sampleHeight;
+  ctx.drawImage(image, 0, 0, sampleWidth, sampleHeight);
 
-      update();
-      const observer = new ResizeObserver(update);
-      observer.observe(node);
+  const pixels = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data;
+  let luminanceTotal = 0;
+  let opaquePixels = 0;
 
-      return () => observer.disconnect();
-    }, []);
+  for (let index = 0; index < pixels.length; index += 16) {
+    const alpha = pixels[index + 3];
+    if (alpha < 32) {
+      continue;
+    }
 
-    const canEdit =
-      Boolean(editorMode) && Boolean(overlayLayout) && Boolean(onOverlayLayoutChange);
+    const r = pixels[index];
+    const g = pixels[index + 1];
+    const b = pixels[index + 2];
+    luminanceTotal += r * 0.2126 + g * 0.7152 + b * 0.0722;
+    opaquePixels += 1;
+  }
 
-    return (
-      <div
-        ref={ref}
-        className="relative w-full overflow-hidden rounded-3xl border border-white/20 bg-slate-900 shadow-[0_30px_120px_-45px_rgba(15,23,42,0.85)]"
-        style={{ aspectRatio: ASPECT_MAP[aspectRatio] }}
-      >
-        <div ref={frameRef} className="absolute inset-0">
-          {primaryImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={primaryImage}
-              alt="Primary poster asset"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,#334155_0%,#0f172a_45%,#020617_100%)]" />
-          )}
-        </div>
+  if (opaquePixels === 0) {
+    return "light";
+  }
 
-        {secondaryImage && variant.layout === "split-story" ? (
-          <div className="absolute top-0 right-0 h-full w-[34%] overflow-hidden border-l border-white/25">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={secondaryImage}
-              alt="Secondary poster asset"
-              className="h-full w-full object-cover"
-            />
+  return luminanceTotal / opaquePixels > 160 ? "light" : "dark";
+};
+
+export const PosterPreview = memo(
+  forwardRef<HTMLDivElement, PosterPreviewProps>(
+    (
+      {
+        variant,
+        brandName,
+        aspectRatio,
+        primaryImage,
+        secondaryImage,
+        logoImage,
+        overlayLayout,
+        editorMode,
+        onOverlayLayoutChange,
+        carouselSlides,
+        activeSlideIndex = 0,
+        onSlideChange,
+      },
+      ref,
+    ) => {
+      const [colorA, colorB] = variant.colorHexes;
+      const overlay = `linear-gradient(135deg, ${hexToRgba(colorA, variant.overlayStrength)} 0%, ${hexToRgba(
+        colorB || "#0F172A",
+        Math.max(variant.overlayStrength - 0.12, 0.16),
+      )} 100%)`;
+
+      const frameRef = useRef<HTMLDivElement>(null);
+      const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+      const [logoTone, setLogoTone] = useState<"light" | "dark">("light");
+
+      useEffect(() => {
+        const node = frameRef.current;
+        if (!node) {
+          return;
+        }
+
+        const update = () => {
+          setFrameSize({ width: node.clientWidth, height: node.clientHeight });
+        };
+
+        update();
+        const observer = new ResizeObserver(update);
+        observer.observe(node);
+
+        return () => observer.disconnect();
+      }, []);
+
+      useEffect(() => {
+        if (!logoImage) {
+          return;
+        }
+
+        let cancelled = false;
+        void sampleLogoTone(logoImage)
+          .then((tone) => {
+            if (!cancelled) {
+              setLogoTone(tone);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setLogoTone("light");
+            }
+          });
+
+        return () => {
+          cancelled = true;
+        };
+      }, [logoImage]);
+
+      const resolvedOverlayLayout = useMemo(
+        () => normalizeOverlayLayout(variant.layout, overlayLayout),
+        [overlayLayout, variant.layout],
+      );
+
+      const navLength =
+        variant.postType === "carousel"
+          ? Math.min(
+              carouselSlides?.length ?? variant.assetSequence.length,
+              variant.assetSequence.length,
+            )
+          : 0;
+      const clampedSlideIndex =
+        navLength > 0 ? Math.min(activeSlideIndex, navLength - 1) : 0;
+
+      const visibleBlocks = useMemo(
+        () =>
+          buildOverlayBlocks(
+            variant,
+            resolvedOverlayLayout,
+            carouselSlides,
+            clampedSlideIndex,
+          ),
+        [carouselSlides, clampedSlideIndex, resolvedOverlayLayout, variant],
+      );
+
+      const canEdit =
+        Boolean(editorMode) &&
+        Boolean(onOverlayLayoutChange) &&
+        frameSize.width > 0 &&
+        frameSize.height > 0;
+
+      return (
+        <div
+          ref={ref}
+          className="relative w-full overflow-hidden rounded-3xl border border-white/20 bg-slate-900 shadow-[0_30px_120px_-45px_rgba(15,23,42,0.85)]"
+          style={{ aspectRatio: ASPECT_MAP[aspectRatio] }}
+        >
+          <div ref={frameRef} className="absolute inset-0">
+            {primaryImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={primaryImage}
+                alt="Primary poster asset"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,#334155_0%,#0f172a_45%,#020617_100%)]" />
+            )}
           </div>
-        ) : null}
 
-        <div className="absolute inset-0" style={{ background: overlay }} />
+          {secondaryImage &&
+          variant.layout === "split-story" &&
+          variant.postType !== "carousel" ? (
+            <div className="absolute top-0 right-0 h-full w-[34%] overflow-hidden border-l border-white/25">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={secondaryImage}
+                alt="Secondary poster asset"
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : null}
 
-        {canEdit && overlayLayout && onOverlayLayoutChange && frameSize.width > 0 ? (
-          <EditorOverlay
-            key={`editor-${variant.id}-${frameSize.width}-${frameSize.height}`}
-            variant={variant}
-            layout={overlayLayout}
-            onChange={onOverlayLayoutChange}
-            frame={frameSize}
-          />
-        ) : (
-          renderOverlayBlock(variant, brandName, { hasLogo: Boolean(logoImage) })
-        )}
+          <div className="absolute inset-0" style={{ background: overlay }} />
 
-        {/* Carousel navigation arrows + dots */}
-        {carouselSlides && onSlideChange
-          ? (() => {
-              const assetCount = variant.assetSequence.length;
-              const navLength = Math.min(carouselSlides.length, assetCount);
+          {!canEdit
+            ? visibleBlocks.map((block) => (
+                <OverlayBlock key={block.id} block={block} editable={false} />
+              ))
+            : null}
 
-              if (navLength < 2) return null;
-
-              const clamped = Math.min(activeSlideIndex, navLength - 1);
-
-              return (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Previous slide"
-                    onClick={() =>
-                      onSlideChange(
-                        clamped > 0 ? clamped - 1 : navLength - 1,
-                      )
-                    }
-                    className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
-                  >
-                    <ChevronLeft className="h-4 w-4 text-white" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next slide"
-                    onClick={() =>
-                      onSlideChange(
-                        clamped < navLength - 1 ? clamped + 1 : 0,
-                      )
-                    }
-                    className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
-                  >
-                    <ChevronRight className="h-4 w-4 text-white" />
-                  </button>
-                  <div className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1.5">
-                    {Array.from({ length: navLength }).map((_, index) => (
-                      <button
-                        key={`dot-${index}`}
-                        type="button"
-                        aria-label={`Go to slide ${index + 1}`}
-                        aria-current={index === clamped ? "true" : undefined}
-                        onClick={() => onSlideChange(index)}
-                        className={cn(
-                          "h-2 w-2 rounded-full transition",
-                          index === clamped
-                            ? "bg-white"
-                            : "bg-white/40 hover:bg-white/70",
-                        )}
-                      />
-                    ))}
-                  </div>
-                </>
-              );
-            })()
-          : null}
-
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] text-slate-900 uppercase">
-          {logoImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoImage}
-              alt="Brand logo"
-              className="h-6 max-w-[4rem] object-contain"
+          {canEdit && onOverlayLayoutChange ? (
+            <EditorOverlay
+              key={`editor-${variant.id}-${frameSize.width}-${frameSize.height}`}
+              blocks={visibleBlocks}
+              layout={resolvedOverlayLayout}
+              onChange={onOverlayLayoutChange}
+              frame={frameSize}
             />
-          ) : (
-            brandName
-          )}
+          ) : null}
+
+          {navLength > 1 && onSlideChange ? (
+            <>
+              <button
+                type="button"
+                aria-label="Previous slide"
+                onClick={() =>
+                  onSlideChange(clampedSlideIndex > 0 ? clampedSlideIndex - 1 : navLength - 1)
+                }
+                className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
+              >
+                <ChevronLeft className="h-4 w-4 text-white" />
+              </button>
+              <button
+                type="button"
+                aria-label="Next slide"
+                onClick={() =>
+                  onSlideChange(clampedSlideIndex < navLength - 1 ? clampedSlideIndex + 1 : 0)
+                }
+                className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-1.5 backdrop-blur-sm transition hover:bg-black/70"
+              >
+                <ChevronRight className="h-4 w-4 text-white" />
+              </button>
+              <div className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1.5">
+                {Array.from({ length: navLength }).map((_, index) => (
+                  <button
+                    key={`dot-${index}`}
+                    type="button"
+                    aria-label={`Go to slide ${index + 1}`}
+                    aria-current={index === clampedSlideIndex ? "true" : undefined}
+                    onClick={() => onSlideChange(index)}
+                    className={cn(
+                      "h-2 w-2 rounded-full transition",
+                      index === clampedSlideIndex
+                        ? "bg-white"
+                        : "bg-white/40 hover:bg-white/70",
+                    )}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          <div
+            className={cn(
+              "absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.2em] uppercase shadow-lg backdrop-blur-sm",
+              logoImage
+                ? logoTone === "light"
+                  ? "border-white/15 bg-slate-950/78 text-white"
+                  : "border-black/10 bg-white/92 text-slate-950"
+                : "border-black/10 bg-white/90 text-slate-900",
+            )}
+          >
+            {logoImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoImage}
+                alt="Brand logo"
+                className="h-6 max-w-[4rem] object-contain"
+              />
+            ) : (
+              brandName
+            )}
+          </div>
         </div>
-      </div>
-    );
-  },
-));
+      );
+    },
+  ),
+);
 
 PosterPreview.displayName = "PosterPreview";

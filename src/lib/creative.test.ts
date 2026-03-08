@@ -4,6 +4,7 @@ import {
   GenerationRequestSchema,
   buildPerformanceContext,
   coerceInternalGenerationResponse,
+  normalizeOverlayLayout,
   selectTopVariants,
   selectTopVariantsWithScores,
   type CreativeVariant,
@@ -150,5 +151,47 @@ describe("creative helpers", () => {
     expect(context).toContain("Performance insights");
     expect(context).toContain("Hook one");
     expect(context).toContain("Engagement");
+  });
+
+  it("normalizes older overlay layouts with editor defaults", () => {
+    const normalized = normalizeOverlayLayout("hero-quote", {
+      headline: {
+        x: 12,
+        y: 20,
+        width: 60,
+        height: 18,
+        fontScale: 1.2,
+        visible: true,
+        text: "",
+      },
+    });
+
+    expect(normalized.headline.x).toBe(12);
+    expect(normalized.headline.visible).toBe(true);
+    expect(normalized.headline.text).toBe("");
+    expect(normalized.custom).toEqual([]);
+    expect(normalized.hook.visible).toBe(true);
+  });
+
+  it("normalizes custom overlay ids and defaults", () => {
+    const normalized = normalizeOverlayLayout("hero-quote", {
+      custom: [
+        {
+          id: "   ",
+          label: " Custom Label ",
+          text: "Custom text",
+          x: 10,
+          y: 12,
+          width: 40,
+          height: 10,
+          fontScale: 1,
+          visible: true,
+        },
+      ],
+    });
+
+    expect(normalized.custom).toHaveLength(1);
+    expect(normalized.custom[0]?.id).toBe("custom-1");
+    expect(normalized.custom[0]?.label).toBe(" Custom Label ");
   });
 });
