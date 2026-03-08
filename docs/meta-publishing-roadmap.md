@@ -45,6 +45,7 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
 1. Additional Meta publishing controls
    - First slice: expose reel `share_to_feed` as a user-facing toggle in the publish form, queue edit flow, and runtime publish pipeline.
    - Candidate follow-ons inside this phase: collaborator workflows and other Graph API publish metadata worth exposing.
+   - Reference: PR `#80`.
 
 ## Remaining phases
 
