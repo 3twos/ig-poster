@@ -33,14 +33,14 @@ flowchart LR
 - UI layer:
   - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity or chat) using `react-resizable-panels`. The right panel has Agent/Chat tab switching.
   - `src/components/app-shell.tsx` hosts nav + main area and can optionally hide the global footer status bar when a route renders its own fixed workflow status bar.
-  - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-section.tsx`, `agent-activity-panel.tsx`.
+  - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `carousel-composer.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-section.tsx`, `agent-activity-panel.tsx`.
   - Settings and brand kit management use controlled full-screen dialog components (`settings-modal.tsx`, `brand-kit-modal.tsx`) mounted from the home route for in-context editing with modal focus management.
   - `src/components/chat/` contains the chat module: `chat-panel.tsx` (embeddable right-panel version), `chat-container.tsx` (full standalone with sidebar), message rendering, markdown, code blocks, and input components.
   - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
   - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
-  - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, and adaptive logo-chip contrast.
+  - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, adaptive logo-chip contrast, and feed landscape ratio support.
   - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, and refine/caption controls.
   - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, and sidebar summary refresh behavior.
 - API layer:
@@ -54,6 +54,7 @@ flowchart LR
   - LLM provider abstraction
   - auth/session/token helpers
   - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
+  - carousel/media-composition utilities
   - Blob storage wrappers
 
 ## Request and Data Flows
@@ -68,7 +69,7 @@ flowchart LR
 Why this shape:
 - Keeps long-lived drafts out of browser memory and enables multi-post workflow.
 - Supports reliable autosave and recent-post retrieval per authenticated workspace user.
-- Keeps canvas edits (`overlayLayouts`) in the same persisted draft object as the creative result, so layout/text adjustments survive preview toggles, shared snapshots, and post switching.
+- Keeps canvas edits (`overlayLayouts`) and carousel media composition (`mediaComposition`) in the same persisted draft object as the creative result, so layout/order/orientation adjustments survive preview toggles, shared snapshots, and post switching.
 
 ### 2) Generate Creative
 
@@ -96,6 +97,7 @@ Why this shape:
 
 Why this shape:
 - Blob-backed JSON is enough for immutable share snapshots.
+- Snapshot payload now includes media-composition state plus the active variant asset sequence, so shared carousel previews match the editor order.
 - No relational DB needed for current lookup pattern (`id -> single project`).
 
 ### 4) Publish / Schedule
@@ -162,7 +164,7 @@ Why this shape:
 ## Storage Model
 
 - Primary relational persistence: Postgres via Drizzle ORM (`posts`, `brand_kits`, private credentials).
-  - `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`).
+- `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`), and persisted media composition for carousel order/orientation/crop foundations.
   - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, an ordered array of named logos, legacy `logoUrl` compatibility, and default flag.
 - Blob persistence: binary media, shared project snapshots, publish outcomes, and chat conversation blobs.
 - Typical paths:

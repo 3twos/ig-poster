@@ -6,6 +6,7 @@ import {
   OverlayLayoutSchema,
   PostInputSchema,
 } from "@/lib/creative";
+import { MediaCompositionSchema } from "@/lib/media-composer";
 
 export { ScheduledJobSchema, type ScheduledJob } from "@/lib/meta-schemas";
 
@@ -26,6 +27,10 @@ export const SavedProjectPayloadSchema = z.object({
   result: GenerationResponseSchema,
   activeVariantId: z.string().trim().min(1),
   overlayLayouts: z.record(z.string(), OverlayLayoutSchema).default({}),
+  mediaComposition: MediaCompositionSchema.default({
+    orientation: "portrait",
+    items: [],
+  }),
   renderedPosterUrl: z.string().url().optional().default(""),
 });
 

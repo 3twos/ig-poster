@@ -57,6 +57,13 @@
       "when": 1772991078029,
       "tag": "0007_light_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1772994320548,
+      "tag": "0008_absent_trish_tilby",
+      "breakpoints": true
     }
   ]
 }

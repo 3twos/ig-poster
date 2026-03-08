@@ -6,7 +6,7 @@ import {
 } from "@/lib/instagram-playbook";
 import { generateStructuredJson, type ResolvedLlmAuth } from "@/lib/llm";
 
-export const AspectRatioSchema = z.enum(["1:1", "4:5", "9:16"]);
+export const AspectRatioSchema = z.enum(["1:1", "4:5", "1.91:1", "9:16"]);
 
 export const BrandInputSchema = z.object({
   brandName: z.string().trim().min(2).max(80),
