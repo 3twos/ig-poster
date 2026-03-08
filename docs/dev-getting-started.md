@@ -148,12 +148,12 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 ## Project Map
 
 - `src/app/page.tsx`: main editor page — composes a 3-column resizable layout from focused section components.
-- `src/components/post-brief-form.tsx`: post brief fields, brand kit selector, generate/export buttons.
-- `src/components/asset-manager.tsx`: drag-and-drop reorderable asset list (uses `@dnd-kit/sortable`).
+- `src/components/post-brief-form.tsx`: post brief fields, brand kit + logo selectors, generate/export buttons.
+- `src/components/asset-manager.tsx`: drag-and-drop reorderable asset list for post media (uses `@dnd-kit/sortable`).
 - `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
 - `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time (optionally hidden on pages that render their own fixed status controls).
 - `src/components/settings-modal.tsx`: full-screen settings dialog (LLM connections, ordering, execution mode).
-- `src/components/brand-kit-modal.tsx`: full-screen brand kit dialog (logo, palette, voice, prompt controls, kit CRUD).
+- `src/components/brand-kit-modal.tsx`: full-screen brand kit dialog (named multi-logo manager, palette, voice, prompt controls, kit CRUD).
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, caption bundles, refine controls, and the canvas editor inspector (save state, text overrides, custom boxes).
 - `src/components/publish-section.tsx`: share link, Instagram auth, optional first-comment input, optional image metadata (location ID + search assist + visual user tags), optional reel feed-sharing toggle, schedule, publish form.
@@ -172,7 +172,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/settings/page.tsx` and `src/app/brand/page.tsx`: compatibility routes that redirect to `/` (settings and brand editing now live in modals from the main shell).
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing (including `/api/meta/locations` for place search), and brand kit CRUD (`/api/brand-kits`).
-- `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted `media` JSON payload).
+- `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted `media` JSON payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.

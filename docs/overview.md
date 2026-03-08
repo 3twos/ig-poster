@@ -12,7 +12,7 @@
 - Generates exactly 3 creative variants per request, including strategy rationale, caption, hashtags, and format-aware plans (single image, carousel, reel).
 - Accepts mixed media assets (images + short videos), with drag-and-drop reorderable asset management and automatic video metadata extraction for better planning.
 - Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
-- New posts default to the first available brand kit for that user (when one exists), so brand/prompt/logo context is prefilled consistently.
+- New posts default to the first available brand kit for that user (when one exists), so brand/prompt context and the kit's primary logo are prefilled consistently.
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
@@ -48,7 +48,7 @@
    - Use the 3-column layout: browse posts (left), edit brief and preview (center), agent activity or chat (right).
    - Open Settings/Brand Kits from the top-right controls without leaving the editor.
    - Switch between Agent and Chat tabs in the right panel to monitor generation or converse with the AI assistant.
-   - Select a brand kit (or use the default), use the Asset Manager controls to attach assets/logo (replace/remove supported for logo), fill post inputs, generate variants, pick one, and export.
+   - Select a brand kit (or use the default), choose one of that kit's named logos in the post brief, use the Asset Manager controls to attach assets, fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
    - Compare 3 variant angles (single image / carousel / reel), copy caption bundles, iterate prompts, and fine-tune the canvas layout or copy without regenerating.

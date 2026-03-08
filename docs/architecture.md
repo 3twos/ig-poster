@@ -163,7 +163,7 @@ Why this shape:
 
 - Primary relational persistence: Postgres via Drizzle ORM (`posts`, `brand_kits`, private credentials).
   - `posts` table: post drafts, briefs, generation results, publish history, brand kit linkage (`brandKitId`).
-  - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, logo URL, and default flag.
+  - `brand_kits` table: per-user brand kits with name, brand fields, prompt config, an ordered array of named logos, legacy `logoUrl` compatibility, and default flag.
 - Blob persistence: binary media, shared project snapshots, publish outcomes, and chat conversation blobs.
 - Typical paths:
   - uploads: `assets/`, `videos/`, `logos/`, `renders/`

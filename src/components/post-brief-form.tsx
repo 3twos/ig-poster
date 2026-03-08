@@ -18,15 +18,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { inferLogoNameFromUrl } from "@/lib/brand-kit";
 import type { AspectRatio } from "@/lib/creative";
-import type { LlmAuthStatus, PostState } from "@/lib/types";
+import type { BrandKitLogo, LlmAuthStatus, PostState } from "@/lib/types";
 import { RATIO_OPTIONS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type BrandKitOption = {
   id: string;
   name: string;
+  logos: BrandKitLogo[];
 };
+
+const NO_LOGO_VALUE = "__no-logo__";
 
 type PostBriefActionsProps = {
   llmAuthStatus: LlmAuthStatus;
@@ -54,6 +58,7 @@ type Props = {
   hasResult: boolean;
   brandKits?: BrandKitOption[];
   activeBrandKitId?: string | null;
+  activeLogoUrl?: string | null;
   compact?: boolean;
   showHeader?: boolean;
   showActions?: boolean;
@@ -63,6 +68,7 @@ type Props = {
   onCancelGenerate: () => void;
   onExportPoster: () => void;
   onSelectBrandKit?: (kitId: string) => void;
+  onSelectLogo?: (logoUrl: string | null) => void;
 };
 
 export function PostBriefActions({
@@ -159,6 +165,7 @@ export function PostBriefForm({
   hasResult,
   brandKits,
   activeBrandKitId,
+  activeLogoUrl,
   compact = false,
   showHeader = true,
   showActions = true,
@@ -168,7 +175,29 @@ export function PostBriefForm({
   onCancelGenerate,
   onExportPoster,
   onSelectBrandKit,
+  onSelectLogo,
 }: Props) {
+  const hasBrandKitSelector = Boolean(
+    brandKits && brandKits.length > 0 && onSelectBrandKit,
+  );
+  const activeBrandKit =
+    brandKits?.find((kit) => kit.id === activeBrandKitId) ?? null;
+  const activeLogos = activeBrandKit?.logos ?? [];
+  const logoOptions =
+    activeLogoUrl && !activeLogos.some((logo) => logo.url === activeLogoUrl)
+      ? [
+          ...activeLogos,
+          {
+            id: "current-logo",
+            name: inferLogoNameFromUrl(activeLogoUrl),
+            url: activeLogoUrl,
+          },
+        ]
+      : activeLogos;
+  const showLogoSelector = Boolean(
+    onSelectLogo && (hasBrandKitSelector || activeLogoUrl),
+  );
+
   const aspectRatioField = (
     <PostBriefAspectRatio
       aspectRatio={post.aspectRatio}
@@ -179,6 +208,61 @@ export function PostBriefForm({
     />
   );
 
+  const brandKitField = hasBrandKitSelector ? (
+    <div className="space-y-1">
+      <Label className="text-xs text-slate-200">Brand Kit</Label>
+      <Select
+        value={activeBrandKitId ?? ""}
+        onValueChange={onSelectBrandKit}
+        disabled={isGenerating}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Select brand kit" />
+        </SelectTrigger>
+        <SelectContent>
+          {brandKits?.map((kit) => (
+            <SelectItem key={kit.id} value={kit.id}>
+              {kit.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  ) : null;
+
+  const logoField = showLogoSelector ? (
+    <div className="space-y-1">
+      <Label className="text-xs text-slate-200">Logo</Label>
+      <Select
+        value={activeLogoUrl ?? NO_LOGO_VALUE}
+        onValueChange={(value) =>
+          onSelectLogo?.(value === NO_LOGO_VALUE ? null : value)
+        }
+        disabled={isGenerating || (!activeBrandKitId && !activeLogoUrl)}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue
+            placeholder={
+              activeBrandKitId
+                ? "Select logo"
+                : activeLogoUrl
+                  ? "Legacy logo"
+                  : "Select a brand kit first"
+            }
+          />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_LOGO_VALUE}>No logo</SelectItem>
+          {logoOptions.map((logo) => (
+            <SelectItem key={logo.id} value={logo.url}>
+              {logo.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-4">
       {showHeader ? (
@@ -188,27 +272,12 @@ export function PostBriefForm({
         </div>
       ) : null}
 
-      {brandKits && brandKits.length > 0 && onSelectBrandKit && (
-        <div className="space-y-1">
-          <Label className="text-xs text-slate-200">Brand Kit</Label>
-          <Select
-            value={activeBrandKitId ?? ""}
-            onValueChange={onSelectBrandKit}
-            disabled={isGenerating}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select brand kit" />
-            </SelectTrigger>
-            <SelectContent>
-              {brandKits.map((kit) => (
-                <SelectItem key={kit.id} value={kit.id}>
-                  {kit.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {brandKitField || logoField ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {brandKitField}
+          {logoField}
         </div>
-      )}
+      ) : null}
 
       <div className={cn("grid gap-3", compact ? "" : "md:grid-cols-2")}>
         <div className="space-y-1">
@@ -227,7 +296,10 @@ export function PostBriefForm({
             value={post.subject}
             disabled={isGenerating}
             onChange={(event) =>
-              dispatch({ type: "UPDATE_BRIEF", brief: { subject: event.target.value } })
+              dispatch({
+                type: "UPDATE_BRIEF",
+                brief: { subject: event.target.value },
+              })
             }
           />
         </div>
@@ -250,7 +322,10 @@ export function PostBriefForm({
             value={post.objective}
             disabled={isGenerating}
             onChange={(event) =>
-              dispatch({ type: "UPDATE_BRIEF", brief: { objective: event.target.value } })
+              dispatch({
+                type: "UPDATE_BRIEF",
+                brief: { objective: event.target.value },
+              })
             }
           />
         </div>
@@ -260,7 +335,10 @@ export function PostBriefForm({
             value={post.audience}
             disabled={isGenerating}
             onChange={(event) =>
-              dispatch({ type: "UPDATE_BRIEF", brief: { audience: event.target.value } })
+              dispatch({
+                type: "UPDATE_BRIEF",
+                brief: { audience: event.target.value },
+              })
             }
           />
         </div>

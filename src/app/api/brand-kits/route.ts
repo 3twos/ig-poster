@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { brandKits } from "@/db/schema";
+import {
+  getPrimaryBrandKitLogoUrl,
+  normalizeBrandKitLogos,
+  normalizeBrandKitRow,
+} from "@/lib/brand-kit";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
@@ -30,7 +35,9 @@ export async function GET(req: Request) {
       .orderBy(desc(brandKits.updatedAt))
       .limit(20);
 
-    return NextResponse.json({ kits: rows });
+    return NextResponse.json({
+      kits: rows.map((row) => normalizeBrandKitRow(row)),
+    });
   } catch (err) {
     console.error("[api/brand-kits]", err);
     return NextResponse.json(
@@ -51,6 +58,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const id = randomId();
     const now = new Date();
+    const logos = normalizeBrandKitLogos(body.logos, body.logoUrl);
 
     const db = getDb();
     const [row] = await db
@@ -61,14 +69,18 @@ export async function POST(req: Request) {
         name: body.name ?? "New Kit",
         brand: body.brand ?? null,
         promptConfig: body.promptConfig ?? null,
-        logoUrl: body.logoUrl ?? null,
+        logos,
+        logoUrl: getPrimaryBrandKitLogoUrl(logos, body.logoUrl),
         isDefault: body.isDefault ?? false,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
 
-    return NextResponse.json({ id: row.id, kit: row });
+    return NextResponse.json({
+      id: row.id,
+      kit: normalizeBrandKitRow(row),
+    });
   } catch (err) {
     console.error("[api/brand-kits]", err);
     return NextResponse.json(

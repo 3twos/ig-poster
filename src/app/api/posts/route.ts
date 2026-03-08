@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { brandKits, posts } from "@/db/schema";
+import { getPrimaryBrandKitLogoUrl } from "@/lib/brand-kit";
 import { toSummary } from "@/lib/post";
 import { PostCreateRequestSchema } from "@/lib/post-schemas";
 import { hashEmail } from "@/lib/server-utils";
@@ -80,7 +81,10 @@ export async function POST(req: Request) {
         brandKitId = firstBrandKit.id;
         brand = firstBrandKit.brand ?? null;
         promptConfig = firstBrandKit.promptConfig ?? null;
-        logoUrl = firstBrandKit.logoUrl ?? null;
+        logoUrl = getPrimaryBrandKitLogoUrl(
+          firstBrandKit.logos,
+          firstBrandKit.logoUrl,
+        );
       }
     }
 
