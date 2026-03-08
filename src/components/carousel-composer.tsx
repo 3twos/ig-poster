@@ -286,20 +286,6 @@ function ComposerTile({
           </div>
         )}
 
-        {dragHandleProps ? (
-          <div
-            {...dragHandleProps.attributes}
-            {...dragHandleProps.listeners}
-            className={cn(
-              "absolute left-1 top-1 inline-flex items-center gap-0.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[10px] text-white",
-              disabled && "pointer-events-none opacity-50",
-            )}
-          >
-            <GripVertical className="h-3 w-3" />
-            Drag
-          </div>
-        ) : null}
-
         {onRemove ? (
           <button
             type="button"
@@ -307,7 +293,7 @@ function ComposerTile({
             onClick={onRemove}
             aria-label={`Remove ${asset.name} from carousel`}
             className={cn(
-              "absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/90 text-white transition hover:bg-red-400",
+              "absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500/60 text-white transition hover:bg-red-500/90",
               (!removable || disabled) && "cursor-not-allowed opacity-50",
             )}
           >
@@ -316,7 +302,21 @@ function ComposerTile({
         ) : null}
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-2">
+      {dragHandleProps ? (
+        <div
+          {...dragHandleProps.attributes}
+          {...dragHandleProps.listeners}
+          className={cn(
+            "mt-1.5 inline-flex w-full items-center justify-center gap-1 rounded-md bg-white/5 py-1 text-[10px] text-slate-400 transition hover:bg-white/10 hover:text-white",
+            disabled && "pointer-events-none opacity-50",
+          )}
+        >
+          <GripVertical className="h-3 w-3" />
+          Drag
+        </div>
+      ) : null}
+
+      <div className="mt-1.5 flex items-center justify-between gap-2">
         <p className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-200">
           {asset.name}
         </p>
