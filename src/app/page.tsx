@@ -6,6 +6,8 @@ import {
   ChevronRight,
   Copy,
   LoaderCircle,
+  Pencil,
+  Save,
   Sparkles,
   Square,
 } from "lucide-react";
@@ -1269,6 +1271,25 @@ export default function Home() {
 
   const postLifecycleActions = activePost ? (
     <>
+      {activeVariant ? (
+        <Button
+          variant="outline"
+          onClick={() => setEditorMode((v) => !v)}
+          className={cn(editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100")}
+        >
+          {editorMode ? (
+            <>
+              <Save className="h-4 w-4" />
+              Save
+            </>
+          ) : (
+            <>
+              <Pencil className="h-4 w-4" />
+              Edit
+            </>
+          )}
+        </Button>
+      ) : null}
       <Button
         variant="outline"
         size="sm"
@@ -1410,7 +1431,7 @@ export default function Home() {
                               </div>
                             </PostBriefActions>
                           </div>
-                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} onSaveNow={saveNow} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} onSaveNow={saveNow} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
                           {activeVariant?.postType === "carousel" ? (
                             <CarouselComposer
                               assets={localAssets}
@@ -1484,7 +1505,7 @@ export default function Home() {
           <div className="space-y-6 px-4 lg:hidden">
             <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} extraActions={postLifecycleActions} />
             <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
-            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} setEditorMode={setEditorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} onSaveNow={saveNow} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
+            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} onSaveNow={saveNow} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {activeVariant?.postType === "carousel" ? (
               <CarouselComposer
                 assets={localAssets}

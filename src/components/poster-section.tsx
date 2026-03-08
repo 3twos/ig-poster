@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { motion } from "framer-motion";
 import type { RefObject } from "react";
 
@@ -33,7 +33,6 @@ type Props = {
   secondaryVisual?: string;
   logoImage?: string;
   editorMode: boolean;
-  setEditorMode: (v: boolean) => void;
   onResetTextLayout: () => void;
   saveStatus: SaveStatus;
   onSaveNow: () => Promise<void>;
@@ -52,7 +51,6 @@ export function PosterSection({
   secondaryVisual,
   logoImage,
   editorMode,
-  setEditorMode,
   onResetTextLayout,
   saveStatus,
   onSaveNow,
@@ -105,70 +103,45 @@ export function PosterSection({
         }
       />
 
-      {/* Editor toolbar below preview */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() => setEditorMode(!editorMode)}
-            className={cn(
-              "uppercase",
-              editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100",
-            )}
-          >
-            {editorMode ? (
-              <>
-                <Save className="h-3.5 w-3.5" />
-                Save
-              </>
-            ) : (
-              <>
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </>
-            )}
-          </Button>
-          {editorMode ? (
-            <>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={onResetTextLayout}
-              >
-                Reset Layout
-              </Button>
-              <label className="flex items-center gap-1.5 text-[10px] text-slate-300 uppercase">
-                Corners
-                <input
-                  type="range"
-                  min={0}
-                  max={48}
-                  value={overlayLayout?.hook?.borderRadius ?? 16}
-                  onChange={(e) => {
-                    if (!overlayLayout) return;
-                    const r = parseInt(e.target.value);
-                    dispatch({
-                      type: "UPDATE_OVERLAY",
-                      variantId: activeVariant.id,
-                      layout: {
-                        ...overlayLayout,
-                        hook: { ...overlayLayout.hook, borderRadius: r },
-                        headline: { ...overlayLayout.headline, borderRadius: r },
-                        supportingText: { ...overlayLayout.supportingText, borderRadius: r },
-                        cta: { ...overlayLayout.cta, borderRadius: r },
-                        custom: (overlayLayout.custom ?? []).map((b) => ({ ...b, borderRadius: r })),
-                      },
-                    });
-                  }}
-                  className="h-3 w-16 accent-orange-300"
-                  title={`Corner radius: ${overlayLayout?.hook?.borderRadius ?? 16}px`}
-                />
-              </label>
-            </>
-          ) : null}
-        </div>
-        {editorMode ? (
+      {/* Editor controls — visible only in edit mode */}
+      {editorMode ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={onResetTextLayout}
+            >
+              Reset Layout
+            </Button>
+            <label className="flex items-center gap-1.5 text-[10px] text-slate-300 uppercase">
+              Corners
+              <input
+                type="range"
+                min={0}
+                max={48}
+                value={overlayLayout?.hook?.borderRadius ?? 16}
+                onChange={(e) => {
+                  if (!overlayLayout) return;
+                  const r = parseInt(e.target.value);
+                  dispatch({
+                    type: "UPDATE_OVERLAY",
+                    variantId: activeVariant.id,
+                    layout: {
+                      ...overlayLayout,
+                      hook: { ...overlayLayout.hook, borderRadius: r },
+                      headline: { ...overlayLayout.headline, borderRadius: r },
+                      supportingText: { ...overlayLayout.supportingText, borderRadius: r },
+                      cta: { ...overlayLayout.cta, borderRadius: r },
+                      custom: (overlayLayout.custom ?? []).map((b) => ({ ...b, borderRadius: r })),
+                    },
+                  });
+                }}
+                className="h-3 w-16 accent-orange-300"
+                title={`Corner radius: ${overlayLayout?.hook?.borderRadius ?? 16}px`}
+              />
+            </label>
+          </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-[10px] uppercase">
               {saveStatusLabel(saveStatus)}
@@ -178,8 +151,8 @@ export function PosterSection({
               Save now
             </Button>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </motion.div>
   );
 }
