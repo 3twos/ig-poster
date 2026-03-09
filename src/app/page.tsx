@@ -870,8 +870,6 @@ export default function Home() {
         dispatch({ type: "SET_ACTIVE_VARIANT", postId: activePostIdRef.current ?? undefined, variantId: resultRef.current.variants[idx].id });
       }
     };
-    const onOpenSettings = () => setSettingsOpen(true);
-    const onOpenBrandKits = () => setBrandKitsOpen(true);
     const onBeforePostSwitch = (e: Event) => {
       const detail = (e as CustomEvent<{ fromPostId?: string | null; toPostId?: string | null }>).detail;
       const fromPostId = detail?.fromPostId ?? activePostIdRef.current;
@@ -883,15 +881,11 @@ export default function Home() {
     window.addEventListener("ig:generate", onGenerate);
     window.addEventListener("ig:toggle-editor", onToggleEditor);
     window.addEventListener("ig:select-variant", onSelectVariant);
-    window.addEventListener("ig:open-settings", onOpenSettings);
-    window.addEventListener("ig:open-brand-kits", onOpenBrandKits);
     window.addEventListener("ig:before-post-switch", onBeforePostSwitch);
     return () => {
       window.removeEventListener("ig:generate", onGenerate);
       window.removeEventListener("ig:toggle-editor", onToggleEditor);
       window.removeEventListener("ig:select-variant", onSelectVariant);
-      window.removeEventListener("ig:open-settings", onOpenSettings);
-      window.removeEventListener("ig:open-brand-kits", onOpenBrandKits);
       window.removeEventListener("ig:before-post-switch", onBeforePostSwitch);
     };
   }, [abortUploadsForPostSwitch, dispatch]);

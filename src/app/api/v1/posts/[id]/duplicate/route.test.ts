@@ -39,7 +39,7 @@ describe("POST /api/v1/posts/:id/duplicate", () => {
       id: "copy-1",
       ownerHash: "hash",
       title: "Launch Copy",
-      status: "generated",
+      status: "draft",
       brief: null,
       result: null,
       assets: [],
@@ -72,7 +72,7 @@ describe("POST /api/v1/posts/:id/duplicate", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        post: { id: "copy-1", title: "Launch Copy" },
+        post: { id: "copy-1", title: "Launch Copy", status: "draft" },
       },
     });
   });

@@ -61,7 +61,7 @@ const updateLinkedPostAfterCancel = async (
   action: "cancel" | "move-to-draft",
 ) => {
   const [post] = await db
-    .select({ result: posts.result })
+    .select({ status: posts.status })
     .from(posts)
     .where(and(eq(posts.id, postId), eq(posts.ownerHash, actor.ownerHash)))
     .limit(1);
@@ -73,7 +73,12 @@ const updateLinkedPostAfterCancel = async (
   await db
     .update(posts)
     .set({
-      status: action === "move-to-draft" ? "draft" : post.result ? "generated" : "draft",
+      status:
+        action === "move-to-draft"
+          ? post.status === "posted"
+            ? "posted"
+            : "draft"
+          : post.status,
       updatedAt: new Date(),
     })
     .where(and(eq(posts.id, postId), eq(posts.ownerHash, actor.ownerHash)));

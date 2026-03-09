@@ -12,8 +12,6 @@ import {
 
 export const runtime = "nodejs";
 
-type Params = { params: Promise<{ id: string }> };
-
 const errorCodeForStatus = (status: PublishJobServiceError["status"]): ApiErrorCode => {
   switch (status) {
     case 400:
@@ -27,7 +25,10 @@ const errorCodeForStatus = (status: PublishJobServiceError["status"]): ApiErrorC
   }
 };
 
-export async function GET(req: Request, { params }: Params) {
+export async function GET(
+  req: Request,
+  { params }: RouteContext<"/api/v1/publish-jobs/[id]">,
+) {
   try {
     const actor = await resolveActorFromRequest(req);
     if (!actor) {
@@ -49,7 +50,10 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-export async function PATCH(req: Request, { params }: Params) {
+export async function PATCH(
+  req: Request,
+  { params }: RouteContext<"/api/v1/publish-jobs/[id]">,
+) {
   try {
     const actor = await resolveActorFromRequest(req);
     if (!actor) {

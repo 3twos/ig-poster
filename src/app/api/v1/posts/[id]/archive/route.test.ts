@@ -39,7 +39,7 @@ describe("POST /api/v1/posts/:id/archive", () => {
       id: "post-1",
       ownerHash: "hash",
       title: "Launch",
-      status: "archived",
+      status: "draft",
       brief: null,
       result: null,
       assets: [],
@@ -72,7 +72,7 @@ describe("POST /api/v1/posts/:id/archive", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        post: { id: "post-1", status: "archived" },
+        post: { id: "post-1", status: "draft" },
       },
     });
   });
