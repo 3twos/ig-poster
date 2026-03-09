@@ -47,7 +47,7 @@
 - Website-style-aware prompts and optional brand autofill from a public site URL.
 - Blob-backed storage for uploads, shared project snapshots, and outcome snapshots used for insights.
 - Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/scheduled/posted` for posts, plus `archivedAt` as a soft-archive marker).
-- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/whoami`, `assets upload`, `brand-kits list/get`, `posts list/get/create/update/duplicate/archive`, `publish-jobs list/get/update`).
+- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/cli/start|exchange|refresh|logout`, `auth/whoami`, `auth/sessions`, `assets upload`, `brand-kits list/get`, `posts list/get/create/update/duplicate/archive`, `publish-jobs list|get|update`).
 
 ## Primary User Scenarios
 
@@ -86,4 +86,4 @@
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Instagram publishing is unavailable.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).
-- The current CLI preview requires a manually supplied bearer token; browser/device login and long-lived CLI session management are still in progress.
+- The CLI preview now supports browser-based login with refreshable CLI sessions. Device-code login and OS keychain storage are still in progress, so refresh tokens currently live in `~/.config/ig-poster/config.json` with restrictive local file permissions.
