@@ -265,7 +265,7 @@ export const createDefaultOverlayLayout = (
     hook: applyDefaults({ ...base.hook }),
     headline: applyDefaults({ ...base.headline }),
     supportingText: applyDefaults({ ...base.supportingText }),
-    cta: applyDefaults({ ...base.cta }),
+    cta: { ...base.cta, ...(br != null ? { borderRadius: br } : {}) },
     custom: [],
     logo: { ...DEFAULT_LOGO_POSITION },
   };

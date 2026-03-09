@@ -39,7 +39,7 @@ flowchart LR
     Posted posts render as a read-only snapshot in the center pane; duplicate/archive remain available, but editing/publish controls are removed.
   - `src/components/app-shell.tsx` hosts nav + main area and can optionally hide the global footer status bar when a route renders its own fixed workflow status bar.
   - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `carousel-composer.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-metadata-editor.tsx`, `publish-section.tsx`, `scheduled-planner.tsx`, `agent-activity-panel.tsx`.
-  - Settings and brand kit management use controlled full-screen dialog components (`settings-modal.tsx`, `brand-kit-modal.tsx`) mounted from the home route for in-context editing with modal focus management.
+  - Settings and brand kit management live on a dedicated `/settings` page (`src/app/settings/page.tsx`) with sidebar tab navigation (General, LLM Provider, Brand Kits). Components are in `src/components/settings/`.
   - `src/components/chat/` contains the chat module: `chat-panel.tsx` (embeddable right-panel version), `chat-container.tsx` (full standalone with sidebar), message rendering, markdown, code blocks, and input components.
   - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
   - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
