@@ -60,6 +60,32 @@ export const printBrandKitsTable = (
   printLines(rows.map(formatRow));
 };
 
+export const printAssetsTable = (
+  assets: Array<{
+    name: string;
+    folder: string;
+    size: number;
+    url: string;
+  }>,
+) => {
+  if (assets.length === 0) {
+    printLines(["No assets uploaded."]);
+    return;
+  }
+
+  const rows = [
+    ["NAME", "FOLDER", "SIZE", "URL"],
+    ...assets.map((asset) => [
+      asset.name,
+      asset.folder,
+      formatBytes(asset.size),
+      asset.url,
+    ]),
+  ];
+
+  printLines(rows.map(formatRow));
+};
+
 export const printQueueTable = (
   jobs: Array<{
     id: string;
@@ -98,6 +124,16 @@ export const printValue = (value: unknown) => {
 };
 
 const formatIso = (value: string) => value.replace("T", " ").replace(".000Z", "Z");
+
+const formatBytes = (value: number) => {
+  if (value >= 1024 * 1024) {
+    return `${(value / (1024 * 1024)).toFixed(1)}MB`;
+  }
+  if (value >= 1024) {
+    return `${(value / 1024).toFixed(1)}KB`;
+  }
+  return `${value}B`;
+};
 
 const formatRow = (columns: string[]) =>
   columns

@@ -1,5 +1,6 @@
 import { parseGlobalOptions } from "./args";
 import { runApiCommand } from "./commands/api";
+import { runAssetsCommand } from "./commands/assets";
 import { runAuthCommand } from "./commands/auth";
 import { runBrandKitsCommand } from "./commands/brand-kits";
 import { runConfigCommand } from "./commands/config";
@@ -14,6 +15,7 @@ const HELP_TEXT = `ig: IG Poster CLI (preview)
 Usage:
   ig status
   ig auth <login|logout|status|test>
+  ig assets <upload>
   ig brand-kits <list|get>
   ig config <list|get|set>
   ig api <METHOD> <PATH> [--body @file.json]
@@ -48,6 +50,9 @@ export const runCli = async (argv: string[]) => {
         break;
       case "auth":
         await runAuthCommand(ctx, commandArgs);
+        break;
+      case "assets":
+        await runAssetsCommand(ctx, commandArgs);
         break;
       case "config":
         await runConfigCommand(ctx, commandArgs);
