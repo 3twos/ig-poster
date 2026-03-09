@@ -55,11 +55,11 @@ export const getPublishJob = async (actor: Actor, id: string) => {
 };
 
 const updateLinkedPostAfterCancel = async (
+  db: ReturnType<typeof getDb>,
   actor: Actor,
   postId: string,
   action: "cancel" | "move-to-draft",
 ) => {
-  const db = getDb();
   const [post] = await db
     .select({ result: posts.result })
     .from(posts)
@@ -78,6 +78,20 @@ const updateLinkedPostAfterCancel = async (
     })
     .where(and(eq(posts.id, postId), eq(posts.ownerHash, actor.ownerHash)));
 };
+
+const buildJobWriteWhere = (
+  actor: Actor,
+  existing: Pick<
+    typeof publishJobs.$inferSelect,
+    "id" | "ownerHash" | "status" | "updatedAt"
+  >,
+) =>
+  and(
+    eq(publishJobs.id, existing.id),
+    eq(publishJobs.ownerHash, actor.ownerHash),
+    eq(publishJobs.status, existing.status),
+    eq(publishJobs.updatedAt, existing.updatedAt),
+  );
 
 const assertMutableJob = (status: (typeof publishJobs.$inferSelect)["status"]) => {
   if (status === "published" || status === "canceled") {
@@ -137,7 +151,7 @@ export const updatePublishJob = async (
               : "Canceled by user.",
         }),
       })
-      .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, actor.ownerHash)))
+      .where(buildJobWriteWhere(actor, existing))
       .returning();
 
     if (!updated) {
@@ -145,7 +159,7 @@ export const updatePublishJob = async (
     }
 
     if (existing.postId) {
-      await updateLinkedPostAfterCancel(actor, existing.postId, payload.action);
+      await updateLinkedPostAfterCancel(db, actor, existing.postId, payload.action);
     }
 
     return updated;
@@ -173,7 +187,7 @@ export const updatePublishJob = async (
           detail: "Retry requested by user.",
         }),
       })
-      .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, actor.ownerHash)))
+      .where(buildJobWriteWhere(actor, existing))
       .returning();
 
     if (!updated) {
@@ -203,7 +217,7 @@ export const updatePublishJob = async (
           detail: `Rescheduled to ${new Date(payload.publishAt).toISOString()}.`,
         }),
       })
-      .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, actor.ownerHash)))
+      .where(buildJobWriteWhere(actor, existing))
       .returning();
 
     if (!updated) {
@@ -268,7 +282,7 @@ export const updatePublishJob = async (
         detail: "Job details updated by user.",
       }),
     })
-    .where(and(eq(publishJobs.id, existing.id), eq(publishJobs.ownerHash, actor.ownerHash)))
+    .where(buildJobWriteWhere(actor, existing))
     .returning();
 
   if (!updated) {
