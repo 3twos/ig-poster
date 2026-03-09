@@ -1645,7 +1645,7 @@ export default function Home() {
                           <div className="w-full max-w-[40rem]">
                             {renderComposerActions()}
                           </div>
-                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} onSaveNow={saveNow} />
                           {activeVariant?.postType === "carousel" && !isPostedPost ? (
                             <CarouselComposer
                               assets={localAssets}
@@ -1666,14 +1666,7 @@ export default function Home() {
                     ) : null}
                     {result && !isPostedPost ? (
                       <section className="border-b border-white/10 pb-6">
-                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
-                          if (!activeVariant) return;
-                          dispatch({
-                            type: "UPDATE_OVERLAY",
-                            variantId: activeVariant.id,
-                            layout,
-                          });
-                        }} saveStatus={saveStatus} onSaveNow={saveNow} />
+                        <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />
                       </section>
                     ) : null}
                     {activeVariant && !isPostedPost ? (
@@ -1729,7 +1722,7 @@ export default function Home() {
             ) : (
               <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
             )}
-            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
+            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} onSaveNow={saveNow} />
             {activeVariant?.postType === "carousel" && !isPostedPost ? (
               <CarouselComposer
                 assets={localAssets}
@@ -1740,14 +1733,7 @@ export default function Home() {
                 disabled={isAgentBusy}
               />
             ) : null}
-            {result && !isPostedPost ? <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
-              if (!activeVariant) return;
-              dispatch({
-                type: "UPDATE_OVERLAY",
-                variantId: activeVariant.id,
-                layout,
-              });
-            }} saveStatus={saveStatus} onSaveNow={saveNow} /> : null}
+            {result && !isPostedPost ? <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} /> : null}
             {activeVariant && !isPostedPost ? (
               <div className="space-y-4">
                 <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />

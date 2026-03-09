@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
 import {
   forwardRef,
   memo,
@@ -500,6 +500,23 @@ const EditorOverlay = ({
     [layout, onChange, frame.height],
   );
 
+  const updateBlockFontScale = (block: OverlayCanvasBlock, delta: number) => {
+    const next = Math.round(Math.min(2.4, Math.max(0.6, block.fontScale + delta)) * 100) / 100;
+    if (block.type === "canonical" && block.key) {
+      onChange({
+        ...layout,
+        [block.key]: { ...layout[block.key], fontScale: next },
+      });
+    } else {
+      onChange({
+        ...layout,
+        custom: (layout.custom ?? []).map((item) =>
+          item.id === block.id ? { ...item, fontScale: next } : item,
+        ),
+      });
+    }
+  };
+
   const removeBlock = (block: OverlayCanvasBlock) => {
     if (block.type === "canonical" && block.key) {
       onChange({
@@ -564,6 +581,35 @@ const EditorOverlay = ({
                 <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
                   {block.label}
                 </span>
+                <div className="flex items-center gap-0.5 rounded bg-slate-950/80 px-1 py-0.5">
+                  <button
+                    type="button"
+                    aria-label="Decrease font scale"
+                    className="p-0.5 text-white transition hover:text-orange-300 disabled:opacity-40"
+                    disabled={block.fontScale <= 0.6}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      updateBlockFontScale(block, -0.1);
+                    }}
+                  >
+                    <Minus className="h-2.5 w-2.5" />
+                  </button>
+                  <span className="min-w-[3ch] text-center text-[9px] tabular-nums text-white/80">
+                    {block.fontScale.toFixed(1)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Increase font scale"
+                    className="p-0.5 text-white transition hover:text-orange-300 disabled:opacity-40"
+                    disabled={block.fontScale >= 2.4}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      updateBlockFontScale(block, 0.1);
+                    }}
+                  >
+                    <Plus className="h-2.5 w-2.5" />
+                  </button>
+                </div>
                 <button
                   type="button"
                   aria-label={`Remove ${block.label}`}
