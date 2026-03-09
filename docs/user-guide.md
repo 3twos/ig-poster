@@ -113,6 +113,7 @@
   - `ig auth login --token-stdin`
   - `ig auth status`
   - `ig auth logout`
+  - `ig assets upload <file...> [--folder <assets|videos|logos|renders>]`
   - `ig brand-kits list|get`
   - `ig config list|get|set`
   - `ig api <METHOD> <PATH>`
@@ -121,6 +122,7 @@
 - The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
 - The current auth bootstrap is temporary: you must provide a valid bearer token manually (`IG_POSTER_TOKEN`, `--token`, `--token-file`, or `--token-stdin`). Browser/device login is not shipped yet.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
+- `ig assets upload` reads local image/video files and sends them to the same Blob-backed upload path the browser uses, with an optional folder override for `assets`, `videos`, `logos`, or `renders`.
 - `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.
 
 ## Working with Saved Posts
