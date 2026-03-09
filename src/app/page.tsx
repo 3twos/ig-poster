@@ -62,6 +62,7 @@ import {
   type GenerationResponse,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
+import type { PostStatus } from "@/lib/post";
 import {
   type BrandState,
   type InstagramAuthStatus,
@@ -156,7 +157,7 @@ export default function Home() {
   const publishImagePreviewRenderIdRef = useRef(0);
   const publishImagePreviewBlobUrlRef = useRef<string | null>(null);
   const activePostIdRef = useRef<string | null>(activePost?.id ?? null);
-  const activePostStatusRef = useRef<string | null>(activePost?.status ?? null);
+  const activePostStatusRef = useRef<PostStatus | null>(activePost?.status ?? null);
   const assetUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -1093,6 +1094,7 @@ export default function Home() {
       return;
     }
     if (!authStatus.connected) { const m = "Connect an Instagram account before publishing."; generation.setError(m); toast.error(m); return; }
+    await saveNow();
     generation.setError(null); setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current); setPublishingForPostId(postId);
     try {
       const seq = activeVariant.assetSequence.map((id) => assetMap.get(id)).filter((a): a is LocalAsset => Boolean(a));
