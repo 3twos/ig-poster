@@ -13,17 +13,21 @@
 ```mermaid
 flowchart LR
   U["Browser UI (`/`)"] --> API["Next.js Route Handlers (`/api/*`)"]
+  CLI["CLI (`ig`)"] --> APIV1["Versioned API (`/api/v1/*`)"]
   U --> SHARE["Share Page (`/share/:id`)"]
   API --> CREATIVE["Creative + Prompt Pipeline (`src/lib/creative.ts`)"]
-  API --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
-  API --> META["Meta Publisher (`src/lib/meta.ts`)"]
-  API --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
-  API --> PG["Postgres (posts, brand_kits, credentials)"]
-  API --> BLOB["Vercel Blob Storage"]
+  APIV1 --> POSTSVC["App Services (`src/services/*`)"]
+  API --> POSTSVC
+  POSTSVC --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
+  POSTSVC --> META["Meta Publisher (`src/lib/meta.ts`)"]
+  POSTSVC --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
+  POSTSVC --> PG["Postgres (posts, brand_kits, credentials)"]
+  POSTSVC --> BLOB["Vercel Blob Storage"]
   CRON["Vercel Cron (`/api/cron/publish`)"] --> PG
   CRON --> META
   MW["Proxy Middleware (`src/proxy.ts`)"] --> U
   MW --> API
+  MW --> APIV1
 ```
 
 ## Runtime and Layers
@@ -45,7 +49,13 @@ flowchart LR
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
+  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `brand-kits`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
   - Zod schemas enforce request and response validity.
+- Application-service layer:
+  - `src/services/actors.ts` resolves an authenticated actor from bearer auth first, then workspace cookies.
+  - `src/services/posts.ts` now owns extracted transport-neutral post workflows (`list`, `get`, `create`, `update`, `duplicate`, `archive`).
+  - `src/services/brand-kits.ts` owns extracted brand-kit read workflows (`list`, `get`).
+  - `src/services/publish-jobs.ts` owns extracted publish-job queue reads and mutation rules (`list`, `get`, `update`) for the CLI-facing API surface.
 - Data layer:
   - `src/db/schema.ts` defines relational post records.
   - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.
@@ -135,6 +145,7 @@ Why this shape:
 
 - `src/proxy.ts` (Next.js 16 Proxy entrypoint) enforces login for non-public routes.
 - Sessions are signed JWTs in `workspace_session` cookie.
+- CLI preview requests can also authenticate with `Authorization: Bearer <token>`. Bearer auth is resolved before cookies for `/api/v1/*` consumers.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`
@@ -177,6 +188,7 @@ Why this shape:
   - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), attempts/retries, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), and event timeline.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `generated`, `published`, `scheduled`, `archived`).
+- CLI-local state is stored outside the app database in a user config file (`~/.config/ig-poster/config.json` unless `IG_POSTER_CONFIG_DIR` is set).
 
 ## Security Posture
 

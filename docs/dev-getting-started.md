@@ -78,6 +78,7 @@ npm run lint
 npm run typecheck
 npm run test:coverage
 npm run build
+npm run build:cli
 ```
 
 Run these before opening or updating a PR.
@@ -176,6 +177,12 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/settings/page.tsx` and `src/app/brand/page.tsx`: compatibility routes that redirect to `/` (settings and brand editing now live in modals from the main shell).
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing (including `/api/meta/locations` for place search), and brand kit CRUD (`/api/brand-kits`).
+- `src/app/api/v1/**/route.ts`: versioned API preview for the CLI (`auth/whoami`, `brand-kits`, `brand-kits/:id`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, `publish-jobs/:id`).
+- `src/services/actors.ts`: transport-neutral actor resolution for bearer token and workspace-cookie auth.
+- `src/services/posts.ts`: extracted post service functions used by the v1 API surface.
+- `src/services/brand-kits.ts`: extracted brand-kit service functions used by the v1 API surface.
+- `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
+- `src/cli/`: CLI source (`ig`) with config storage, output helpers, raw API access, auth bootstrap, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -198,6 +205,34 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 6. Update docs when behavior/architecture/dev workflow changes.
 7. Commit, push, and open PR.
 8. Wait for automatic Copilot review, address all comments, resolve all conversations, and clear merge conflicts before asking for merge approval.
+
+## CLI Preview Workflow
+
+Build and inspect the preview CLI locally:
+
+```bash
+npm run build:cli
+npm run cli -- help
+```
+
+The CLI reads profile state from `~/.config/ig-poster/config.json` by default. Override that location in tests or isolated runs with `IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli`.
+
+Current preview auth is manual rather than browser/device based. To save a token for the active profile:
+
+```bash
+printf '%s' "$IG_POSTER_TOKEN" | npm run cli -- auth login --token-stdin
+npm run cli -- auth status --json
+npm run cli -- posts list
+```
+
+Supported preview commands today:
+- `ig status`
+- `ig auth login|logout|status|test`
+- `ig brand-kits list|get`
+- `ig config list|get|set`
+- `ig api <METHOD> <PATH>`
+- `ig posts list|get|create|update|duplicate|archive`
+- `ig queue list|get|cancel|retry|move-to-draft|update`
 
 ## Common Implementation Notes
 

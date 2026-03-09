@@ -2,6 +2,9 @@
   "name": "ig-poster",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "ig": "dist/cli/main.js"
+  },
   "engines": {
     "node": ">=20.9.0"
   },
@@ -15,6 +18,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:smoke": "vitest run src/app/api/meta/schedule/route.test.ts src/app/api/publish-jobs/[id]/route.test.ts src/app/api/posts/[id]/duplicate/route.test.ts src/components/publish-metadata-editor.test.tsx src/components/scheduled-planner.test.tsx",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "cli": "npm run build:cli --silent && node dist/cli/main.js",
+    "cli:dev": "npm run build:cli --silent && node dist/cli/main.js",
     "check": "npm run lint && npm run typecheck && npm run test",
     "check:full": "npm run lint && npm run typecheck && npm run test:coverage && npm run build",
     "db:generate": "drizzle-kit generate",
