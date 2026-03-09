@@ -155,8 +155,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/carousel-composer.tsx`: authoritative carousel composer for included media order, add/remove controls, and feed orientation selection.
 - `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
 - `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time (optionally hidden on pages that render their own fixed status controls).
-- `src/components/settings-modal.tsx`: full-screen settings dialog (LLM connections, ordering, execution mode).
-- `src/components/brand-kit-modal.tsx`: full-screen brand kit dialog (named multi-logo manager, palette, voice, prompt controls, kit CRUD).
+- `src/app/settings/page.tsx`: dedicated settings page with sidebar tabs (General, LLM Provider, Brand Kits). Section components live in `src/components/settings/`.
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, persisted post-caption editing, refine controls, and the canvas editor inspector (save state, text overrides, custom boxes).
 - `src/components/publish-metadata-editor.tsx`: persisted publish metadata editor for first comment, location, reel feed-sharing, and per-asset user tags.
