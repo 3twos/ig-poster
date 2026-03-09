@@ -10,10 +10,12 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/auth/google/",
   "/api/auth/meta/",
   "/api/cron/publish",
+  "/api/v1/auth/cli/",
   "/_next/",
 ];
 
 const PUBLIC_EXACT_PATHS = ["/favicon.ico"];
+const BEARER_AUTH_BYPASS_PREFIXES = ["/api/v1/"];
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 
@@ -101,6 +103,16 @@ const buildCanonicalRedirect = (req: NextRequest) => {
 const hasPublicFileExtension = (pathname: string) =>
   /\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|map)$/i.test(pathname);
 
+const hasBearerAuthorization = (req: NextRequest) => {
+  const authorization = req.headers.get("authorization");
+  if (!authorization) {
+    return false;
+  }
+
+  const [scheme, value] = authorization.split(/\s+/, 2);
+  return scheme?.toLowerCase() === "bearer" && Boolean(value?.trim());
+};
+
 const isPublicPath = (pathname: string) => {
   if (PUBLIC_EXACT_PATHS.includes(pathname)) {
     return true;
@@ -160,6 +172,15 @@ export async function proxy(req: NextRequest) {
   }
 
   if (isPublicPath(req.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
+  if (
+    BEARER_AUTH_BYPASS_PREFIXES.some((prefix) =>
+      req.nextUrl.pathname.startsWith(prefix),
+    ) &&
+    hasBearerAuthorization(req)
+  ) {
     return NextResponse.next();
   }
 
