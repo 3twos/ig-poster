@@ -8,6 +8,23 @@ export const runtime = "nodejs";
 const errorCodeForStatus = (status: AssetUploadServiceError["status"]): ApiErrorCode =>
   status === 503 ? "INTERNAL_ERROR" : "INVALID_INPUT";
 
+const readMultipartFormData = async (req: Request) => {
+  const contentType = req.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.startsWith("multipart/form-data")) {
+    throw new AssetUploadServiceError(400, "Expected multipart/form-data.");
+  }
+
+  try {
+    return await req.formData();
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new AssetUploadServiceError(400, "Invalid multipart/form-data.");
+    }
+
+    throw error;
+  }
+};
+
 export async function POST(req: Request) {
   try {
     const actor = await resolveActorFromRequest(req);
@@ -15,7 +32,7 @@ export async function POST(req: Request) {
       return apiError(401, "AUTH_REQUIRED", "Login required");
     }
 
-    const formData = await req.formData();
+    const formData = await readMultipartFormData(req);
     const file = formData.get("file");
     const folder = formData.get("folder");
     const asset = await uploadAsset(file instanceof File ? file : null, String(folder ?? ""));

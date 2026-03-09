@@ -83,6 +83,30 @@ describe("POST /api/v1/assets", () => {
     });
   });
 
+  it("treats non-multipart payloads as invalid input", async () => {
+    mockedResolveActor.mockResolvedValue(actor);
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/assets", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ file: "photo.png" }),
+      }),
+    );
+
+    expect(mockedUploadAsset).not.toHaveBeenCalled();
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_INPUT",
+        message: "Expected multipart/form-data.",
+      },
+    });
+  });
+
   it("returns a versioned asset envelope", async () => {
     mockedResolveActor.mockResolvedValue(actor);
     mockedUploadAsset.mockResolvedValue({
