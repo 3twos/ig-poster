@@ -2205,9 +2205,11 @@ refresh_project_deployments() {
       continue
     fi
 
-    # Skip preview deployments — previews are disabled in Vercel.
-    if [[ "$dep_target" == "preview" ]]; then
-      log_line "Skipping preview deployment: id=${dep_id}"
+    # Skip non-production deployments — previews are disabled in Vercel.
+    # Some cancelled preview deployments may have an empty target, so we
+    # check for "not production" rather than "equals preview".
+    if [[ "$dep_target" != "production" ]]; then
+      log_line "Skipping non-production deployment: id=${dep_id} target=${dep_target:-empty}"
       continue
     fi
 

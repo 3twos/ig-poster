@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   Send,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { ScheduledPlanner } from "@/components/scheduled-planner";
@@ -37,7 +38,6 @@ type Props = {
   shareUrl: string | null;
   shareCopyState: "idle" | "done";
   localTimeZone: string;
-  onOpenSettings: () => void;
   onCreateShareLink: () => void;
   onPostNow: () => void;
   onSchedulePost: (scheduleAt: string) => void;
@@ -57,7 +57,6 @@ export function PublishSection({
   shareUrl,
   shareCopyState,
   localTimeZone,
-  onOpenSettings,
   onCreateShareLink,
   onPostNow,
   onSchedulePost,
@@ -88,8 +87,8 @@ export function PublishSection({
             Token expiry: {new Date(authStatus.account.tokenExpiresAt).toLocaleString()}
           </p>
         ) : null}
-        <Button variant="outline" size="xs" onClick={onOpenSettings} className="mt-2">
-          Manage in Settings
+        <Button variant="outline" size="xs" asChild className="mt-2">
+          <Link href="/settings">Manage in Settings</Link>
         </Button>
       </div>
 

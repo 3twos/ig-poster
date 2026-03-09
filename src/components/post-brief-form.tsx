@@ -116,13 +116,9 @@ export function PostBriefActions({
 
       {!llmAuthStatus.connected ? (
         <p className="text-xs text-slate-400">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent("ig:open-settings"))}
-            className="underline"
-          >
+          <a href="/settings?tab=llm" className="underline">
             Connect an LLM provider
-          </button>{" "}
+          </a>{" "}
           for AI-powered generation.
         </p>
       ) : null}

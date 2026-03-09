@@ -33,13 +33,14 @@ Next.js 16 App Router application (React 19, TypeScript 5, Tailwind CSS v4) depl
 |---|---|---|
 | `/` | `src/app/page.tsx` | Posts home — post brief, asset upload, generate, preview, results, publish |
 | `/brand` | `src/app/brand/page.tsx` | Redirects to `/` |
-| `/settings` | `src/app/settings/page.tsx` | Redirects to `/` |
+| `/settings` | `src/app/settings/page.tsx` | Settings page — sidebar tabs for General, LLM Provider, Brand Kits |
 
-Settings and Brand Kits are full-screen modal overlays rendered from the home page:
-- `src/components/settings-modal.tsx` — LLM provider config, entry point to Brand Kits
-- `src/components/brand-kit-modal.tsx` — Master/detail brand kit editor (multiple kits)
+Settings is a dedicated full page at `/settings` with master/detail sidebar navigation:
+- `src/components/settings/general-section.tsx` — Instagram publishing (Meta OAuth connect/disconnect)
+- `src/components/settings/llm-provider-section.tsx` — LLM provider connections, model ordering, execution mode
+- `src/components/settings/brand-kits-section.tsx` — Master/detail brand kit editor (multiple kits, logos, overlay defaults)
 
-The Settings modal is opened via the `ig:open-settings` custom event dispatched from `<AppNav>`, the command palette, the onboarding checklist, and `post-brief-form.tsx`. The Brand Kits modal is opened from within the Settings modal via a callback, or via `ig:open-brand-kits` from the command palette and onboarding checklist.
+Deep-link to tabs via query param: `/settings?tab=general`, `/settings?tab=llm`, `/settings?tab=brand-kits`.
 
 All pages share `<AppShell>` (`src/components/app-shell.tsx`) which wraps content with `<AppNav>` (`src/components/app-nav.tsx`).
 

@@ -367,7 +367,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
       <DialogContent
         showCloseButton={false}
-        className="z-[70] h-[100dvh] w-screen max-w-none translate-x-[-50%] translate-y-[-50%] rounded-none border-0 bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] p-0 text-white"
+        className="z-[70] flex h-[100dvh] w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-[radial-gradient(circle_at_0%_0%,#1E293B_0%,#0F172A_35%,#020617_100%)] p-0 text-white sm:max-w-none"
       >
         <DialogTitle className="sr-only">Brand Kits</DialogTitle>
         <div className="flex h-full flex-col">
@@ -430,7 +430,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
               </div>
 
               {/* Detail — kit editor (right) */}
-              <ScrollArea className="flex-1">
+              <div className="flex-1 overflow-y-auto">
                 {!activeKitId ? (
                   <div className="flex h-full flex-col items-center justify-center gap-4 p-12 text-center">
                     <Palette className="h-10 w-10 text-slate-500" />
@@ -685,6 +685,24 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
                     <Label htmlFor="brand-logo-notes">Logo Notes</Label>
                     <Input id="brand-logo-notes" value={brand.logoNotes} onChange={(event) => setBrand((current) => ({ ...current, logoNotes: event.target.value }))} />
                   </div>
+
+                  {/* Overlay Defaults */}
+                  <div className="space-y-3 md:col-span-2">
+                    <p className="text-xs font-semibold text-slate-300 uppercase">Overlay Defaults</p>
+                    <div className="flex flex-wrap items-center gap-6">
+                      <label className="flex items-center gap-2 text-xs text-slate-300">
+                        Corner Radius
+                        <span className="min-w-[2ch] text-right tabular-nums">{brand.defaultCornerRadius}</span>
+                        <input type="range" min={0} max={32} value={brand.defaultCornerRadius} onChange={(e) => setBrand((current) => ({ ...current, defaultCornerRadius: parseInt(e.target.value) }))} className="h-3 w-20 accent-orange-300" />
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-slate-300">
+                        Background Opacity
+                        <span className="min-w-[2ch] text-right tabular-nums">{brand.defaultBgOpacity}</span>
+                        <input type="range" min={0} max={100} value={brand.defaultBgOpacity} onChange={(e) => setBrand((current) => ({ ...current, defaultBgOpacity: parseInt(e.target.value) }))} className="h-3 w-20 accent-orange-300" />
+                      </label>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Applied to new posts using this kit. Per-post values can still be adjusted in the editor.</p>
+                  </div>
                 </div>
               </div>
 
@@ -710,7 +728,7 @@ export function BrandKitModal({ open, onClose }: BrandKitModalProps) {
               </div>
             </div>
                 )}
-              </ScrollArea>
+              </div>
             </div>
           )}
         </div>
