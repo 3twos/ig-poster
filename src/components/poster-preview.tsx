@@ -62,6 +62,7 @@ type OverlayCanvasBlock = {
   containerClassName: string;
   contentClassName: string;
   borderRadius: number;
+  bgOpacity: number;
 };
 
 const ASPECT_MAP: Record<AspectRatio, string> = {
@@ -115,8 +116,9 @@ const buildOverlayBlocks = (
       ...overlayLayout.hook,
       text: overlayLayout.hook.text.trim() || resolvedCopy.hook,
       borderRadius: overlayLayout.hook.borderRadius ?? 16,
+      bgOpacity: overlayLayout.hook.bgOpacity ?? 28,
       className: "text-xs font-semibold tracking-[0.22em] uppercase text-white/80",
-      containerClassName: "bg-black/28 backdrop-blur-sm",
+      containerClassName: "backdrop-blur-sm",
       contentClassName: alignClass,
     },
     {
@@ -127,8 +129,9 @@ const buildOverlayBlocks = (
       ...overlayLayout.headline,
       text: overlayLayout.headline.text.trim() || resolvedCopy.headline,
       borderRadius: overlayLayout.headline.borderRadius ?? 26,
+      bgOpacity: overlayLayout.headline.bgOpacity ?? 42,
       className: "text-3xl leading-tight font-semibold text-white",
-      containerClassName: "bg-black/42 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.9)] backdrop-blur-md",
+      containerClassName: "shadow-[0_18px_48px_-28px_rgba(15,23,42,0.9)] backdrop-blur-md",
       contentClassName: alignClass,
     },
     {
@@ -139,8 +142,9 @@ const buildOverlayBlocks = (
       ...overlayLayout.supportingText,
       text: overlayLayout.supportingText.text.trim() || resolvedCopy.supportingText,
       borderRadius: overlayLayout.supportingText.borderRadius ?? 24,
+      bgOpacity: overlayLayout.supportingText.bgOpacity ?? 36,
       className: "text-sm leading-relaxed text-white/90",
-      containerClassName: "bg-black/36 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur-md",
+      containerClassName: "shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur-md",
       contentClassName: alignClass,
     },
     {
@@ -151,9 +155,10 @@ const buildOverlayBlocks = (
       ...overlayLayout.cta,
       text: overlayLayout.cta.text.trim() || resolvedCopy.cta,
       borderRadius: overlayLayout.cta.borderRadius ?? 9999,
+      bgOpacity: overlayLayout.cta.bgOpacity ?? 0,
       className:
-        "inline-flex rounded-full border border-white/35 bg-black/20 px-3 py-1 text-xs font-semibold uppercase text-white",
-      containerClassName: "bg-transparent",
+        "inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase text-white",
+      containerClassName: "",
       contentClassName: cn("justify-start", variant.textAlign === "center" && "justify-center"),
     },
   ];
@@ -170,8 +175,9 @@ const buildOverlayBlocks = (
     fontScale: block.fontScale,
     visible: block.visible,
     borderRadius: block.borderRadius ?? 24,
+    bgOpacity: block.bgOpacity ?? 34,
     className: "text-sm leading-relaxed text-white",
-    containerClassName: "bg-black/34 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.88)] backdrop-blur-md",
+    containerClassName: "shadow-[0_18px_44px_-30px_rgba(15,23,42,0.88)] backdrop-blur-md",
     contentClassName: alignClass,
   }));
 
@@ -249,16 +255,19 @@ const OverlayBlockBody = ({
   return (
     <div
       className={cn(
-        "flex min-h-full w-full p-3",
-        block.containerClassName,
+        "flex w-full p-3",
+        block.bgOpacity > 0 && block.containerClassName,
         block.key === "cta" ? "items-start" : "items-stretch",
       )}
-      style={{ borderRadius: block.borderRadius }}
+      style={{
+        borderRadius: block.borderRadius,
+        backgroundColor: block.bgOpacity > 0 ? `rgba(0,0,0,${block.bgOpacity / 100})` : "transparent",
+      }}
       onDoubleClick={onEditStart}
     >
       <div
         className={cn(
-          "flex min-h-full w-full whitespace-pre-wrap break-words",
+          "flex w-full whitespace-pre-wrap break-words",
           block.contentClassName,
         )}
         style={{ fontSize: `${block.fontScale}em` }}
@@ -522,13 +531,14 @@ const EditorOverlay = ({
           <Rnd
             key={block.id}
             bounds="parent"
-            size={{ width, height: minHeight }}
+            size={{ width, height: "auto" as unknown as number }}
             position={{ x, y }}
             minWidth={Math.max(frame.width * 0.16, 96)}
             minHeight={Math.max(frame.height * 0.06, 48)}
             dragHandleClassName={`drag-${block.id}`}
             disableDragging={isEditing}
             enableResizing={!isEditing}
+            style={{ height: "auto", minHeight: minHeight }}
             onDragStop={(_event, data) => {
               updateBlockRect(block, {
                 x: data.x,
@@ -547,8 +557,8 @@ const EditorOverlay = ({
             }}
           >
             <div
-              className="relative h-full w-full border border-orange-300/70 bg-black/24 p-2 backdrop-blur-sm"
-              style={{ borderRadius: Math.min(block.borderRadius, 28) }}
+              className="relative w-full border border-orange-300/70"
+              style={{ borderRadius: block.borderRadius }}
             >
               <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
                 <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
@@ -566,7 +576,7 @@ const EditorOverlay = ({
                   <X className="h-3 w-3" />
                 </button>
               </div>
-              <div className={cn(`drag-${block.id} h-full w-full`, !isEditing && "cursor-move")}>
+              <div className={cn(`drag-${block.id} w-full`, !isEditing && "cursor-move")}>
                 <OverlayBlockBody
                   block={block}
                   isEditing={isEditing}

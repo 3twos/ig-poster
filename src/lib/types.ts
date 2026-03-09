@@ -36,6 +36,8 @@ export type BrandState = {
   palette: string;
   fonts: string;
   logoNotes: string;
+  defaultCornerRadius: number;
+  defaultBgOpacity: number;
 };
 
 export type BrandKitLogo = {
@@ -125,6 +127,8 @@ export const INITIAL_BRAND: BrandState = {
   palette: "#0F172A, #F97316, #F8FAFC, #22C55E",
   fonts: "",
   logoNotes: "Keep logo visible but subtle, preferably top-left chip",
+  defaultCornerRadius: 16,
+  defaultBgOpacity: 34,
 };
 
 export const INITIAL_POST: PostState = {

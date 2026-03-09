@@ -23,7 +23,6 @@ import {
 import type { PanelImperativeHandle } from "react-resizable-panels";
 
 import { AgentActivityPanel } from "@/components/agent-activity-panel";
-import { BrandKitModal } from "@/components/brand-kit-modal";
 import { CarouselComposer } from "@/components/carousel-composer";
 import { ChatPanel } from "@/components/chat";
 import { PublishMetadataEditor } from "@/components/publish-metadata-editor";
@@ -38,7 +37,6 @@ import {
 import { PosterSection } from "@/components/poster-section";
 import { MobileSidebarDrawer, SidebarContent } from "@/components/post-sidebar";
 import { PublishSection } from "@/components/publish-section";
-import { SettingsModal } from "@/components/settings-modal";
 import { StrategySection } from "@/components/strategy-section";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,8 +140,6 @@ export default function Home() {
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<"agent" | "chat">("agent");
   const [brandKits, setBrandKits] = useState<BrandKitRow[]>([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [brandKitsOpen, setBrandKitsOpen] = useState(false);
   const [hydratedAssetsPostId, setHydratedAssetsPostId] = useState<string | null>(null);
   const [pendingGenerateRequest, setPendingGenerateRequest] = useState<{ postId: string } | null>(null);
   const [pendingPublishRequest, setPendingPublishRequest] = useState<{ postId: string; scheduleAt?: string } | null>(null);
@@ -351,11 +347,6 @@ export default function Home() {
     finally { setIsAuthLoading(false); }
   }, []);
 
-  const handleMetaAuthChanged = useCallback((nextStatus: InstagramAuthStatus) => {
-    setAuthStatus(nextStatus);
-    setIsAuthLoading(false);
-  }, []);
-
   const loadLlmStatus = useCallback(async () => {
     try {
       const r = await fetch("/api/auth/llm/status", { cache: "no-store" });
@@ -509,7 +500,7 @@ export default function Home() {
     if (!activeVariant) return undefined;
     return (
       overlayLayouts[activeVariant.id] ??
-      createDefaultOverlayLayout(activeVariant.layout)
+      createDefaultOverlayLayout(activeVariant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity })
     );
   }, [activeVariant, overlayLayouts]);
 
@@ -838,8 +829,6 @@ export default function Home() {
     const onGenerate = () => { if (!isAgentBusyRef.current && localAssetsRef.current.length > 0) void generateRef.current?.(); };
     const onToggleEditor = () => setEditorMode((v) => !v);
     const onSelectVariant = (e: Event) => { const idx = (e as CustomEvent).detail?.index; if (typeof idx === "number" && resultRef.current?.variants[idx]) dispatch({ type: "SET_ACTIVE_VARIANT", postId: activePostIdRef.current ?? undefined, variantId: resultRef.current.variants[idx].id }); };
-    const onOpenSettings = () => setSettingsOpen(true);
-    const onOpenBrandKits = () => setBrandKitsOpen(true);
     const onBeforePostSwitch = (e: Event) => {
       const detail = (e as CustomEvent<{ fromPostId?: string | null; toPostId?: string | null }>).detail;
       const fromPostId = detail?.fromPostId ?? activePostIdRef.current;
@@ -851,10 +840,8 @@ export default function Home() {
     window.addEventListener("ig:generate", onGenerate);
     window.addEventListener("ig:toggle-editor", onToggleEditor);
     window.addEventListener("ig:select-variant", onSelectVariant);
-    window.addEventListener("ig:open-settings", onOpenSettings);
-    window.addEventListener("ig:open-brand-kits", onOpenBrandKits);
     window.addEventListener("ig:before-post-switch", onBeforePostSwitch);
-    return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:open-settings", onOpenSettings); window.removeEventListener("ig:open-brand-kits", onOpenBrandKits); window.removeEventListener("ig:before-post-switch", onBeforePostSwitch); };
+    return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:before-post-switch", onBeforePostSwitch); };
   }, [abortUploadsForPostSwitch, dispatch]);
 
   const renderPosterToDataUrl = useCallback(async () => {
@@ -967,9 +954,9 @@ export default function Home() {
       type: "UPDATE_OVERLAY",
       postId: activePostIdRef.current ?? undefined,
       variantId: activeVariant.id,
-      layout: createDefaultOverlayLayout(activeVariant.layout),
+      layout: createDefaultOverlayLayout(activeVariant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity }),
     });
-  }, [activeVariant, dispatch]);
+  }, [activeVariant, brand.defaultCornerRadius, brand.defaultBgOpacity, dispatch]);
 
   const createShareLink = async () => {
     const postId = activePostIdRef.current;
@@ -1381,8 +1368,6 @@ export default function Home() {
             </div>
           </div>
         </AppShell>
-        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} onMetaAuthChanged={handleMetaAuthChanged} />
-        <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); void loadBrandKits(); }} />
       </>
     );
   }
@@ -1394,7 +1379,7 @@ export default function Home() {
           {!brand.brandName && (
             <div className="mx-4 mb-4 rounded-xl border border-orange-300/30 bg-orange-400/10 p-3 text-xs text-orange-100 md:mx-8">
               No saved brand kit found.{" "}
-              <button type="button" onClick={() => setBrandKitsOpen(true)} className="font-semibold underline">Set up your Brand Kit</button>{" "}
+              <a href="/settings?tab=brand-kits" className="font-semibold underline">Set up your Brand Kit</a>{" "}
               for better results.
             </div>
           )}
@@ -1464,7 +1449,7 @@ export default function Home() {
                       <section className="pb-6">
                         <div className="space-y-4">
                           <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
-                          <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+                          <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone}onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
                         </div>
                       </section>
                     )}
@@ -1527,7 +1512,7 @@ export default function Home() {
             {activeVariant && (
               <div className="space-y-4">
                 <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
-                <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onOpenSettings={() => setSettingsOpen(true)} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+                <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone}onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
               </div>
             )}
             <div className="flex gap-2">
@@ -1582,8 +1567,6 @@ export default function Home() {
         </div>
       </div>
 
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenBrandKits={() => { setSettingsOpen(false); setBrandKitsOpen(true); }} onMetaAuthChanged={handleMetaAuthChanged} />
-      <BrandKitModal open={brandKitsOpen} onClose={() => { setBrandKitsOpen(false); setSettingsOpen(true); void loadBrandKits(); }} />
     </>
   );
 }
