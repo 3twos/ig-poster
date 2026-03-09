@@ -1,6 +1,7 @@
 "use client";
 
 import { Command, EllipsisVertical, LoaderCircle, PanelLeft, Settings, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -87,11 +88,12 @@ export function AppNav() {
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={() => window.dispatchEvent(new CustomEvent("ig:open-settings"))}
+          asChild
           className="text-slate-300 hover:text-white"
-          aria-label="Open settings"
         >
-          <Settings className="h-4 w-4" />
+          <Link href="/settings" aria-label="Open settings">
+            <Settings className="h-4 w-4" />
+          </Link>
         </Button>
 
         {workspaceAuth?.authenticated && (
@@ -113,10 +115,8 @@ export function AppNav() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[180px]">
-            <DropdownMenuItem
-              onSelect={() => window.dispatchEvent(new CustomEvent("ig:open-settings"))}
-            >
-              Settings
+            <DropdownMenuItem asChild>
+              <Link href="/settings">Settings</Link>
             </DropdownMenuItem>
             {workspaceAuth?.authenticated && (
               <>

@@ -145,6 +145,7 @@ export const OverlayBlockSchema = z.object({
   visible: z.boolean().optional().default(true),
   text: z.string().trim().max(320).optional().default(""),
   borderRadius: z.number().min(0).max(9999).optional(),
+  bgOpacity: z.number().min(0).max(100).optional(),
 });
 
 export const CustomOverlayBlockSchema = OverlayBlockSchema.extend({
@@ -248,14 +249,27 @@ const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
   },
 };
 
-export const createDefaultOverlayLayout = (layout: CreativeLayout): OverlayLayout => ({
-  hook: { ...OVERLAY_DEFAULTS[layout].hook },
-  headline: { ...OVERLAY_DEFAULTS[layout].headline },
-  supportingText: { ...OVERLAY_DEFAULTS[layout].supportingText },
-  cta: { ...OVERLAY_DEFAULTS[layout].cta },
-  custom: [],
-  logo: { ...DEFAULT_LOGO_POSITION },
-});
+export const createDefaultOverlayLayout = (
+  layout: CreativeLayout,
+  brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
+): OverlayLayout => {
+  const base = OVERLAY_DEFAULTS[layout];
+  const br = brandDefaults?.cornerRadius;
+  const bg = brandDefaults?.bgOpacity;
+  const applyDefaults = (block: OverlayBlock): OverlayBlock => ({
+    ...block,
+    ...(br != null ? { borderRadius: br } : {}),
+    ...(bg != null ? { bgOpacity: bg } : {}),
+  });
+  return {
+    hook: applyDefaults({ ...base.hook }),
+    headline: applyDefaults({ ...base.headline }),
+    supportingText: applyDefaults({ ...base.supportingText }),
+    cta: applyDefaults({ ...base.cta }),
+    custom: [],
+    logo: { ...DEFAULT_LOGO_POSITION },
+  };
+};
 
 const DEFAULT_CUSTOM_OVERLAY_BLOCK: Omit<CustomOverlayBlock, "id"> = {
   label: "Custom",

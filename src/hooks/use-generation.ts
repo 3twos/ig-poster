@@ -676,7 +676,7 @@ export function useGeneration({
       const layouts = Object.fromEntries(
         finalResult.variants.map((variant) => [
           variant.id,
-          createDefaultOverlayLayout(variant.layout),
+          createDefaultOverlayLayout(variant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity }),
         ]),
       );
       if (!shouldCommitForCurrentPost()) {

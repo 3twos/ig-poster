@@ -112,11 +112,12 @@ export function PosterSection({
               Reset Layout
             </Button>
             <label className="flex items-center gap-1.5 text-[10px] text-slate-300 uppercase">
-              Corners
+              Corners{" "}
+              <span className="min-w-[2ch] text-right tabular-nums">{overlayLayout?.hook?.borderRadius ?? 16}</span>
               <input
                 type="range"
                 min={0}
-                max={48}
+                max={32}
                 value={overlayLayout?.hook?.borderRadius ?? 16}
                 onChange={(e) => {
                   if (!overlayLayout) return;
@@ -136,6 +137,34 @@ export function PosterSection({
                 }}
                 className="h-3 w-16 accent-orange-300"
                 title={`Corner radius: ${overlayLayout?.hook?.borderRadius ?? 16}px`}
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-[10px] text-slate-300 uppercase">
+              Background{" "}
+              <span className="min-w-[2ch] text-right tabular-nums">{overlayLayout?.hook?.bgOpacity ?? 28}</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={overlayLayout?.hook?.bgOpacity ?? 28}
+                onChange={(e) => {
+                  if (!overlayLayout) return;
+                  const o = parseInt(e.target.value);
+                  dispatch({
+                    type: "UPDATE_OVERLAY",
+                    variantId: activeVariant.id,
+                    layout: {
+                      ...overlayLayout,
+                      hook: { ...overlayLayout.hook, bgOpacity: o },
+                      headline: { ...overlayLayout.headline, bgOpacity: o },
+                      supportingText: { ...overlayLayout.supportingText, bgOpacity: o },
+                      cta: { ...overlayLayout.cta, bgOpacity: o },
+                      custom: (overlayLayout.custom ?? []).map((b) => ({ ...b, bgOpacity: o })),
+                    },
+                  });
+                }}
+                className="h-3 w-16 accent-orange-300"
+                title={`Background opacity: ${overlayLayout?.hook?.bgOpacity ?? 28}%`}
               />
             </label>
           </div>

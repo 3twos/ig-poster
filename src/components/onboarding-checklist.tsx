@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ type Step = {
   label: string;
   description: string;
   icon: React.ReactNode;
-  action?: string; // custom event name to dispatch
+  action?: string; // URL path to navigate to
   checkFn?: string; // key to check dynamically
 };
 
@@ -40,21 +41,21 @@ const STEPS: Step[] = [
     label: "Connect AI provider",
     description: "Set up OpenAI or Anthropic for content generation.",
     icon: <BrainCircuit className="h-4 w-4" />,
-    action: "ig:open-settings",
+    action: "/settings?tab=llm",
   },
   {
     id: "brand",
     label: "Set up brand kit",
     description: "Define your brand voice, colors, and style.",
     icon: <Palette className="h-4 w-4" />,
-    action: "ig:open-brand-kits",
+    action: "/settings?tab=brand-kits",
   },
   {
     id: "logo",
     label: "Add brand logos",
     description: "Upload one or more logos to your brand kit.",
     icon: <ImagePlus className="h-4 w-4" />,
-    action: "ig:open-brand-kits",
+    action: "/settings?tab=brand-kits",
   },
   {
     id: "post",
@@ -263,13 +264,12 @@ export function OnboardingChecklist() {
                 </div>
                 <div className="min-w-0 flex-1">
                   {step.action && !done ? (
-                    <button
-                      type="button"
-                      onClick={() => window.dispatchEvent(new CustomEvent(step.action!))}
+                    <Link
+                      href={step.action}
                       className="text-xs font-medium text-white hover:text-orange-200"
                     >
                       {step.label}
-                    </button>
+                    </Link>
                   ) : (
                     <p
                       className={`text-xs font-medium ${done ? "text-slate-400 line-through" : "text-white"}`}
