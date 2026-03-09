@@ -4,6 +4,7 @@ import {
   GenerationRequestSchema,
   buildPerformanceContext,
   coerceInternalGenerationResponse,
+  createDefaultOverlayLayout,
   normalizeOverlayLayout,
   selectTopVariants,
   selectTopVariantsWithScores,
@@ -151,6 +152,25 @@ describe("creative helpers", () => {
     expect(context).toContain("Performance insights");
     expect(context).toContain("Hook one");
     expect(context).toContain("Engagement");
+  });
+
+  it("applies brand defaults to blocks but keeps CTA transparent", () => {
+    const layout = createDefaultOverlayLayout("hero-quote", {
+      cornerRadius: 16,
+      bgOpacity: 50,
+    });
+
+    // Non-CTA blocks get both cornerRadius and bgOpacity
+    expect(layout.hook.borderRadius).toBe(16);
+    expect(layout.hook.bgOpacity).toBe(50);
+    expect(layout.headline.borderRadius).toBe(16);
+    expect(layout.headline.bgOpacity).toBe(50);
+    expect(layout.supportingText.borderRadius).toBe(16);
+    expect(layout.supportingText.bgOpacity).toBe(50);
+
+    // CTA gets cornerRadius but NOT bgOpacity (stays transparent)
+    expect(layout.cta.borderRadius).toBe(16);
+    expect(layout.cta.bgOpacity).toBeUndefined();
   });
 
   it("normalizes older overlay layouts with editor defaults", () => {
