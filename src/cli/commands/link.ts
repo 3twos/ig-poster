@@ -33,15 +33,19 @@ export const runLinkCommand = async (ctx: CliContext, argv: string[]) => {
   const cwd = process.cwd();
   const existing = await loadProjectLinkAtDir(cwd);
   const host = options.host ? normalizeHost(options.host) : ctx.host;
-  const profile = normalizeNonEmptyValue(options.profile) ?? ctx.profileName;
+  const profile = normalizeOptionalValue(options.profile, "--profile") ?? ctx.profileName;
+  const normalizedBrandKit = normalizeOptionalValue(
+    options.brandKit,
+    "--brand-kit",
+  );
+  const normalizedOutputDir = normalizeOptionalValue(
+    options.outputDir,
+    "--output-dir",
+  );
   const defaults = {
     ...(existing?.config.defaults ?? {}),
-    ...(options.brandKit
-      ? { brandKitId: normalizeNonEmptyValue(options.brandKit) }
-      : {}),
-    ...(options.outputDir
-      ? { outputDir: normalizeNonEmptyValue(options.outputDir) }
-      : {}),
+    ...(normalizedBrandKit ? { brandKitId: normalizedBrandKit } : {}),
+    ...(normalizedOutputDir ? { outputDir: normalizedOutputDir } : {}),
   };
 
   const linked = await saveProjectLink(cwd, {
@@ -100,7 +104,15 @@ const normalizeHost = (value: string) => {
   }
 };
 
-const normalizeNonEmptyValue = (value?: string) => {
+const normalizeOptionalValue = (value: string | undefined, optionName: string) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
   const normalized = value?.trim();
-  return normalized ? normalized : undefined;
+  if (!normalized) {
+    throw new CliError(`${optionName} must not be empty.`);
+  }
+
+  return normalized;
 };

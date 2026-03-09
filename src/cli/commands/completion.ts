@@ -28,6 +28,10 @@ const GLOBAL_FLAGS = [
 ];
 
 export const runCompletionCommand = async (argv: string[]) => {
+  if (argv.length !== 1) {
+    throw new CliError("Usage: ig completion <bash|zsh|fish>");
+  }
+
   const [shell] = argv;
 
   switch (shell) {
@@ -47,12 +51,32 @@ export const runCompletionCommand = async (argv: string[]) => {
 
 const buildBashCompletion = () => `#!/usr/bin/env bash
 _ig() {
-  local cur prev command
+  local cur prev command i word
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
-  command="\${COMP_WORDS[1]}"
+  command=""
 
   if [[ \${COMP_CWORD} -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "${[...COMMANDS, ...GLOBAL_FLAGS].join(" ")}" -- "$cur") )
+    return 0
+  fi
+
+  for (( i=1; i < \${COMP_CWORD}; i++ )); do
+    word="\${COMP_WORDS[i]}"
+    case "$word" in
+      --host|--profile|--jq|--timeout)
+        (( i++ ))
+        ;;
+      --*)
+        ;;
+      *)
+        command="$word"
+        break
+        ;;
+    esac
+  done
+
+  if [[ -z "$command" ]]; then
     COMPREPLY=( $(compgen -W "${[...COMMANDS, ...GLOBAL_FLAGS].join(" ")}" -- "$cur") )
     return 0
   fi

@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { z } from "zod";
@@ -104,7 +104,7 @@ export const removeProjectLink = async (
   try {
     const entries = await readdir(path.dirname(linked.configPath));
     if (entries.length === 0) {
-      await rmdir(path.dirname(linked.configPath));
+      await rm(path.dirname(linked.configPath), { recursive: false });
     }
   } catch {
     // Best-effort cleanup only. Ignore directory races and non-empty folders.

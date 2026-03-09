@@ -17,6 +17,9 @@ describe("runCompletionCommand", () => {
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("complete -F _ig ig"),
     );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('if [[ -z "$command" ]]; then'),
+    );
   });
 
   it("prints a zsh completion script", async () => {
@@ -38,6 +41,14 @@ describe("runCompletionCommand", () => {
 
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("complete -c ig -f"),
+    );
+  });
+
+  it("rejects extra positional arguments", async () => {
+    await expect(runCompletionCommand(["bash", "extra"])).rejects.toMatchObject(
+      {
+        message: "Usage: ig completion <bash|zsh|fish>",
+      },
     );
   });
 });

@@ -91,4 +91,50 @@ describe("link commands", () => {
 
     await expect(loadProjectLink(nestedDir)).resolves.toBeNull();
   });
+
+  it("rejects whitespace-only defaults instead of silently clearing them", async () => {
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runLinkCommand(
+      {
+        host: "https://ig.example.com",
+        profileName: "staging",
+        globalOptions: {
+          json: true,
+          quiet: false,
+          noColor: false,
+          yes: false,
+          dryRun: false,
+        },
+      } as never,
+      ["--brand-kit", "bk_123"],
+    );
+
+    await expect(
+      runLinkCommand(
+        {
+          host: "https://ig.example.com",
+          profileName: "staging",
+          globalOptions: {
+            json: true,
+            quiet: false,
+            noColor: false,
+            yes: false,
+            dryRun: false,
+          },
+        } as never,
+        ["--brand-kit", "   "],
+      ),
+    ).rejects.toMatchObject({
+      message: "--brand-kit must not be empty.",
+    });
+
+    await expect(loadProjectLinkAtDir(tempDir)).resolves.toMatchObject({
+      config: {
+        defaults: {
+          brandKitId: "bk_123",
+        },
+      },
+    });
+  });
 });
