@@ -49,7 +49,6 @@ describe("PublishSection", () => {
         localTimeZone="America/Los_Angeles"
         hasBlockingValidationError
         validationMessage="Fix incomplete user tag rows before posting or scheduling."
-        onOpenSettings={vi.fn()}
         onCreateShareLink={vi.fn()}
         onPostNow={onPostNow}
         onSchedulePost={vi.fn()}
@@ -75,7 +74,6 @@ describe("PublishSection", () => {
         shareUrl={null}
         shareCopyState="idle"
         localTimeZone="America/Los_Angeles"
-        onOpenSettings={vi.fn()}
         onCreateShareLink={vi.fn()}
         onPostNow={vi.fn()}
         onSchedulePost={vi.fn()}
