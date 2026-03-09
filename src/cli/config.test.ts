@@ -59,6 +59,13 @@ describe("cli config", () => {
     const config = upsertProfile(await loadConfig(env), "staging", {
       host: "https://ig.example.com",
       token: "secret-token",
+      tokenExpiresAt: "2026-03-09T20:00:00.000Z",
+      refreshToken: "session.secret",
+      refreshTokenExpiresAt: "2026-04-08T20:00:00.000Z",
+      email: "person@example.com",
+      domain: "example.com",
+      cliSessionId: "session-1",
+      cliSessionLabel: "Laptop",
     });
     const cleared = clearProfileToken(config, "staging");
 

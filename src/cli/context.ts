@@ -2,15 +2,17 @@ import {
   getProfileName,
   loadConfig,
   resolveHost,
-  resolveToken,
   type CliConfig,
+  type CliProfileConfig,
 } from "./config";
 import type { GlobalOptions } from "./args";
+import { refreshProfileAuth } from "./auth";
 import { IgPosterClient } from "./client";
 
 export type CliContext = {
   client: IgPosterClient;
   config: CliConfig;
+  profileConfig: CliProfileConfig;
   profileName: string;
   host: string;
   token?: string;
@@ -18,21 +20,27 @@ export type CliContext = {
 };
 
 export const createContext = async (globalOptions: GlobalOptions) => {
-  const config = await loadConfig();
-  const profileName = getProfileName(config, globalOptions.profile);
-  const host = resolveHost(config, profileName, globalOptions.host);
-  const token = resolveToken(config, profileName);
+  const initialConfig = await loadConfig();
+  const profileName = getProfileName(initialConfig, globalOptions.profile);
+  const host = resolveHost(initialConfig, profileName, globalOptions.host);
+  const resolved = await refreshProfileAuth({
+    config: initialConfig,
+    profileName,
+    host,
+    timeoutMs: globalOptions.timeoutMs ?? 30_000,
+  });
 
   return {
     client: new IgPosterClient({
       host,
-      token,
+      token: resolved.token,
       timeoutMs: globalOptions.timeoutMs ?? 30_000,
     }),
-    config,
+    config: resolved.config,
+    profileConfig: resolved.profileConfig,
     profileName,
     host,
-    token,
+    token: resolved.token,
     globalOptions,
   } satisfies CliContext;
 };

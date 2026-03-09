@@ -14,7 +14,7 @@ const HELP_TEXT = `ig: IG Poster CLI (preview)
 
 Usage:
   ig status
-  ig auth <login|logout|status|test>
+  ig auth <login|logout|status|test|sessions>
   ig assets <upload>
   ig brand-kits <list|get>
   ig config <list|get|set>

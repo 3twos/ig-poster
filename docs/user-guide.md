@@ -115,9 +115,12 @@
 - The repo now includes an experimental `ig` CLI for power users and local agents.
 - Available preview commands:
   - `ig status`
+  - `ig auth login`
   - `ig auth login --token-stdin`
   - `ig auth status`
   - `ig auth logout`
+  - `ig auth sessions list`
+  - `ig auth sessions revoke <id>`
   - `ig assets upload <file...> [--folder <assets|videos|logos|renders>]`
   - `ig brand-kits list|get`
   - `ig config list|get|set`
@@ -125,7 +128,9 @@
   - `ig posts list|get|create|update|duplicate|archive`
   - `ig queue list|get|cancel|retry|move-to-draft|update`
 - The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
-- The current auth bootstrap is temporary: you must provide a valid bearer token manually (`IG_POSTER_TOKEN`, `--token`, `--token-file`, or `--token-stdin`). Browser/device login is not shipped yet.
+- `ig auth login` now opens the browser, reuses the Google Workspace login gate, and stores a refreshable CLI session for the active profile.
+- Manual bearer bootstrap is still available for testing and overrides: `IG_POSTER_TOKEN`, `--token`, `--token-file`, and `--token-stdin`.
+- Refresh tokens are currently stored in `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). OS keychain storage and device-code login are not shipped yet.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
 - `ig assets upload` reads local image/video files and sends them to the same Blob-backed upload path the browser uses, with an optional folder override for `assets`, `videos`, `logos`, or `renders`.
 - `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.

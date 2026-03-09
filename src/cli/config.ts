@@ -7,6 +7,13 @@ import { z } from "zod";
 const ProfileConfigSchema = z.object({
   host: z.string().url().optional(),
   token: z.string().min(1).optional(),
+  tokenExpiresAt: z.string().datetime().optional(),
+  refreshToken: z.string().min(1).optional(),
+  refreshTokenExpiresAt: z.string().datetime().optional(),
+  email: z.string().email().optional(),
+  domain: z.string().min(1).optional(),
+  cliSessionId: z.string().min(1).optional(),
+  cliSessionLabel: z.string().min(1).optional(),
 });
 
 const CliConfigSchema = z.object({
@@ -109,6 +116,13 @@ export const clearProfileToken = (config: CliConfig, profileName: string) => {
   const current = getProfileConfig(config, profileName);
   const nextProfile = { ...current };
   delete nextProfile.token;
+  delete nextProfile.tokenExpiresAt;
+  delete nextProfile.refreshToken;
+  delete nextProfile.refreshTokenExpiresAt;
+  delete nextProfile.email;
+  delete nextProfile.domain;
+  delete nextProfile.cliSessionId;
+  delete nextProfile.cliSessionLabel;
 
   return {
     ...config,

@@ -1,9 +1,11 @@
 import { hashEmail } from "@/lib/server-utils";
+import { WORKSPACE_SCOPES } from "@/lib/auth-scopes";
 import {
   readWorkspaceSessionFromRequest,
   verifyWorkspaceSessionToken,
   type WorkspaceSession,
 } from "@/lib/workspace-auth";
+import { verifyCliAccessToken } from "@/services/auth/cli";
 
 export type ActorAuthSource = "bearer" | "cookie";
 
@@ -19,8 +21,6 @@ export type Actor = {
   expiresAt: string;
 };
 
-const WORKSPACE_SCOPES = ["posts:read", "posts:write"];
-
 const toActor = (
   session: WorkspaceSession,
   authSource: ActorAuthSource,
@@ -31,7 +31,7 @@ const toActor = (
   domain: session.domain,
   ownerHash: hashEmail(session.email),
   authSource,
-  scopes: WORKSPACE_SCOPES,
+  scopes: [...WORKSPACE_SCOPES],
   issuedAt: session.issuedAt,
   expiresAt: session.expiresAt,
 });
@@ -55,6 +55,11 @@ export const resolveActorFromRequest = async (
 ): Promise<Actor | null> => {
   const bearerToken = readBearerTokenFromRequest(req);
   if (bearerToken) {
+    const cliActor = await verifyCliAccessToken(bearerToken);
+    if (cliActor) {
+      return cliActor;
+    }
+
     const session = await verifyWorkspaceSessionToken(bearerToken);
     return session ? toActor(session, "bearer") : null;
   }
