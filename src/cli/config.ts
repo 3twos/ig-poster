@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -69,8 +69,14 @@ export const saveConfig = async (
   env: NodeJS.ProcessEnv = process.env,
 ) => {
   const filePath = getConfigPath(env);
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  const configDir = path.dirname(filePath);
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
+  await chmod(configDir, 0o700);
+  await writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await chmod(filePath, 0o600);
 };
 
 export const getProfileName = (
@@ -104,7 +110,23 @@ export const clearProfileToken = (config: CliConfig, profileName: string) => {
   const nextProfile = { ...current };
   delete nextProfile.token;
 
-  return upsertProfile(config, profileName, nextProfile);
+  return {
+    ...config,
+    profiles: {
+      ...config.profiles,
+      [profileName]: nextProfile,
+    },
+  };
+};
+
+export const parseConfigHost = (value: string) => {
+  const normalized = value.trim();
+  const url = new URL(normalized);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Host must use http or https");
+  }
+
+  return normalized;
 };
 
 export const resolveHost = (

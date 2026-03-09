@@ -1,13 +1,15 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  clearProfileToken,
   getConfigPath,
   getProfileConfig,
   loadConfig,
+  parseConfigHost,
   resolveHost,
   resolveToken,
   saveConfig,
@@ -51,5 +53,33 @@ describe("cli config", () => {
       "https://ig.example.com",
     );
     expect(resolveToken(loaded, "staging", env)).toBe("secret-token");
+  });
+
+  it("removes a persisted token during logout", async () => {
+    const config = upsertProfile(await loadConfig(env), "staging", {
+      host: "https://ig.example.com",
+      token: "secret-token",
+    });
+    const cleared = clearProfileToken(config, "staging");
+
+    expect(getProfileConfig(cleared, "staging")).toEqual({
+      host: "https://ig.example.com",
+    });
+  });
+
+  it("writes config with restrictive directory and file permissions", async () => {
+    await saveConfig(await loadConfig(env), env);
+
+    const fileStats = await stat(getConfigPath(env));
+    const dirStats = await stat(configDir);
+
+    expect(fileStats.mode & 0o777).toBe(0o600);
+    expect(dirStats.mode & 0o777).toBe(0o700);
+  });
+
+  it("rejects unsupported host protocols", () => {
+    expect(() => parseConfigHost("ftp://ig.example.com")).toThrow(
+      "Host must use http or https",
+    );
   });
 });

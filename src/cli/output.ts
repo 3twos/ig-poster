@@ -4,7 +4,9 @@ import { CliError, EXIT_CODES } from "./errors";
 
 export const printJson = (value: unknown, jq?: string) => {
   const output = jq ? applyJq(value, jq) : value;
-  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(output === undefined ? null : output, null, 2)}\n`,
+  );
 };
 
 export const printLines = (lines: string[]) => {

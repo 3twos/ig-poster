@@ -27,15 +27,15 @@ Global options:
 `;
 
 export const runCli = async (argv: string[]) => {
-  const { options, rest } = parseGlobalOptions(argv);
-  const [command, ...commandArgs] = rest;
-
-  if (!command || command === "help" || command === "--help") {
-    process.stdout.write(HELP_TEXT);
-    return EXIT_CODES.ok;
-  }
-
   try {
+    const { options, rest } = parseGlobalOptions(argv);
+    const [command, ...commandArgs] = rest;
+
+    if (!command || command === "help" || command === "--help") {
+      process.stdout.write(HELP_TEXT);
+      return EXIT_CODES.ok;
+    }
+
     const ctx = await createContext(options);
 
     switch (command) {

@@ -2,6 +2,7 @@ import {
   getProfileName,
   getProfileConfig,
   loadConfig,
+  parseConfigHost,
   saveConfig,
   upsertProfile,
 } from "../config";
@@ -62,17 +63,24 @@ const setConfig = async (ctx: CliContext, argv: string[]) => {
     throw new CliError("Only `host` is supported by `ig config set` right now.");
   }
 
+  let normalizedHost: string;
+  try {
+    normalizedHost = parseConfigHost(value);
+  } catch {
+    throw new CliError(`Invalid host URL: ${value}`);
+  }
+
   const config = await loadConfig();
   const profileName = getProfileName(config, ctx.globalOptions.profile);
-  await saveConfig(upsertProfile(config, profileName, { host: value }));
+  await saveConfig(upsertProfile(config, profileName, { host: normalizedHost }));
 
   if (ctx.globalOptions.json) {
-    printJson({ profile: profileName, key, value });
+    printJson({ profile: profileName, key, value: normalizedHost });
     return;
   }
 
   printKeyValue([
     ["profile", profileName],
-    ["host", value],
+    ["host", normalizedHost],
   ]);
 };
