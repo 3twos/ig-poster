@@ -5,9 +5,11 @@ import { duplicatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
 
+type RouteContext = { params: Promise<{ id: string }> };
+
 export async function POST(
   req: Request,
-  { params }: RouteContext<"/api/v1/posts/[id]/duplicate">,
+  { params }: RouteContext,
 ) {
   try {
     const actor = await resolveActorFromRequest(req);

@@ -5,9 +5,11 @@ import { getBrandKit } from "@/services/brand-kits";
 
 export const runtime = "nodejs";
 
+type RouteContext = { params: Promise<{ id: string }> };
+
 export async function GET(
   req: Request,
-  { params }: RouteContext<"/api/v1/brand-kits/[id]">,
+  { params }: RouteContext,
 ) {
   try {
     const actor = await resolveActorFromRequest(req);

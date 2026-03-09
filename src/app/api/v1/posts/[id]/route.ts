@@ -7,9 +7,11 @@ import { getPost, updatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
 
+type RouteContext = { params: Promise<{ id: string }> };
+
 export async function GET(
   req: Request,
-  { params }: RouteContext<"/api/v1/posts/[id]">,
+  { params }: RouteContext,
 ) {
   try {
     const actor = await resolveActorFromRequest(req);
@@ -33,7 +35,7 @@ export async function GET(
 
 export async function PATCH(
   req: Request,
-  { params }: RouteContext<"/api/v1/posts/[id]">,
+  { params }: RouteContext,
 ) {
   try {
     const actor = await resolveActorFromRequest(req);
