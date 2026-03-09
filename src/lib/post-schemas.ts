@@ -66,6 +66,8 @@ export const PostCreateRequestSchema = z
   })
   .passthrough();
 
+export type PostCreateRequest = z.infer<typeof PostCreateRequestSchema>;
+
 export const PostUpdateRequestSchema = z
   .object({
     title: z.string().trim().max(120).optional(),
@@ -87,3 +89,5 @@ export const PostUpdateRequestSchema = z
     publishHistory: z.array(PublishHistoryEntrySchema).max(200).optional(),
   })
   .passthrough();
+
+export type PostUpdateRequest = z.infer<typeof PostUpdateRequestSchema>;

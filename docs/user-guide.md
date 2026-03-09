@@ -105,6 +105,21 @@
    - Start a new conversation with the "+" button.
    - The chat uses the same LLM connections configured in Settings.
 
+## CLI Preview
+
+- The repo now includes an experimental `ig` CLI for power users and local agents.
+- Available preview commands:
+  - `ig status`
+  - `ig auth login --token-stdin`
+  - `ig auth status`
+  - `ig auth logout`
+  - `ig config list|get|set`
+  - `ig api <METHOD> <PATH>`
+  - `ig posts list|get|create`
+- The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
+- The current auth bootstrap is temporary: you must provide a valid bearer token manually (`IG_POSTER_TOKEN`, `--token`, `--token-file`, or `--token-stdin`). Browser/device login is not shipped yet.
+- Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
+
 ## Working with Saved Posts
 
 - Selecting a different post saves pending edits first, then loads the selected draft.
@@ -151,6 +166,7 @@
 
 - "Unauthorized" responses:
   - Sign in again with your Workspace account.
+  - For CLI usage, also verify that the configured bearer token is still valid for the target host/profile.
 
 - Main page is empty and "New Post" does nothing:
   - Verify `POSTGRES_URL` or `DATABASE_URL` is configured for the running environment.

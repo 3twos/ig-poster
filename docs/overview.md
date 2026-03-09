@@ -6,6 +6,7 @@
 - Keep creative output structured, editable, and reusable instead of one-off draft text.
 - Support the full workflow from concept generation to export, sharing, and publishing.
 - Enforce secure, internal-first access for teams using Google Workspace.
+- Add a first-party CLI and versioned API surface for operator and agent workflows without duplicating server-side business logic.
 
 ## Capabilities
 
@@ -34,6 +35,7 @@
 - Enforces stricter API payload contracts for persisted post drafts/updates.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
+- Ships an experimental `ig` CLI preview with profile-aware host/token config, raw API access, auth/status checks, and core post commands backed by `/api/v1/*`.
 
 ## Key Features
 
@@ -44,6 +46,7 @@
 - Website-style-aware prompts and optional brand autofill from a public site URL.
 - Blob-backed storage for uploads, shared project snapshots, and outcome snapshots used for insights.
 - Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/generated/published/scheduled/archived` for posts).
+- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/whoami`, `posts list/get/create`).
 
 ## Primary User Scenarios
 
@@ -71,9 +74,13 @@
 6. Refine ideas with AI chat
    - Open the Chat tab in the right panel to brainstorm captions, get hashtag suggestions, or refine creative direction in a multi-turn conversation.
 
+7. Operate the service from the CLI
+   - Use the preview `ig` CLI for host/profile config, raw API calls, auth checks, and basic post listing/inspection/creation against the same server-side workflows.
+
 ## Scope Boundaries
 
 - Without `POSTGRES_URL` or `DATABASE_URL`, private post creation/loading is unavailable.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Instagram publishing is unavailable.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).
+- The current CLI preview requires a manually supplied bearer token; browser/device login and long-lived CLI session management are still in progress.
