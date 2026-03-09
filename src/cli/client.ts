@@ -51,15 +51,21 @@ export class IgPosterClient {
         headers.set("authorization", `Bearer ${this.token}`);
       }
 
-      let body: string | undefined;
+      let body: BodyInit | undefined;
       if (options.body !== undefined) {
-        if (!headers.has("content-type")) {
-          headers.set("content-type", "application/json");
+        const isFormData =
+          typeof FormData !== "undefined" && options.body instanceof FormData;
+        if (isFormData) {
+          body = options.body as BodyInit;
+        } else {
+          if (!headers.has("content-type")) {
+            headers.set("content-type", "application/json");
+          }
+          body =
+            typeof options.body === "string"
+              ? options.body
+              : JSON.stringify(options.body);
         }
-        body =
-          typeof options.body === "string"
-            ? options.body
-            : JSON.stringify(options.body);
       }
 
       const response = await fetch(`${this.host}${normalizePath(options.path)}`, {
