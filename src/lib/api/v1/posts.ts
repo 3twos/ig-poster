@@ -47,6 +47,10 @@ export const PostDataSchema = z.object({
   post: PostResourceSchema,
 });
 
+export const PostMutationDataSchema = z.object({
+  post: PostResourceSchema,
+});
+
 export const PostsListQuerySchema = z.object({
   archived: z.boolean().optional(),
   status: PostStatusSchema.optional(),
