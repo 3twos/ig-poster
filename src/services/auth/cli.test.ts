@@ -142,4 +142,32 @@ describe("services/auth/cli", () => {
       false,
     );
   });
+
+  it("skips invalid stored session payloads when listing sessions", async () => {
+    store.set("cli_session:broken", { nope: true });
+    const verifier = "y".repeat(64);
+    const code = await createCliAuthorizationCode({
+      actor,
+      codeChallenge: buildChallenge(verifier),
+      redirectUri: "http://127.0.0.1:51234/callback",
+    });
+    await exchangeCliAuthorizationCode({
+      code,
+      codeVerifier: verifier,
+      label: "Laptop",
+    });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const sessions = await listCliSessions(actor);
+
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]?.label).toBe("Laptop");
+      expect(warning).toHaveBeenCalledWith(
+        "[services/auth/cli] Ignoring invalid cli_session record broken",
+      );
+    } finally {
+      warning.mockRestore();
+    }
+  });
 });

@@ -388,7 +388,17 @@ export const listCliSessions = async (actor: Actor) => {
 
   const sessions = await listCredentialRecords<CliSessionRecord>("cli_session");
   return sessions
-    .map((item) => CliSessionRecordSchema.parse(item.payload))
+    .flatMap((item) => {
+      const parsed = CliSessionRecordSchema.safeParse(item.payload);
+      if (!parsed.success) {
+        console.warn(
+          `[services/auth/cli] Ignoring invalid cli_session record ${item.credentialId}`,
+        );
+        return [];
+      }
+
+      return [parsed.data];
+    })
     .filter((record) => record.ownerHash === actor.ownerHash)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map(toSessionView);

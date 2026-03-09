@@ -39,6 +39,15 @@ const buildLoginState = () => randomBytes(16).toString("hex");
 
 const defaultSessionLabel = () => `IG CLI on ${os.hostname()}`.slice(0, 80);
 
+export const normalizeRequestedSessionLabel = (value?: string) => {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return defaultSessionLabel();
+  }
+
+  return normalized.slice(0, 80);
+};
+
 const isFutureIso = (value?: string) =>
   Boolean(value) && Date.parse(value as string) > Date.now();
 
@@ -267,12 +276,12 @@ export const refreshProfileAuth = async (params: {
       token: response.data.accessToken,
     };
   } catch (error) {
-    const cleared = clearProfileToken(params.config, params.profileName);
-    await saveConfig(cleared, env);
     if (
       error instanceof CliError &&
       (error.exitCode === EXIT_CODES.auth || error.exitCode === EXIT_CODES.forbidden)
     ) {
+      const cleared = clearProfileToken(params.config, params.profileName);
+      await saveConfig(cleared, env);
       return {
         config: cleared,
         profileConfig: getProfileConfig(cleared, params.profileName),
@@ -322,7 +331,7 @@ export const loginWithBrowser = async (params: {
     body: {
       code,
       codeVerifier: verifier,
-      label: params.label ?? defaultSessionLabel(),
+      label: normalizeRequestedSessionLabel(params.label),
     },
   });
 

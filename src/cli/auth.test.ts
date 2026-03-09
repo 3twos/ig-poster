@@ -14,7 +14,11 @@ vi.mock("@/cli/client", () => ({
   ),
 }));
 
-import { persistCliAuthTokens, refreshProfileAuth } from "@/cli/auth";
+import {
+  normalizeRequestedSessionLabel,
+  persistCliAuthTokens,
+  refreshProfileAuth,
+} from "@/cli/auth";
 import {
   clearProfileToken,
   getProfileConfig,
@@ -132,5 +136,41 @@ describe("cli auth helpers", () => {
       getProfileConfig(cleared, "default"),
     );
     expect(refreshed.token).toBeUndefined();
+  });
+
+  it("preserves stored refresh auth on transient refresh failures", async () => {
+    const config = upsertProfile(await loadConfig(env), "default", {
+      host: "http://localhost:3000",
+      token: "expired-token",
+      tokenExpiresAt: "2026-03-09T19:00:00.000Z",
+      refreshToken: "session.secret",
+      refreshTokenExpiresAt: "2099-04-08T20:00:00.000Z",
+    });
+    await saveConfig(config, env);
+    requestJson.mockRejectedValue(new CliError("Request timed out", EXIT_CODES.transport));
+
+    await expect(
+      refreshProfileAuth({
+        config,
+        profileName: "default",
+        host: "http://localhost:3000",
+        timeoutMs: 30_000,
+        env,
+      }),
+    ).rejects.toMatchObject({
+      message: "Request timed out",
+      exitCode: EXIT_CODES.transport,
+    });
+
+    const persisted = await loadConfig(env);
+    expect(getProfileConfig(persisted, "default")).toMatchObject({
+      token: "expired-token",
+      refreshToken: "session.secret",
+    });
+  });
+
+  it("normalizes blank session labels to the default login label", () => {
+    expect(normalizeRequestedSessionLabel("   ")).toContain("IG CLI on ");
+    expect(normalizeRequestedSessionLabel("  Laptop  ")).toBe("Laptop");
   });
 });
