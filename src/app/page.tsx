@@ -516,7 +516,7 @@ export default function Home() {
       overlayLayouts[activeVariant.id] ??
       createDefaultOverlayLayout(activeVariant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity })
     );
-  }, [activeVariant, overlayLayouts]);
+  }, [activeVariant, brand.defaultBgOpacity, brand.defaultCornerRadius, overlayLayouts]);
 
   const handleCarouselComposerSequenceChange = useCallback(
     (nextSequence: string[]) => {
