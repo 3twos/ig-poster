@@ -60,6 +60,35 @@ export const printBrandKitsTable = (
   printLines(rows.map(formatRow));
 };
 
+export const printQueueTable = (
+  jobs: Array<{
+    id: string;
+    status: string;
+    publishAt: string;
+    attempts: number;
+    maxAttempts: number;
+    postId?: string | null;
+  }>,
+) => {
+  if (jobs.length === 0) {
+    printLines(["No publish jobs found."]);
+    return;
+  }
+
+  const rows = [
+    ["ID", "STATUS", "PUBLISH AT", "ATTEMPTS", "POST ID"],
+    ...jobs.map((job) => [
+      job.id,
+      job.status,
+      formatIso(job.publishAt),
+      `${job.attempts}/${job.maxAttempts}`,
+      job.postId ?? "-",
+    ]),
+  ];
+
+  printLines(rows.map(formatRow));
+};
+
 export const printKeyValue = (entries: Array<[string, string | undefined]>) => {
   printLines(entries.map(([key, value]) => `${key}: ${value ?? "-"}`));
 };
