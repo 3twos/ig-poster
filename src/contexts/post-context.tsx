@@ -61,6 +61,7 @@ function summariesEqual(a: PostSummary, b: PostSummary): boolean {
     a.status === b.status &&
     a.createdAt === b.createdAt &&
     a.updatedAt === b.updatedAt &&
+    a.archivedAt === b.archivedAt &&
     a.assetCount === b.assetCount &&
     a.variantCount === b.variantCount &&
     a.thumbnail === b.thumbnail
@@ -155,8 +156,8 @@ export function PostProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/posts?archived=true", { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
-      const all: PostSummary[] = json.posts ?? [];
-      setArchivedPosts(all.filter((p) => p.status === "archived"));
+      const incoming = (json.posts ?? []) as PostSummary[];
+      setArchivedPosts((current) => reconcilePostSummaries(current, incoming));
     } catch {
       // Silently fail
     }
@@ -360,7 +361,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handler = () => {
       const d = draftRef.current;
-      if (!d) return;
+      if (!d || d.status === "posted") return;
       const rest = { ...d };
       delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
       const body = JSON.stringify(rest);

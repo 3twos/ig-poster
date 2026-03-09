@@ -128,7 +128,7 @@ describe("updatePost", () => {
     expect(updatePayload).not.toHaveProperty("overlayLayouts");
   });
 
-  it("preserves an explicit status when result is also provided", async () => {
+  it("preserves an explicit scheduled status when result is also provided", async () => {
     const existing = {
       id: "p1",
       ownerHash: "hash",
@@ -148,7 +148,7 @@ describe("updatePost", () => {
     const selectWhere = vi.fn(() => ({ limit: selectLimit }));
     const selectFrom = vi.fn(() => ({ where: selectWhere }));
     const updateReturning = vi.fn().mockResolvedValue([
-      { ...existing, status: "published" },
+      { ...existing, status: "scheduled" },
     ]);
     const updateWhere = vi.fn(() => ({ returning: updateReturning }));
     const updateSet = vi.fn((payload: Record<string, unknown>) => {
@@ -162,14 +162,14 @@ describe("updatePost", () => {
     } as unknown as ReturnType<typeof getDb>);
 
     await updatePost(actor, "p1", {
-      status: "published",
+      status: "scheduled",
       result: validGenerationResult,
     });
 
     expect(updateSet).toHaveBeenCalledTimes(1);
     const [updatePayload] = updateSet.mock.calls[0];
     expect(updatePayload).toMatchObject({
-      status: "published",
+      status: "scheduled",
     });
   });
 });

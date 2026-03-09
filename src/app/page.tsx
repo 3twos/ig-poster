@@ -2,6 +2,7 @@
 
 import { toBlob, toPng } from "html-to-image";
 import {
+  Download,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -61,6 +62,7 @@ import {
   type GenerationResponse,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
+import type { PostStatus } from "@/lib/post";
 import {
   type BrandState,
   type InstagramAuthStatus,
@@ -113,6 +115,7 @@ const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
 export default function Home() {
   const {
     activePost,
+    archivePost,
     posts,
     dispatch,
     createNewPost,
@@ -154,10 +157,12 @@ export default function Home() {
   const publishImagePreviewRenderIdRef = useRef(0);
   const publishImagePreviewBlobUrlRef = useRef<string | null>(null);
   const activePostIdRef = useRef<string | null>(activePost?.id ?? null);
+  const activePostStatusRef = useRef<PostStatus | null>(activePost?.status ?? null);
   const assetUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   activePostIdRef.current = activePost?.id ?? null;
+  activePostStatusRef.current = activePost?.status ?? null;
 
   const brand: BrandState = useMemo(() => {
     if (!activePost?.brand) return INITIAL_BRAND;
@@ -234,6 +239,9 @@ export default function Home() {
   const isPublishing = publishingForPostId === activePost?.id;
   const isRefining = refiningForPostId === activePost?.id;
   const publishMessage = publishMessageState.postId === activePost?.id ? publishMessageState.text : null;
+  const isPostedPost = activePost?.status === "posted";
+  const isScheduledPost = activePost?.status === "scheduled";
+  const latestPublishEntry = activePost?.publishHistory.at(-1) ?? null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const typedDispatch = dispatch as (action: any) => void;
@@ -367,6 +375,9 @@ export default function Home() {
 
   const handleSelectBrandKit = useCallback((kitId: string) => {
     const postId = activePostIdRef.current;
+    if (activePostStatusRef.current === "posted") {
+      return;
+    }
     const kit = brandKits.find((candidate) => candidate.id === kitId);
     if (!kit || !isPostStillActive(postId)) {
       return;
@@ -383,6 +394,9 @@ export default function Home() {
   }, [brandKits, dispatch, isPostStillActive]);
 
   const handleSelectLogo = useCallback((logoUrl: string | null) => {
+    if (activePostStatusRef.current === "posted") {
+      return;
+    }
     dispatch({
       type: "SET_LOGO",
       postId: activePostIdRef.current ?? undefined,
@@ -502,7 +516,7 @@ export default function Home() {
       overlayLayouts[activeVariant.id] ??
       createDefaultOverlayLayout(activeVariant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity })
     );
-  }, [activeVariant, overlayLayouts]);
+  }, [activeVariant, brand.defaultBgOpacity, brand.defaultCornerRadius, overlayLayouts]);
 
   const handleCarouselComposerSequenceChange = useCallback(
     (nextSequence: string[]) => {
@@ -538,7 +552,7 @@ export default function Home() {
   const updatePublishSettings = useCallback(
     (nextSettings: Partial<PublishSettingsState>) => {
       const postId = activePostIdRef.current;
-      if (!postId) return;
+      if (!postId || activePostStatusRef.current === "posted") return;
       dispatch({
         type: "SET_PUBLISH_SETTINGS",
         postId,
@@ -550,6 +564,9 @@ export default function Home() {
 
   const updateAssetUserTags = useCallback(
     (assetId: string, userTags: MetaUserTag[]) => {
+      if (activePostStatusRef.current === "posted") {
+        return;
+      }
       updateMediaComposition((current) => ({
         ...current,
         items: current.items.map((item) =>
@@ -700,8 +717,9 @@ export default function Home() {
     if (generation.agentRun?.status === "cancelled") return { tone: "error" as const, text: generation.agentRun.summary ?? "Generation stopped.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
     if (publishMessage) return { tone: "success" as const, text: publishMessage, elapsedMs: undefined, showStop: false };
     if (shareUrl) return { tone: "success" as const, text: "Share link created.", elapsedMs: undefined, showStop: false };
+    if (isPostedPost) return { tone: "success" as const, text: "Posted posts are locked. Duplicate this post to make changes.", elapsedMs: undefined, showStop: false };
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
-  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, saveStatus, shareUrl]);
+  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPostedPost, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, saveStatus, shareUrl]);
 
   const uploadFileToStorage = async (
     file: File,
@@ -720,7 +738,7 @@ export default function Home() {
     const postId = activePostIdRef.current;
     const selected = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!postId || !selected.length) return;
+    if (!postId || !selected.length || activePostStatusRef.current === "posted") return;
     generation.setError(null);
     setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current);
     const remaining = 20 - localAssets.length;
@@ -793,6 +811,9 @@ export default function Home() {
   };
 
   const removeAsset = useCallback((id: string) => {
+    if (activePostStatusRef.current === "posted") {
+      return;
+    }
     const postId = activePostIdRef.current;
     setLocalAssetsForPost(postId, (current) => {
       const removing = current.find((asset) => asset.id === id);
@@ -809,6 +830,9 @@ export default function Home() {
   }, [setLocalAssetsForPost, syncAssetsToPost]);
 
   const reorderAssets = useCallback((reordered: LocalAsset[]) => {
+    if (activePostStatusRef.current === "posted") {
+      return;
+    }
     const postId = activePostIdRef.current;
     setLocalAssetsForPost(postId, () => {
       syncAssetsToPost(postId, reordered);
@@ -826,9 +850,27 @@ export default function Home() {
   generateRef.current = generation.generate;
 
   useEffect(() => {
-    const onGenerate = () => { if (!isAgentBusyRef.current && localAssetsRef.current.length > 0) void generateRef.current?.(); };
-    const onToggleEditor = () => setEditorMode((v) => !v);
-    const onSelectVariant = (e: Event) => { const idx = (e as CustomEvent).detail?.index; if (typeof idx === "number" && resultRef.current?.variants[idx]) dispatch({ type: "SET_ACTIVE_VARIANT", postId: activePostIdRef.current ?? undefined, variantId: resultRef.current.variants[idx].id }); };
+    const onGenerate = () => {
+      if (activePostStatusRef.current === "posted") {
+        return;
+      }
+      if (!isAgentBusyRef.current && localAssetsRef.current.length > 0) void generateRef.current?.();
+    };
+    const onToggleEditor = () => {
+      if (activePostStatusRef.current === "posted") {
+        return;
+      }
+      setEditorMode((v) => !v);
+    };
+    const onSelectVariant = (e: Event) => {
+      if (activePostStatusRef.current === "posted") {
+        return;
+      }
+      const idx = (e as CustomEvent).detail?.index;
+      if (typeof idx === "number" && resultRef.current?.variants[idx]) {
+        dispatch({ type: "SET_ACTIVE_VARIANT", postId: activePostIdRef.current ?? undefined, variantId: resultRef.current.variants[idx].id });
+      }
+    };
     const onBeforePostSwitch = (e: Event) => {
       const detail = (e as CustomEvent<{ fromPostId?: string | null; toPostId?: string | null }>).detail;
       const fromPostId = detail?.fromPostId ?? activePostIdRef.current;
@@ -841,7 +883,12 @@ export default function Home() {
     window.addEventListener("ig:toggle-editor", onToggleEditor);
     window.addEventListener("ig:select-variant", onSelectVariant);
     window.addEventListener("ig:before-post-switch", onBeforePostSwitch);
-    return () => { window.removeEventListener("ig:generate", onGenerate); window.removeEventListener("ig:toggle-editor", onToggleEditor); window.removeEventListener("ig:select-variant", onSelectVariant); window.removeEventListener("ig:before-post-switch", onBeforePostSwitch); };
+    return () => {
+      window.removeEventListener("ig:generate", onGenerate);
+      window.removeEventListener("ig:toggle-editor", onToggleEditor);
+      window.removeEventListener("ig:select-variant", onSelectVariant);
+      window.removeEventListener("ig:before-post-switch", onBeforePostSwitch);
+    };
   }, [abortUploadsForPostSwitch, dispatch]);
 
   const renderPosterToDataUrl = useCallback(async () => {
@@ -935,21 +982,79 @@ export default function Home() {
 
   const refineVariant = async (instruction?: string) => {
     const postId = activePostIdRef.current;
-    const inst = instruction?.trim(); if (!activeVariant || !inst) return;
+    const inst = instruction?.trim();
+    if (!activeVariant || !inst || activePostStatusRef.current === "posted") return;
+    const variantForRefine = activeOverlayLayout
+      ? {
+          ...activeVariant,
+          hook: activeOverlayLayout.hook.text.trim() || activeVariant.hook,
+          headline:
+            activeOverlayLayout.headline.text.trim() || activeVariant.headline,
+          supportingText:
+            activeOverlayLayout.supportingText.text.trim() ||
+            activeVariant.supportingText,
+          cta: activeOverlayLayout.cta.text.trim() || activeVariant.cta,
+        }
+      : activeVariant;
     setRefiningForPostId(postId); generation.setError(null);
     try {
-      const r = await fetch("/api/generate/refine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ variant: activeVariant, instruction: inst, brand }) });
+      const r = await fetch("/api/generate/refine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ variant: variantForRefine, instruction: inst, brand }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = await r.json();
       if (j.source !== "model") throw new Error("Refinement could not be applied.");
       if (!isPostStillActive(postId)) return;
-      if (result) dispatch({ type: "SET_RESULT", postId: postId ?? undefined, result: { ...result, variants: result.variants.map((v) => v.id === activeVariant.id ? { ...j.variant, id: activeVariant.id } : v) }, overlayLayouts });
+      if (result) {
+        const refinedVariant = { ...j.variant, id: activeVariant.id };
+        const syncedOverlayLayout = activeOverlayLayout
+          ? {
+              ...activeOverlayLayout,
+              hook: {
+                ...activeOverlayLayout.hook,
+                text: activeOverlayLayout.hook.text.trim()
+                  ? refinedVariant.hook
+                  : activeOverlayLayout.hook.text,
+              },
+              headline: {
+                ...activeOverlayLayout.headline,
+                text: activeOverlayLayout.headline.text.trim()
+                  ? refinedVariant.headline
+                  : activeOverlayLayout.headline.text,
+              },
+              supportingText: {
+                ...activeOverlayLayout.supportingText,
+                text: activeOverlayLayout.supportingText.text.trim()
+                  ? refinedVariant.supportingText
+                  : activeOverlayLayout.supportingText.text,
+              },
+              cta: {
+                ...activeOverlayLayout.cta,
+                text: activeOverlayLayout.cta.text.trim()
+                  ? refinedVariant.cta
+                  : activeOverlayLayout.cta.text,
+              },
+            }
+          : undefined;
+
+        dispatch({
+          type: "SET_RESULT",
+          postId: postId ?? undefined,
+          result: {
+            ...result,
+            variants: result.variants.map((v) =>
+              v.id === activeVariant.id ? refinedVariant : v,
+            ),
+          },
+          overlayLayouts: syncedOverlayLayout
+            ? { [activeVariant.id]: syncedOverlayLayout }
+            : {},
+        });
+      }
     } catch (e) { if (isPostStillActive(postId)) { const m = e instanceof Error ? e.message : "Refinement failed"; generation.setError(m); toast.error(m); } }
     finally { setRefiningForPostId((current) => current === postId ? null : current); }
   };
 
   const handleResetTextLayout = useCallback(() => {
-    if (!activeVariant) return;
+    if (!activeVariant || activePostStatusRef.current === "posted") return;
     dispatch({
       type: "UPDATE_OVERLAY",
       postId: activePostIdRef.current ?? undefined,
@@ -976,6 +1081,12 @@ export default function Home() {
 
   const publishToInstagram = async (scheduleAt?: string) => {
     const postId = activePostIdRef.current;
+    if (activePostStatusRef.current === "posted") {
+      const m = "Posted posts are locked. Duplicate the post to publish a new version.";
+      generation.setError(m);
+      toast.error(m);
+      return;
+    }
     if (!activeVariant) {
       const m = "Generate and select a variant before posting.";
       generation.setError(m);
@@ -983,6 +1094,7 @@ export default function Home() {
       return;
     }
     if (!authStatus.connected) { const m = "Connect an Instagram account before publishing."; generation.setError(m); toast.error(m); return; }
+    await saveNow();
     generation.setError(null); setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current); setPublishingForPostId(postId);
     try {
       const seq = activeVariant.assetSequence.map((id) => assetMap.get(id)).filter((a): a is LocalAsset => Boolean(a));
@@ -1099,6 +1211,12 @@ export default function Home() {
   const runGenerateFromQuickAction = useCallback(
     async (options?: { notifyOnMissingAssets?: boolean }): Promise<"started" | "busy" | "missing-assets"> => {
       const notifyOnMissingAssets = options?.notifyOnMissingAssets ?? true;
+      if (activePostStatusRef.current === "posted") {
+        const m = "Posted posts are locked. Duplicate the post to generate a new version.";
+        generation.setError(m);
+        toast.error(m);
+        return "busy";
+      }
       if (isAgentBusyRef.current) return "busy";
       if (localAssetsRef.current.length === 0) {
         if (notifyOnMissingAssets) {
@@ -1114,8 +1232,22 @@ export default function Home() {
     [generation],
   );
 
+  const getKnownPostStatus = useCallback(
+    (postId: string) =>
+      activePost?.id === postId
+        ? activePost.status
+        : posts.find((postSummary) => postSummary.id === postId)?.status,
+    [activePost?.id, activePost?.status, posts],
+  );
+
   const requestGenerateForPost = useCallback(async (postId: string) => {
     if (!postId) return;
+    if (getKnownPostStatus(postId) === "posted") {
+      const m = "Posted posts are locked. Duplicate the post to generate a new version.";
+      generation.setError(m);
+      toast.error(m);
+      return;
+    }
     const needsSelection = activePost?.id !== postId;
     const needsHydration = hydratedAssetsPostId !== postId;
 
@@ -1135,17 +1267,23 @@ export default function Home() {
 
     // Keep request queued while waiting for assets or busy state to clear.
     setPendingGenerateRequest({ postId });
-  }, [activePost?.id, hydratedAssetsPostId, runGenerateFromQuickAction, selectPost]);
+  }, [activePost?.id, generation, getKnownPostStatus, hydratedAssetsPostId, runGenerateFromQuickAction, selectPost]);
 
   const requestPublishForPost = useCallback(async (postId: string, scheduleAt?: string) => {
     if (!postId) return;
+    if (getKnownPostStatus(postId) === "posted") {
+      const m = "Posted posts are locked. Duplicate the post to publish a new version.";
+      generation.setError(m);
+      toast.error(m);
+      return;
+    }
     if (activePost?.id !== postId) {
       setPendingPublishRequest({ postId, scheduleAt });
       await selectPost(postId);
       return;
     }
     await publishToInstagramRef.current(scheduleAt);
-  }, [activePost?.id, selectPost]);
+  }, [activePost?.id, generation, getKnownPostStatus, selectPost]);
 
   const handlePublishJobsMutated = useCallback(async (
     postId: string | undefined,
@@ -1158,16 +1296,12 @@ export default function Home() {
         status:
           action === "reschedule" || action === "edit" || action === "retry-now"
             ? "scheduled"
-            : action === "move-to-draft"
-              ? "draft"
-              : activePost.result
-              ? "generated"
-              : "draft",
+            : "draft",
       });
     }
 
     await refreshPosts();
-  }, [activePost?.id, activePost?.result, dispatch, refreshPosts]);
+  }, [activePost?.id, dispatch, refreshPosts]);
 
   const handleDuplicatePost = useCallback(async (postId: string) => {
     try {
@@ -1180,85 +1314,89 @@ export default function Home() {
     }
   }, [duplicatePost]);
 
-  const handleFinishLater = useCallback(async () => {
-    if (!activePost) return;
+  const handleMoveScheduledToDraft = useCallback(async () => {
+    if (!activePost || activePost.status !== "scheduled") return;
 
     try {
-      if (activePost.status === "scheduled") {
-        const jobsResponse = await fetch(
-          "/api/publish-jobs?status=queued,processing&limit=50",
-          { cache: "no-store" },
-        );
-        if (!jobsResponse.ok) {
-          throw new Error(await parseApiError(jobsResponse));
-        }
-
-        const scheduledJobs = PublishJobListResponseSchema.parse(
-          await jobsResponse.json(),
-        ).jobs.filter((job) => job.postId === activePost.id);
-
-        if (scheduledJobs.length > 0) {
-          setPublishJobsRefreshKey((value) => value + 1);
-          const moveResults = await Promise.allSettled(
-            scheduledJobs.map(async (job) => {
-              const moveResponse = await fetch(`/api/publish-jobs/${job.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "move-to-draft" }),
-              });
-              if (!moveResponse.ok) {
-                throw new Error(await parseApiError(moveResponse));
-              }
-            }),
-          );
-          const failedMoves = moveResults.filter(
-            (result): result is PromiseRejectedResult =>
-              result.status === "rejected",
-          );
-
-          if (failedMoves.length === 0) {
-            await handlePublishJobsMutated(activePost.id, "move-to-draft");
-            toast.success("Moved scheduled post back to drafts.");
-            return;
-          }
-
-          await refreshPosts();
-
-          const movedCount = scheduledJobs.length - failedMoves.length;
-          const firstFailure = failedMoves[0]?.reason;
-          const failureMessage =
-            firstFailure instanceof Error
-              ? firstFailure.message
-              : "Unknown error";
-
-          if (movedCount > 0) {
-            throw new Error(
-              `Moved ${movedCount} of ${scheduledJobs.length} scheduled jobs back to drafts. ${failedMoves.length} failed: ${failureMessage}`,
-            );
-          }
-
-          throw new Error(failureMessage);
-        }
+      const jobsResponse = await fetch(
+        "/api/publish-jobs?status=queued,processing&limit=50",
+        { cache: "no-store" },
+      );
+      if (!jobsResponse.ok) {
+        throw new Error(await parseApiError(jobsResponse));
       }
 
-      dispatch({
-        type: "SET_STATUS",
-        postId: activePost.id,
-        status: "draft",
-      });
-      await saveNow();
-      await refreshPosts();
-      toast.success("Saved to drafts.");
+      const scheduledJobs = PublishJobListResponseSchema.parse(
+        await jobsResponse.json(),
+      ).jobs.filter((job) => job.postId === activePost.id);
+
+      if (scheduledJobs.length > 0) {
+        setPublishJobsRefreshKey((value) => value + 1);
+        const moveResults = await Promise.allSettled(
+          scheduledJobs.map(async (job) => {
+            const moveResponse = await fetch(`/api/publish-jobs/${job.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "move-to-draft" }),
+            });
+            if (!moveResponse.ok) {
+              throw new Error(await parseApiError(moveResponse));
+            }
+          }),
+        );
+        const failedMoves = moveResults.filter(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+        );
+
+        if (failedMoves.length === 0) {
+          await handlePublishJobsMutated(activePost.id, "move-to-draft");
+          toast.success("Moved scheduled post back to drafts.");
+          return;
+        }
+
+        await refreshPosts();
+
+        const movedCount = scheduledJobs.length - failedMoves.length;
+        const firstFailure = failedMoves[0]?.reason;
+        const failureMessage =
+          firstFailure instanceof Error
+            ? firstFailure.message
+            : "Unknown error";
+
+        if (movedCount > 0) {
+          throw new Error(
+            `Moved ${movedCount} of ${scheduledJobs.length} scheduled jobs back to drafts. ${failedMoves.length} failed: ${failureMessage}`,
+          );
+        }
+
+        throw new Error(failureMessage);
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not move post to drafts.",
       );
     }
-  }, [activePost, dispatch, handlePublishJobsMutated, refreshPosts, saveNow]);
+  }, [activePost, handlePublishJobsMutated, refreshPosts]);
+
+  const handleArchiveCurrentPost = useCallback(async () => {
+    if (!activePost || activePost.archivedAt) return;
+
+    try {
+      await archivePost(activePost.id);
+      toast.success(
+        activePost.status === "posted" ? "Posted post archived." : "Post archived.",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not archive post.",
+      );
+    }
+  }, [activePost, archivePost]);
 
   const postLifecycleActions = activePost ? (
     <>
-      {activeVariant ? (
+      {activeVariant && !isPostedPost ? (
         <Button
           variant="outline"
           onClick={() => setEditorMode((v) => !v)}
@@ -1277,14 +1415,16 @@ export default function Home() {
           )}
         </Button>
       ) : null}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void handleFinishLater()}
-        disabled={isAgentBusy}
-      >
-        Finish later
-      </Button>
+      {isScheduledPost ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void handleMoveScheduledToDraft()}
+          disabled={isAgentBusy}
+        >
+          Move to draft
+        </Button>
+      ) : null}
       <Button
         variant="outline"
         size="sm"
@@ -1294,8 +1434,97 @@ export default function Home() {
         <Copy className="h-3.5 w-3.5" />
         Duplicate post
       </Button>
+      {isPostedPost && !activePost.archivedAt ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void handleArchiveCurrentPost()}
+          disabled={isAgentBusy}
+        >
+          Archive
+        </Button>
+      ) : null}
     </>
   ) : null;
+
+  const renderPostedReadOnlySummary = () =>
+    isPostedPost ? (
+      <div className="space-y-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/5 p-4">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.18em] text-emerald-200 uppercase">
+            Posted Snapshot
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-200">
+            This post is already posted. IG Poster locks posted posts because the Meta publishing API flow we use does not support updating published media. Duplicate this post to create a new editable draft.
+          </p>
+          {latestPublishEntry?.publishedAt ? (
+            <p className="mt-2 text-xs text-slate-400">
+              Posted{" "}
+              {formatDateTimeInTimeZone(latestPublishEntry.publishedAt, localTimeZone, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}{" "}
+              ({localTimeZone})
+            </p>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+              Brand
+            </p>
+            <p className="mt-2 text-sm text-white">{brand.brandName}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+              Subject
+            </p>
+            <p className="mt-2 text-sm text-white">{post.subject}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+              Objective
+            </p>
+            <p className="mt-2 text-sm text-white">{post.objective}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+              Audience
+            </p>
+            <p className="mt-2 text-sm text-white">{post.audience}</p>
+          </div>
+        </div>
+
+        {effectiveCaption ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+              Caption Snapshot
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-200">
+              {effectiveCaption}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+  const renderComposerActions = () =>
+    isPostedPost ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" onClick={() => void exportPoster()} disabled={!activeVariant}>
+          <Download className="h-4 w-4" />
+          Export PNG
+        </Button>
+        {postLifecycleActions}
+      </div>
+    ) : (
+      <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} extraActions={postLifecycleActions}>
+        <div className="w-36">
+          <PostBriefAspectRatio aspectRatio={post.aspectRatio} disabled={generation.isGenerating} showLabel={false} onChange={(value) => typedDispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value } })} />
+        </div>
+      </PostBriefActions>
+    );
 
   useEffect(() => {
     if (!pendingGenerateRequest || activePost?.id !== pendingGenerateRequest.postId) {
@@ -1406,18 +1635,18 @@ export default function Home() {
                     <section className="border-b border-white/10 pb-6">
                       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,27rem)_minmax(0,1fr)]">
                         <div className="min-w-0 max-w-[27rem]">
-                          <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} compact showHeader={false} showActions={false} showAspectRatio={false} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} />
+                          {isPostedPost ? (
+                            renderPostedReadOnlySummary()
+                          ) : (
+                            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} compact showHeader={false} showActions={false} showAspectRatio={false} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} />
+                          )}
                         </div>
                         <div className="min-w-0 space-y-4">
                           <div className="w-full max-w-[40rem]">
-                            <PostBriefActions llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} extraActions={postLifecycleActions}>
-                              <div className="w-36">
-                                <PostBriefAspectRatio aspectRatio={post.aspectRatio} disabled={generation.isGenerating} showLabel={false} onChange={(value) => typedDispatch({ type: "UPDATE_BRIEF", brief: { aspectRatio: value } })} />
-                              </div>
-                            </PostBriefActions>
+                            {renderComposerActions()}
                           </div>
-                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
-                          {activeVariant?.postType === "carousel" ? (
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                          {activeVariant?.postType === "carousel" && !isPostedPost ? (
                             <CarouselComposer
                               assets={localAssets}
                               assetSequence={carouselComposerSequence}
@@ -1430,10 +1659,12 @@ export default function Home() {
                         </div>
                       </div>
                     </section>
-                    <section className="border-b border-white/10 pb-6">
-                      <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
-                    </section>
-                    {result && (
+                    {!isPostedPost ? (
+                      <section className="border-b border-white/10 pb-6">
+                        <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
+                      </section>
+                    ) : null}
+                    {result && !isPostedPost ? (
                       <section className="border-b border-white/10 pb-6">
                         <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
                           if (!activeVariant) return;
@@ -1444,15 +1675,15 @@ export default function Home() {
                           });
                         }} saveStatus={saveStatus} onSaveNow={saveNow} />
                       </section>
-                    )}
-                    {activeVariant && (
+                    ) : null}
+                    {activeVariant && !isPostedPost ? (
                       <section className="pb-6">
                         <div className="space-y-4">
                           <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
                           <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
                         </div>
                       </section>
-                    )}
+                    ) : null}
                   </div>
                 </ScrollArea>
               </ResizablePanel>
@@ -1488,10 +1719,18 @@ export default function Home() {
 
           {/* Mobile single column */}
           <div className="space-y-6 px-4 lg:hidden">
-            <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} extraActions={postLifecycleActions} />
-            <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
-            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
-            {activeVariant?.postType === "carousel" ? (
+            {isPostedPost ? (
+              renderPostedReadOnlySummary()
+            ) : (
+              <PostBriefForm post={post} llmAuthStatus={llmAuthStatus} isGenerating={generation.isGenerating} isUploadingAssets={isUploadingAssets} hasAssets={localAssets.length > 0} hasResult={!!activeVariant} brandKits={brandKits} activeBrandKitId={activePost?.brandKitId} activeLogoUrl={activePost?.logoUrl} dispatch={typedDispatch} onGenerate={() => void generation.generate()} onCancelGenerate={generation.stopGeneration} onExportPoster={() => void exportPoster()} onSelectBrandKit={(id) => void handleSelectBrandKit(id)} onSelectLogo={handleSelectLogo} extraActions={postLifecycleActions} />
+            )}
+            {isPostedPost ? (
+              renderComposerActions()
+            ) : (
+              <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
+            )}
+            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
+            {activeVariant?.postType === "carousel" && !isPostedPost ? (
               <CarouselComposer
                 assets={localAssets}
                 assetSequence={carouselComposerSequence}
@@ -1501,20 +1740,20 @@ export default function Home() {
                 disabled={isAgentBusy}
               />
             ) : null}
-            {result && <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
+            {result && !isPostedPost ? <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
               if (!activeVariant) return;
               dispatch({
                 type: "UPDATE_OVERLAY",
                 variantId: activeVariant.id,
                 layout,
               });
-            }} saveStatus={saveStatus} onSaveNow={saveNow} />}
-            {activeVariant && (
+            }} saveStatus={saveStatus} onSaveNow={saveNow} /> : null}
+            {activeVariant && !isPostedPost ? (
               <div className="space-y-4">
                 <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
                 <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
               </div>
-            )}
+            ) : null}
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setMobileAgentSheetOpen(true)} className="flex-1">Agent Activity</Button>
               <Button variant="outline" size="sm" onClick={() => setMobileChatSheetOpen(true)} className="flex-1">Chat</Button>

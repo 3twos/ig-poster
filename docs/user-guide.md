@@ -27,8 +27,8 @@
 3. Navigate the 3-column layout
    - Left panel: posts list with thumbnails — browse, select, post now/schedule, duplicate, archive, or delete posts.
    - Each post row is fully clickable (title, thumbnail, and metadata), and hover on a thumbnail shows a larger preview.
-   - Post rows show visual state chips (`Unposted`, `Dirty`, `Posted`, plus `Scheduled`/`Archived` where applicable).
-   - Filter tabs include All, Drafts, Generated, Scheduled, Published, and Archived.
+   - Post rows show visual state chips (`Draft`, `Dirty`, `Post at`, `Posted`, and `Archived` where applicable).
+   - Filter tabs include All, Drafts, Scheduled, Posted, and Archived.
    - Center panel: post brief, asset manager, preview, strategy, and publish sections.
    - Right panel: switch between **Agent** and **Chat** tabs.
      - Agent tab: real-time generation progress and LLM reasoning.
@@ -58,6 +58,8 @@
      - hook/headline/body/CTA
      - caption + hashtags
      - post type and media sequencing
+   - `Generate` keeps the post in `Draft`. Running it again uses the current brief, assets, brand kit, and logo selection to create a fresh result.
+   - A fresh `Generate` pass intentionally ignores prior `Refine` instructions and manual editor component changes. Use it when you want a reset, not an incremental tweak.
    - During generation, the right panel streams LLM reasoning tokens in real time. Expand "Show reasoning" to see the model's thought process.
 
 8. Pick and edit a variant
@@ -74,7 +76,9 @@
    - Turning editor mode off keeps the edited layout visible in the normal preview and in shared snapshots.
    - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
    - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.
-   - Use `Finish later` to explicitly move the current work back into Drafts, or `Duplicate post` to fork the current post into a new editable copy.
+   - `Refine` is the incremental path: it updates the selected variant while preserving the current editor placement and visual treatment unless you explicitly ask the AI to change them.
+   - `Duplicate post` forks the current post into a new editable draft copy. If the source post is already posted, duplication is the only way to continue iterating.
+   - Scheduled posts can be moved back into `Draft` with `Move to draft`.
 
 9. Export or copy content
    - Export poster as PNG.
@@ -97,6 +101,7 @@
    - The publish section also shows a workspace queue for queued, processing, and failed jobs.
    - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata, including visual tag placement and location search assist, plus reel feed-sharing and per-item carousel tags) without leaving the editor.
    - Each queue card now shows recent activity entries so you can see retries, deferrals, failures, and manual edits without checking the database.
+   - After a post is successfully published, IG Poster marks it `Posted` and switches it to a read-only snapshot view. Posted posts cannot be edited or deleted; archive them to hide them from the main list, or duplicate them to create a new draft.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -132,13 +137,15 @@
 - Sidebar list refreshes keep existing entries visible to avoid flicker while background updates run.
 - Editor text/layout changes and carousel composition changes are part of the same autosaved draft state as your brief, assets, and selected variant.
 - Duplicating a post creates a new draft copy with the current creative result, media composition, and publish settings, but without old share links or publish history.
-- `Finish later` can be used before or after generation; if the post was already scheduled, the app first removes the pending schedule and then returns the post to Drafts.
+- Posted posts are immutable in IG Poster because the Meta publishing API flow used here does not support updating the published media payload.
+- Moving a scheduled post back to draft first cancels the pending publish job, then returns the post to `Draft`.
 
 ## Publishing Behavior
 
 - `single-image` variant publishes a rendered poster image.
 - `carousel` variant uses the Carousel Composer sequence (minimum 2 items, up to 10) and the selected feed orientation.
 - `reel` variant requires at least one uploaded video and includes a `Share reel to main feed` toggle. The default is on, matching the previous hardcoded behavior.
+- Post status lifecycle is `Draft -> Scheduled -> Posted`, with archiving handled separately via the archive action.
 - Location ID is supported for single-image posts, reels, and carousel parents.
 - User tags are supported for single-image posts, reels, and carousel image items. Carousel videos cannot carry user tags.
 - Location search suggestions populate the same `locationId` field sent to Meta; if search fails, you can still paste the raw ID manually.
@@ -152,6 +159,7 @@
 - Failed jobs stay visible in the publish queue with their latest error so they can be retried immediately or edited and re-queued.
 - If the 24-hour publish window is saturated, immediate publish returns a clear limit message and due queued jobs are deferred automatically (without consuming retry attempts) until capacity returns.
 - First-comment posting is best effort: publish success is preserved even if first-comment posting fails.
+- Because posted posts are locked, any further iteration happens by duplicating the post into a new draft rather than editing the posted record in place.
 
 ## Managing Connections
 

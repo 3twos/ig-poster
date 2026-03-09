@@ -19,11 +19,12 @@
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
 - Sidebar post rows expose quick publish actions (`Post now`, `Post at`) plus `Duplicate` in the context menu, in addition to archive/delete controls.
+- Keeps the post lifecycle intentionally narrow: `draft`, `scheduled`, and `posted`, with posted posts locked from further edits or deletion and archivable instead.
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed Postgres queue.
 - Promotes caption editing into a persisted post-composer field, while keeping the generated caption bundle available as a one-click suggestion.
-- Adds explicit lifecycle controls for `Finish later`, `Duplicate post`, and a planner sheet for scheduled posts.
+- Adds explicit lifecycle controls for `Move to draft`, `Duplicate post`, `Archive`, and a planner sheet for scheduled posts.
 - Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor.
 - Supports Meta location search assist plus structured user tagging for single-image posts, reels, and carousel image items, with per-item carousel tagging persisted in media-composition state.
 - For reels, supports choosing whether the publish should also appear on the main feed (`share_to_feed`), with the default remaining on.
@@ -45,7 +46,7 @@
 - Deterministic fallback generation when no LLM credentials are available or all models fail.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
 - Blob-backed storage for uploads, shared project snapshots, and outcome snapshots used for insights.
-- Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/generated/published/scheduled/archived` for posts).
+- Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/scheduled/posted` for posts, plus `archivedAt` as a soft-archive marker).
 - Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/whoami`, `assets upload`, `brand-kits list/get`, `posts list/get/create/update/duplicate/archive`, `publish-jobs list/get/update`).
 
 ## Primary User Scenarios
@@ -58,6 +59,7 @@
 
 2. Build reusable campaign options
    - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, and fine-tune the canvas layout or copy without regenerating.
+   - Use `Refine` to revise copy while preserving the current editor layout/look unless you explicitly ask for visual changes. Use `Generate` when you want a full fresh result from the saved brief and assets, even if that means discarding prior manual/refine component edits.
 
 3. Collaborate asynchronously
    - Save a project snapshot and send a share link so teammates can review the selected concept.
@@ -70,6 +72,7 @@
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.
    - Review scheduled posts from the planner, move them back to draft when needed, and use the queue for lower-level retry/edit diagnostics.
+   - Once a post is posted, archive it to remove it from the main list or duplicate it to start a new editable version.
 
 6. Refine ideas with AI chat
    - Open the Chat tab in the right panel to brainstorm captions, get hashtag suggestions, or refine creative direction in a multi-turn conversation.

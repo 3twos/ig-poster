@@ -2,17 +2,16 @@ import type { PostRow } from "@/db/schema";
 
 export type PostStatus =
   | "draft"
-  | "generated"
-  | "published"
   | "scheduled"
-  | "archived";
+  | "posted";
 
 export type PostSummary = {
   id: string;
   title: string;
-  status: string;
+  status: PostStatus;
   createdAt: string;
   updatedAt: string;
+  archivedAt: string | null;
   assetCount: number;
   variantCount: number;
   thumbnail?: string;
@@ -54,6 +53,7 @@ export function toSummary(row: PostRow): PostSummary {
     status: row.status,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    archivedAt: row.archivedAt?.toISOString() ?? null,
     assetCount: row.assets?.length ?? 0,
     variantCount: variants.length,
     thumbnail: deriveThumbnail(row),

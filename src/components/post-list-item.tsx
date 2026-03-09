@@ -40,9 +40,8 @@ import { cn } from "@/lib/utils";
 
 const STATUS_DOT: Record<string, string> = {
   draft: "bg-slate-400",
-  generated: "bg-blue-400",
-  published: "bg-green-400",
   scheduled: "bg-amber-400",
+  posted: "bg-green-400",
   archived: "bg-slate-600",
 };
 
@@ -89,19 +88,6 @@ function getDisplayStatus(status: string, isDirty: boolean): DisplayStatus {
     };
   }
 
-  if (status === "generated") {
-    return {
-      label: "UNPOSTED",
-      tone: "border-blue-300/45 bg-blue-400/10 text-blue-100",
-      dotTone: STATUS_DOT.generated,
-      tooltipLabel: "unposted",
-      actions: [
-        { id: "post", label: "POST" },
-        { id: "post-at", label: "POST AT" },
-      ],
-    };
-  }
-
   if (status === "scheduled") {
     return {
       label: "POST AT",
@@ -112,11 +98,11 @@ function getDisplayStatus(status: string, isDirty: boolean): DisplayStatus {
     };
   }
 
-  if (status === "published") {
+  if (status === "posted") {
     return {
       label: "POSTED",
       tone: "border-emerald-300/45 bg-emerald-400/10 text-emerald-100",
-      dotTone: STATUS_DOT.published,
+      dotTone: STATUS_DOT.posted,
       tooltipLabel: "posted",
       actions: [],
     };
@@ -173,17 +159,47 @@ export function PostListItem({
   const [expandedStatusKey, setExpandedStatusKey] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const displayStatus = useMemo(
-    () => getDisplayStatus(post.status, isDirty),
-    [post.status, isDirty],
-  );
+  const displayStatus = useMemo(() => {
+    if (post.archivedAt) {
+      return {
+        label: "ARCHIVED",
+        tone: "border-slate-400/35 bg-slate-500/10 text-slate-200",
+        dotTone: STATUS_DOT.archived,
+        tooltipLabel: "archived",
+        actions: [],
+      } satisfies DisplayStatus;
+    }
+
+    if (post.status === "draft" && !isDirty) {
+      return {
+        label: "DRAFT",
+        tone: "border-slate-300/35 bg-slate-500/10 text-slate-100",
+        dotTone: STATUS_DOT.draft,
+        tooltipLabel: post.variantCount > 0 ? "draft, ready to publish" : "draft",
+        actions:
+          post.variantCount > 0
+            ? [
+                { id: "generate", label: "GENERATE" },
+                { id: "post", label: "POST" },
+                { id: "post-at", label: "POST AT" },
+              ]
+            : [{ id: "generate", label: "GENERATE" }],
+      } satisfies DisplayStatus;
+    }
+
+    return getDisplayStatus(post.status, isDirty);
+  }, [post.archivedAt, post.status, post.variantCount, isDirty]);
   const hasQuickActions = displayStatus.actions.length > 0;
   const statusKey = `${post.id}:${post.status}:${isDirty ? "dirty" : "clean"}`;
   const quickActionsId = `post-status-actions-${post.id}`;
   const showQuickActions = hasQuickActions && expandedStatusKey === statusKey;
   const canPostNow = Boolean(onPostNow);
   const canSchedulePost = Boolean(onSchedulePost);
-  const hasPublishMenuActions = canPostNow || canSchedulePost;
+  const hasGeneratedDraft = post.status === "draft" && post.variantCount > 0;
+  const hasPublishMenuActions =
+    !post.archivedAt && hasGeneratedDraft && (canPostNow || canSchedulePost);
+  const canDelete = post.status !== "posted";
+  const canArchive = !post.archivedAt;
 
   useEffect(() => {
     if (!showQuickActions) return;
@@ -405,32 +421,39 @@ export function PostListItem({
                   Duplicate
                 </DropdownMenuItem>
               ) : null}
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.stopPropagation();
-                  onArchive();
-                }}
-              >
-                <Archive className="h-3.5 w-3.5" />
-                Archive
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={(event) => {
-                  event.stopPropagation();
-                  setDeleteDialogOpen(true);
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </DropdownMenuItem>
+              {canArchive ? (
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.stopPropagation();
+                    onArchive();
+                  }}
+                >
+                  <Archive className="h-3.5 w-3.5" />
+                  Archive
+                </DropdownMenuItem>
+              ) : null}
+              {canDelete ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={(event) => {
+                    event.stopPropagation();
+                    setDeleteDialogOpen(true);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog
+        open={canDelete && deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete post?</AlertDialogTitle>

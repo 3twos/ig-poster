@@ -5,9 +5,12 @@ import { archivePost } from "@/services/posts";
 
 export const runtime = "nodejs";
 
-type Params = { params: Promise<{ id: string }> };
+type RouteContext = { params: Promise<{ id: string }> };
 
-export async function POST(req: Request, { params }: Params) {
+export async function POST(
+  req: Request,
+  { params }: RouteContext,
+) {
   try {
     const actor = await resolveActorFromRequest(req);
     if (!actor) {

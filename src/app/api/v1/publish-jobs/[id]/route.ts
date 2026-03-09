@@ -12,7 +12,7 @@ import {
 
 export const runtime = "nodejs";
 
-type Params = { params: Promise<{ id: string }> };
+type RouteContext = { params: Promise<{ id: string }> };
 
 const errorCodeForStatus = (status: PublishJobServiceError["status"]): ApiErrorCode => {
   switch (status) {
@@ -27,7 +27,10 @@ const errorCodeForStatus = (status: PublishJobServiceError["status"]): ApiErrorC
   }
 };
 
-export async function GET(req: Request, { params }: Params) {
+export async function GET(
+  req: Request,
+  { params }: RouteContext,
+) {
   try {
     const actor = await resolveActorFromRequest(req);
     if (!actor) {
@@ -49,7 +52,10 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-export async function PATCH(req: Request, { params }: Params) {
+export async function PATCH(
+  req: Request,
+  { params }: RouteContext,
+) {
   try {
     const actor = await resolveActorFromRequest(req);
     if (!actor) {

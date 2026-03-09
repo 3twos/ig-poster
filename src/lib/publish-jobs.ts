@@ -74,7 +74,7 @@ export const markPostPublished = async (
   await db
     .update(posts)
     .set({
-      status: "published",
+      status: "posted",
       publishedAt: new Date(),
       updatedAt: new Date(),
       publishHistory: [

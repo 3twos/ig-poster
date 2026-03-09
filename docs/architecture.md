@@ -36,6 +36,7 @@ flowchart LR
 - Next.js 16 auth gate entrypoint uses `src/proxy.ts` (Proxy file convention), which is executed as middleware.
 - UI layer:
   - `src/app/page.tsx` is the primary editor page, composing a 3-column resizable layout (posts list, editing content, agent activity or chat) using `react-resizable-panels`. The right panel has Agent/Chat tab switching.
+    Posted posts render as a read-only snapshot in the center pane; duplicate/archive remain available, but editing/publish controls are removed.
   - `src/components/app-shell.tsx` hosts nav + main area and can optionally hide the global footer status bar when a route renders its own fixed workflow status bar.
   - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `carousel-composer.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-metadata-editor.tsx`, `publish-section.tsx`, `scheduled-planner.tsx`, `agent-activity-panel.tsx`.
   - Settings and brand kit management live on a dedicated `/settings` page (`src/app/settings/page.tsx`) with sidebar tab navigation (General, LLM Provider, Brand Kits). Components are in `src/components/settings/`.
@@ -76,11 +77,13 @@ flowchart LR
 2. Client creates/selects posts through `POST/GET /api/posts*`.
 3. Client autosaves edits with `PUT /api/posts/:id` (debounced + beforeunload keepalive).
 4. Server persists post state in Postgres.
+5. Once a post reaches `posted`, the API rejects further edits/deletion; archiving is tracked via `archivedAt` and duplication creates a new `draft`.
 
 Why this shape:
 - Keeps long-lived drafts out of browser memory and enables multi-post workflow.
 - Supports reliable autosave and recent-post retrieval per authenticated workspace user.
 - Keeps canvas edits (`overlayLayouts`), carousel media composition (`mediaComposition`), and publish metadata (`publishSettings`) in the same persisted draft object as the creative result, so layout/order/orientation/caption/tagging adjustments survive preview toggles, planner actions, shared snapshots, and post switching.
+- Preserves a simple lifecycle model for posts: `draft`, `scheduled`, `posted`, with archive state orthogonal to publish state.
 
 ### 2) Generate Creative
 
@@ -94,10 +97,12 @@ Why this shape:
    LLM thinking/reasoning tokens are forwarded to the client as `llm-thinking` SSE events.
 6. Response is validated with `GenerationResponseSchema`.
 7. If all models fail, fallback response generator returns deterministic variants.
+8. Regeneration replaces the stored result for the post and does not attempt to merge prior refine instructions or manual editor component overrides back into the new output.
 
 Why this shape:
 - Schema-first contracts reduce malformed LLM output risk.
 - Fallback response keeps the core workflow available during outages or unconfigured environments.
+- Keeps `Generate` as a clean re-run from persisted brief inputs, while `Refine` remains the incremental path that preserves the current canvas look unless asked otherwise.
 
 ### 3) Share Project
 
@@ -121,7 +126,8 @@ Before submitting, clients can call `GET /api/meta/locations?q=<query>` to turn 
 4. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
 5. Otherwise route publishes immediately through Meta Graph API helpers.
 6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` is passed through for feed/reel publish jobs, optional top-level `userTags` are passed through for single-image and reel jobs, and carousel image-item tags are passed through per child item. Optional reel `shareToFeed` is passed through for reel-mode publish jobs.
-7. Cron route (`GET /api/cron/publish`) first fails stale `processing` jobs for manual review, then claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
+7. Successful publish marks the linked post `posted`, appends publish history, and leaves that post immutable from the app's post-edit APIs.
+8. Cron route (`GET /api/cron/publish`) first fails stale `processing` jobs for manual review, then claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
 
 Why this shape:
 - Separates interactive request latency from scheduled execution.
@@ -188,7 +194,8 @@ Why this shape:
 - Postgres persistence now includes:
   - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), attempts/retries, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), and event timeline.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
-- `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `generated`, `published`, `scheduled`, `archived`).
+- `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `scheduled`, `posted`).
+- `posts.archivedAt` is the soft-archive flag; archived posts keep their publish status instead of switching to a separate archived enum value.
 - CLI-local state is stored outside the app database in a user config file (`~/.config/ig-poster/config.json` unless `IG_POSTER_CONFIG_DIR` is set).
 
 ## Security Posture

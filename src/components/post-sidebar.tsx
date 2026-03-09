@@ -21,12 +21,13 @@ import { usePostContext } from "@/contexts/post-context";
 import type { PostStatus } from "@/lib/post";
 import { cn } from "@/lib/utils";
 
-const FILTERS: Array<{ label: string; value: "all" | PostStatus }> = [
+type SidebarFilter = "all" | PostStatus | "archived";
+
+const FILTERS: Array<{ label: string; value: SidebarFilter }> = [
   { label: "All", value: "all" },
   { label: "Drafts", value: "draft" },
-  { label: "Generated", value: "generated" },
   { label: "Scheduled", value: "scheduled" },
-  { label: "Published", value: "published" },
+  { label: "Posted", value: "posted" },
   { label: "Archived", value: "archived" },
 ];
 
@@ -57,7 +58,7 @@ export function SidebarContent({
     saveStatus,
   } = usePostContext();
 
-  const [filter, setFilter] = useState<"all" | PostStatus>("all");
+  const [filter, setFilter] = useState<SidebarFilter>("all");
   const [isCreating, setIsCreating] = useState(false);
 
   // Lazy-load archived posts when switching to Archived tab

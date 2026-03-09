@@ -47,7 +47,7 @@ export async function POST(req: Request, ctx: Ctx) {
         id: randomId(),
         ownerHash,
         title: duplicateTitle(existing),
-        status: existing.result ? "generated" : "draft",
+        status: "draft",
         brand: existing.brand ?? null,
         brief: existing.brief ?? null,
         assets: existing.assets ?? [],

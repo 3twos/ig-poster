@@ -5,10 +5,8 @@ import { deriveTitle, toSummary } from "@/lib/post";
 
 export const PostStatusSchema = z.enum([
   "draft",
-  "generated",
-  "published",
   "scheduled",
-  "archived",
+  "posted",
 ]);
 
 export const PostSummaryResourceSchema = z.object({
@@ -17,6 +15,7 @@ export const PostSummaryResourceSchema = z.object({
   status: PostStatusSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  archivedAt: z.string().datetime().nullable(),
   assetCount: z.number().int().nonnegative(),
   variantCount: z.number().int().nonnegative(),
   thumbnail: z.string().optional(),
@@ -35,6 +34,7 @@ export const PostResourceSchema = z.object({
   activeVariantId: z.string().nullable(),
   mediaComposition: z.unknown().nullable(),
   publishSettings: z.unknown().nullable(),
+  archivedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -71,6 +71,7 @@ export const toPostResource = (row: PostRow) => ({
   activeVariantId: row.activeVariantId ?? null,
   mediaComposition: row.mediaComposition ?? null,
   publishSettings: row.publishSettings ?? null,
+  archivedAt: row.archivedAt?.toISOString() ?? null,
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 });

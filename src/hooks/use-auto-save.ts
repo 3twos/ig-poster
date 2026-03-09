@@ -39,6 +39,7 @@ export function useAutoSave(
   const saveNow = useCallback(async () => {
     const d = draftRef.current;
     if (!d) return;
+    if (d.status === "posted") return;
 
     const cached = lastSerializedRef.current;
     const serialized = (cached && cached.id === d.id) ? cached.json : withPerfSync("autoSave:serialize", () => serializeDraft(d));
@@ -89,6 +90,11 @@ export function useAutoSave(
   // Debounced auto-save effect
   useEffect(() => {
     if (!draft) return;
+
+    if (draft.status === "posted") {
+      setSaveStatus("saved");
+      return;
+    }
 
     const serialized = withPerfSync("autoSave:serialize", () => serializeDraft(draft));
     lastSerializedRef.current = { id: draft.id, json: serialized };

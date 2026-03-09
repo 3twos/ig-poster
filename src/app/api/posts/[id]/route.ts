@@ -66,6 +66,15 @@ export async function PUT(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    if (existing.status === "posted") {
+      return NextResponse.json(
+        {
+          error: "Posted posts are locked. Duplicate the post to make changes.",
+        },
+        { status: 409 },
+      );
+    }
+
     // Build update payload — merge JSONB fields, overwrite scalars
     const update: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -129,11 +138,6 @@ export async function PUT(req: Request, ctx: Ctx) {
       }
     }
 
-    // Auto-transition draft → generated when result is set
-    if (body.result && existing.status === "draft") {
-      update.status = "generated";
-    }
-
     const [updated] = await db
       .update(posts)
       .set(update)
@@ -167,6 +171,25 @@ export async function DELETE(req: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     const ownerHash = hashEmail(session.email);
     const db = getDb();
+
+    const [existing] = await db
+      .select({ status: posts.status })
+      .from(posts)
+      .where(and(eq(posts.id, id), eq(posts.ownerHash, ownerHash)))
+      .limit(1);
+
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (existing.status === "posted") {
+      return NextResponse.json(
+        {
+          error: "Posted posts cannot be deleted. Archive the post instead.",
+        },
+        { status: 409 },
+      );
+    }
 
     await db
       .delete(posts)

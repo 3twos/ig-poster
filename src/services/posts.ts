@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { brandKits, posts, type PostRow } from "@/db/schema";
@@ -20,6 +20,16 @@ const randomId = () =>
     .join("")
     .slice(0, 18);
 
+export class PostServiceError extends Error {
+  readonly status: 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "PostServiceError";
+    this.status = 409;
+  }
+}
+
 export const listPosts = async (
   actor: Actor,
   options: {
@@ -29,10 +39,10 @@ export const listPosts = async (
 ) => {
   const conditions = [eq(posts.ownerHash, actor.ownerHash)];
 
+  conditions.push(options.archived ? isNotNull(posts.archivedAt) : isNull(posts.archivedAt));
+
   if (options.status) {
     conditions.push(eq(posts.status, options.status));
-  } else if (!options.archived) {
-    conditions.push(ne(posts.status, "archived"));
   }
 
   const db = getDb();
@@ -129,6 +139,12 @@ export const updatePost = async (
     return null;
   }
 
+  if (existing.status === "posted") {
+    throw new PostServiceError(
+      "Posted posts are locked. Duplicate the post to make changes.",
+    );
+  }
+
   const update: Record<string, unknown> = { updatedAt: new Date() };
 
   if (body.title !== undefined) update.title = body.title;
@@ -191,10 +207,6 @@ export const updatePost = async (
     }
   }
 
-  if (body.result && body.status === undefined && existing.status === "draft") {
-    update.status = "generated";
-  }
-
   const [updated] = await db
     .update(posts)
     .set(update)
@@ -228,7 +240,7 @@ export const duplicatePost = async (actor: Actor, id: string) => {
       id: randomUUID().replace(/-/g, "").slice(0, 18),
       ownerHash: actor.ownerHash,
       title: duplicateTitle(existing),
-      status: existing.result ? "generated" : "draft",
+      status: "draft",
       brand: existing.brand ?? null,
       brief: existing.brief ?? null,
       assets: existing.assets ?? [],
@@ -259,7 +271,6 @@ export const archivePost = async (actor: Actor, id: string) => {
   const [updated] = await db
     .update(posts)
     .set({
-      status: "archived",
       archivedAt: new Date(),
       updatedAt: new Date(),
     })

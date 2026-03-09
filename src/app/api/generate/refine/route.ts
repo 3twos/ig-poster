@@ -31,7 +31,7 @@ export async function POST(req: Request) {
         (auth) => ({
           auth,
           systemPrompt:
-            "You refine Instagram creative variants. Apply the user's refinement instruction while preserving the variant's structure, postType, layout, and asset sequence. Return strict JSON only.",
+            "You refine Instagram creative variants. Apply the user's refinement instruction while preserving the current structure, postType, layout, asset sequence, and overall on-canvas look. Only change placement or styling if the user explicitly asks for it. Return strict JSON only.",
           userPrompt: `Refine this Instagram creative variant according to the instruction below.
 
 Current variant:

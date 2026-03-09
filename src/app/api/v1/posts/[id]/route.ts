@@ -7,9 +7,12 @@ import { getPost, updatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
 
-type Params = { params: Promise<{ id: string }> };
+type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(req: Request, { params }: Params) {
+export async function GET(
+  req: Request,
+  { params }: RouteContext,
+) {
   try {
     const actor = await resolveActorFromRequest(req);
     if (!actor) {
@@ -30,7 +33,10 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-export async function PATCH(req: Request, { params }: Params) {
+export async function PATCH(
+  req: Request,
+  { params }: RouteContext,
+) {
   try {
     const actor = await resolveActorFromRequest(req);
     if (!actor) {
@@ -48,6 +54,9 @@ export async function PATCH(req: Request, { params }: Params) {
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       return apiError(400, "INVALID_INPUT", "Invalid request body");
+    }
+    if (error instanceof Error && "status" in error && error.status === 409) {
+      return apiError(409, "CONFLICT", error.message);
     }
 
     console.error("[api/v1/posts/id]", error);

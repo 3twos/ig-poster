@@ -8,7 +8,7 @@ vi.mock("@/lib/workspace-auth", () => ({
   readWorkspaceSessionFromRequest: vi.fn(),
 }));
 
-import { PUT } from "@/app/api/posts/[id]/route";
+import { DELETE, PUT } from "@/app/api/posts/[id]/route";
 import { getDb } from "@/db";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
@@ -106,5 +106,69 @@ describe("PUT /api/posts/:id", () => {
     const [updatePayload] = updateSet.mock.calls[0];
     expect(updatePayload).not.toHaveProperty("mediaComposition");
     await expect(res.json()).resolves.toMatchObject({ title: "Updated" });
+  });
+
+  it("rejects updates to posted posts", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+
+    const existing = {
+      id: "p1",
+      ownerHash: "owner",
+      title: "Posted post",
+      mediaComposition: null,
+      brand: null,
+      brief: null,
+      promptConfig: null,
+      overlayLayouts: null,
+      publishSettings: null,
+      status: "posted",
+    };
+    const selectLimit = vi.fn().mockResolvedValue([existing]);
+    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+    const selectFrom = vi.fn(() => ({ where: selectWhere }));
+
+    mockedGetDb.mockReturnValue({
+      select: vi.fn(() => ({ from: selectFrom })),
+      update: vi.fn(),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/posts/p1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Changed" }),
+    });
+
+    const res = await PUT(req, { params: Promise.resolve({ id: "p1" }) });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Posted posts are locked. Duplicate the post to make changes.",
+    });
+  });
+
+  it("rejects deleting posted posts", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+
+    const selectLimit = vi.fn().mockResolvedValue([{ status: "posted" as const }]);
+    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+    const selectFrom = vi.fn(() => ({ where: selectWhere }));
+    const deleteWhere = vi.fn();
+
+    mockedGetDb.mockReturnValue({
+      select: vi.fn(() => ({ from: selectFrom })),
+      delete: vi.fn(() => ({ where: deleteWhere })),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/posts/p1", {
+      method: "DELETE",
+    });
+
+    const res = await DELETE(req, { params: Promise.resolve({ id: "p1" }) });
+
+    expect(res.status).toBe(409);
+    expect(deleteWhere).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Posted posts cannot be deleted. Archive the post instead.",
+    });
   });
 });

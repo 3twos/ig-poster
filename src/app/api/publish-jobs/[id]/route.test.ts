@@ -144,7 +144,7 @@ describe("PATCH /api/publish-jobs/:id", () => {
     const postSelectChain = {
       from: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue([{ result: { variants: [{ id: "variant-1" }] } }]),
+      limit: vi.fn().mockResolvedValue([{ status: "scheduled" as const }]),
     };
     const jobUpdateChain = {
       set: vi.fn().mockReturnThis(),
