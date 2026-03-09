@@ -200,6 +200,7 @@ Why this shape:
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `scheduled`, `posted`).
 - `posts.archivedAt` is the soft-archive flag; archived posts keep their publish status instead of switching to a separate archived enum value.
 - CLI-local state is stored outside the app database in a user config file (`~/.config/ig-poster/config.json` unless `IG_POSTER_CONFIG_DIR` is set).
+- Repo-local CLI project links are stored in `.ig-poster/project.json` and can override the default host/profile for commands run inside that working tree.
 
 ## Security Posture
 

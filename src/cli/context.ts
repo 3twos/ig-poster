@@ -2,12 +2,15 @@ import {
   getProfileName,
   loadConfig,
   resolveHost,
+  resolveToken,
+  getProfileConfig,
   type CliConfig,
   type CliProfileConfig,
 } from "./config";
 import type { GlobalOptions } from "./args";
 import { refreshProfileAuth } from "./auth";
 import { IgPosterClient } from "./client";
+import { loadProjectLink, type LoadedProjectLink } from "./project";
 
 export type CliContext = {
   client: IgPosterClient;
@@ -16,13 +19,50 @@ export type CliContext = {
   profileName: string;
   host: string;
   token?: string;
+  projectLink: LoadedProjectLink | null;
   globalOptions: GlobalOptions;
 };
 
-export const createContext = async (globalOptions: GlobalOptions) => {
+export const createContext = async (
+  globalOptions: GlobalOptions,
+  options: { refreshAuth?: boolean } = {},
+) => {
   const initialConfig = await loadConfig();
-  const profileName = getProfileName(initialConfig, globalOptions.profile);
-  const host = resolveHost(initialConfig, profileName, globalOptions.host);
+  const projectLink = await loadProjectLink();
+  const profileName = getProfileName(
+    initialConfig,
+    globalOptions.profile,
+    process.env,
+    projectLink?.config.profile,
+  );
+  const host = resolveHost(
+    initialConfig,
+    profileName,
+    globalOptions.host,
+    process.env,
+    projectLink?.config.host,
+  );
+
+  if (options.refreshAuth === false) {
+    const profileConfig = getProfileConfig(initialConfig, profileName);
+    const token = resolveToken(initialConfig, profileName);
+
+    return {
+      client: new IgPosterClient({
+        host,
+        token,
+        timeoutMs: globalOptions.timeoutMs ?? 30_000,
+      }),
+      config: initialConfig,
+      profileConfig,
+      profileName,
+      host,
+      token,
+      projectLink,
+      globalOptions,
+    } satisfies CliContext;
+  }
+
   const resolved = await refreshProfileAuth({
     config: initialConfig,
     profileName,
@@ -41,6 +81,7 @@ export const createContext = async (globalOptions: GlobalOptions) => {
     profileName,
     host,
     token: resolved.token,
+    projectLink,
     globalOptions,
   } satisfies CliContext;
 };

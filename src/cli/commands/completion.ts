@@ -1,0 +1,155 @@
+import { CliError } from "../errors";
+
+const COMMANDS = [
+  "status",
+  "auth",
+  "assets",
+  "brand-kits",
+  "config",
+  "api",
+  "posts",
+  "queue",
+  "link",
+  "unlink",
+  "completion",
+  "help",
+];
+
+const GLOBAL_FLAGS = [
+  "--host",
+  "--profile",
+  "--json",
+  "--jq",
+  "--timeout",
+  "--quiet",
+  "--dry-run",
+  "--no-color",
+  "--yes",
+];
+
+export const runCompletionCommand = async (argv: string[]) => {
+  const [shell] = argv;
+
+  switch (shell) {
+    case "bash":
+      process.stdout.write(buildBashCompletion());
+      return;
+    case "zsh":
+      process.stdout.write(buildZshCompletion());
+      return;
+    case "fish":
+      process.stdout.write(buildFishCompletion());
+      return;
+    default:
+      throw new CliError("Usage: ig completion <bash|zsh|fish>");
+  }
+};
+
+const buildBashCompletion = () => `#!/usr/bin/env bash
+_ig() {
+  local cur prev command
+  cur="\${COMP_WORDS[COMP_CWORD]}"
+  prev="\${COMP_WORDS[COMP_CWORD-1]}"
+  command="\${COMP_WORDS[1]}"
+
+  if [[ \${COMP_CWORD} -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "${[...COMMANDS, ...GLOBAL_FLAGS].join(" ")}" -- "$cur") )
+    return 0
+  fi
+
+  case "$command" in
+    auth)
+      COMPREPLY=( $(compgen -W "login logout status test sessions" -- "$cur") )
+      ;;
+    assets)
+      COMPREPLY=( $(compgen -W "upload" -- "$cur") )
+      ;;
+    brand-kits)
+      COMPREPLY=( $(compgen -W "list get" -- "$cur") )
+      ;;
+    config)
+      COMPREPLY=( $(compgen -W "list get set" -- "$cur") )
+      ;;
+    posts)
+      COMPREPLY=( $(compgen -W "list get create update duplicate archive" -- "$cur") )
+      ;;
+    queue)
+      COMPREPLY=( $(compgen -W "list get cancel retry move-to-draft update" -- "$cur") )
+      ;;
+    completion)
+      COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
+      ;;
+    *)
+      COMPREPLY=()
+      ;;
+  esac
+}
+complete -F _ig ig
+`;
+
+const buildZshCompletion = () => `#compdef ig
+
+local -a commands
+commands=(
+  'status:Show CLI status'
+  'auth:Authentication commands'
+  'assets:Asset commands'
+  'brand-kits:Brand kit commands'
+  'config:Configuration commands'
+  'api:Raw API requests'
+  'posts:Post commands'
+  'queue:Publish queue commands'
+  'link:Link the current repo'
+  'unlink:Remove the current repo link'
+  'completion:Print shell completion scripts'
+  'help:Show help'
+)
+
+_arguments \
+  '*::command:->command'
+
+case $state in
+  command)
+    case $words[2] in
+      auth)
+        _values 'auth command' login logout status test sessions
+        ;;
+      assets)
+        _values 'asset command' upload
+        ;;
+      brand-kits)
+        _values 'brand kit command' list get
+        ;;
+      config)
+        _values 'config command' list get set
+        ;;
+      posts)
+        _values 'post command' list get create update duplicate archive
+        ;;
+      queue)
+        _values 'queue command' list get cancel retry move-to-draft update
+        ;;
+      completion)
+        _values 'shell' bash zsh fish
+        ;;
+      *)
+        _describe 'command' commands
+        ;;
+    esac
+    ;;
+esac
+`;
+
+const buildFishCompletion = () => [
+  "complete -c ig -f",
+  ...COMMANDS.map((command) => `complete -c ig -n '__fish_use_subcommand' -a '${command}'`),
+  "complete -c ig -n '__fish_seen_subcommand_from auth' -a 'login logout status test sessions'",
+  "complete -c ig -n '__fish_seen_subcommand_from assets' -a 'upload'",
+  "complete -c ig -n '__fish_seen_subcommand_from brand-kits' -a 'list get'",
+  "complete -c ig -n '__fish_seen_subcommand_from config' -a 'list get set'",
+  "complete -c ig -n '__fish_seen_subcommand_from posts' -a 'list get create update duplicate archive'",
+  "complete -c ig -n '__fish_seen_subcommand_from queue' -a 'list get cancel retry move-to-draft update'",
+  "complete -c ig -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'",
+  ...GLOBAL_FLAGS.map((flag) => `complete -c ig -l ${flag.slice(2)}`),
+  "",
+].join("\n");

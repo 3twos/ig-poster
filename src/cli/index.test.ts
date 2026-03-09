@@ -18,4 +18,19 @@ describe("runCli", () => {
     );
     expect(stderr).toHaveBeenCalledWith("Invalid timeout value: nope\n");
   });
+
+  it("prints help text with the new project and completion commands", async () => {
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+
+    await expect(runCli(["help"])).resolves.toBe(EXIT_CODES.ok);
+
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining("ig link [--host <url>] [--profile <name>]"),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining("ig completion <bash|zsh|fish>"),
+    );
+  });
 });

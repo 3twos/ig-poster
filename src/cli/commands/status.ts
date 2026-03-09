@@ -33,6 +33,13 @@ export const runStatusCommand = async (ctx: CliContext) => {
     authenticated: Boolean(whoami),
     actor: whoami?.data.actor ?? null,
     authError,
+    projectLink: ctx.projectLink
+      ? {
+          rootDir: ctx.projectLink.rootDir,
+          path: ctx.projectLink.configPath,
+          ...ctx.projectLink.config,
+        }
+      : null,
   };
 
   if (ctx.globalOptions.json) {
@@ -47,6 +54,13 @@ export const runStatusCommand = async (ctx: CliContext) => {
     ["email", payload.actor?.email],
     ["authSource", payload.actor?.authSource],
     ["expiresAt", payload.actor?.expiresAt],
+    ["linkedProject", String(Boolean(payload.projectLink))],
+    ["projectRoot", payload.projectLink?.rootDir],
+    ["projectPath", payload.projectLink?.path],
+    ["projectHost", payload.projectLink?.host],
+    ["projectProfile", payload.projectLink?.profile],
+    ["defaultBrandKitId", payload.projectLink?.defaults?.brandKitId],
+    ["outputDir", payload.projectLink?.defaults?.outputDir],
     ["authError", payload.authError ?? undefined],
   ]);
 };
