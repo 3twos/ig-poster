@@ -124,6 +124,9 @@
   - `ig assets upload <file...> [--folder <assets|videos|logos|renders>]`
   - `ig brand-kits list|get`
   - `ig config list|get|set`
+  - `ig generate run --post <id>`
+  - `ig generate run --request @generate.json`
+  - `ig generate refine --post <id> --instruction "Make this more editorial"`
   - `ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]`
   - `ig unlink`
   - `ig completion <bash|zsh|fish>`
@@ -135,6 +138,7 @@
 - Manual bearer bootstrap is still available for testing and overrides: `IG_POSTER_TOKEN`, `--token`, `--token-file`, and `--token-stdin`.
 - Refresh tokens are currently stored in `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). OS keychain storage and device-code login are not shipped yet.
 - `ig link` writes repo-local defaults to `.ig-poster/project.json`, and `ig status` now includes the active linked-project details when one is present.
+- `ig generate run` streams server-side generation events from `/api/v1/generate`; add `--stream-json` for newline-delimited events or `--json` to emit the final result envelope only.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
 - `ig assets upload` reads local image/video files and sends them to the same Blob-backed upload path the browser uses, with an optional folder override for `assets`, `videos`, `logos`, or `renders`.
 - `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.

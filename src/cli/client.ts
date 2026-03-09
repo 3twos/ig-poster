@@ -37,6 +37,66 @@ export class IgPosterClient {
     return response.data as T;
   }
 
+  async requestStream(options: RequestOptions): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const headers = new Headers(options.headers);
+      if (this.token) {
+        headers.set("authorization", `Bearer ${this.token}`);
+      }
+
+      let body: BodyInit | undefined;
+      if (options.body !== undefined) {
+        if (!headers.has("content-type")) {
+          headers.set("content-type", "application/json");
+        }
+        body =
+          typeof options.body === "string"
+            ? options.body
+            : JSON.stringify(options.body);
+      }
+
+      const response = await fetch(`${this.host}${normalizePath(options.path)}`, {
+        method: options.method,
+        headers,
+        body,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        const raw = await response.text();
+        const data =
+          contentType.includes("application/json") && raw
+            ? (JSON.parse(raw) as unknown)
+            : raw;
+        throw buildHttpError(response.status, data);
+      }
+
+      clearTimeout(timeout);
+      return response;
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error instanceof CliError) {
+        throw error;
+      }
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new CliError(
+          `Request timed out after ${this.timeoutMs}ms`,
+          EXIT_CODES.transport,
+        );
+      }
+
+      throw new CliError(
+        error instanceof Error ? error.message : "Network request failed",
+        EXIT_CODES.transport,
+      );
+    }
+  }
+
   async request(options: RequestOptions): Promise<{
     status: number;
     data: unknown;

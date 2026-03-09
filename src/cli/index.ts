@@ -5,6 +5,7 @@ import { runAuthCommand } from "./commands/auth";
 import { runBrandKitsCommand } from "./commands/brand-kits";
 import { runCompletionCommand } from "./commands/completion";
 import { runConfigCommand } from "./commands/config";
+import { runGenerateCommand } from "./commands/generate";
 import { runLinkCommand, runUnlinkCommand } from "./commands/link";
 import { runPostsCommand } from "./commands/posts";
 import { runQueueCommand } from "./commands/queue";
@@ -20,6 +21,7 @@ Usage:
   ig assets <upload>
   ig brand-kits <list|get>
   ig config <list|get|set>
+  ig generate <run|refine>
   ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]
   ig unlink
   ig completion <bash|zsh|fish>
@@ -31,6 +33,7 @@ Global options:
   --host <url>
   --profile <name>
   --json
+  --stream-json
   --jq <expr>
   --timeout <ms>
   --quiet
@@ -68,6 +71,9 @@ export const runCli = async (argv: string[]) => {
         break;
       case "config":
         await runConfigCommand(ctx, commandArgs);
+        break;
+      case "generate":
+        await runGenerateCommand(ctx, commandArgs);
         break;
       case "link":
         await runLinkCommand(ctx, commandArgs);

@@ -6,6 +6,7 @@ const COMMANDS = [
   "assets",
   "brand-kits",
   "config",
+  "generate",
   "api",
   "posts",
   "queue",
@@ -94,6 +95,9 @@ _ig() {
     config)
       COMPREPLY=( $(compgen -W "list get set" -- "$cur") )
       ;;
+    generate)
+      COMPREPLY=( $(compgen -W "run refine" -- "$cur") )
+      ;;
     posts)
       COMPREPLY=( $(compgen -W "list get create update duplicate archive" -- "$cur") )
       ;;
@@ -147,6 +151,9 @@ case $state in
       config)
         _values 'config command' list get set
         ;;
+      generate)
+        _values 'generate command' run refine
+        ;;
       posts)
         _values 'post command' list get create update duplicate archive
         ;;
@@ -171,6 +178,7 @@ const buildFishCompletion = () => [
   "complete -c ig -n '__fish_seen_subcommand_from assets' -a 'upload'",
   "complete -c ig -n '__fish_seen_subcommand_from brand-kits' -a 'list get'",
   "complete -c ig -n '__fish_seen_subcommand_from config' -a 'list get set'",
+  "complete -c ig -n '__fish_seen_subcommand_from generate' -a 'run refine'",
   "complete -c ig -n '__fish_seen_subcommand_from posts' -a 'list get create update duplicate archive'",
   "complete -c ig -n '__fish_seen_subcommand_from queue' -a 'list get cancel retry move-to-draft update'",
   "complete -c ig -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'",
