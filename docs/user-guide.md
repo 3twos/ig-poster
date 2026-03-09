@@ -113,9 +113,10 @@
   - `ig auth login --token-stdin`
   - `ig auth status`
   - `ig auth logout`
+  - `ig brand-kits list|get`
   - `ig config list|get|set`
   - `ig api <METHOD> <PATH>`
-  - `ig posts list|get|create`
+  - `ig posts list|get|create|update|duplicate|archive`
 - The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
 - The current auth bootstrap is temporary: you must provide a valid bearer token manually (`IG_POSTER_TOKEN`, `--token`, `--token-file`, or `--token-stdin`). Browser/device login is not shipped yet.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.

@@ -35,6 +35,10 @@ type CreateOptions = {
   body?: string;
 };
 
+type UpdateOptions = {
+  patch?: string;
+};
+
 export const runPostsCommand = async (ctx: CliContext, argv: string[]) => {
   const action = argv[0];
 
@@ -45,8 +49,14 @@ export const runPostsCommand = async (ctx: CliContext, argv: string[]) => {
       return getPost(ctx, argv.slice(1));
     case "create":
       return createPost(ctx, argv.slice(1));
+    case "update":
+      return updatePost(ctx, argv.slice(1));
+    case "duplicate":
+      return duplicatePost(ctx, argv.slice(1));
+    case "archive":
+      return archivePost(ctx, argv.slice(1));
     default:
-      throw new CliError("Usage: ig posts <list|get|create>");
+      throw new CliError("Usage: ig posts <list|get|create|update|duplicate|archive>");
   }
 };
 
@@ -132,5 +142,80 @@ const createPost = async (ctx: CliContext, argv: string[]) => {
     ["id", String(response.data.post.id ?? "")],
     ["title", String(response.data.post.title ?? "")],
     ["status", String(response.data.post.status ?? "")],
+  ]);
+};
+
+const updatePost = async (ctx: CliContext, argv: string[]) => {
+  const { options, positionals } = parseCommandOptions<UpdateOptions>(argv, {
+    patch: "string",
+  });
+  const [id] = positionals;
+
+  if (!id || !options.patch) {
+    throw new CliError("Usage: ig posts update <id> --patch @patch.json");
+  }
+
+  const patch = await readJsonInput<Record<string, unknown>>(options.patch);
+  const response = await ctx.client.requestJson<PostResponse>({
+    method: "PATCH",
+    path: `/api/v1/posts/${id}`,
+    body: patch,
+  });
+
+  if (ctx.globalOptions.json) {
+    printJson(response, ctx.globalOptions.jq);
+    return;
+  }
+
+  printKeyValue([
+    ["id", String(response.data.post.id ?? "")],
+    ["status", String(response.data.post.status ?? "")],
+    ["title", String(response.data.post.title ?? "")],
+  ]);
+};
+
+const duplicatePost = async (ctx: CliContext, argv: string[]) => {
+  const [id] = argv;
+  if (!id) {
+    throw new CliError("Usage: ig posts duplicate <id>");
+  }
+
+  const response = await ctx.client.requestJson<PostResponse>({
+    method: "POST",
+    path: `/api/v1/posts/${id}/duplicate`,
+  });
+
+  if (ctx.globalOptions.json) {
+    printJson(response, ctx.globalOptions.jq);
+    return;
+  }
+
+  printKeyValue([
+    ["id", String(response.data.post.id ?? "")],
+    ["status", String(response.data.post.status ?? "")],
+    ["title", String(response.data.post.title ?? "")],
+  ]);
+};
+
+const archivePost = async (ctx: CliContext, argv: string[]) => {
+  const [id] = argv;
+  if (!id) {
+    throw new CliError("Usage: ig posts archive <id>");
+  }
+
+  const response = await ctx.client.requestJson<PostResponse>({
+    method: "POST",
+    path: `/api/v1/posts/${id}/archive`,
+  });
+
+  if (ctx.globalOptions.json) {
+    printJson(response, ctx.globalOptions.jq);
+    return;
+  }
+
+  printKeyValue([
+    ["id", String(response.data.post.id ?? "")],
+    ["status", String(response.data.post.status ?? "")],
+    ["title", String(response.data.post.title ?? "")],
   ]);
 };

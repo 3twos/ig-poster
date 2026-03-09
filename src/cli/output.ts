@@ -34,6 +34,32 @@ export const printPostsTable = (
   printLines(rows.map(formatRow));
 };
 
+export const printBrandKitsTable = (
+  brandKits: Array<{
+    id: string;
+    name: string;
+    updatedAt: string;
+    isDefault?: boolean;
+  }>,
+) => {
+  if (brandKits.length === 0) {
+    printLines(["No brand kits found."]);
+    return;
+  }
+
+  const rows = [
+    ["ID", "DEFAULT", "UPDATED", "NAME"],
+    ...brandKits.map((brandKit) => [
+      brandKit.id,
+      brandKit.isDefault ? "yes" : "no",
+      formatIso(brandKit.updatedAt),
+      brandKit.name,
+    ]),
+  ];
+
+  printLines(rows.map(formatRow));
+};
+
 export const printKeyValue = (entries: Array<[string, string | undefined]>) => {
   printLines(entries.map(([key, value]) => `${key}: ${value ?? "-"}`));
 };

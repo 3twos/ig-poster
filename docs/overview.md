@@ -35,7 +35,7 @@
 - Enforces stricter API payload contracts for persisted post drafts/updates.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
-- Ships an experimental `ig` CLI preview with profile-aware host/token config, raw API access, auth/status checks, and core post commands backed by `/api/v1/*`.
+- Ships an experimental `ig` CLI preview with profile-aware host/token config, raw API access, auth/status checks, brand-kit lookup, and core post read/write commands backed by `/api/v1/*`.
 
 ## Key Features
 
@@ -46,7 +46,7 @@
 - Website-style-aware prompts and optional brand autofill from a public site URL.
 - Blob-backed storage for uploads, shared project snapshots, and outcome snapshots used for insights.
 - Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/generated/published/scheduled/archived` for posts).
-- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/whoami`, `posts list/get/create`).
+- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/whoami`, `brand-kits list/get`, `posts list/get/create/update/duplicate/archive`).
 
 ## Primary User Scenarios
 
