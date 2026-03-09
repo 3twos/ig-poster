@@ -166,7 +166,7 @@ export const updatePost = async (
       ? { ...(existing.promptConfig ?? {}), ...body.promptConfig }
       : body.promptConfig;
   }
-  if (body.overlayLayouts !== undefined) {
+  if (body.overlayLayouts !== undefined && body.overlayLayouts !== null) {
     update.overlayLayouts = body.overlayLayouts
       ? { ...(existing.overlayLayouts ?? {}), ...body.overlayLayouts }
       : body.overlayLayouts;
@@ -191,7 +191,7 @@ export const updatePost = async (
     }
   }
 
-  if (body.result && existing.status === "draft") {
+  if (body.result && body.status === undefined && existing.status === "draft") {
     update.status = "generated";
   }
 
