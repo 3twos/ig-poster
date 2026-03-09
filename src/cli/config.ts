@@ -90,7 +90,8 @@ export const getProfileName = (
   config: CliConfig,
   explicitProfile?: string,
   env: NodeJS.ProcessEnv = process.env,
-) => explicitProfile ?? env.IG_POSTER_PROFILE ?? config.defaultProfile;
+  projectProfile?: string,
+) => explicitProfile ?? env.IG_POSTER_PROFILE ?? projectProfile ?? config.defaultProfile;
 
 export const getProfileConfig = (
   config: CliConfig,
@@ -148,9 +149,11 @@ export const resolveHost = (
   profileName: string,
   explicitHost?: string,
   env: NodeJS.ProcessEnv = process.env,
+  projectHost?: string,
 ) =>
   explicitHost ??
   env.IG_POSTER_HOST ??
+  projectHost ??
   getProfileConfig(config, profileName).host ??
   "http://localhost:3000";
 

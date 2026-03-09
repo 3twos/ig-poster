@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   clearProfileToken,
   getConfigPath,
+  getProfileName,
   getProfileConfig,
   loadConfig,
   parseConfigHost,
@@ -53,6 +54,19 @@ describe("cli config", () => {
       "https://ig.example.com",
     );
     expect(resolveToken(loaded, "staging", env)).toBe("secret-token");
+  });
+
+  it("lets a linked project override the default profile and host", async () => {
+    const config = upsertProfile(await loadConfig(env), "staging", {
+      host: "https://profile.example.com",
+    });
+
+    expect(
+      getProfileName(config, undefined, env, "staging"),
+    ).toBe("staging");
+    expect(
+      resolveHost(config, "staging", undefined, env, "https://link.example.com"),
+    ).toBe("https://link.example.com");
   });
 
   it("removes a persisted token during logout", async () => {

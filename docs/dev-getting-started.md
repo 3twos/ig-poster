@@ -183,7 +183,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/posts.ts`: extracted post service functions used by the v1 API surface.
 - `src/services/brand-kits.ts`: extracted brand-kit service functions used by the v1 API surface.
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
-- `src/cli/`: CLI source (`ig`) with config storage, browser login helpers, raw API access, auth/session commands, asset upload commands, brand-kit commands, post commands, and queue commands.
+- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, shell completion output, raw API access, auth/session commands, asset upload commands, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -218,6 +218,13 @@ npm run cli -- help
 
 The CLI reads profile state from `~/.config/ig-poster/config.json` by default. Override that location in tests or isolated runs with `IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli`.
 
+Repo-local defaults can also be linked in `.ig-poster/project.json`:
+
+```bash
+npm run cli -- link --profile staging --brand-kit bk_123
+npm run cli -- status
+```
+
 Start the app locally in one terminal:
 
 ```bash
@@ -251,6 +258,9 @@ Supported preview commands today:
 - `ig assets upload <file...> [--folder <assets|videos|logos|renders>]`
 - `ig brand-kits list|get`
 - `ig config list|get|set`
+- `ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]`
+- `ig unlink`
+- `ig completion <bash|zsh|fish>`
 - `ig api <METHOD> <PATH>`
 - `ig posts list|get|create|update|duplicate|archive`
 - `ig queue list|get|cancel|retry|move-to-draft|update`
