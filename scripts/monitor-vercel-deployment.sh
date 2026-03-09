@@ -31,7 +31,7 @@ Options:
   --project-name <name>        Short name used in spoken alerts
   --team-id <id>               Team/org id (default: $VERCEL_TEAM_ID or $VERCEL_ORG_ID)
   --token <token>              Vercel token (default: $VERCEL_TOKEN, or secure prompt)
-  --target <target>            Filter deployments by target: production, preview (default: all)
+  --target <target>            Filter deployments by target: production (default: all)
   --max-deployments <count>    Number of recent deployments to display (default: 6)
   --event-mode <mode>          auto | stream | poll (default: auto)
   --no-speak                   Disable spoken alerts
@@ -2205,6 +2205,12 @@ refresh_project_deployments() {
       continue
     fi
 
+    # Skip preview deployments — previews are disabled in Vercel.
+    if [[ "$dep_target" == "preview" ]]; then
+      log_line "Skipping preview deployment: id=${dep_id}"
+      continue
+    fi
+
     old_idx="$(deployment_index_by_id "$dep_id")"
     if (( old_idx >= 0 )); then
       first_seen="${DEP_FIRST_SEEN_EPOCH[old_idx]}"
@@ -2962,8 +2968,12 @@ if [[ "$EVENT_MODE" != "auto" && "$EVENT_MODE" != "stream" && "$EVENT_MODE" != "
 fi
 
 TARGET_FILTER="$(printf '%s' "$TARGET_FILTER" | tr '[:upper:]' '[:lower:]')"
-if [[ -n "$TARGET_FILTER" && "$TARGET_FILTER" != "production" && "$TARGET_FILTER" != "preview" ]]; then
-  print_error "--target must be one of: production, preview."
+if [[ -n "$TARGET_FILTER" && "$TARGET_FILTER" != "production" ]]; then
+  if [[ "$TARGET_FILTER" == "preview" ]]; then
+    print_error "--target preview is no longer supported (preview deployments are disabled)."
+  else
+    print_error "--target must be: production."
+  fi
   exit 1
 fi
 
