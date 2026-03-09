@@ -117,9 +117,11 @@
   - `ig config list|get|set`
   - `ig api <METHOD> <PATH>`
   - `ig posts list|get|create|update|duplicate|archive`
+  - `ig queue list|get|cancel|retry|move-to-draft|update`
 - The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
 - The current auth bootstrap is temporary: you must provide a valid bearer token manually (`IG_POSTER_TOKEN`, `--token`, `--token-file`, or `--token-stdin`). Browser/device login is not shipped yet.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
+- `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.
 
 ## Working with Saved Posts
 

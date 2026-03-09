@@ -4,6 +4,7 @@ import { runAuthCommand } from "./commands/auth";
 import { runBrandKitsCommand } from "./commands/brand-kits";
 import { runConfigCommand } from "./commands/config";
 import { runPostsCommand } from "./commands/posts";
+import { runQueueCommand } from "./commands/queue";
 import { runStatusCommand } from "./commands/status";
 import { createContext } from "./context";
 import { CliError, EXIT_CODES } from "./errors";
@@ -17,6 +18,7 @@ Usage:
   ig config <list|get|set>
   ig api <METHOD> <PATH> [--body @file.json]
   ig posts <list|get|create|update|duplicate|archive>
+  ig queue <list|get|cancel|retry|move-to-draft|update>
 
 Global options:
   --host <url>
@@ -58,6 +60,9 @@ export const runCli = async (argv: string[]) => {
         break;
       case "posts":
         await runPostsCommand(ctx, commandArgs);
+        break;
+      case "queue":
+        await runQueueCommand(ctx, commandArgs);
         break;
       default:
         throw new CliError(`Unknown command: ${command}`);

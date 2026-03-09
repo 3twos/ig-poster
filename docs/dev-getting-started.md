@@ -177,11 +177,12 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/settings/page.tsx` and `src/app/brand/page.tsx`: compatibility routes that redirect to `/` (settings and brand editing now live in modals from the main shell).
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing (including `/api/meta/locations` for place search), and brand kit CRUD (`/api/brand-kits`).
-- `src/app/api/v1/**/route.ts`: versioned API preview for the CLI (`auth/whoami`, `brand-kits`, `brand-kits/:id`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`).
+- `src/app/api/v1/**/route.ts`: versioned API preview for the CLI (`auth/whoami`, `brand-kits`, `brand-kits/:id`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, `publish-jobs/:id`).
 - `src/services/actors.ts`: transport-neutral actor resolution for bearer token and workspace-cookie auth.
 - `src/services/posts.ts`: extracted post service functions used by the v1 API surface.
 - `src/services/brand-kits.ts`: extracted brand-kit service functions used by the v1 API surface.
-- `src/cli/`: CLI source (`ig`) with config storage, output helpers, raw API access, auth bootstrap, brand-kit commands, and post commands.
+- `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
+- `src/cli/`: CLI source (`ig`) with config storage, output helpers, raw API access, auth bootstrap, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -231,6 +232,7 @@ Supported preview commands today:
 - `ig config list|get|set`
 - `ig api <METHOD> <PATH>`
 - `ig posts list|get|create|update|duplicate|archive`
+- `ig queue list|get|cancel|retry|move-to-draft|update`
 
 ## Common Implementation Notes
 
