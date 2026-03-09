@@ -1,5 +1,6 @@
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
 import type { MediaComposition } from "@/lib/media-composer";
+import type { PostStatus } from "@/lib/post";
 import type { StoredAsset } from "@/lib/project";
 import type {
   BrandState,
@@ -14,7 +15,8 @@ import type { PostRow, PublishHistoryEntry } from "@/db/schema";
 export type PostDraft = {
   id: string;
   title: string;
-  status: string;
+  status: PostStatus;
+  archivedAt: string | null;
   brand: Partial<BrandState> | null;
   brief: Partial<PostState> | null;
   assets: StoredAsset[];
@@ -66,7 +68,7 @@ export type PostAction =
   | { type: "SET_SHARE"; shareUrl: string; shareProjectId?: string; postId?: string }
   | { type: "SET_RENDERED_POSTER"; url: string }
   | { type: "ADD_PUBLISH"; entry: PublishHistoryEntry; postId?: string }
-  | { type: "SET_STATUS"; status: string; postId?: string }
+  | { type: "SET_STATUS"; status: PostStatus; postId?: string }
   | {
       type: "SET_BRAND_KIT";
       postId?: string;
@@ -88,6 +90,7 @@ export function rowToDraft(row: PostRow): PostDraft {
     id: row.id,
     title: row.title,
     status: row.status,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
     brand: row.brand ?? null,
     brief: row.brief ?? null,
     assets: row.assets ?? [],
@@ -174,7 +177,6 @@ export function postReducer(
         ...state,
         result: action.result,
         overlayLayouts: { ...state.overlayLayouts, ...action.overlayLayouts },
-        status: state.status === "draft" ? "generated" : state.status,
       };
 
     case "SET_ACTIVE_VARIANT":
@@ -212,7 +214,7 @@ export function postReducer(
       return {
         ...state,
         publishHistory: [...state.publishHistory, action.entry],
-        status: "published",
+        status: "posted",
       };
 
     case "SET_STATUS":

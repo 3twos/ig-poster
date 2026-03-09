@@ -11,10 +11,8 @@ import { StoredAssetSchema } from "@/lib/project";
 
 export const PostStatusSchema = z.enum([
   "draft",
-  "generated",
-  "published",
   "scheduled",
-  "archived",
+  "posted",
 ]);
 
 const DraftBrandSchema = z.object({

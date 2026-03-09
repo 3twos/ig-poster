@@ -13,9 +13,10 @@ function makePost(overrides?: Partial<PostSummary>): PostSummary {
   return {
     id: "post-1",
     title: "How High-Growth Teams Design Trust",
-    status: "generated",
+    status: "draft",
     createdAt: "2026-03-01T08:00:00.000Z",
     updatedAt: "2026-03-06T08:00:00.000Z",
+    archivedAt: null,
     assetCount: 5,
     variantCount: 3,
     ...overrides,
@@ -56,7 +57,7 @@ describe("PostListItem quick actions", () => {
       },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "UNPOSTED" }));
+    fireEvent.click(screen.getByRole("button", { name: "DRAFT" }));
     expect(screen.queryByRole("button", { name: "POST" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "POST AT" })).not.toBeNull();
 
@@ -64,7 +65,7 @@ describe("PostListItem quick actions", () => {
 
     expect(screen.queryByRole("button", { name: "POST" })).toBeNull();
     expect(screen.queryByRole("button", { name: "POST AT" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "UNPOSTED" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "DRAFT" })).not.toBeNull();
   });
 
   it("requires confirmation before immediate publish from status quick action", () => {
@@ -82,7 +83,7 @@ describe("PostListItem quick actions", () => {
       },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "UNPOSTED" }));
+    fireEvent.click(screen.getByRole("button", { name: "DRAFT" }));
     fireEvent.click(screen.getByRole("button", { name: "POST" }));
 
     const dialog = screen.getByRole("alertdialog");
@@ -108,7 +109,7 @@ describe("PostListItem quick actions", () => {
     );
 
     // Expand chip actions first; selecting Post now from the menu should collapse this.
-    fireEvent.click(screen.getByRole("button", { name: "UNPOSTED" }));
+    fireEvent.click(screen.getByRole("button", { name: "DRAFT" }));
     expect(screen.queryByRole("button", { name: "POST" })).not.toBeNull();
 
     const menuTrigger = screen.getByRole("button", { name: "Post options" });

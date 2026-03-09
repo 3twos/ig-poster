@@ -40,14 +40,14 @@ describe("POST /api/posts/:id/duplicate", () => {
     expect(res.status).toBe(401);
   });
 
-  it("duplicates the post into a fresh generated draft", async () => {
+  it("duplicates the post into a fresh draft copy", async () => {
     mockedReadWorkspace.mockResolvedValue(session);
 
     const existing = {
       id: "p1",
       ownerHash: "owner",
       title: "Original title",
-      status: "published",
+      status: "posted",
       brand: { brandName: "Acme" },
       brief: { subject: "Original title" },
       assets: [{ id: "asset-1", name: "asset", url: "https://cdn.example.com/1.jpg" }],
@@ -87,11 +87,12 @@ describe("POST /api/posts/:id/duplicate", () => {
         ...existing,
         id: "copy_1",
         title: "Original title Copy",
-        status: "generated",
+        status: "draft",
         shareUrl: null,
         shareProjectId: null,
         publishHistory: [],
         publishedAt: null,
+        archivedAt: null,
       },
     ]);
     const insertValues = vi.fn().mockReturnValue({ returning });
@@ -110,7 +111,7 @@ describe("POST /api/posts/:id/duplicate", () => {
     expect(res.status).toBe(200);
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: "generated",
+        status: "draft",
         title: "Original title Copy",
         shareUrl: null,
         shareProjectId: null,
@@ -118,6 +119,8 @@ describe("POST /api/posts/:id/duplicate", () => {
         publishSettings: existing.publishSettings,
         mediaComposition: existing.mediaComposition,
         renderedPosterUrl: null,
+        archivedAt: null,
+        publishedAt: null,
       }),
     );
     await expect(res.json()).resolves.toMatchObject({
@@ -125,6 +128,7 @@ describe("POST /api/posts/:id/duplicate", () => {
       post: {
         id: "copy_1",
         title: "Original title Copy",
+        status: "draft",
       },
     });
   });

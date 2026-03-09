@@ -99,7 +99,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
       if (existing.postId) {
         const [post] = await db
-          .select({ result: posts.result })
+          .select({ status: posts.status })
           .from(posts)
           .where(and(eq(posts.id, existing.postId), eq(posts.ownerHash, ownerHash)))
           .limit(1);
@@ -107,12 +107,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
           await db
             .update(posts)
             .set({
-              status:
-                payload.action === "move-to-draft"
-                  ? "draft"
-                  : post.result
-                    ? "generated"
-                    : "draft",
+              status: post.status === "posted" ? "posted" : "draft",
               updatedAt: new Date(),
             })
             .where(and(eq(posts.id, existing.postId), eq(posts.ownerHash, ownerHash)));

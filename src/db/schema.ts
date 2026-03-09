@@ -33,10 +33,8 @@ export type PublishHistoryEntry = {
 
 export const postStatusEnum = pgEnum("post_status", [
   "draft",
-  "generated",
-  "published",
   "scheduled",
-  "archived",
+  "posted",
 ]);
 
 export const publishJobStatusEnum = pgEnum("publish_job_status", [

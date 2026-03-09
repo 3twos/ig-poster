@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -30,8 +30,8 @@ export async function GET(req: Request) {
     const showArchived = url.searchParams.get("archived") === "true";
 
     const conditions = showArchived
-      ? [eq(posts.ownerHash, ownerHash)]
-      : [eq(posts.ownerHash, ownerHash), ne(posts.status, "archived")];
+      ? [eq(posts.ownerHash, ownerHash), isNotNull(posts.archivedAt)]
+      : [eq(posts.ownerHash, ownerHash), isNull(posts.archivedAt)];
 
     const db = getDb();
     const rows = await db

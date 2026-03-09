@@ -24,7 +24,6 @@ export async function POST(req: Request, ctx: Ctx) {
     const [updated] = await db
       .update(posts)
       .set({
-        status: "archived",
         archivedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -56,27 +55,18 @@ export async function DELETE(req: Request, ctx: Ctx) {
     const ownerHash = hashEmail(session.email);
     const db = getDb();
 
-    const [existing] = await db
-      .select()
-      .from(posts)
-      .where(and(eq(posts.id, id), eq(posts.ownerHash, ownerHash)))
-      .limit(1);
-
-    if (!existing) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    const restoredStatus = existing.result ? "generated" : "draft";
-
     const [updated] = await db
       .update(posts)
       .set({
-        status: restoredStatus,
         archivedAt: null,
         updatedAt: new Date(),
       })
       .where(and(eq(posts.id, id), eq(posts.ownerHash, ownerHash)))
       .returning();
+
+    if (!updated) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
     return NextResponse.json(updated);
   } catch (err) {
