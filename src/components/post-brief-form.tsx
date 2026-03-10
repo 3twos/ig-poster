@@ -108,7 +108,7 @@ export function PostBriefActions({
 
         <Button variant="outline" onClick={onExportPoster} disabled={!hasResult}>
           <Download className="h-4 w-4" />
-          Export PNG
+          PNG
         </Button>
         {extraActions}
         {children}
@@ -146,7 +146,7 @@ export function PostBriefAspectRatio({
         disabled={disabled}
         onValueChange={(value) => onChange(value as AspectRatio)}
       >
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-full min-w-[11rem]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

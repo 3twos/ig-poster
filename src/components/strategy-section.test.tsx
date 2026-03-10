@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
-  createDefaultOverlayLayout,
   type CreativeVariant,
   type GenerationResponse,
 } from "@/lib/creative";
@@ -43,79 +41,49 @@ const result: GenerationResponse = {
   variants: [variant],
 };
 
-function StrategyHarness() {
-  const [layout, setLayout] = useState(createDefaultOverlayLayout(variant.layout));
-  const [caption, setCaption] = useState("");
+describe("StrategySection", () => {
+  it("renders strategy text and variant cards", () => {
+    render(
+      <TooltipProvider>
+        <StrategySection
+          result={result}
+          activeVariant={variant}
+          isRefining={false}
+          dispatch={vi.fn()}
+          captionValue=""
+          onCaptionChange={vi.fn()}
+          onUseGeneratedCaption={vi.fn()}
+          onRefineVariant={vi.fn()}
+          onCopyCaption={vi.fn()}
+          copyState="idle"
+        />
+      </TooltipProvider>,
+    );
 
-  return (
-    <TooltipProvider>
-      <StrategySection
-        result={result}
-        activeVariant={variant}
-        editorMode
-        isRefining={false}
-        dispatch={vi.fn()}
-        captionValue={caption}
-        onCaptionChange={setCaption}
-        onUseGeneratedCaption={() => setCaption(`${variant.caption}\n\n${variant.hashtags.join(" ")}`)}
-        onRefineVariant={vi.fn()}
-        onCopyCaption={vi.fn()}
-        copyState="idle"
-        overlayLayout={layout}
-        onOverlayLayoutChange={setLayout}
-        saveStatus="saved"
-        onSaveNow={vi.fn().mockResolvedValue(undefined)}
-      />
-    </TooltipProvider>
-  );
-}
-
-describe("StrategySection editor inspector", () => {
-  it("lets users hide generated blocks, edit text, and add or remove custom boxes", () => {
-    render(<StrategyHarness />);
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Hide" })[0]);
-    expect(screen.getByRole("button", { name: "Add back" })).not.toBeNull();
-
-    const headlineInput = screen.getByPlaceholderText(variant.headline);
-    fireEvent.change(headlineInput, { target: { value: "Manual headline override" } });
-    expect(screen.getByDisplayValue("Manual headline override")).not.toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Add box" }));
-    expect(screen.getByDisplayValue("Text Box 1")).not.toBeNull();
-    expect(screen.getByDisplayValue("New text")).not.toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    expect(screen.queryByDisplayValue("New text")).toBeNull();
+    expect(screen.getByText(result.strategy)).not.toBeNull();
+    expect(screen.getByText(variant.name)).not.toBeNull();
+    expect(screen.getByText(variant.headline)).not.toBeNull();
   });
 
-  it("keeps custom boxes within schema limits while editing", () => {
-    render(<StrategyHarness />);
+  it("shows refine presets and caption section", () => {
+    render(
+      <TooltipProvider>
+        <StrategySection
+          result={result}
+          activeVariant={variant}
+          isRefining={false}
+          dispatch={vi.fn()}
+          captionValue=""
+          onCaptionChange={vi.fn()}
+          onUseGeneratedCaption={vi.fn()}
+          onRefineVariant={vi.fn()}
+          onCopyCaption={vi.fn()}
+          copyState="idle"
+        />
+      </TooltipProvider>,
+    );
 
-    const addButton = screen.getByRole("button", { name: "Add box" });
-    for (let index = 0; index < 6; index += 1) {
-      fireEvent.click(addButton);
-    }
-
-    expect((addButton as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(6);
-
-    const firstLabelInput = screen.getByDisplayValue("Text Box 1");
-    fireEvent.change(firstLabelInput, { target: { value: "" } });
-    expect(screen.getByDisplayValue("Text Box 1")).not.toBeNull();
-
-    const firstCustomText = screen.getAllByDisplayValue("New text")[0] as HTMLTextAreaElement;
-    expect(firstCustomText.getAttribute("maxLength")).toBe("320");
-  });
-
-  it("toggles logo visibility", () => {
-    render(<StrategyHarness />);
-
-    const hideButton = screen.getAllByRole("button", { name: "Hide" });
-    // The last Hide button is the logo toggle
-    const logoHide = hideButton[hideButton.length - 1];
-    fireEvent.click(logoHide);
-
-    expect(screen.getAllByRole("button", { name: "Show" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "Shorter caption" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Use generated" })).not.toBeNull();
   });
 });

@@ -31,7 +31,7 @@ Options:
   --project-name <name>        Short name used in spoken alerts
   --team-id <id>               Team/org id (default: $VERCEL_TEAM_ID or $VERCEL_ORG_ID)
   --token <token>              Vercel token (default: $VERCEL_TOKEN, or secure prompt)
-  --target <target>            Filter deployments by target: production (default: all)
+  --target <target>            Filter deployments by target (default: production)
   --max-deployments <count>    Number of recent deployments to display (default: 6)
   --event-mode <mode>          auto | stream | poll (default: auto)
   --no-speak                   Disable spoken alerts
@@ -2206,10 +2206,9 @@ refresh_project_deployments() {
     fi
 
     # Skip non-production deployments — previews are disabled in Vercel.
-    # Some cancelled preview deployments may have an empty target, so we
-    # check for "not production" rather than "equals preview".
+    # The API is already filtered to target=production by default, but
+    # this guards against edge cases (e.g., empty target on cancelled previews).
     if [[ "$dep_target" != "production" ]]; then
-      log_line "Skipping non-production deployment: id=${dep_id} target=${dep_target:-empty}"
       continue
     fi
 
@@ -2811,7 +2810,7 @@ TOKEN_FROM_ARG=0
 ENABLE_SPEAK=1
 FORCE_PLAIN=0
 TARGET=""
-TARGET_FILTER=""
+TARGET_FILTER="production"
 MAX_DEPLOYMENTS=6
 EVENT_MODE="auto"
 

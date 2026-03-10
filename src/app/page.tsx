@@ -5,7 +5,6 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  Copy,
   LoaderCircle,
   Pencil,
   Save,
@@ -119,7 +118,6 @@ export default function Home() {
     posts,
     dispatch,
     createNewPost,
-    duplicatePost,
     refreshPosts,
     selectPost,
     saveNow,
@@ -1303,17 +1301,6 @@ export default function Home() {
     await refreshPosts();
   }, [activePost?.id, dispatch, refreshPosts]);
 
-  const handleDuplicatePost = useCallback(async (postId: string) => {
-    try {
-      await duplicatePost(postId);
-      toast.success("Post duplicated.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not duplicate post.",
-      );
-    }
-  }, [duplicatePost]);
-
   const handleMoveScheduledToDraft = useCallback(async () => {
     if (!activePost || activePost.status !== "scheduled") return;
 
@@ -1425,15 +1412,6 @@ export default function Home() {
           Move to draft
         </Button>
       ) : null}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void handleDuplicatePost(activePost.id)}
-        disabled={isAgentBusy}
-      >
-        <Copy className="h-3.5 w-3.5" />
-        Duplicate post
-      </Button>
       {isPostedPost && !activePost.archivedAt ? (
         <Button
           variant="outline"
@@ -1666,14 +1644,7 @@ export default function Home() {
                     ) : null}
                     {result && !isPostedPost ? (
                       <section className="border-b border-white/10 pb-6">
-                        <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
-                          if (!activeVariant) return;
-                          dispatch({
-                            type: "UPDATE_OVERLAY",
-                            variantId: activeVariant.id,
-                            layout,
-                          });
-                        }} saveStatus={saveStatus} onSaveNow={saveNow} />
+                        <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />
                       </section>
                     ) : null}
                     {activeVariant && !isPostedPost ? (
@@ -1740,14 +1711,7 @@ export default function Home() {
                 disabled={isAgentBusy}
               />
             ) : null}
-            {result && !isPostedPost ? <StrategySection result={result} activeVariant={activeVariant} editorMode={editorMode} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} overlayLayout={activeOverlayLayout} onOverlayLayoutChange={(layout) => {
-              if (!activeVariant) return;
-              dispatch({
-                type: "UPDATE_OVERLAY",
-                variantId: activeVariant.id,
-                layout,
-              });
-            }} saveStatus={saveStatus} onSaveNow={saveNow} /> : null}
+            {result && !isPostedPost ? <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} /> : null}
             {activeVariant && !isPostedPost ? (
               <div className="space-y-4">
                 <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
