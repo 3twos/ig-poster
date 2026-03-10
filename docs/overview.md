@@ -36,7 +36,7 @@
 - Enforces stricter API payload contracts for persisted post drafts/updates.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
-- Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, richer status summaries for linked-project/provider/quota visibility, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
+- Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
 
 ## Key Features
 
@@ -78,7 +78,7 @@
    - Open the Chat tab in the right panel to brainstorm captions, get hashtag suggestions, or refine creative direction in a multi-turn conversation.
 
 7. Operate the service from the CLI
-   - Use the preview `ig` CLI for host/profile config, repo-local project linking via `.ig-poster/project.json`, status checks that summarize auth plus Meta/LLM/quota readiness, raw API calls, asset uploads, generation runs/refinements, linked-post chat prompts, direct publish/schedule requests, post management, shell completion generation, and publish-queue inspection/mutation against the same server-side workflows.
+   - Use the preview `ig` CLI for host/profile config, repo-local project linking via `.ig-poster/project.json`, reusable argument bundles via `--flags-file`, status checks that summarize auth plus Meta/LLM/quota readiness, raw API calls, asset uploads, generation runs/refinements, linked-post chat prompts, direct publish/schedule requests, post management, shell completion generation, and publish-queue inspection/mutation against the same server-side workflows.
 
 ## Scope Boundaries
 

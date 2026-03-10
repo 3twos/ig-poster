@@ -187,7 +187,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/meta-auth.ts`: CLI-safe Meta auth resolution for bearer-auth publish and Meta place-search routes.
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
 - `src/services/status.ts`: aggregated CLI status summaries for actor auth, Meta readiness, LLM providers, and publish-window usage.
-- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, direct publish commands, brand-kit commands, post commands, and queue commands.
+- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, global `--flags-file` expansion, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -245,6 +245,7 @@ npm run cli -- auth sessions list
 npm run cli -- publish --image https://cdn.example.com/poster.png --caption "Launch day" --dry-run
 npm run cli -- generate run --post <post-id> --stream-json
 npm run cli -- chat ask --post <post-id> "Give me three stronger hooks for this draft"
+npm run cli -- --flags-file .ig-poster/release.flags
 npm run cli -- posts list
 ```
 
@@ -257,6 +258,10 @@ printf '%s' "$IG_POSTER_TOKEN" | npm run cli -- auth login --token-stdin
 ```
 
 Current limitation: refresh tokens are still written to `~/.config/ig-poster/config.json` (mode `0600`). Device-code login and OS keychain storage are still pending.
+
+The CLI also supports `--flags-file <path>` as a global option. Supported formats:
+- JSON array of strings when you need spaces inside values.
+- Newline-delimited tokens for simple argument lists (blank lines and `#` comments are ignored).
 
 Supported preview commands today:
 - `ig status`
