@@ -32,7 +32,7 @@ const loadLockfile = () => {
   return JSON.parse(readFileSync(lockfilePath, "utf8"));
 };
 
-const collectMissingPackages = (targetSuffix) => {
+const collectTargetPackages = (targetSuffix) => {
   const lockfile = loadLockfile();
   const resolved = new Map();
 
@@ -65,9 +65,7 @@ const collectMissingPackages = (targetSuffix) => {
     }
   }
 
-  return [...resolved.entries()].filter(([name]) => {
-    return !existsSync(join(repoRoot, "node_modules", name));
-  });
+  return [...resolved.entries()];
 };
 
 const installPackages = (packages) => {
@@ -108,4 +106,13 @@ if (!targetSuffix) {
   process.exit(0);
 }
 
-installPackages(collectMissingPackages(targetSuffix));
+const targetPackages = collectTargetPackages(targetSuffix);
+const hasMissingPackages = targetPackages.some(([name]) => {
+  return !existsSync(join(repoRoot, "node_modules", name));
+});
+
+if (!hasMissingPackages) {
+  process.exit(0);
+}
+
+installPackages(targetPackages);
