@@ -5,7 +5,6 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  Copy,
   LoaderCircle,
   Pencil,
   Save,
@@ -119,7 +118,6 @@ export default function Home() {
     posts,
     dispatch,
     createNewPost,
-    duplicatePost,
     refreshPosts,
     selectPost,
     saveNow,
@@ -1303,17 +1301,6 @@ export default function Home() {
     await refreshPosts();
   }, [activePost?.id, dispatch, refreshPosts]);
 
-  const handleDuplicatePost = useCallback(async (postId: string) => {
-    try {
-      await duplicatePost(postId);
-      toast.success("Post duplicated.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not duplicate post.",
-      );
-    }
-  }, [duplicatePost]);
-
   const handleMoveScheduledToDraft = useCallback(async () => {
     if (!activePost || activePost.status !== "scheduled") return;
 
@@ -1425,15 +1412,6 @@ export default function Home() {
           Move to draft
         </Button>
       ) : null}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void handleDuplicatePost(activePost.id)}
-        disabled={isAgentBusy}
-      >
-        <Copy className="h-3.5 w-3.5" />
-        Duplicate post
-      </Button>
       {isPostedPost && !activePost.archivedAt ? (
         <Button
           variant="outline"
