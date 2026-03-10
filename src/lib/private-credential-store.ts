@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 
-export type CredentialNamespace = "llm" | "meta";
+export type CredentialNamespace = "llm" | "meta" | "cli_session";
 
 type SqlClient = ReturnType<typeof neon>;
 

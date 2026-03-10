@@ -36,7 +36,7 @@
 - Enforces stricter API payload contracts for persisted post drafts/updates.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
-- Ships an experimental `ig` CLI preview with profile-aware host/token config, raw API access, auth/status checks, asset upload, brand-kit lookup, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
+- Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, shell completion output, raw API access, auth/status checks, asset upload, brand-kit lookup, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
 
 ## Key Features
 
@@ -47,7 +47,7 @@
 - Website-style-aware prompts and optional brand autofill from a public site URL.
 - Blob-backed storage for uploads, shared project snapshots, and outcome snapshots used for insights.
 - Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/scheduled/posted` for posts, plus `archivedAt` as a soft-archive marker).
-- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/whoami`, `assets upload`, `brand-kits list/get`, `posts list/get/create/update/duplicate/archive`, `publish-jobs list/get/update`).
+- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/cli/start|exchange|refresh|logout`, `auth/whoami`, `auth/sessions`, `assets upload`, `brand-kits list/get`, `posts list/get/create/update/duplicate/archive`, `publish-jobs list|get|update`).
 
 ## Primary User Scenarios
 
@@ -78,7 +78,7 @@
    - Open the Chat tab in the right panel to brainstorm captions, get hashtag suggestions, or refine creative direction in a multi-turn conversation.
 
 7. Operate the service from the CLI
-   - Use the preview `ig` CLI for host/profile config, raw API calls, auth checks, asset uploads, post management, and publish-queue inspection/mutation against the same server-side workflows.
+   - Use the preview `ig` CLI for host/profile config, repo-local project linking via `.ig-poster/project.json`, raw API calls, auth checks, asset uploads, post management, shell completion generation, and publish-queue inspection/mutation against the same server-side workflows.
 
 ## Scope Boundaries
 
@@ -86,4 +86,5 @@
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Instagram publishing is unavailable.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).
-- The current CLI preview requires a manually supplied bearer token; browser/device login and long-lived CLI session management are still in progress.
+- The CLI preview now supports browser-based login with refreshable CLI sessions. Device-code login and OS keychain storage are still in progress, so refresh tokens currently live in `~/.config/ig-poster/config.json` with restrictive local file permissions.
+- The CLI preview can also store repo-local project defaults in `.ig-poster/project.json`, which currently cover linked host/profile plus optional brand-kit and output-directory preferences.

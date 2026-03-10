@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   clearProfileToken,
   getConfigPath,
+  getProfileName,
   getProfileConfig,
   loadConfig,
   parseConfigHost,
@@ -55,10 +56,30 @@ describe("cli config", () => {
     expect(resolveToken(loaded, "staging", env)).toBe("secret-token");
   });
 
+  it("lets a linked project override the default profile and host", async () => {
+    const config = upsertProfile(await loadConfig(env), "staging", {
+      host: "https://profile.example.com",
+    });
+
+    expect(
+      getProfileName(config, undefined, env, "staging"),
+    ).toBe("staging");
+    expect(
+      resolveHost(config, "staging", undefined, env, "https://link.example.com"),
+    ).toBe("https://link.example.com");
+  });
+
   it("removes a persisted token during logout", async () => {
     const config = upsertProfile(await loadConfig(env), "staging", {
       host: "https://ig.example.com",
       token: "secret-token",
+      tokenExpiresAt: "2026-03-09T20:00:00.000Z",
+      refreshToken: "session.secret",
+      refreshTokenExpiresAt: "2026-04-08T20:00:00.000Z",
+      email: "person@example.com",
+      domain: "example.com",
+      cliSessionId: "session-1",
+      cliSessionLabel: "Laptop",
     });
     const cleared = clearProfileToken(config, "staging");
 

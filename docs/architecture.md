@@ -153,6 +153,9 @@ Why this shape:
 - `src/proxy.ts` (Next.js 16 Proxy entrypoint) enforces login for non-public routes.
 - Sessions are signed JWTs in `workspace_session` cookie.
 - CLI preview requests can also authenticate with `Authorization: Bearer <token>`. Bearer auth is resolved before cookies for `/api/v1/*` consumers.
+- Browser-assisted CLI login now runs through `/api/v1/auth/cli/start` and `/api/v1/auth/cli/exchange`, which mint short-lived CLI access tokens plus rolling refresh sessions.
+- Refresh/session lifecycle routes live at `/api/v1/auth/cli/refresh`, `/api/v1/auth/cli/logout`, `/api/v1/auth/sessions`, and `/api/v1/auth/sessions/:id/revoke`.
+- CLI refresh-session records are currently stored in the private credential store namespace `cli_session` (backed by Postgres), while the local CLI persists the current access/refresh pair in `~/.config/ig-poster/config.json` until OS keychain integration lands.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`
@@ -197,6 +200,7 @@ Why this shape:
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `scheduled`, `posted`).
 - `posts.archivedAt` is the soft-archive flag; archived posts keep their publish status instead of switching to a separate archived enum value.
 - CLI-local state is stored outside the app database in a user config file (`~/.config/ig-poster/config.json` unless `IG_POSTER_CONFIG_DIR` is set).
+- Repo-local CLI project links are stored in `.ig-poster/project.json` and can override the default host/profile for commands run inside that working tree.
 
 ## Security Posture
 

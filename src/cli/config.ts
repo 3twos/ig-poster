@@ -7,6 +7,13 @@ import { z } from "zod";
 const ProfileConfigSchema = z.object({
   host: z.string().url().optional(),
   token: z.string().min(1).optional(),
+  tokenExpiresAt: z.string().datetime().optional(),
+  refreshToken: z.string().min(1).optional(),
+  refreshTokenExpiresAt: z.string().datetime().optional(),
+  email: z.string().email().optional(),
+  domain: z.string().min(1).optional(),
+  cliSessionId: z.string().min(1).optional(),
+  cliSessionLabel: z.string().min(1).optional(),
 });
 
 const CliConfigSchema = z.object({
@@ -83,7 +90,8 @@ export const getProfileName = (
   config: CliConfig,
   explicitProfile?: string,
   env: NodeJS.ProcessEnv = process.env,
-) => explicitProfile ?? env.IG_POSTER_PROFILE ?? config.defaultProfile;
+  projectProfile?: string,
+) => explicitProfile ?? env.IG_POSTER_PROFILE ?? projectProfile ?? config.defaultProfile;
 
 export const getProfileConfig = (
   config: CliConfig,
@@ -109,6 +117,13 @@ export const clearProfileToken = (config: CliConfig, profileName: string) => {
   const current = getProfileConfig(config, profileName);
   const nextProfile = { ...current };
   delete nextProfile.token;
+  delete nextProfile.tokenExpiresAt;
+  delete nextProfile.refreshToken;
+  delete nextProfile.refreshTokenExpiresAt;
+  delete nextProfile.email;
+  delete nextProfile.domain;
+  delete nextProfile.cliSessionId;
+  delete nextProfile.cliSessionLabel;
 
   return {
     ...config,
@@ -134,9 +149,11 @@ export const resolveHost = (
   profileName: string,
   explicitHost?: string,
   env: NodeJS.ProcessEnv = process.env,
+  projectHost?: string,
 ) =>
   explicitHost ??
   env.IG_POSTER_HOST ??
+  projectHost ??
   getProfileConfig(config, profileName).host ??
   "http://localhost:3000";
 

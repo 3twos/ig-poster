@@ -115,6 +115,36 @@ export const printQueueTable = (
   printLines(rows.map(formatRow));
 };
 
+export const printSessionsTable = (
+  sessions: Array<{
+    id: string;
+    label: string;
+    email: string;
+    lastUsedAt: string;
+    expiresAt: string;
+    revokedAt: string | null;
+  }>,
+) => {
+  if (sessions.length === 0) {
+    printLines(["No CLI sessions found."]);
+    return;
+  }
+
+  const rows = [
+    ["ID", "REVOKED", "LAST USED", "EXPIRES", "LABEL", "EMAIL"],
+    ...sessions.map((session) => [
+      session.id,
+      session.revokedAt ? "yes" : "no",
+      formatIso(session.lastUsedAt),
+      formatIso(session.expiresAt),
+      session.label,
+      session.email,
+    ]),
+  ];
+
+  printLines(rows.map(formatRow));
+};
+
 export const printKeyValue = (entries: Array<[string, string | undefined]>) => {
   printLines(entries.map(([key, value]) => `${key}: ${value ?? "-"}`));
 };
