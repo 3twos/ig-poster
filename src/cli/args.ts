@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { CliError, EXIT_CODES } from "./errors";
 
 export type GlobalOptions = {
@@ -16,6 +19,7 @@ export type GlobalOptions = {
 type FlagType = "boolean" | "string";
 
 const GLOBAL_FLAG_TYPES: Record<string, FlagType> = {
+  "flags-file": "string",
   host: "string",
   profile: "string",
   json: "boolean",
@@ -29,6 +33,7 @@ const GLOBAL_FLAG_TYPES: Record<string, FlagType> = {
 };
 
 export const parseGlobalOptions = (argv: string[]) => {
+  const expandedArgv = expandFlagsFiles(argv);
   const options: GlobalOptions = {
     json: false,
     streamJson: false,
@@ -39,8 +44,8 @@ export const parseGlobalOptions = (argv: string[]) => {
   };
   const rest: string[] = [];
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
+  for (let index = 0; index < expandedArgv.length; index += 1) {
+    const token = expandedArgv[index];
     if (!token.startsWith("--")) {
       rest.push(token);
       continue;
@@ -58,7 +63,7 @@ export const parseGlobalOptions = (argv: string[]) => {
       continue;
     }
 
-    const value = inlineValue ?? argv[index + 1];
+    const value = inlineValue ?? expandedArgv[index + 1];
     if (!value || value.startsWith("--")) {
       throw new CliError(`Missing value for --${rawName}`, EXIT_CODES.usage);
     }
@@ -169,3 +174,87 @@ export const parseCommandOptions = <T extends Record<string, string | boolean>>(
 
 const camelCase = (value: string) =>
   value.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+const expandFlagsFiles = (
+  argv: string[],
+  baseDir = process.cwd(),
+  seen = new Set<string>(),
+): string[] => {
+  const expanded: string[] = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token !== "--flags-file" && !token.startsWith("--flags-file=")) {
+      expanded.push(token);
+      continue;
+    }
+
+    const [, inlineValue] = token.slice(2).split("=", 2);
+    const rawPath = inlineValue ?? argv[index + 1];
+    if (!rawPath || rawPath.startsWith("--")) {
+      throw new CliError("Missing value for --flags-file", EXIT_CODES.usage);
+    }
+
+    if (inlineValue === undefined) {
+      index += 1;
+    }
+
+    const filePath = path.resolve(baseDir, rawPath);
+    if (seen.has(filePath)) {
+      throw new CliError(
+        `Circular --flags-file reference: ${filePath}`,
+        EXIT_CODES.usage,
+      );
+    }
+
+    const fileArgs = parseFlagsFile(filePath);
+    const nextSeen = new Set(seen);
+    nextSeen.add(filePath);
+    expanded.push(
+      ...expandFlagsFiles(fileArgs, path.dirname(filePath), nextSeen),
+    );
+  }
+
+  return expanded;
+};
+
+const parseFlagsFile = (filePath: string) => {
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, "utf8");
+  } catch (error) {
+    throw new CliError(
+      error instanceof Error
+        ? `Could not read --flags-file ${filePath}: ${error.message}`
+        : `Could not read --flags-file ${filePath}`,
+      EXIT_CODES.usage,
+    );
+  }
+
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string")) {
+        throw new Error("Expected a JSON array of strings.");
+      }
+      return parsed;
+    } catch (error) {
+      throw new CliError(
+        error instanceof Error
+          ? `Invalid JSON in --flags-file ${filePath}: ${error.message}`
+          : `Invalid JSON in --flags-file ${filePath}`,
+        EXIT_CODES.usage,
+      );
+    }
+  }
+
+  return trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+};
