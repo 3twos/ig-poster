@@ -2209,6 +2209,13 @@ refresh_project_deployments() {
       continue
     fi
 
+    # Skip deployments instantly cancelled by Vercel's "Ignored Build Step".
+    # These are production-target entries that never actually built — they
+    # arrive already CANCELED with the characteristic error message.
+    if [[ "$dep_status" == "CANCELED" && "$dep_error" == *"Ignored Build Step"* ]]; then
+      continue
+    fi
+
     old_idx="$(deployment_index_by_id "$dep_id")"
     if (( old_idx >= 0 )); then
       first_seen="${DEP_FIRST_SEEN_EPOCH[old_idx]}"
