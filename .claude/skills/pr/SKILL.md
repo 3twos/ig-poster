@@ -65,7 +65,7 @@ Once review activity appears (or timeout), proceed.
 ## Phase 6: Final update
 
 1. Check merge status: `gh pr view <number> --json mergeable --jq .mergeable`
-2. If CONFLICTING: rebase on main and force-push.
+2. If CONFLICTING: rebase on main and push with `git push --force-with-lease` (intentional history rewrite after rebase).
 3. Post a final PR comment (via `--body-file`) summarizing:
    - Changes made after review
    - All review comments resolved

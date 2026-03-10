@@ -40,9 +40,7 @@
       "Bash(npx next:*)",
       "Bash(npx vitest:*)",
       "Bash(npx shadcn@latest:*)",
-      "Bash(npm install:*)",
       "Bash(./scripts/:*)",
-      "Bash(bash:*)",
       "Bash(do:*)"
     ]
   },
