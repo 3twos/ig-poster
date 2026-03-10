@@ -482,12 +482,12 @@ export const approveCliDeviceCode = async (params: {
     }
 
     const record = parsed.data;
-    if (record.userCode !== normalizedUserCode) {
+    if (Date.parse(record.expiresAt) <= now) {
+      await deleteDeviceCodeRecord(record.id);
       continue;
     }
 
-    if (Date.parse(record.expiresAt) <= now) {
-      await deleteDeviceCodeRecord(record.id);
+    if (record.userCode !== normalizedUserCode) {
       continue;
     }
 

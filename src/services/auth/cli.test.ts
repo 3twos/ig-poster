@@ -176,6 +176,29 @@ describe("services/auth/cli", () => {
     );
   });
 
+  it("cleans up expired device-code records before scanning for a matching user code", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-10T22:00:00.000Z"));
+
+    const expired = await createCliDeviceCode({
+      origin: "https://igposter.3twos.com",
+    });
+
+    vi.setSystemTime(new Date("2026-03-10T22:11:00.000Z"));
+
+    const active = await createCliDeviceCode({
+      origin: "https://igposter.3twos.com",
+    });
+
+    await approveCliDeviceCode({
+      actor,
+      userCode: active.userCode,
+    });
+
+    expect(store.has(`cli_device_code:${expired.deviceCode}`)).toBe(false);
+    vi.useRealTimers();
+  });
+
   it("marks expired device codes as expired and removes them", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-10T22:00:00.000Z"));
