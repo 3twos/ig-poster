@@ -8,7 +8,7 @@ import {
 } from "@/cli/secure-storage";
 
 describe("secure storage helpers", () => {
-  it("writes refresh tokens via stdin to the macOS security CLI", async () => {
+  it("writes refresh tokens through expect-driven prompt input so they stay out of argv", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
 
     const stored = await saveStoredRefreshToken("default", "http://localhost:3000", "session.secret", {
@@ -17,8 +17,18 @@ describe("secure storage helpers", () => {
     });
 
     expect(stored).toBe(true);
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "/usr/bin/expect",
+        stdin: "session.secret\n",
+      }),
+    );
     expect(run).toHaveBeenCalledWith({
+      command: "/usr/bin/expect",
       args: [
+        "-c",
+        expect.any(String),
+        "/usr/bin/security",
         "add-generic-password",
         "-U",
         "-s",
@@ -45,7 +55,11 @@ describe("secure storage helpers", () => {
     );
 
     expect(run).toHaveBeenCalledWith({
+      command: "/usr/bin/expect",
       args: [
+        "-c",
+        expect.any(String),
+        "/usr/bin/security",
         "add-generic-password",
         "-U",
         "-s",

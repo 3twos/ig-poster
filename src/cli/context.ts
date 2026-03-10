@@ -1,14 +1,21 @@
 import {
+  getProfileConfig,
   getProfileName,
   loadConfig,
   resolveHost,
   resolveToken,
+  saveConfig,
   type CliConfig,
   type CliProfileConfig,
 } from "./config";
 import type { GlobalOptions } from "./args";
-import { refreshProfileAuth } from "./auth";
+import {
+  loginWithBrowser,
+  persistCliAuthTokens,
+  refreshProfileAuth,
+} from "./auth";
 import { IgPosterClient } from "./client";
+import { CliError, EXIT_CODES } from "./errors";
 import { loadProjectLink, type LoadedProjectLink } from "./project";
 import { resolveProfileConfigSecrets } from "./secure-storage";
 
@@ -74,6 +81,48 @@ export const createContext = async (
     timeoutMs: globalOptions.timeoutMs ?? 30_000,
   });
 
+  if (!resolved.token) {
+    if (!canAutoBootstrapBrowserAuth()) {
+      throw new CliError(
+        "Authentication required. Run `ig auth login` interactively first, or set IG_POSTER_TOKEN.",
+        EXIT_CODES.auth,
+      );
+    }
+
+    if (!globalOptions.quiet) {
+      process.stderr.write(
+        `No IG Poster CLI session found for profile "${profileName}". Opening browser login...\n`,
+      );
+    }
+
+    const tokens = await loginWithBrowser({
+      host,
+      timeoutMs: Math.max(globalOptions.timeoutMs ?? 30_000, 120_000),
+    });
+    const nextConfig = await persistCliAuthTokens(
+      resolved.config,
+      profileName,
+      host,
+      tokens,
+    );
+    await saveConfig(nextConfig);
+
+    return {
+      client: new IgPosterClient({
+        host,
+        token: tokens.accessToken,
+        timeoutMs: globalOptions.timeoutMs ?? 30_000,
+      }),
+      config: nextConfig,
+      profileConfig: getProfileConfig(nextConfig, profileName),
+      profileName,
+      host,
+      token: tokens.accessToken,
+      projectLink,
+      globalOptions,
+    } satisfies CliContext;
+  }
+
   return {
     client: new IgPosterClient({
       host,
@@ -89,3 +138,6 @@ export const createContext = async (
     globalOptions,
   } satisfies CliContext;
 };
+
+const canAutoBootstrapBrowserAuth = () =>
+  Boolean(process.stdin.isTTY && process.stderr.isTTY);

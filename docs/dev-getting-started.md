@@ -222,6 +222,8 @@ npm run cli -- help
 
 The CLI reads profile state from `~/.config/ig-poster/config.json` by default. Override that location in tests or isolated runs with `IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli`. On macOS, browser-login refresh tokens are written to Keychain unless you set `IG_POSTER_DISABLE_KEYCHAIN=1`.
 
+In an interactive terminal, auth-required commands now bootstrap browser login automatically when no valid CLI session exists. Non-interactive usage still requires a saved session or `IG_POSTER_TOKEN`.
+
 Repo-local defaults can also be linked in `.ig-poster/project.json`:
 
 ```bash
@@ -239,7 +241,7 @@ Then test the CLI from another terminal:
 
 ```bash
 export IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli
-npm run cli -- auth login
+npm run cli -- status --json
 npm run cli -- auth status --json
 npm run cli -- auth sessions list
 npm run cli -- publish --image https://cdn.example.com/poster.png --caption "Launch day" --dry-run
@@ -249,7 +251,7 @@ npm run cli -- --flags-file .ig-poster/release.flags
 npm run cli -- posts list
 ```
 
-If the browser cannot be opened automatically, the CLI prints the login URL so you can open it manually.
+The first auth-required command above should open the browser automatically if the CLI is not logged in yet. If the browser cannot be opened automatically, the CLI prints the login URL so you can open it manually. You can still run `npm run cli -- auth login` explicitly when you want to pre-authenticate ahead of time.
 
 Manual bearer bootstrap is still available when you need it:
 

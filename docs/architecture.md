@@ -162,6 +162,7 @@ Why this shape:
 - CLI preview requests can also authenticate with `Authorization: Bearer <token>`. Bearer auth is resolved before cookies for `/api/v1/*` consumers.
 - Browser-assisted CLI login now runs through `/api/v1/auth/cli/start` and `/api/v1/auth/cli/exchange`, which mint short-lived CLI access tokens plus rolling refresh sessions.
 - Refresh/session lifecycle routes live at `/api/v1/auth/cli/refresh`, `/api/v1/auth/cli/logout`, `/api/v1/auth/sessions`, and `/api/v1/auth/sessions/:id/revoke`.
+- Interactive CLI commands first try the cached access token and refresh token, then automatically bootstrap the browser login flow when no valid CLI session exists. Non-interactive callers must authenticate explicitly ahead of time or provide `IG_POSTER_TOKEN`.
 - CLI refresh-session records are stored in the private credential store namespace `cli_session` (backed by Postgres). Locally, the CLI now stores refresh tokens in macOS Keychain when available, while still persisting access tokens and session metadata in `~/.config/ig-poster/config.json`; non-macOS environments fall back to storing the refresh token in that config file as well.
 - OAuth flow:
   - start: `/api/auth/google/start`

@@ -136,7 +136,8 @@
   - `ig posts list|get|create|update|duplicate|archive`
   - `ig queue list|get|cancel|retry|move-to-draft|update`
 - The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
-- `ig auth login` now opens the browser, reuses the Google Workspace login gate, and stores a refreshable CLI session for the active profile.
+- `ig auth login` opens the browser, reuses the Google Workspace login gate, and stores a refreshable CLI session for the active profile.
+- In an interactive terminal, most auth-required commands now trigger the same browser login flow automatically when no valid CLI session exists yet. Non-interactive runs still need a saved session or `IG_POSTER_TOKEN`.
 - Manual bearer bootstrap is still available for testing and overrides: `IG_POSTER_TOKEN`, `--token`, `--token-file`, and `--token-stdin`.
 - `--flags-file <path>` can preload arguments from a file before normal parsing. Use either a JSON array of strings for values containing spaces, or a newline-delimited token file for simple cases. Nested `--flags-file` references are supported, and later CLI args still override earlier file-loaded args.
 - On macOS, CLI refresh tokens are stored in the user Keychain by default. Other environments fall back to `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). Device-code login is not shipped yet. Set `IG_POSTER_DISABLE_KEYCHAIN=1` to force the file fallback on macOS.
