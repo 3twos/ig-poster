@@ -74,7 +74,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Node runtime: `>=20.9.0`.
+Node runtime: `22.x` (see `.nvmrc`).
 
 ## Environment Variables
 

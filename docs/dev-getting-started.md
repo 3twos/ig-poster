@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+ and npm.
+- Node.js 22.x and npm.
 - A Postgres database URL (`POSTGRES_URL` or `DATABASE_URL`) for persistent posts.
 - A Google Workspace OAuth app for login.
 - Optional but recommended for full local feature testing:
