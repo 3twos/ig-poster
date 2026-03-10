@@ -180,12 +180,13 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/actors.ts`: transport-neutral actor resolution for bearer token and workspace-cookie auth.
 - `src/services/auth/cli.ts`: CLI access-token issuance, refresh-session persistence, and session listing/revocation.
 - `src/services/assets.ts`: extracted asset upload service functions used by both the browser upload route and the v1 API surface.
+- `src/services/chat.ts`: extracted CLI chat prompt shaping and bearer-auth streaming helpers for `/api/v1/chat`.
 - `src/services/generation.ts`: post-derived generation/refine request helpers used by the v1 generation routes.
 - `src/services/posts.ts`: extracted post service functions used by the v1 API surface.
 - `src/services/brand-kits.ts`: extracted brand-kit service functions used by the v1 API surface.
 - `src/services/meta-auth.ts`: CLI-safe Meta auth resolution for bearer-auth publish and Meta place-search routes.
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
-- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, direct publish commands, brand-kit commands, post commands, and queue commands.
+- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -242,6 +243,7 @@ npm run cli -- auth status --json
 npm run cli -- auth sessions list
 npm run cli -- publish --image https://cdn.example.com/poster.png --caption "Launch day" --dry-run
 npm run cli -- generate run --post <post-id> --stream-json
+npm run cli -- chat ask --post <post-id> "Give me three stronger hooks for this draft"
 npm run cli -- posts list
 ```
 
@@ -261,6 +263,7 @@ Supported preview commands today:
 - `ig auth sessions list|revoke`
 - `ig assets upload <file...> [--folder <assets|videos|logos|renders>]`
 - `ig brand-kits list|get`
+- `ig chat ask [--post <id>] [--message <text|@file|->] <message>`
 - `ig config list|get|set`
 - `ig generate run [--post <id> | --request @generate.json]`
 - `ig generate refine --post <id> --instruction <text>`

@@ -19,7 +19,7 @@ describe("runCli", () => {
     expect(stderr).toHaveBeenCalledWith("Invalid timeout value: nope\n");
   });
 
-  it("prints help text with the publish and completion commands", async () => {
+  it("prints help text with the chat, publish, and completion commands", async () => {
     const stdout = vi
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
@@ -36,6 +36,9 @@ describe("runCli", () => {
     );
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("ig generate <run|refine>"),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining("ig chat <ask>"),
     );
   });
 });
