@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { CliError, EXIT_CODES } from "@/cli/errors";
 import { parseCommandOptions, parseGlobalOptions } from "@/cli/args";
 
 describe("parseGlobalOptions", () => {
@@ -54,6 +55,24 @@ describe("parseGlobalOptions", () => {
     }
   });
 
+  it("supports inline --flags-file=<path> syntax", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "ig-flags-inline-"));
+    const flagsPath = path.join(tempDir, "flags.json");
+    writeFileSync(flagsPath, JSON.stringify(["--profile", "staging", "posts", "list"]));
+
+    try {
+      const parsed = parseGlobalOptions([`--flags-file=${flagsPath}`, "--json"]);
+
+      expect(parsed.options).toMatchObject({
+        profile: "staging",
+        json: true,
+      });
+      expect(parsed.rest).toEqual(["posts", "list"]);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("supports nested newline flags files with relative paths", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "ig-flags-nested-"));
     const outerPath = path.join(tempDir, "outer.flags");
@@ -91,6 +110,40 @@ describe("parseGlobalOptions", () => {
       expect(() => parseGlobalOptions(["--flags-file", firstPath])).toThrow(
         `Circular --flags-file reference: ${firstPath}`,
       );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects missing flags files with a usage error", () => {
+    expect.assertions(2);
+
+    try {
+      parseGlobalOptions(["--flags-file", "/tmp/does-not-exist.flags"]);
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      expect(error).toMatchObject({
+        exitCode: EXIT_CODES.usage,
+        message: expect.stringContaining("Could not read --flags-file /tmp/does-not-exist.flags"),
+      });
+    }
+  });
+
+  it("rejects invalid json flags files with a usage error", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "ig-flags-invalid-json-"));
+    const flagsPath = path.join(tempDir, "flags.json");
+    writeFileSync(flagsPath, '["--profile",]');
+
+    expect.assertions(2);
+
+    try {
+      parseGlobalOptions(["--flags-file", flagsPath]);
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliError);
+      expect(error).toMatchObject({
+        exitCode: EXIT_CODES.usage,
+        message: expect.stringContaining(`Invalid JSON in --flags-file ${flagsPath}`),
+      });
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

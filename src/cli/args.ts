@@ -108,6 +108,11 @@ const setGlobalString = (
   value: string,
 ) => {
   switch (flag) {
+    case "flags-file":
+      throw new CliError(
+        "Unexpected --flags-file after argument expansion.",
+        EXIT_CODES.usage,
+      );
     case "host":
       options.host = value;
       break;
@@ -218,7 +223,7 @@ const expandFlagsFiles = (
   return expanded;
 };
 
-const parseFlagsFile = (filePath: string) => {
+const parseFlagsFile = (filePath: string): string[] => {
   let raw: string;
   try {
     raw = readFileSync(filePath, "utf8");
@@ -242,7 +247,7 @@ const parseFlagsFile = (filePath: string) => {
       if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string")) {
         throw new Error("Expected a JSON array of strings.");
       }
-      return parsed;
+      return parsed as string[];
     } catch (error) {
       throw new CliError(
         error instanceof Error
