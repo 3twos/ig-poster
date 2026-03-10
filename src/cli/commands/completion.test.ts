@@ -20,6 +20,7 @@ describe("runCompletionCommand", () => {
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining('if [[ -z "$command" ]]; then'),
     );
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("publish"));
   });
 
   it("prints a zsh completion script", async () => {

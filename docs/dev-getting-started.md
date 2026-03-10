@@ -176,15 +176,16 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/app/share/[id]/page.tsx`: shared project view.
 - `src/app/settings/page.tsx` and `src/app/brand/page.tsx`: compatibility routes that redirect to `/` (settings and brand editing now live in modals from the main shell).
 - `src/app/api/**/route.ts`: API endpoints for generation, auth, uploads, projects, publishing (including `/api/meta/locations` for place search), and brand kit CRUD (`/api/brand-kits`).
-- `src/app/api/v1/**/route.ts`: versioned API preview for the CLI (`auth/cli/start|exchange|refresh|logout`, `auth/whoami`, `auth/sessions`, `assets`, `brand-kits`, `brand-kits/:id`, `generate`, `generate/refine`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, `publish-jobs/:id`).
+- `src/app/api/v1/**/route.ts`: versioned API preview for the CLI (`auth/cli/start|exchange|refresh|logout`, `auth/whoami`, `auth/sessions`, `assets`, `brand-kits`, `brand-kits/:id`, `generate`, `generate/refine`, `meta/locations`, `publish`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, `publish-jobs/:id`).
 - `src/services/actors.ts`: transport-neutral actor resolution for bearer token and workspace-cookie auth.
 - `src/services/auth/cli.ts`: CLI access-token issuance, refresh-session persistence, and session listing/revocation.
 - `src/services/assets.ts`: extracted asset upload service functions used by both the browser upload route and the v1 API surface.
 - `src/services/generation.ts`: post-derived generation/refine request helpers used by the v1 generation routes.
 - `src/services/posts.ts`: extracted post service functions used by the v1 API surface.
 - `src/services/brand-kits.ts`: extracted brand-kit service functions used by the v1 API surface.
+- `src/services/meta-auth.ts`: CLI-safe Meta auth resolution for bearer-auth publish and Meta place-search routes.
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
-- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, brand-kit commands, post commands, and queue commands.
+- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -239,6 +240,7 @@ export IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli
 npm run cli -- auth login
 npm run cli -- auth status --json
 npm run cli -- auth sessions list
+npm run cli -- publish --image https://cdn.example.com/poster.png --caption "Launch day" --dry-run
 npm run cli -- generate run --post <post-id> --stream-json
 npm run cli -- posts list
 ```
@@ -265,6 +267,7 @@ Supported preview commands today:
 - `ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]`
 - `ig unlink`
 - `ig completion <bash|zsh|fish>`
+- `ig publish (--image <url> | --video <url> | --carousel <url,...>) (--caption <text> | --caption-file <file>)`
 - `ig api <METHOD> <PATH>`
 - `ig posts list|get|create|update|duplicate|archive`
 - `ig queue list|get|cancel|retry|move-to-draft|update`

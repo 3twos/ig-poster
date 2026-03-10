@@ -9,6 +9,7 @@ const COMMANDS = [
   "generate",
   "api",
   "posts",
+  "publish",
   "queue",
   "link",
   "unlink",
@@ -98,6 +99,9 @@ _ig() {
     generate)
       COMPREPLY=( $(compgen -W "run refine" -- "$cur") )
       ;;
+    publish)
+      COMPREPLY=( $(compgen -W "--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed" -- "$cur") )
+      ;;
     posts)
       COMPREPLY=( $(compgen -W "list get create update duplicate archive" -- "$cur") )
       ;;
@@ -124,8 +128,10 @@ commands=(
   'assets:Asset commands'
   'brand-kits:Brand kit commands'
   'config:Configuration commands'
+  'generate:Generation commands'
   'api:Raw API requests'
   'posts:Post commands'
+  'publish:Publish media to Instagram'
   'queue:Publish queue commands'
   'link:Link the current repo'
   'unlink:Remove the current repo link'
@@ -154,6 +160,9 @@ case $state in
       generate)
         _values 'generate command' run refine
         ;;
+      publish)
+        _values 'publish option' --image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed
+        ;;
       posts)
         _values 'post command' list get create update duplicate archive
         ;;
@@ -179,6 +188,7 @@ const buildFishCompletion = () => [
   "complete -c ig -n '__fish_seen_subcommand_from brand-kits' -a 'list get'",
   "complete -c ig -n '__fish_seen_subcommand_from config' -a 'list get set'",
   "complete -c ig -n '__fish_seen_subcommand_from generate' -a 'run refine'",
+  "complete -c ig -n '__fish_seen_subcommand_from publish' -a '--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed'",
   "complete -c ig -n '__fish_seen_subcommand_from posts' -a 'list get create update duplicate archive'",
   "complete -c ig -n '__fish_seen_subcommand_from queue' -a 'list get cancel retry move-to-draft update'",
   "complete -c ig -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'",

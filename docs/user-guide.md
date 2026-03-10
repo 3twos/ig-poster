@@ -130,6 +130,7 @@
   - `ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]`
   - `ig unlink`
   - `ig completion <bash|zsh|fish>`
+  - `ig publish (--image <url> | --video <url> | --carousel <url,...>) (--caption <text> | --caption-file <file>)`
   - `ig api <METHOD> <PATH>`
   - `ig posts list|get|create|update|duplicate|archive`
   - `ig queue list|get|cancel|retry|move-to-draft|update`
@@ -141,6 +142,7 @@
 - `ig generate run` streams server-side generation events from `/api/v1/generate`; add `--stream-json` for newline-delimited events or `--json` to emit the final result envelope only.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
 - `ig assets upload` reads local image/video files and sends them to the same Blob-backed upload path the browser uses, with an optional folder override for `assets`, `videos`, `logos`, or `renders`.
+- `ig publish` sends direct media publish/schedule requests through `/api/v1/publish`, supports `--dry-run`, and can resolve Meta place search with `--location` before attaching the final `locationId`.
 - `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.
 
 ## Working with Saved Posts

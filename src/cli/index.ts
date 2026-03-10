@@ -8,6 +8,7 @@ import { runConfigCommand } from "./commands/config";
 import { runGenerateCommand } from "./commands/generate";
 import { runLinkCommand, runUnlinkCommand } from "./commands/link";
 import { runPostsCommand } from "./commands/posts";
+import { runPublishCommand } from "./commands/publish";
 import { runQueueCommand } from "./commands/queue";
 import { runStatusCommand } from "./commands/status";
 import { createContext } from "./context";
@@ -25,6 +26,7 @@ Usage:
   ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]
   ig unlink
   ig completion <bash|zsh|fish>
+  ig publish (--image <url> | --video <url> | --carousel <url,...>)
   ig api <METHOD> <PATH> [--body @file.json]
   ig posts <list|get|create|update|duplicate|archive>
   ig queue <list|get|cancel|retry|move-to-draft|update>
@@ -80,6 +82,9 @@ export const runCli = async (argv: string[]) => {
         break;
       case "unlink":
         await runUnlinkCommand(ctx, commandArgs);
+        break;
+      case "publish":
+        await runPublishCommand(ctx, commandArgs);
         break;
       case "brand-kits":
         await runBrandKitsCommand(ctx, commandArgs);

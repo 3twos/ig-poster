@@ -50,7 +50,7 @@ flowchart LR
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
-  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `generate`, `generate/refine`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
+  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `generate`, `generate/refine`, `meta/locations`, `publish`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
   - Zod schemas enforce request and response validity.
 - Application-service layer:
   - `src/services/actors.ts` resolves an authenticated actor from bearer auth first, then workspace cookies.
@@ -58,6 +58,7 @@ flowchart LR
   - `src/services/generation.ts` owns post-derived generation/refine request shaping for the CLI-facing v1 generation routes.
   - `src/services/posts.ts` now owns extracted transport-neutral post workflows (`list`, `get`, `create`, `update`, `duplicate`, `archive`).
   - `src/services/brand-kits.ts` owns extracted brand-kit read workflows (`list`, `get`).
+  - `src/services/meta-auth.ts` resolves CLI-safe Meta auth for bearer-auth `/api/v1/*` publish and location-search requests, preferring stored OAuth connections when available and falling back to env credentials.
   - `src/services/publish-jobs.ts` owns extracted publish-job queue reads and mutation rules (`list`, `get`, `update`) for the CLI-facing API surface.
 - Data layer:
   - `src/db/schema.ts` defines relational post records.
@@ -119,7 +120,7 @@ Why this shape:
 
 ### 4) Publish / Schedule
 
-Before submitting, clients can call `GET /api/meta/locations?q=<query>` to turn a place name into a Meta `locationId`. Reel clients can also choose whether Meta should `share_to_feed`, and carousel clients store per-item user tags in persisted media composition.
+Before submitting, browser clients can call `GET /api/meta/locations?q=<query>` and CLI clients can call `GET /api/v1/meta/locations?q=<query>` to turn a place name into a Meta `locationId`. Reel clients can also choose whether Meta should `share_to_feed`, and carousel clients store per-item user tags in persisted media composition.
 
 1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment, optional location metadata, optional user tags, and optional reel `shareToFeed` control).
 2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
@@ -129,6 +130,8 @@ Before submitting, clients can call `GET /api/meta/locations?q=<query>` to turn 
 6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` is passed through for feed/reel publish jobs, optional top-level `userTags` are passed through for single-image and reel jobs, and carousel image-item tags are passed through per child item. Optional reel `shareToFeed` is passed through for reel-mode publish jobs.
 7. Successful publish marks the linked post `posted`, appends publish history, and leaves that post immutable from the app's post-edit APIs.
 8. Cron route (`GET /api/cron/publish`) first fails stale `processing` jobs for manual review, then claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
+
+For CLI preview consumers, `POST /api/v1/publish` mirrors the same scheduling/publish pipeline while resolving actor auth from bearer tokens and Meta auth from the latest stored OAuth connection (or env fallback) instead of browser cookies.
 
 Why this shape:
 - Separates interactive request latency from scheduled execution.
@@ -169,6 +172,7 @@ Why this shape:
 - Preferred path: Meta OAuth (`/api/auth/meta/*`), storing encrypted access token in the private credential store (DB) with encrypted cookie fallback.
 - Fallback path: env credentials (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ID`).
 - Runtime resolver returns a uniform `MetaAuthContext` to publishing code.
+- CLI-facing `/api/v1/*` publish flows use the same stored Meta OAuth records when present, but resolve them server-side without relying on the browser's `ig_connection` cookie.
 
 ### LLM Auth (Multi-Model)
 
