@@ -3,10 +3,28 @@ import { spawn } from "node:child_process";
 import type { CliConfig, CliProfileConfig } from "./config";
 
 const KEYCHAIN_SERVICE = "ig-poster-cli-refresh-token";
+const SECURITY_BIN = "/usr/bin/security";
+const EXPECT_BIN = "/usr/bin/expect";
 const KEYCHAIN_ITEM_NOT_FOUND_PATTERN =
   /errSecItemNotFound|could not be found|item[\s\S]*not found/iu;
+const PROMPTED_COMMAND_EXPECT_SCRIPT = `
+set timeout -1
+log_user 0
+set secret [read stdin]
+regsub {\\r?\\n$} $secret {} secret
+spawn {*}$argv
+send -- "$secret\\r"
+expect eof
+set child_output $expect_out(buffer)
+lassign [wait] pid spawnid os_error exit_status
+if {$os_error != 0 || $exit_status != 0} {
+  puts -nonewline stderr $child_output
+  exit [expr {$os_error != 0 ? $os_error : $exit_status}]
+}
+`.trim();
 
-export type SecurityCommandRunner = (params: {
+export type SecureStorageCommandRunner = (params: {
+  command?: string;
   args: string[];
   stdin?: string;
 }) => Promise<{ stdout: string; stderr: string }>;
@@ -14,12 +32,16 @@ export type SecurityCommandRunner = (params: {
 type SecureStorageOptions = {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
-  run?: SecurityCommandRunner;
+  run?: SecureStorageCommandRunner;
 };
 
-const defaultSecurityRunner: SecurityCommandRunner = async ({ args, stdin }) =>
+const defaultSecurityRunner: SecureStorageCommandRunner = async ({
+  command = SECURITY_BIN,
+  args,
+  stdin,
+}) =>
   new Promise((resolve, reject) => {
-    const child = spawn("security", args, {
+    const child = spawn(command, args, {
       stdio: "pipe",
     });
 
@@ -133,7 +155,11 @@ export const saveStoredRefreshToken = async (
   const run = options.run ?? defaultSecurityRunner;
   try {
     await run({
+      command: EXPECT_BIN,
       args: [
+        "-c",
+        PROMPTED_COMMAND_EXPECT_SCRIPT,
+        SECURITY_BIN,
         "add-generic-password",
         "-U",
         "-s",
@@ -141,8 +167,8 @@ export const saveStoredRefreshToken = async (
         "-a",
         buildAccountName(profileName, host),
         "-w",
-        refreshToken,
       ],
+      stdin: `${refreshToken}\n`,
     });
     return true;
   } catch {

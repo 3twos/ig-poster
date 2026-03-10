@@ -89,9 +89,11 @@ export const createContext = async (
       );
     }
 
-    process.stderr.write(
-      `No IG Poster CLI session found for profile "${profileName}". Opening browser login...\n`,
-    );
+    if (!globalOptions.quiet) {
+      process.stderr.write(
+        `No IG Poster CLI session found for profile "${profileName}". Opening browser login...\n`,
+      );
+    }
 
     const tokens = await loginWithBrowser({
       host,

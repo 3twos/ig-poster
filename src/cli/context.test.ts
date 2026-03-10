@@ -174,6 +174,52 @@ describe("createContext", () => {
     );
   });
 
+  it("suppresses the bootstrap notice when --quiet is enabled", async () => {
+    const tokens = {
+      accessToken: "fresh-token",
+      accessTokenExpiresAt: "2099-03-09T20:00:00.000Z",
+      refreshToken: "session.secret",
+      refreshTokenExpiresAt: "2099-04-08T20:00:00.000Z",
+      session: {
+        id: "session-1",
+        label: "Laptop",
+        email: "person@example.com",
+        domain: "example.com",
+      },
+    };
+    const nextConfig = {
+      ...baseConfig,
+      profiles: {
+        default: {
+          ...baseConfig.profiles.default,
+          token: "fresh-token",
+        },
+      },
+    };
+    mockedRefreshProfileAuth.mockResolvedValueOnce({
+      config: baseConfig,
+      profileConfig: baseConfig.profiles.default,
+      token: undefined,
+    });
+    mockedLoginWithBrowser.mockResolvedValueOnce(tokens);
+    mockedPersistCliAuthTokens.mockResolvedValueOnce(nextConfig);
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    await createContext({
+      json: false,
+      streamJson: false,
+      quiet: true,
+      noColor: false,
+      yes: false,
+      dryRun: false,
+    });
+
+    expect(stderr).not.toHaveBeenCalled();
+    expect(mockedLoginWithBrowser).toHaveBeenCalled();
+  });
+
   it("fails with an auth error in non-interactive mode when bootstrap login is needed", async () => {
     mockedRefreshProfileAuth.mockResolvedValueOnce({
       config: baseConfig,
