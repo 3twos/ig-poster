@@ -34,6 +34,7 @@ Usage:
   ig queue <list|get|cancel|retry|move-to-draft|update>
 
 Global options:
+  --flags-file <path>
   --host <url>
   --profile <name>
   --json

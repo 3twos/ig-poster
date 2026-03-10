@@ -40,5 +40,8 @@ describe("runCli", () => {
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("ig chat <ask>"),
     );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining("--flags-file <path>"),
+    );
   });
 });

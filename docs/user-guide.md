@@ -138,6 +138,7 @@
 - The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
 - `ig auth login` now opens the browser, reuses the Google Workspace login gate, and stores a refreshable CLI session for the active profile.
 - Manual bearer bootstrap is still available for testing and overrides: `IG_POSTER_TOKEN`, `--token`, `--token-file`, and `--token-stdin`.
+- `--flags-file <path>` can preload arguments from a file before normal parsing. Use either a JSON array of strings for values containing spaces, or a newline-delimited token file for simple cases. Nested `--flags-file` references are supported, and later CLI args still override earlier file-loaded args.
 - Refresh tokens are currently stored in `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). OS keychain storage and device-code login are not shipped yet.
 - `ig link` writes repo-local defaults to `.ig-poster/project.json`, and `ig status` now includes the active linked-project details when one is present.
 - When authenticated, `ig status` also summarizes the server-visible Meta publish connection, CLI-visible LLM providers plus execution mode, and current 24-hour publish-window usage.

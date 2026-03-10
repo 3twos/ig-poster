@@ -19,6 +19,7 @@ const COMMANDS = [
 ];
 
 const GLOBAL_FLAGS = [
+  "--flags-file",
   "--host",
   "--profile",
   "--json",
@@ -67,7 +68,7 @@ _ig() {
   for (( i=1; i < \${COMP_CWORD}; i++ )); do
     word="\${COMP_WORDS[i]}"
     case "$word" in
-      --host|--profile|--jq|--timeout)
+      --flags-file|--host|--profile|--jq|--timeout)
         (( i++ ))
         ;;
       --*)
