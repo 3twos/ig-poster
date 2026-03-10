@@ -10,9 +10,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "predev": "npm run ensure:linux-native-deps",
     "build": "next build",
-    "prebuild": "npm run ensure:linux-native-deps",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -28,8 +26,11 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:check": "bash scripts/check-migrations.sh",
-    "db:studio": "drizzle-kit studio",
-    "ensure:linux-native-deps": "node scripts/ensure-linux-optional-native-deps.mjs"
+    "db:studio": "drizzle-kit studio"
+  },
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "4.2.1",
+    "lightningcss-linux-x64-gnu": "1.31.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
