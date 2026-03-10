@@ -38,14 +38,7 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm ci
-      - name: Ensure Linux optional native deps
-        run: |
-          mapfile -t LINUX_OPTIONAL_PKGS < <(
-            node -e "const lock=require('./package-lock.json');const out=[];for(const pkg of Object.values(lock.packages||{})){for(const [name,version] of Object.entries(pkg.optionalDependencies||{})){if(name.endsWith('-linux-x64-gnu'))out.push(name+'@'+version)}};console.log([...new Set(out)].join('\n'));"
-          )
-          if [ "${#LINUX_OPTIONAL_PKGS[@]}" -gt 0 ]; then
-            npm install --no-save "${LINUX_OPTIONAL_PKGS[@]}"
-          fi
+      - run: npm run ensure:linux-native-deps
       - run: npm run test:coverage
 
   db-check:
@@ -68,14 +61,7 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm ci
-      - name: Ensure Linux optional native deps
-        run: |
-          mapfile -t LINUX_OPTIONAL_PKGS < <(
-            node -e "const lock=require('./package-lock.json');const out=[];for(const pkg of Object.values(lock.packages||{})){for(const [name,version] of Object.entries(pkg.optionalDependencies||{})){if(name.endsWith('-linux-x64-gnu'))out.push(name+'@'+version)}};console.log([...new Set(out)].join('\n'));"
-          )
-          if [ "${#LINUX_OPTIONAL_PKGS[@]}" -gt 0 ]; then
-            npm install --no-save "${LINUX_OPTIONAL_PKGS[@]}"
-          fi
+      - run: npm run ensure:linux-native-deps
       - uses: actions/cache@v4
         with:
           path: .next/cache
