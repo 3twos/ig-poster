@@ -98,7 +98,7 @@ To reduce approval interruptions, the following commands are pre-approved by def
   - `mkdir`, `cp`, `mv`, `rm`, `touch` (paths must remain inside the active repository/worktree)
   - `npm run *`, `npm ci`, `npm ls`, `npm test`
   - `npx tsc`, `npx eslint`, `npx next`, `npx vitest`, `npx shadcn@latest`
-  - `npm install` is **not** pre-approved by default; ask first.
+  - `npm install *`
 
 Safety hooks:
 - `worktree-guard` and `pr-workflow-guard` are enforced via `.claude/settings.json` PreToolUse hooks.

@@ -103,7 +103,7 @@ Zod schemas are used pervasively for request validation in API routes and for ty
 
 ## PR and Branch Policy
 
-**Read `AGENTS.md` for additional instructions** on PR flow, merge gates, and review handling rules. Key points: branches use `claude/` prefix, never self-merge — wait for explicit user approval, and treat review comments as required inputs. Parallel agent work uses git worktrees via `scripts/new-agent-worktree.sh`.
+**Use `/pr <task>` to run the full PR lifecycle** — worktree setup, implementation, validation, PR creation, review handling, and cleanup. Read `AGENTS.md` for detailed rules on merge gates, review handling, and branch policy. Key points: branches use `claude/` prefix, never self-merge — wait for explicit user approval, and treat review comments as required inputs.
 
 ## CI/CD
 
