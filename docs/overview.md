@@ -36,7 +36,7 @@
 - Enforces stricter API payload contracts for persisted post drafts/updates.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
-- Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
+- Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, macOS Keychain-backed refresh-token storage, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
 
 ## Key Features
 
@@ -86,5 +86,5 @@
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Instagram publishing is unavailable.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).
-- The CLI preview now supports browser-based login with refreshable CLI sessions. Device-code login and OS keychain storage are still in progress, so refresh tokens currently live in `~/.config/ig-poster/config.json` with restrictive local file permissions.
+- The CLI preview now supports browser-based login with refreshable CLI sessions. On macOS, refresh tokens are stored in the user Keychain by default; other environments still fall back to `~/.config/ig-poster/config.json` with restrictive local file permissions. Device-code login is still in progress.
 - The CLI preview can also store repo-local project defaults in `.ig-poster/project.json`, which currently cover linked host/profile plus optional brand-kit and output-directory preferences.
