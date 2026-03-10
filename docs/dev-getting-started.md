@@ -251,6 +251,21 @@ npm run cli -- --flags-file .ig-poster/release.flags
 npm run cli -- posts list
 ```
 
+For a quick walkthrough that exercises the current preview commands while keeping project link state isolated to a temporary directory, run:
+
+```bash
+./scripts/cli-showcase.zsh
+```
+
+Optional showcase environment overrides:
+- `IG_SHOWCASE_HOST` / `IG_SHOWCASE_PROFILE` to target a non-default server or profile
+- `IG_SHOWCASE_CONFIG_DIR` to isolate CLI auth/config state
+- `IG_SHOWCASE_POST_ID` to enable `generate` / `chat` / `refine` examples
+- `IG_SHOWCASE_IMAGE_URL` to enable an `ig publish --dry-run` example
+- `IG_SHOWCASE_BRAND_KIT_ID` to choose the brand kit used by the temporary project link
+- `IG_SHOWCASE_CHAT_PROMPT` to customize the `chat ask` prompt
+- `IG_SHOWCASE_CAPTION` to customize the `ig publish --dry-run` caption
+
 The first auth-required command above should open the browser automatically if the CLI is not logged in yet. If the browser cannot be opened automatically, the CLI prints the login URL so you can open it manually. You can still run `npm run cli -- auth login` explicitly when you want to pre-authenticate ahead of time.
 
 Manual bearer bootstrap is still available when you need it:
