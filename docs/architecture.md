@@ -50,7 +50,7 @@ flowchart LR
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
-  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `chat`, `generate`, `generate/refine`, `meta/locations`, `publish`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
+  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `chat`, `generate`, `generate/refine`, `meta/locations`, `publish`, `status`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
   - Zod schemas enforce request and response validity.
 - Application-service layer:
   - `src/services/actors.ts` resolves an authenticated actor from bearer auth first, then workspace cookies.
@@ -61,6 +61,7 @@ flowchart LR
   - `src/services/brand-kits.ts` owns extracted brand-kit read workflows (`list`, `get`).
   - `src/services/meta-auth.ts` resolves CLI-safe Meta auth for bearer-auth `/api/v1/*` publish and location-search requests, preferring stored OAuth connections when available and falling back to env credentials.
   - `src/services/publish-jobs.ts` owns extracted publish-job queue reads and mutation rules (`list`, `get`, `update`) for the CLI-facing API surface.
+  - `src/services/status.ts` aggregates CLI-safe bearer-auth status data for `/api/v1/status`, combining actor info, Meta readiness, LLM provider availability, and publish-window usage.
 - Data layer:
   - `src/db/schema.ts` defines relational post records.
   - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.

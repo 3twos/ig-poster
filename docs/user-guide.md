@@ -140,6 +140,7 @@
 - Manual bearer bootstrap is still available for testing and overrides: `IG_POSTER_TOKEN`, `--token`, `--token-file`, and `--token-stdin`.
 - Refresh tokens are currently stored in `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). OS keychain storage and device-code login are not shipped yet.
 - `ig link` writes repo-local defaults to `.ig-poster/project.json`, and `ig status` now includes the active linked-project details when one is present.
+- When authenticated, `ig status` also summarizes the server-visible Meta publish connection, CLI-visible LLM providers plus execution mode, and current 24-hour publish-window usage.
 - `ig generate run` streams server-side generation events from `/api/v1/generate`; add `--stream-json` for newline-delimited events or `--json` to emit the final result envelope only.
 - `ig chat ask` streams server-side chat events from `/api/v1/chat`; add `--stream-json` for newline-delimited events, `--json` for the final assistant message object, and `--post <id>` to inject the saved draft context into the prompt.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
