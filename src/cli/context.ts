@@ -3,7 +3,6 @@ import {
   loadConfig,
   resolveHost,
   resolveToken,
-  getProfileConfig,
   type CliConfig,
   type CliProfileConfig,
 } from "./config";
@@ -11,6 +10,7 @@ import type { GlobalOptions } from "./args";
 import { refreshProfileAuth } from "./auth";
 import { IgPosterClient } from "./client";
 import { loadProjectLink, type LoadedProjectLink } from "./project";
+import { resolveProfileConfigSecrets } from "./secure-storage";
 
 export type CliContext = {
   client: IgPosterClient;
@@ -44,7 +44,11 @@ export const createContext = async (
   );
 
   if (options.refreshAuth === false) {
-    const profileConfig = getProfileConfig(initialConfig, profileName);
+    const profileConfig = await resolveProfileConfigSecrets(
+      initialConfig,
+      profileName,
+      host,
+    );
     const token = resolveToken(initialConfig, profileName);
 
     return {

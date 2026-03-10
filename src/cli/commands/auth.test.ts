@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/cli/auth", () => ({
   loginWithBrowser: vi.fn(),
-  persistCliAuthTokens: vi.fn((config, profileName, host, tokens) => ({
+  persistCliAuthTokens: vi.fn(async (config, profileName, host, tokens) => ({
     ...config,
     profiles: {
       ...config.profiles,
@@ -21,11 +21,17 @@ vi.mock("@/cli/auth", () => ({
   })),
 }));
 
+vi.mock("@/cli/secure-storage", () => ({
+  clearStoredRefreshToken: vi.fn(async () => false),
+}));
+
 import { runAuthCommand } from "@/cli/commands/auth";
 import { loadConfig } from "@/cli/config";
 import { loginWithBrowser } from "@/cli/auth";
+import { clearStoredRefreshToken } from "@/cli/secure-storage";
 
 const mockedLoginWithBrowser = vi.mocked(loginWithBrowser);
+const mockedClearStoredRefreshToken = vi.mocked(clearStoredRefreshToken);
 
 describe("runAuthCommand", () => {
   let configDir: string;
@@ -34,6 +40,7 @@ describe("runAuthCommand", () => {
     configDir = await mkdtemp(path.join(os.tmpdir(), "ig-poster-cli-auth-cmd-"));
     process.env.IG_POSTER_CONFIG_DIR = configDir;
     mockedLoginWithBrowser.mockReset();
+    mockedClearStoredRefreshToken.mockReset();
   });
 
   afterEach(async () => {
@@ -170,6 +177,10 @@ describe("runAuthCommand", () => {
       path: "/api/v1/auth/cli/logout",
       body: { refreshToken: "session.secret" },
     });
+    expect(mockedClearStoredRefreshToken).toHaveBeenCalledWith(
+      "default",
+      "http://localhost:3000",
+    );
     const saved = await loadConfig();
     expect(saved.profiles.default).toEqual({
       host: "http://localhost:3000",

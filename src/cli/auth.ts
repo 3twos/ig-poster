@@ -14,6 +14,11 @@ import {
 import { IgPosterClient } from "./client";
 import { CliError, EXIT_CODES } from "./errors";
 import { printLines } from "./output";
+import {
+  clearStoredRefreshToken,
+  resolveProfileConfigSecrets,
+  saveStoredRefreshToken,
+} from "./secure-storage";
 
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 30_000;
 
@@ -176,23 +181,36 @@ const listenForBrowserCallback = async (timeoutMs: number) => {
   };
 };
 
-export const persistCliAuthTokens = (
+export const persistCliAuthTokens = async (
   config: CliConfig,
   profileName: string,
   host: string,
   tokens: CliAuthTokens,
-) =>
-  upsertProfile(clearProfileToken(config, profileName), profileName, {
+) => {
+  let nextConfig = upsertProfile(clearProfileToken(config, profileName), profileName, {
     host,
     token: tokens.accessToken,
     tokenExpiresAt: tokens.accessTokenExpiresAt,
-    refreshToken: tokens.refreshToken,
     refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
     email: tokens.session.email,
     domain: tokens.session.domain,
     cliSessionId: tokens.session.id,
     cliSessionLabel: tokens.session.label,
   });
+
+  const storedInKeychain = await saveStoredRefreshToken(
+    profileName,
+    host,
+    tokens.refreshToken,
+  );
+  if (!storedInKeychain) {
+    nextConfig = upsertProfile(nextConfig, profileName, {
+      refreshToken: tokens.refreshToken,
+    });
+  }
+
+  return nextConfig;
+};
 
 export const refreshProfileAuth = async (params: {
   config: CliConfig;
@@ -202,22 +220,29 @@ export const refreshProfileAuth = async (params: {
   env?: NodeJS.ProcessEnv;
 }) => {
   const env = params.env ?? process.env;
-  const initialProfile = getProfileConfig(params.config, params.profileName);
+  const currentProfile = getProfileConfig(params.config, params.profileName);
   if (env.IG_POSTER_TOKEN) {
     return {
       config: params.config,
-      profileConfig: initialProfile,
+      profileConfig: currentProfile,
       token: env.IG_POSTER_TOKEN,
     };
   }
 
-  if (hasUsableAccessToken(initialProfile)) {
+  if (hasUsableAccessToken(currentProfile)) {
     return {
       config: params.config,
-      profileConfig: initialProfile,
-      token: initialProfile.token,
+      profileConfig: currentProfile,
+      token: currentProfile.token,
     };
   }
+
+  const initialProfile = await resolveProfileConfigSecrets(
+    params.config,
+    params.profileName,
+    params.host,
+    { env },
+  );
 
   if (!initialProfile.refreshToken) {
     if (initialProfile.token && initialProfile.tokenExpiresAt) {
@@ -242,6 +267,7 @@ export const refreshProfileAuth = async (params: {
     !isFutureIso(initialProfile.refreshTokenExpiresAt)
   ) {
     const cleared = clearProfileToken(params.config, params.profileName);
+    await clearStoredRefreshToken(params.profileName, params.host, { env });
     await saveConfig(cleared, env);
     return {
       config: cleared,
@@ -263,7 +289,7 @@ export const refreshProfileAuth = async (params: {
         refreshToken: initialProfile.refreshToken,
       },
     });
-    const nextConfig = persistCliAuthTokens(
+    const nextConfig = await persistCliAuthTokens(
       params.config,
       params.profileName,
       params.host,
@@ -281,6 +307,7 @@ export const refreshProfileAuth = async (params: {
       (error.exitCode === EXIT_CODES.auth || error.exitCode === EXIT_CODES.forbidden)
     ) {
       const cleared = clearProfileToken(params.config, params.profileName);
+      await clearStoredRefreshToken(params.profileName, params.host, { env });
       await saveConfig(cleared, env);
       return {
         config: cleared,

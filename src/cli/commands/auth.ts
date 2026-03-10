@@ -7,6 +7,7 @@ import { loginWithBrowser, persistCliAuthTokens, type CliAuthTokens } from "../a
 import { CliError, EXIT_CODES } from "../errors";
 import { readTextInput } from "../input";
 import { printJson, printKeyValue, printSessionsTable } from "../output";
+import { clearStoredRefreshToken } from "../secure-storage";
 import type { CliContext } from "../context";
 import { IgPosterClient } from "../client";
 
@@ -114,6 +115,7 @@ const login = async (ctx: CliContext, argv: string[]) => {
       ctx.profileName,
       { host: ctx.host, token },
     );
+    await clearStoredRefreshToken(ctx.profileName, ctx.host);
     result = {
       profile: ctx.profileName,
       host: ctx.host,
@@ -126,7 +128,7 @@ const login = async (ctx: CliContext, argv: string[]) => {
       timeoutMs: Math.max(ctx.globalOptions.timeoutMs ?? 30_000, 120_000),
       label: options.label,
     });
-    nextConfig = persistCliAuthTokens(
+    nextConfig = await persistCliAuthTokens(
       ctx.config,
       ctx.profileName,
       ctx.host,
@@ -185,6 +187,7 @@ const logout = async (ctx: CliContext) => {
     }
   }
 
+  await clearStoredRefreshToken(ctx.profileName, ctx.host);
   await saveConfig(clearProfileToken(ctx.config, ctx.profileName));
 
   if (ctx.globalOptions.json) {
