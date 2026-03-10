@@ -188,8 +188,8 @@ export const resolveProfileConfigSecrets = async (
 
   let baseProfile = profile;
   if (profile.refreshToken && !matchesResolvedHost) {
-    const { refreshToken: _ignoredRefreshToken, ...profileWithoutRefreshToken } =
-      profile;
+    const profileWithoutRefreshToken = { ...profile };
+    delete profileWithoutRefreshToken.refreshToken;
     baseProfile = profileWithoutRefreshToken;
   } else if (profile.refreshToken) {
     return profile;
