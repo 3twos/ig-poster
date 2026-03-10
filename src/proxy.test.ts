@@ -45,6 +45,17 @@ describe("proxy", () => {
     expect(mockedVerify).not.toHaveBeenCalled();
   });
 
+  it("lets CLI auth paths through without session", async () => {
+    const req = new NextRequest(
+      "https://app.example.com/api/v1/auth/cli/start?challenge=1234567890123456789012345678901234567890123&state=state1234&redirect_uri=http://127.0.0.1:3001/callback",
+    );
+    const res = await proxy(req);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(mockedVerify).not.toHaveBeenCalled();
+  });
+
   it("redirects unauthenticated page requests to google start", async () => {
     const req = new NextRequest("https://app.example.com/settings");
     const res = await proxy(req);
@@ -74,5 +85,30 @@ describe("proxy", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("x-middleware-next")).toBe("1");
     expect(mockedVerify).toHaveBeenCalledWith("token123");
+  });
+
+  it("allows v1 API requests authenticated with bearer tokens", async () => {
+    const req = new NextRequest("https://app.example.com/api/v1/posts", {
+      headers: {
+        authorization: "  Bearer header.payload.signature  ",
+      },
+    });
+
+    const res = await proxy(req);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(mockedVerify).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed bearer tokens on v1 API requests", async () => {
+    const req = new NextRequest("https://app.example.com/api/v1/posts", {
+      headers: {
+        authorization: "Bearer not-a-jwt",
+      },
+    });
+
+    const res = await proxy(req);
+    expect(res.status).toBe(401);
+    expect(mockedVerify).not.toHaveBeenCalled();
   });
 });
