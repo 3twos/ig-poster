@@ -50,11 +50,12 @@ flowchart LR
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
-  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
+  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `generate`, `generate/refine`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
   - Zod schemas enforce request and response validity.
 - Application-service layer:
   - `src/services/actors.ts` resolves an authenticated actor from bearer auth first, then workspace cookies.
   - `src/services/assets.ts` owns transport-neutral blob upload validation and persistence for both the browser upload route and the CLI-facing v1 route.
+  - `src/services/generation.ts` owns post-derived generation/refine request shaping for the CLI-facing v1 generation routes.
   - `src/services/posts.ts` now owns extracted transport-neutral post workflows (`list`, `get`, `create`, `update`, `duplicate`, `archive`).
   - `src/services/brand-kits.ts` owns extracted brand-kit read workflows (`list`, `get`).
   - `src/services/publish-jobs.ts` owns extracted publish-job queue reads and mutation rules (`list`, `get`, `update`) for the CLI-facing API surface.

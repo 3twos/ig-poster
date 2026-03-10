@@ -32,5 +32,8 @@ describe("runCli", () => {
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("ig completion <bash|zsh|fish>"),
     );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining("ig generate <run|refine>"),
+    );
   });
 });

@@ -36,7 +36,7 @@
 - Enforces stricter API payload contracts for persisted post drafts/updates.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
-- Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, shell completion output, raw API access, auth/status checks, asset upload, brand-kit lookup, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
+- Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, shell completion output, raw API access, auth/status checks, asset upload, brand-kit lookup, generation run/refine commands, core post read/write commands, and publish-job queue controls backed by `/api/v1/*`.
 
 ## Key Features
 
@@ -47,7 +47,7 @@
 - Website-style-aware prompts and optional brand autofill from a public site URL.
 - Blob-backed storage for uploads, shared project snapshots, and outcome snapshots used for insights.
 - Postgres-backed post drafts and publish jobs with enum-constrained workflow status (`draft/scheduled/posted` for posts, plus `archivedAt` as a soft-archive marker).
-- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/cli/start|exchange|refresh|logout`, `auth/whoami`, `auth/sessions`, `assets upload`, `brand-kits list/get`, `posts list/get/create/update/duplicate/archive`, `publish-jobs list|get|update`).
+- Versioned API preview under `/api/v1/*` for authenticated CLI access (`auth/cli/start|exchange|refresh|logout`, `auth/whoami`, `auth/sessions`, `assets upload`, `brand-kits list/get`, `generate run/refine`, `posts list|get|create|update|duplicate|archive`, `publish-jobs list|get|update`).
 
 ## Primary User Scenarios
 
@@ -78,7 +78,7 @@
    - Open the Chat tab in the right panel to brainstorm captions, get hashtag suggestions, or refine creative direction in a multi-turn conversation.
 
 7. Operate the service from the CLI
-   - Use the preview `ig` CLI for host/profile config, repo-local project linking via `.ig-poster/project.json`, raw API calls, auth checks, asset uploads, post management, shell completion generation, and publish-queue inspection/mutation against the same server-side workflows.
+   - Use the preview `ig` CLI for host/profile config, repo-local project linking via `.ig-poster/project.json`, raw API calls, auth checks, asset uploads, generation runs/refinements, post management, shell completion generation, and publish-queue inspection/mutation against the same server-side workflows.
 
 ## Scope Boundaries
 

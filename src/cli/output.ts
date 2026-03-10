@@ -145,6 +145,32 @@ export const printSessionsTable = (
   printLines(rows.map(formatRow));
 };
 
+export const printGenerationVariantsTable = (
+  variants: Array<{
+    id: string;
+    name: string;
+    postType: string;
+    score?: number;
+  }>,
+) => {
+  if (variants.length === 0) {
+    printLines(["No variants generated."]);
+    return;
+  }
+
+  const rows = [
+    ["ID", "TYPE", "SCORE", "NAME"],
+    ...variants.map((variant) => [
+      variant.id,
+      variant.postType,
+      variant.score !== undefined ? String(variant.score) : "-",
+      variant.name,
+    ]),
+  ];
+
+  printLines(rows.map(formatRow));
+};
+
 export const printKeyValue = (entries: Array<[string, string | undefined]>) => {
   printLines(entries.map(([key, value]) => `${key}: ${value ?? "-"}`));
 };

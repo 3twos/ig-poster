@@ -17,8 +17,16 @@ describe("parseGlobalOptions", () => {
     expect(parsed.options).toMatchObject({
       profile: "staging",
       json: true,
+      streamJson: false,
     });
     expect(parsed.rest).toEqual(["posts", "list", "--status", "draft"]);
+  });
+
+  it("parses stream-json as a global flag", () => {
+    const parsed = parseGlobalOptions(["generate", "run", "--post", "post-1", "--stream-json"]);
+
+    expect(parsed.options.streamJson).toBe(true);
+    expect(parsed.rest).toEqual(["generate", "run", "--post", "post-1"]);
   });
 });
 

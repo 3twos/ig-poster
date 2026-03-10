@@ -4,6 +4,7 @@ export type GlobalOptions = {
   host?: string;
   profile?: string;
   json: boolean;
+  streamJson: boolean;
   jq?: string;
   quiet: boolean;
   noColor: boolean;
@@ -18,6 +19,7 @@ const GLOBAL_FLAG_TYPES: Record<string, FlagType> = {
   host: "string",
   profile: "string",
   json: "boolean",
+  "stream-json": "boolean",
   jq: "string",
   quiet: "boolean",
   "no-color": "boolean",
@@ -29,6 +31,7 @@ const GLOBAL_FLAG_TYPES: Record<string, FlagType> = {
 export const parseGlobalOptions = (argv: string[]) => {
   const options: GlobalOptions = {
     json: false,
+    streamJson: false,
     quiet: false,
     noColor: false,
     yes: false,
@@ -73,6 +76,9 @@ const setGlobalBoolean = (options: GlobalOptions, flag: string) => {
   switch (flag) {
     case "json":
       options.json = true;
+      break;
+    case "stream-json":
+      options.streamJson = true;
       break;
     case "quiet":
       options.quiet = true;
