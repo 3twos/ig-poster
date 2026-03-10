@@ -89,6 +89,17 @@ describe("resolveMetaAuthForApi", () => {
     expect(mockedGetMetaConnection).toHaveBeenCalledWith("conn-1");
   });
 
+  it("rejects explicit stored connection ids when credential storage is disabled", async () => {
+    await expect(
+      resolveMetaAuthForApi({ connectionId: "conn-1" }),
+    ).rejects.toMatchObject({
+      name: "MetaAuthServiceError",
+      status: 400,
+      message:
+        "Stored Meta OAuth connections require POSTGRES_URL or DATABASE_URL.",
+    } satisfies Partial<MetaAuthServiceError>);
+  });
+
   it("uses the latest stored connection when none is specified", async () => {
     mockedIsCredentialStoreEnabled.mockReturnValue(true);
     mockedListCredentialRecords.mockResolvedValue([

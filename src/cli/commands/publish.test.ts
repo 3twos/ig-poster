@@ -200,4 +200,167 @@ describe("runPublishCommand", () => {
     });
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining('"status": "published"'));
   });
+
+  it("rejects carousel urls that split into malformed items and hints about %2C", async () => {
+    await expect(
+      runPublishCommand(
+        {
+          client: { requestJson: vi.fn() },
+          globalOptions: {
+            json: false,
+            jq: undefined,
+            quiet: false,
+            noColor: false,
+            yes: false,
+            dryRun: false,
+          },
+        } as never,
+        [
+          "--carousel",
+          "https://cdn.example.com/c1.jpg?label=a,b",
+          "--caption",
+          "Launch day caption",
+        ],
+      ),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("encode it as %2C"),
+    });
+  });
+
+  it("rejects location queries with no matches", async () => {
+    const requestJson = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        locations: [],
+      },
+    });
+
+    await expect(
+      runPublishCommand(
+        {
+          client: { requestJson },
+          globalOptions: {
+            json: false,
+            jq: undefined,
+            quiet: false,
+            noColor: false,
+            yes: false,
+            dryRun: false,
+          },
+        } as never,
+        [
+          "--image",
+          "https://cdn.example.com/poster.png",
+          "--caption",
+          "Launch day caption",
+          "--location",
+          "Nowhere",
+        ],
+      ),
+    ).rejects.toMatchObject({
+      message: 'No Meta locations matched "Nowhere".',
+    });
+  });
+
+  it("uses an exact location name match when the query returns multiple results", async () => {
+    const requestJson = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          locations: [
+            { id: "loc-1", name: "Napa" },
+            { id: "loc-2", name: "Napa Valley Welcome Center" },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          publish: {
+            status: "published",
+            mode: "image",
+            authSource: "oauth",
+            publishId: "publish-1",
+            creationId: "creation-1",
+          },
+        },
+      });
+
+    await runPublishCommand(
+      {
+        client: { requestJson },
+        globalOptions: {
+          json: true,
+          jq: undefined,
+          quiet: false,
+          noColor: false,
+          yes: false,
+          dryRun: false,
+        },
+      } as never,
+      [
+        "--image",
+        "https://cdn.example.com/poster.png",
+        "--caption",
+        "Launch day caption",
+        "--location",
+        "Napa Valley Welcome Center",
+      ],
+    );
+
+    expect(requestJson).toHaveBeenNthCalledWith(2, {
+      method: "POST",
+      path: "/api/v1/publish",
+      body: {
+        caption: "Launch day caption",
+        locationId: "loc-2",
+        media: {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/poster.png",
+        },
+      },
+    });
+  });
+
+  it("rejects ambiguous location matches without an exact name hit", async () => {
+    const requestJson = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        locations: [
+          { id: "loc-1", name: "Napa Valley" },
+          { id: "loc-2", name: "Napa Valley Welcome Center" },
+          { id: "loc-3", name: "Napa Valley Museum" },
+        ],
+      },
+    });
+
+    await expect(
+      runPublishCommand(
+        {
+          client: { requestJson },
+          globalOptions: {
+            json: false,
+            jq: undefined,
+            quiet: false,
+            noColor: false,
+            yes: false,
+            dryRun: false,
+          },
+        } as never,
+        [
+          "--image",
+          "https://cdn.example.com/poster.png",
+          "--caption",
+          "Launch day caption",
+          "--location",
+          "Napa Valley Welcome",
+        ],
+      ),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining(
+        "Location query matched multiple results. Use --location-id instead.",
+      ),
+    });
+  });
 });

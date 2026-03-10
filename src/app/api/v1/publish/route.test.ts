@@ -60,6 +60,7 @@ import { isBlobEnabled } from "@/lib/blob-store";
 import { publishInstagramContent } from "@/lib/meta";
 import { preflightMetaMediaForPublish } from "@/lib/meta-media-preflight";
 import {
+  createPublishJob,
   completePublishJobSuccess,
   reserveImmediatePublishJob,
 } from "@/lib/publish-jobs";
@@ -69,6 +70,7 @@ import { resolveMetaAuthForApi } from "@/services/meta-auth";
 const mockedResolveActorFromRequest = vi.mocked(resolveActorFromRequest);
 const mockedResolveMetaAuthForApi = vi.mocked(resolveMetaAuthForApi);
 const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
+const mockedCreatePublishJob = vi.mocked(createPublishJob);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
@@ -99,6 +101,10 @@ describe("POST /api/v1/publish", () => {
     });
     mockedPreflightMetaMedia.mockResolvedValue(undefined);
     mockedGetDb.mockReturnValue({} as ReturnType<typeof getDb>);
+    mockedCreatePublishJob.mockResolvedValue({
+      id: "job_1",
+      publishAt: new Date("2026-03-10T18:30:00.000Z"),
+    } as never);
     mockedReserveImmediatePublishJob.mockResolvedValue({
       id: "job_1",
       ownerHash: "owner_hash",
@@ -182,6 +188,44 @@ describe("POST /api/v1/publish", () => {
       },
     });
     expect(mockedPreflightMetaMedia).toHaveBeenCalledTimes(1);
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+  });
+
+  it("schedules future publish requests instead of publishing immediately", async () => {
+    const publishAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    mockedCreatePublishJob.mockResolvedValueOnce({
+      id: "job_1",
+      publishAt: new Date(publishAt),
+    } as never);
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/publish", {
+        method: "POST",
+        body: JSON.stringify({
+          caption: "Caption",
+          publishAt,
+          media: {
+            mode: "image",
+            imageUrl: "https://cdn.example.com/image.jpg",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        publish: {
+          status: "scheduled",
+          mode: "image",
+          id: "job_1",
+          publishAt,
+        },
+      },
+    });
+    expect(mockedCreatePublishJob).toHaveBeenCalledTimes(1);
     expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
   });

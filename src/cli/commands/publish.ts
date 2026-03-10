@@ -177,18 +177,26 @@ const resolveMedia = (options: PublishOptions) => {
   }
 
   rejectUnexpectedReelOptions(options);
-  const items = (options.carousel as string)
+  const rawItems = (options.carousel as string)
     .split(",")
     .map((item) => item.trim())
-    .filter(Boolean)
-    .map((rawUrl) => ({
+    .filter(Boolean);
+
+  if (rawItems.length < 2) {
+    throw new CliError(
+      "Carousel publishing requires at least 2 comma-separated media URLs.",
+      EXIT_CODES.usage,
+    );
+  }
+
+  const items = rawItems.map((rawUrl) => ({
       mediaType: inferCarouselMediaType(rawUrl),
       url: normalizeMediaUrl(rawUrl),
     }));
 
-  if (items.length < 2) {
+  if (items.some((item) => !isSupportedPublishUrl(item.url))) {
     throw new CliError(
-      "Carousel publishing requires at least 2 comma-separated media URLs.",
+      "Carousel items must be comma-separated absolute URLs. If a URL contains a literal comma, encode it as %2C.",
       EXIT_CODES.usage,
     );
   }
@@ -294,3 +302,12 @@ const inferCarouselMediaType = (value: string) => {
 
 const normalizeMediaUrl = (value: string) =>
   value.replace(/^(image|video):/i, "");
+
+const isSupportedPublishUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
