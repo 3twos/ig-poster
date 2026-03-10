@@ -5,6 +5,7 @@ const COMMANDS = [
   "auth",
   "assets",
   "brand-kits",
+  "chat",
   "config",
   "generate",
   "api",
@@ -93,6 +94,9 @@ _ig() {
     brand-kits)
       COMPREPLY=( $(compgen -W "list get" -- "$cur") )
       ;;
+    chat)
+      COMPREPLY=( $(compgen -W "ask --post --message --history --temperature --system-prompt" -- "$cur") )
+      ;;
     config)
       COMPREPLY=( $(compgen -W "list get set" -- "$cur") )
       ;;
@@ -127,6 +131,7 @@ commands=(
   'auth:Authentication commands'
   'assets:Asset commands'
   'brand-kits:Brand kit commands'
+  'chat:Chat commands'
   'config:Configuration commands'
   'generate:Generation commands'
   'api:Raw API requests'
@@ -153,6 +158,9 @@ case $state in
         ;;
       brand-kits)
         _values 'brand kit command' list get
+        ;;
+      chat)
+        _values 'chat command' ask --post --message --history --temperature --system-prompt
         ;;
       config)
         _values 'config command' list get set
@@ -186,6 +194,7 @@ const buildFishCompletion = () => [
   "complete -c ig -n '__fish_seen_subcommand_from auth' -a 'login logout status test sessions'",
   "complete -c ig -n '__fish_seen_subcommand_from assets' -a 'upload'",
   "complete -c ig -n '__fish_seen_subcommand_from brand-kits' -a 'list get'",
+  "complete -c ig -n '__fish_seen_subcommand_from chat' -a 'ask --post --message --history --temperature --system-prompt'",
   "complete -c ig -n '__fish_seen_subcommand_from config' -a 'list get set'",
   "complete -c ig -n '__fish_seen_subcommand_from generate' -a 'run refine'",
   "complete -c ig -n '__fish_seen_subcommand_from publish' -a '--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed'",

@@ -123,6 +123,7 @@
   - `ig auth sessions revoke <id>`
   - `ig assets upload <file...> [--folder <assets|videos|logos|renders>]`
   - `ig brand-kits list|get`
+  - `ig chat ask [--post <id>] <message>`
   - `ig config list|get|set`
   - `ig generate run --post <id>`
   - `ig generate run --request @generate.json`
@@ -140,6 +141,7 @@
 - Refresh tokens are currently stored in `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). OS keychain storage and device-code login are not shipped yet.
 - `ig link` writes repo-local defaults to `.ig-poster/project.json`, and `ig status` now includes the active linked-project details when one is present.
 - `ig generate run` streams server-side generation events from `/api/v1/generate`; add `--stream-json` for newline-delimited events or `--json` to emit the final result envelope only.
+- `ig chat ask` streams server-side chat events from `/api/v1/chat`; add `--stream-json` for newline-delimited events, `--json` for the final assistant message object, and `--post <id>` to inject the saved draft context into the prompt.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
 - `ig assets upload` reads local image/video files and sends them to the same Blob-backed upload path the browser uses, with an optional folder override for `assets`, `videos`, `logos`, or `renders`.
 - `ig publish` sends direct media publish/schedule requests through `/api/v1/publish`, supports `--dry-run`, and can resolve Meta place search with `--location` before attaching the final `locationId`.
