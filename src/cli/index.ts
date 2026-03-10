@@ -3,6 +3,7 @@ import { runApiCommand } from "./commands/api";
 import { runAssetsCommand } from "./commands/assets";
 import { runAuthCommand } from "./commands/auth";
 import { runBrandKitsCommand } from "./commands/brand-kits";
+import { runChatCommand } from "./commands/chat";
 import { runCompletionCommand } from "./commands/completion";
 import { runConfigCommand } from "./commands/config";
 import { runGenerateCommand } from "./commands/generate";
@@ -21,6 +22,7 @@ Usage:
   ig auth <login|logout|status|test|sessions>
   ig assets <upload>
   ig brand-kits <list|get>
+  ig chat <ask>
   ig config <list|get|set>
   ig generate <run|refine>
   ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]
@@ -88,6 +90,9 @@ export const runCli = async (argv: string[]) => {
         break;
       case "brand-kits":
         await runBrandKitsCommand(ctx, commandArgs);
+        break;
+      case "chat":
+        await runChatCommand(ctx, commandArgs);
         break;
       case "api":
         await runApiCommand(ctx, commandArgs);

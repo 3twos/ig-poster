@@ -21,6 +21,7 @@ describe("runCompletionCommand", () => {
       expect.stringContaining('if [[ -z "$command" ]]; then'),
     );
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("publish"));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("chat"));
   });
 
   it("prints a zsh completion script", async () => {

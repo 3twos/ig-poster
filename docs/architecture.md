@@ -50,11 +50,12 @@ flowchart LR
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
-  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `generate`, `generate/refine`, `meta/locations`, `publish`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
+  - Versioned CLI-facing handlers in `src/app/api/v1/**/route.ts` now cover `auth/whoami`, `assets`, `brand-kits`, `chat`, `generate`, `generate/refine`, `meta/locations`, `publish`, `posts`, `posts/:id`, `posts/:id/duplicate`, `posts/:id/archive`, `publish-jobs`, and `publish-jobs/:id`.
   - Zod schemas enforce request and response validity.
 - Application-service layer:
   - `src/services/actors.ts` resolves an authenticated actor from bearer auth first, then workspace cookies.
   - `src/services/assets.ts` owns transport-neutral blob upload validation and persistence for both the browser upload route and the CLI-facing v1 route.
+  - `src/services/chat.ts` owns CLI chat prompt shaping, linked-post context injection, and bearer-auth streaming response setup for `/api/v1/chat`.
   - `src/services/generation.ts` owns post-derived generation/refine request shaping for the CLI-facing v1 generation routes.
   - `src/services/posts.ts` now owns extracted transport-neutral post workflows (`list`, `get`, `create`, `update`, `duplicate`, `archive`).
   - `src/services/brand-kits.ts` owns extracted brand-kit read workflows (`list`, `get`).
@@ -145,6 +146,7 @@ Why this shape:
 3. Conversation CRUD is handled by `/api/chat/conversations` (list/create) and `/api/chat/conversations/[id]` (get/update/delete).
 4. `POST /api/chat/title` auto-generates a short title for new conversations.
 5. Conversations are persisted to Blob at `chat/<ownerHash>/conversations/<id>.json` with a summary index at `chat/<ownerHash>/index.json` for fast sidebar listing.
+   CLI preview callers can instead stream ephemeral bearer-auth prompts through `POST /api/v1/chat`, optionally linking a saved post so the service appends draft/variant context to the system prompt without creating a persisted conversation.
 
 Why this shape:
 - Client-sends-history pattern keeps the streaming API stateless and avoids blob read latency on every message.
