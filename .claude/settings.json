@@ -1,6 +1,8 @@
 {
   "permissions": {
     "allow": [
+      "Edit",
+      "Write",
       "Read",
       "Glob",
       "Grep",
@@ -38,6 +40,7 @@
       "Bash(npx next:*)",
       "Bash(npx vitest:*)",
       "Bash(npx shadcn@latest:*)",
+      "Bash(./scripts/:*)",
       "Bash(do:*)"
     ]
   },
