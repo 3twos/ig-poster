@@ -6,7 +6,7 @@
     "ig": "dist/cli/main.js"
   },
   "engines": {
-    "node": ">=20.9.0"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "next dev",
