@@ -45,3 +45,42 @@ export const CliAuthExchangeRequestSchema = z.object({
 export const CliAuthRefreshRequestSchema = z.object({
   refreshToken: z.string().min(1),
 });
+
+export const CliDeviceCodeStartRequestSchema = z.object({
+  grantType: z.literal("device_code"),
+  label: z.string().trim().min(1).max(80).optional(),
+});
+
+export const CliDeviceCodeStartSchema = z.object({
+  deviceCode: z.string().min(1),
+  userCode: z.string().min(1),
+  verificationUri: z.string().url(),
+  verificationUriComplete: z.string().url(),
+  expiresAt: z.string().datetime(),
+  intervalSeconds: z.number().int().positive(),
+});
+
+export const CliDeviceCodePollRequestSchema = z.object({
+  deviceCode: z.string().min(1),
+});
+
+export const CliDeviceCodePollSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("pending"),
+    expiresAt: z.string().datetime(),
+    intervalSeconds: z.number().int().positive(),
+  }),
+  z.object({
+    status: z.literal("approved"),
+    accessToken: z.string().min(1),
+    accessTokenExpiresAt: z.string().datetime(),
+    refreshToken: z.string().min(1),
+    refreshTokenExpiresAt: z.string().datetime(),
+    session: CliSessionSchema,
+  }),
+  z.object({
+    status: z.literal("expired"),
+    expiresAt: z.string().datetime(),
+    intervalSeconds: z.number().int().positive(),
+  }),
+]);

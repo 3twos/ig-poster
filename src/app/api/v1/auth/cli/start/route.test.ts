@@ -13,24 +13,28 @@ vi.mock("@/services/auth/cli", () => ({
       this.status = status;
     }
   },
+  createCliDeviceCode: vi.fn(),
   ensureCliAuthReady: vi.fn(),
   createCliAuthorizationCode: vi.fn(),
 }));
 
-import { GET } from "@/app/api/v1/auth/cli/start/route";
+import { GET, POST } from "@/app/api/v1/auth/cli/start/route";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import {
+  createCliDeviceCode,
   createCliAuthorizationCode,
   ensureCliAuthReady,
 } from "@/services/auth/cli";
 
 const mockedReadWorkspaceSession = vi.mocked(readWorkspaceSessionFromRequest);
+const mockedCreateCliDeviceCode = vi.mocked(createCliDeviceCode);
 const mockedEnsureCliAuthReady = vi.mocked(ensureCliAuthReady);
 const mockedCreateCliAuthorizationCode = vi.mocked(createCliAuthorizationCode);
 
 describe("GET /api/v1/auth/cli/start", () => {
   beforeEach(() => {
     mockedReadWorkspaceSession.mockReset();
+    mockedCreateCliDeviceCode.mockReset();
     mockedEnsureCliAuthReady.mockReset();
     mockedCreateCliAuthorizationCode.mockReset();
   });
@@ -80,5 +84,38 @@ describe("GET /api/v1/auth/cli/start", () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  it("starts a device-code flow for CLI polling", async () => {
+    mockedCreateCliDeviceCode.mockResolvedValue({
+      deviceCode: "device-code-123",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://app.example.com/cli/device",
+      verificationUriComplete:
+        "https://app.example.com/cli/device?user_code=ABCD-EFGH",
+      expiresAt: "2026-03-10T23:00:00.000Z",
+      intervalSeconds: 5,
+    });
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/auth/cli/start", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "ig-cli/test",
+        },
+        body: JSON.stringify({
+          grantType: "device_code",
+          label: "Laptop",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mockedCreateCliDeviceCode).toHaveBeenCalledWith({
+      origin: "https://app.example.com",
+      label: "Laptop",
+      userAgent: "ig-cli/test",
+    });
   });
 });
