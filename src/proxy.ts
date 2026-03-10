@@ -7,6 +7,7 @@ import {
 } from "@/lib/workspace-auth";
 
 const PUBLIC_PATH_PREFIXES = [
+  "/api/auth/cli/",
   "/api/auth/google/",
   "/api/auth/meta/",
   "/api/cron/publish",

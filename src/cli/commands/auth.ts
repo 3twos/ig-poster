@@ -3,7 +3,12 @@ import {
   saveConfig,
   upsertProfile,
 } from "../config";
-import { loginWithBrowser, persistCliAuthTokens, type CliAuthTokens } from "../auth";
+import {
+  loginWithBrowser,
+  loginWithDeviceCode,
+  persistCliAuthTokens,
+  type CliAuthTokens,
+} from "../auth";
 import { CliError, EXIT_CODES } from "../errors";
 import { readTextInput } from "../input";
 import { printJson, printKeyValue, printSessionsTable } from "../output";
@@ -15,6 +20,8 @@ type LoginOptions = {
   token?: string;
   tokenFile?: string;
   tokenStdin?: boolean;
+  deviceCode?: boolean;
+  noBrowser?: boolean;
   label?: string;
 };
 
@@ -80,12 +87,14 @@ const login = async (ctx: CliContext, argv: string[]) => {
     token: "string",
     "token-file": "string",
     "token-stdin": "boolean",
+    "device-code": "boolean",
+    "no-browser": "boolean",
     label: "string",
   });
 
   if (positionals.length > 0) {
     throw new CliError(
-      "Usage: ig auth login [--token <value>|--token-file <path>|--token-stdin|--label <name>]",
+      "Usage: ig auth login [--token <value>|--token-file <path>|--token-stdin|--device-code|--no-browser] [--label <name>]",
     );
   }
 
@@ -123,11 +132,18 @@ const login = async (ctx: CliContext, argv: string[]) => {
       auth: "saved",
     };
   } else {
-    const tokens = await loginWithBrowser({
-      host: ctx.host,
-      timeoutMs: Math.max(ctx.globalOptions.timeoutMs ?? 30_000, 120_000),
-      label: options.label,
-    });
+    const loginWithDeviceFlow = options.deviceCode || options.noBrowser;
+    const tokens = loginWithDeviceFlow
+      ? await loginWithDeviceCode({
+          host: ctx.host,
+          timeoutMs: Math.max(ctx.globalOptions.timeoutMs ?? 30_000, 30_000),
+          label: options.label,
+        })
+      : await loginWithBrowser({
+          host: ctx.host,
+          timeoutMs: Math.max(ctx.globalOptions.timeoutMs ?? 30_000, 120_000),
+          label: options.label,
+        });
     nextConfig = await persistCliAuthTokens(
       ctx.config,
       ctx.profileName,
@@ -144,7 +160,7 @@ const login = async (ctx: CliContext, argv: string[]) => {
         expiresAt: tokens.accessTokenExpiresAt,
       },
       session: tokens.session,
-      auth: "browser-login",
+      auth: loginWithDeviceFlow ? "device-code" : "browser-login",
     };
   }
 
@@ -281,10 +297,25 @@ const resolveLoginToken = async (options: LoginOptions) => {
     options.tokenFile,
     options.tokenStdin,
   ].filter(Boolean).length;
+  const deviceSources = [options.deviceCode, options.noBrowser].filter(Boolean).length;
 
   if (manualSources > 1) {
     throw new CliError(
       "Choose exactly one of --token, --token-file, or --token-stdin",
+      EXIT_CODES.usage,
+    );
+  }
+
+  if (deviceSources > 1) {
+    throw new CliError(
+      "Choose either --device-code or --no-browser, not both.",
+      EXIT_CODES.usage,
+    );
+  }
+
+  if (manualSources > 0 && deviceSources > 0) {
+    throw new CliError(
+      "Choose either a manual token source or device-code login.",
       EXIT_CODES.usage,
     );
   }

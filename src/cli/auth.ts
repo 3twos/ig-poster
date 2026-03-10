@@ -35,6 +35,30 @@ export type CliAuthTokens = {
   };
 };
 
+type CliDeviceCodeStart = {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete: string;
+  expiresAt: string;
+  intervalSeconds: number;
+};
+
+type CliDeviceCodePollResult =
+  | {
+      status: "pending";
+      expiresAt: string;
+      intervalSeconds: number;
+    }
+  | ({
+      status: "approved";
+    } & CliAuthTokens)
+  | {
+      status: "expired";
+      expiresAt: string;
+      intervalSeconds: number;
+    };
+
 const buildPkceVerifier = () => randomBytes(32).toString("base64url");
 
 const buildPkceChallenge = (verifier: string) =>
@@ -43,6 +67,7 @@ const buildPkceChallenge = (verifier: string) =>
 const buildLoginState = () => randomBytes(16).toString("hex");
 
 const defaultSessionLabel = () => `IG CLI on ${os.hostname()}`.slice(0, 80);
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const normalizeRequestedSessionLabel = (value?: string) => {
   const normalized = value?.trim();
@@ -363,4 +388,61 @@ export const loginWithBrowser = async (params: {
   });
 
   return response.data;
+};
+
+export const loginWithDeviceCode = async (params: {
+  host: string;
+  timeoutMs: number;
+  label?: string;
+}): Promise<CliAuthTokens> => {
+  const client = new IgPosterClient({
+    host: params.host,
+    timeoutMs: params.timeoutMs,
+  });
+  const start = await client.requestJson<{ ok: true; data: CliDeviceCodeStart }>({
+    method: "POST",
+    path: "/api/v1/auth/cli/start",
+    body: {
+      grantType: "device_code",
+      label: normalizeRequestedSessionLabel(params.label),
+    },
+  });
+
+  printLines([
+    "Open this URL to approve CLI login:",
+    start.data.verificationUriComplete,
+    `Code: ${start.data.userCode}`,
+  ]);
+
+  const expiresAt = Date.parse(start.data.expiresAt);
+  let intervalMs = Math.max(start.data.intervalSeconds, 1) * 1000;
+
+  while (Date.now() < expiresAt) {
+    const poll = await client.requestJson<{ ok: true; data: CliDeviceCodePollResult }>({
+      method: "POST",
+      path: "/api/v1/auth/cli/poll",
+      body: {
+        deviceCode: start.data.deviceCode,
+      },
+    });
+
+    if (poll.data.status === "approved") {
+      return {
+        accessToken: poll.data.accessToken,
+        accessTokenExpiresAt: poll.data.accessTokenExpiresAt,
+        refreshToken: poll.data.refreshToken,
+        refreshTokenExpiresAt: poll.data.refreshTokenExpiresAt,
+        session: poll.data.session,
+      };
+    }
+
+    if (poll.data.status === "expired") {
+      throw new CliError("CLI device login expired before approval.", EXIT_CODES.auth);
+    }
+
+    intervalMs = Math.max(poll.data.intervalSeconds, 1) * 1000;
+    await sleep(intervalMs);
+  }
+
+  throw new CliError("CLI device login expired before approval.", EXIT_CODES.auth);
 };

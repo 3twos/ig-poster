@@ -187,7 +187,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/meta-auth.ts`: CLI-safe Meta auth resolution for bearer-auth publish and Meta place-search routes.
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
 - `src/services/status.ts`: aggregated CLI status summaries for actor auth, Meta readiness, LLM providers, and publish-window usage.
-- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, direct publish commands, brand-kit commands, post commands, and queue commands.
+- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -220,9 +220,9 @@ npm run build:cli
 npm run cli -- help
 ```
 
-The CLI reads profile state from `~/.config/ig-poster/config.json` by default. Override that location in tests or isolated runs with `IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli`. On macOS, browser-login refresh tokens are written to Keychain unless you set `IG_POSTER_DISABLE_KEYCHAIN=1`.
+The CLI reads profile state from `~/.config/ig-poster/config.json` by default. Override that location in tests or isolated runs with `IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli`. On macOS, CLI refresh tokens are written to Keychain unless you set `IG_POSTER_DISABLE_KEYCHAIN=1`.
 
-In an interactive terminal, auth-required commands now bootstrap browser login automatically when no valid CLI session exists. Non-interactive usage still requires a saved session or `IG_POSTER_TOKEN`.
+In an interactive terminal, auth-required commands now bootstrap browser login automatically when no valid CLI session exists. Non-interactive usage still requires a saved session or `IG_POSTER_TOKEN`, but you can also start an explicit headless approval flow with `npm run cli -- auth login --device-code` or `--no-browser`.
 
 Repo-local defaults can also be linked in `.ig-poster/project.json`:
 
@@ -266,7 +266,7 @@ Optional showcase environment overrides:
 - `IG_SHOWCASE_CHAT_PROMPT` to customize the `chat ask` prompt
 - `IG_SHOWCASE_CAPTION` to customize the `ig publish --dry-run` caption
 
-The first auth-required command above should open the browser automatically if the CLI is not logged in yet. If the browser cannot be opened automatically, the CLI prints the login URL so you can open it manually. You can still run `npm run cli -- auth login` explicitly when you want to pre-authenticate ahead of time.
+The first auth-required command above should open the browser automatically if the CLI is not logged in yet. If the browser cannot be opened automatically, the CLI prints the login URL so you can open it manually. You can still run `npm run cli -- auth login` explicitly when you want to pre-authenticate ahead of time, or `npm run cli -- auth login --device-code` for a headless approval flow.
 
 Manual bearer bootstrap is still available when you need it:
 
@@ -274,7 +274,7 @@ Manual bearer bootstrap is still available when you need it:
 printf '%s' "$IG_POSTER_TOKEN" | npm run cli -- auth login --token-stdin
 ```
 
-Current limitation: device-code login is still pending. On non-macOS platforms, or when `IG_POSTER_DISABLE_KEYCHAIN=1` is set, refresh tokens still fall back to `~/.config/ig-poster/config.json` (mode `0600`).
+For headless login, the CLI now supports a hosted device-code approval page. On non-macOS platforms, or when `IG_POSTER_DISABLE_KEYCHAIN=1` is set, refresh tokens still fall back to `~/.config/ig-poster/config.json` (mode `0600`).
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.

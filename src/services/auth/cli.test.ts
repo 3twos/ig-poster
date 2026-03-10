@@ -6,6 +6,8 @@ const store = new Map<string, unknown>();
 
 vi.mock("@/lib/private-credential-store", () => ({
   isCredentialStoreEnabled: vi.fn(() => true),
+  deleteCredentialRecord: vi.fn(async (namespace: string, credentialId: string) =>
+    store.delete(`${namespace}:${credentialId}`)),
   putCredentialRecord: vi.fn(async (namespace: string, credentialId: string, payload: unknown) => {
     store.set(`${namespace}:${credentialId}`, structuredClone(payload));
   }),
@@ -25,8 +27,11 @@ vi.mock("@/lib/private-credential-store", () => ({
 import type { Actor } from "@/services/actors";
 import { hashEmail } from "@/lib/server-utils";
 import {
+  approveCliDeviceCode,
+  createCliDeviceCode,
   createCliAuthorizationCode,
   listCliSessions,
+  pollCliDeviceCode,
   refreshCliSession,
   revokeCliSessionById,
   revokeCliSessionByRefreshToken,
@@ -141,6 +146,77 @@ describe("services/auth/cli", () => {
     await expect(revokeCliSessionByRefreshToken(tokens.refreshToken)).resolves.toBe(
       false,
     );
+  });
+
+  it("starts, approves, and exchanges a device-code login", async () => {
+    const started = await createCliDeviceCode({
+      origin: "https://igposter.3twos.com",
+      label: "Laptop",
+      userAgent: "ig-cli/test",
+    });
+
+    await expect(pollCliDeviceCode(started.deviceCode)).resolves.toMatchObject({
+      status: "pending",
+      intervalSeconds: 5,
+    });
+
+    await approveCliDeviceCode({
+      actor,
+      userCode: started.userCode.toLowerCase(),
+    });
+
+    await expect(pollCliDeviceCode(started.deviceCode, "ig-cli/test")).resolves.toMatchObject(
+      {
+        status: "approved",
+        session: {
+          label: "Laptop",
+          email: actor.email,
+        },
+      },
+    );
+  });
+
+  it("cleans up expired device-code records before scanning for a matching user code", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-10T22:00:00.000Z"));
+
+    const expired = await createCliDeviceCode({
+      origin: "https://igposter.3twos.com",
+    });
+
+    vi.setSystemTime(new Date("2026-03-10T22:11:00.000Z"));
+
+    const active = await createCliDeviceCode({
+      origin: "https://igposter.3twos.com",
+    });
+
+    await approveCliDeviceCode({
+      actor,
+      userCode: active.userCode,
+    });
+
+    expect(store.has(`cli_device_code:${expired.deviceCode}`)).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("marks expired device codes as expired and removes them", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-10T22:00:00.000Z"));
+
+    const started = await createCliDeviceCode({
+      origin: "https://igposter.3twos.com",
+    });
+
+    vi.setSystemTime(new Date("2026-03-10T22:11:00.000Z"));
+
+    await expect(pollCliDeviceCode(started.deviceCode)).resolves.toMatchObject({
+      status: "expired",
+    });
+    await expect(pollCliDeviceCode(started.deviceCode)).rejects.toThrow(
+      "Invalid or expired CLI device code.",
+    );
+
+    vi.useRealTimers();
   });
 
   it("skips invalid stored session payloads when listing sessions", async () => {

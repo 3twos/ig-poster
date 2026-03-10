@@ -21,6 +21,7 @@ vi.mock("@/cli/client", () => ({
 }));
 
 import {
+  loginWithDeviceCode,
   normalizeRequestedSessionLabel,
   persistCliAuthTokens,
   refreshProfileAuth,
@@ -286,6 +287,82 @@ describe("cli auth helpers", () => {
       token: "expired-token",
       refreshToken: "session.secret",
     });
+  });
+
+  it("polls device-code login until approval", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    requestJson
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          deviceCode: "device-code-123",
+          userCode: "ABCD-EFGH",
+          verificationUri: "https://igposter.3twos.com/cli/device",
+          verificationUriComplete:
+            "https://igposter.3twos.com/cli/device?user_code=ABCD-EFGH",
+          expiresAt: "2099-03-10T23:00:00.000Z",
+          intervalSeconds: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          status: "pending",
+          expiresAt: "2099-03-10T23:00:00.000Z",
+          intervalSeconds: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          status: "approved",
+          accessToken: "access-token",
+          accessTokenExpiresAt: "2099-03-10T23:05:00.000Z",
+          refreshToken: "session.secret",
+          refreshTokenExpiresAt: "2099-04-09T23:00:00.000Z",
+          session: {
+            id: "session-1",
+            label: "Laptop",
+            email: "person@example.com",
+            domain: "example.com",
+          },
+        },
+      });
+
+    const loginPromise = loginWithDeviceCode({
+      host: "https://igposter.3twos.com",
+      timeoutMs: 30_000,
+      label: "Laptop",
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(loginPromise).resolves.toMatchObject({
+      accessToken: "access-token",
+      refreshToken: "session.secret",
+      session: {
+        id: "session-1",
+      },
+    });
+    expect(requestJson).toHaveBeenNthCalledWith(1, {
+      method: "POST",
+      path: "/api/v1/auth/cli/start",
+      body: {
+        grantType: "device_code",
+        label: "Laptop",
+      },
+    });
+    expect(requestJson).toHaveBeenNthCalledWith(2, {
+      method: "POST",
+      path: "/api/v1/auth/cli/poll",
+      body: { deviceCode: "device-code-123" },
+    });
+    expect(requestJson).toHaveBeenNthCalledWith(3, {
+      method: "POST",
+      path: "/api/v1/auth/cli/poll",
+      body: { deviceCode: "device-code-123" },
+    });
+    vi.useRealTimers();
   });
 
   it("normalizes blank session labels to the default login label", () => {
