@@ -8,7 +8,7 @@ import {
 } from "@/cli/secure-storage";
 
 describe("secure storage helpers", () => {
-  it("writes refresh tokens via stdin to the macOS security CLI", async () => {
+  it("passes refresh tokens as the -w argument to avoid interactive keychain prompts", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
 
     const stored = await saveStoredRefreshToken("default", "http://localhost:3000", "session.secret", {
@@ -26,8 +26,8 @@ describe("secure storage helpers", () => {
         "-a",
         "default@http://localhost:3000",
         "-w",
+        "session.secret",
       ],
-      stdin: "session.secret\n",
     });
   });
 
@@ -53,8 +53,8 @@ describe("secure storage helpers", () => {
         "-a",
         "default@https://example.com",
         "-w",
+        "session.secret",
       ],
-      stdin: "session.secret\n",
     });
   });
 

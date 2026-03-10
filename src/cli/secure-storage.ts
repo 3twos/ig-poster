@@ -141,8 +141,8 @@ export const saveStoredRefreshToken = async (
         "-a",
         buildAccountName(profileName, host),
         "-w",
+        refreshToken,
       ],
-      stdin: `${refreshToken}\n`,
     });
     return true;
   } catch {
