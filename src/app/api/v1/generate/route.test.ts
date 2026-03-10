@@ -33,6 +33,7 @@ const mockedGeneratePost = vi.mocked(generatePost);
 
 describe("POST /api/v1/generate", () => {
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -104,5 +105,50 @@ describe("POST /api/v1/generate", () => {
     );
     expect(mockedGeneratePost).toHaveBeenCalledTimes(1);
     await expect(response.text()).resolves.toContain("\"run-start\"");
+  });
+
+  it("rejects mixed postId and request bodies", async () => {
+    mockedResolveActorFromRequest.mockResolvedValueOnce({ ownerHash: "owner" } as never);
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          postId: "post-1",
+          request: {
+            brand: {
+              brandName: "Nexa Labs",
+              website: "",
+              values: "Measured growth and clear proof points.",
+              principles: "Show the evidence and stay useful.",
+              story: "We help growth teams turn strategy into repeatable execution.",
+              voice: "Direct, confident, and clear.",
+              visualDirection: "Bold editorial layouts and premium contrast.",
+              palette: "#0F172A, #F97316, #F8FAFC",
+              logoNotes: "",
+            },
+            post: {
+              theme: "Category authority",
+              subject: "Designing trust",
+              thought: "Trust compounds through repeated proof moments.",
+              objective: "Drive profile visits",
+              audience: "Startup founders",
+              mood: "Premium",
+              aspectRatio: "4:5",
+            },
+            assets: [],
+            hasLogo: false,
+            promptConfig: {
+              systemPrompt: "",
+              customInstructions: "",
+            },
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockedBuildGenerationRequestFromPost).not.toHaveBeenCalled();
+    expect(mockedGeneratePost).not.toHaveBeenCalled();
   });
 });

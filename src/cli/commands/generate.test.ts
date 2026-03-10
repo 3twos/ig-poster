@@ -214,6 +214,54 @@ describe("runGenerateCommand", () => {
     );
   });
 
+  it("prints a run-complete ndjson event for json fallback responses", async () => {
+    const requestStream = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          strategy: "Fallback strategy",
+          variants: [
+            {
+              id: "variant-1",
+              name: "Hero",
+              postType: "single-image",
+            },
+          ],
+        }),
+        {
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+
+    await runGenerateCommand(
+      {
+        client: { requestStream },
+        globalOptions: {
+          json: false,
+          streamJson: true,
+          jq: undefined,
+          quiet: false,
+          noColor: false,
+          yes: false,
+          dryRun: false,
+        },
+      } as never,
+      ["run", "--post", "post-1"],
+    );
+
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"type":"run-complete"'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"fallbackUsed":true'),
+    );
+  });
+
   it("calls the refine endpoint for a post", async () => {
     const requestJson = vi.fn().mockResolvedValue({
       source: "model",

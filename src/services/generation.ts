@@ -85,15 +85,26 @@ export const buildRefineRequestFromPost = async (params: {
     throw conflict("Post has no generated variants to refine.");
   }
 
-  const variantId = params.variantId ?? post.activeVariantId ?? undefined;
-  const variant =
-    (variantId
-      ? result.data.variants.find((candidate) => candidate.id === variantId)
-      : undefined) ?? result.data.variants[0];
+  if (params.variantId) {
+    const requestedVariant = result.data.variants.find(
+      (candidate) => candidate.id === params.variantId,
+    );
+    if (!requestedVariant) {
+      throw notFound("Variant not found for this post.");
+    }
 
-  if (!variant) {
-    throw notFound("Variant not found for this post.");
+    return {
+      variant: CreativeVariantSchema.parse(requestedVariant),
+      brand: brand.data,
+    };
   }
+
+  const variant =
+    (post.activeVariantId
+      ? result.data.variants.find(
+          (candidate) => candidate.id === post.activeVariantId,
+        )
+      : undefined) ?? result.data.variants[0];
 
   return {
     variant: CreativeVariantSchema.parse(variant),

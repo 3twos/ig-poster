@@ -83,6 +83,14 @@ type GenerationRunEvent =
       detail: string;
     };
 
+const STEP_PHASES = new Set([
+  "queue",
+  "planning",
+  "execution",
+  "validation",
+  "finalization",
+]);
+
 export const runGenerateCommand = async (ctx: CliContext, argv: string[]) => {
   const action = argv[0];
 
@@ -139,12 +147,16 @@ const runGenerate = async (ctx: CliContext, argv: string[]) => {
 
   const contentType = response.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
-    const fallback = parseGenerationResult(await response.json());
-    return printGenerateResult(ctx, {
+    const payload = {
       summary: "Generation completed with fallback output.",
       fallbackUsed: true,
-      result: fallback,
+      result: parseGenerationResult(await response.json()),
+    };
+    emitRunEvent(ctx, {
+      type: "run-complete",
+      ...payload,
     });
+    return printGenerateResult(ctx, payload);
   }
 
   const reader = response.body?.getReader();
@@ -159,23 +171,6 @@ const runGenerate = async (ctx: CliContext, argv: string[]) => {
     fallbackUsed: boolean;
     result: GenerationResult;
   } | null = null;
-
-  const flushEvent = (event: GenerationRunEvent) => {
-    if (ctx.globalOptions.streamJson) {
-      process.stdout.write(`${JSON.stringify(event)}\n`);
-      return;
-    }
-
-    if (ctx.globalOptions.json || ctx.globalOptions.quiet) {
-      return;
-    }
-
-    if (event.type === "llm-thinking") {
-      return;
-    }
-
-    printLines([summarizeRunEvent(event)]);
-  };
 
   const processLine = (line: string) => {
     const trimmed = line.trim();
@@ -193,7 +188,7 @@ const runGenerate = async (ctx: CliContext, argv: string[]) => {
       return;
     }
 
-    flushEvent(event);
+    emitRunEvent(ctx, event);
 
     if (event.type === "run-error") {
       throw new CliError(event.detail);
@@ -222,6 +217,7 @@ const runGenerate = async (ctx: CliContext, argv: string[]) => {
     }
   }
 
+  buffer += decoder.decode();
   if (buffer) {
     processLine(buffer);
   }
@@ -310,21 +306,74 @@ const printGenerateResult = (
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+const emitRunEvent = (ctx: CliContext, event: GenerationRunEvent) => {
+  if (ctx.globalOptions.streamJson) {
+    process.stdout.write(`${JSON.stringify(event)}\n`);
+    return;
+  }
+
+  if (ctx.globalOptions.json || ctx.globalOptions.quiet) {
+    return;
+  }
+
+  if (event.type === "llm-thinking") {
+    return;
+  }
+
+  printLines([summarizeRunEvent(event)]);
+};
+
 const isGenerationRunEvent = (value: unknown): value is GenerationRunEvent => {
   if (!isRecord(value) || typeof value.type !== "string") {
     return false;
   }
 
-  return [
-    "run-start",
-    "step-start",
-    "step-complete",
-    "step-error",
-    "heartbeat",
-    "llm-thinking",
-    "run-complete",
-    "run-error",
-  ].includes(value.type);
+  if (value.type === "run-start") {
+    return (
+      typeof value.runId === "string" &&
+      typeof value.label === "string" &&
+      (value.detail === undefined || typeof value.detail === "string")
+    );
+  }
+
+  if (value.type === "step-start") {
+    return (
+      typeof value.stepId === "string" &&
+      typeof value.title === "string" &&
+      typeof value.phase === "string" &&
+      STEP_PHASES.has(value.phase) &&
+      (value.detail === undefined || typeof value.detail === "string")
+    );
+  }
+
+  if (value.type === "step-complete") {
+    return (
+      typeof value.stepId === "string" &&
+      (value.detail === undefined || typeof value.detail === "string")
+    );
+  }
+
+  if (value.type === "step-error") {
+    return typeof value.stepId === "string" && typeof value.detail === "string";
+  }
+
+  if (value.type === "heartbeat") {
+    return typeof value.detail === "string";
+  }
+
+  if (value.type === "llm-thinking") {
+    return typeof value.stepId === "string" && typeof value.text === "string";
+  }
+
+  if (value.type === "run-complete") {
+    return (
+      "result" in value &&
+      typeof value.summary === "string" &&
+      typeof value.fallbackUsed === "boolean"
+    );
+  }
+
+  return value.type === "run-error" && typeof value.detail === "string";
 };
 
 const summarizeRunEvent = (event: GenerationRunEvent) => {
