@@ -15,7 +15,14 @@ const PUBLIC_PATH_PREFIXES = [
 ];
 
 const PUBLIC_EXACT_PATHS = ["/favicon.ico"];
-const BEARER_AUTH_BYPASS_PREFIXES = ["/api/v1/"];
+const BEARER_AUTH_BYPASS_PREFIXES = [
+  "/api/v1/assets",
+  "/api/v1/auth/sessions",
+  "/api/v1/auth/whoami",
+  "/api/v1/brand-kits",
+  "/api/v1/posts",
+  "/api/v1/publish-jobs",
+];
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 
@@ -103,14 +110,28 @@ const buildCanonicalRedirect = (req: NextRequest) => {
 const hasPublicFileExtension = (pathname: string) =>
   /\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|map)$/i.test(pathname);
 
-const hasBearerAuthorization = (req: NextRequest) => {
-  const authorization = req.headers.get("authorization");
+const readBearerAuthorization = (req: NextRequest) => {
+  const authorization = req.headers.get("authorization")?.trim();
   if (!authorization) {
-    return false;
+    return null;
   }
 
   const [scheme, value] = authorization.split(/\s+/, 2);
-  return scheme?.toLowerCase() === "bearer" && Boolean(value?.trim());
+  if (scheme?.toLowerCase() !== "bearer") {
+    return null;
+  }
+
+  const token = value?.trim();
+  if (!token) {
+    return null;
+  }
+
+  return token;
+};
+
+const isJwtLikeToken = (value: string) => {
+  const parts = value.split(".");
+  return parts.length === 3 && parts.every((part) => part.length > 0);
 };
 
 const isPublicPath = (pathname: string) => {
@@ -177,11 +198,14 @@ export async function proxy(req: NextRequest) {
 
   if (
     BEARER_AUTH_BYPASS_PREFIXES.some((prefix) =>
-      req.nextUrl.pathname.startsWith(prefix),
-    ) &&
-    hasBearerAuthorization(req)
+      req.nextUrl.pathname === prefix ||
+      req.nextUrl.pathname.startsWith(`${prefix}/`),
+    )
   ) {
-    return NextResponse.next();
+    const bearerToken = readBearerAuthorization(req);
+    if (bearerToken && isJwtLikeToken(bearerToken)) {
+      return NextResponse.next();
+    }
   }
 
   const sessionToken = req.cookies.get(WORKSPACE_SESSION_COOKIE)?.value;

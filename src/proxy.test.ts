@@ -90,13 +90,25 @@ describe("proxy", () => {
   it("allows v1 API requests authenticated with bearer tokens", async () => {
     const req = new NextRequest("https://app.example.com/api/v1/posts", {
       headers: {
-        authorization: "Bearer token123",
+        authorization: "  Bearer header.payload.signature  ",
       },
     });
 
     const res = await proxy(req);
     expect(res.status).toBe(200);
     expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(mockedVerify).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed bearer tokens on v1 API requests", async () => {
+    const req = new NextRequest("https://app.example.com/api/v1/posts", {
+      headers: {
+        authorization: "Bearer not-a-jwt",
+      },
+    });
+
+    const res = await proxy(req);
+    expect(res.status).toBe(401);
     expect(mockedVerify).not.toHaveBeenCalled();
   });
 });
