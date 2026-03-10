@@ -75,10 +75,18 @@ export function useAutoSave(
         onSavedRef.current?.();
       } else {
         setSaveStatus("error");
+        // Retry after 5 seconds
+        timerRef.current = setTimeout(() => {
+          void saveNow();
+        }, 5000);
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         setSaveStatus("error");
+        // Retry after 5 seconds
+        timerRef.current = setTimeout(() => {
+          void saveNow();
+        }, 5000);
       }
     } finally {
       if (controllerRef.current === controller) {

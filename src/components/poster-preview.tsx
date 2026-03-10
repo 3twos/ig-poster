@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, EyeOff, Minus, Plus } from "lucide-react";
 import {
   forwardRef,
   memo,
@@ -55,6 +55,7 @@ type OverlayCanvasBlock = {
   width: number;
   height: number;
   fontScale: number;
+  baseFontSizeRem: number;
   visible: boolean;
   type: "canonical" | "custom";
   key?: CanonicalOverlayKey;
@@ -117,7 +118,8 @@ const buildOverlayBlocks = (
       text: overlayLayout.hook.text.trim() || resolvedCopy.hook,
       borderRadius: overlayLayout.hook.borderRadius ?? 16,
       bgOpacity: overlayLayout.hook.bgOpacity ?? 28,
-      className: "text-xs font-semibold tracking-[0.22em] uppercase text-white/80",
+      baseFontSizeRem: 0.75,
+      className: "font-semibold tracking-[0.22em] uppercase text-white/80",
       containerClassName: "backdrop-blur-sm",
       contentClassName: alignClass,
     },
@@ -130,7 +132,8 @@ const buildOverlayBlocks = (
       text: overlayLayout.headline.text.trim() || resolvedCopy.headline,
       borderRadius: overlayLayout.headline.borderRadius ?? 26,
       bgOpacity: overlayLayout.headline.bgOpacity ?? 42,
-      className: "text-3xl leading-tight font-semibold text-white",
+      baseFontSizeRem: 1.875,
+      className: "leading-tight font-semibold text-white",
       containerClassName: "shadow-[0_18px_48px_-28px_rgba(15,23,42,0.9)] backdrop-blur-md",
       contentClassName: alignClass,
     },
@@ -143,7 +146,8 @@ const buildOverlayBlocks = (
       text: overlayLayout.supportingText.text.trim() || resolvedCopy.supportingText,
       borderRadius: overlayLayout.supportingText.borderRadius ?? 24,
       bgOpacity: overlayLayout.supportingText.bgOpacity ?? 36,
-      className: "text-sm leading-relaxed text-white/90",
+      baseFontSizeRem: 0.875,
+      className: "leading-relaxed text-white/90",
       containerClassName: "shadow-[0_18px_44px_-30px_rgba(15,23,42,0.9)] backdrop-blur-md",
       contentClassName: alignClass,
     },
@@ -156,8 +160,9 @@ const buildOverlayBlocks = (
       text: overlayLayout.cta.text.trim() || resolvedCopy.cta,
       borderRadius: overlayLayout.cta.borderRadius ?? 9999,
       bgOpacity: overlayLayout.cta.bgOpacity ?? 0,
+      baseFontSizeRem: 0.75,
       className:
-        "inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase text-white",
+        "inline-flex rounded-full px-3 py-1 font-semibold uppercase text-white",
       containerClassName: "",
       contentClassName: cn("justify-start", variant.textAlign === "center" && "justify-center"),
     },
@@ -176,7 +181,8 @@ const buildOverlayBlocks = (
     visible: block.visible,
     borderRadius: block.borderRadius ?? 24,
     bgOpacity: block.bgOpacity ?? 34,
-    className: "text-sm leading-relaxed text-white",
+    baseFontSizeRem: 0.875,
+    className: "leading-relaxed text-white",
     containerClassName: "shadow-[0_18px_44px_-30px_rgba(15,23,42,0.88)] backdrop-blur-md",
     contentClassName: alignClass,
   }));
@@ -201,6 +207,20 @@ const OverlayBlockBody = ({
 }) => {
   const spanRef = useRef<HTMLSpanElement>(null);
   const cancelledRef = useRef(false);
+
+  // Auto-focus and select all text when entering edit mode
+  useEffect(() => {
+    if (!isEditing || !spanRef.current) return;
+    const span = spanRef.current;
+    span.focus();
+    const selection = window.getSelection();
+    if (selection) {
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }, [isEditing]);
 
   const handleBlur = useCallback(() => {
     if (cancelledRef.current) {
@@ -270,11 +290,11 @@ const OverlayBlockBody = ({
           "flex w-full whitespace-pre-wrap break-words",
           block.contentClassName,
         )}
-        style={{ fontSize: `${block.fontScale}em` }}
       >
         <span
           ref={spanRef}
           className={cn(block.className, isEditing && "outline-none ring-1 ring-orange-300/60 rounded px-0.5")}
+          style={{ fontSize: `${block.baseFontSizeRem * block.fontScale}rem` }}
           contentEditable={isEditing}
           suppressContentEditableWarning
           onBlur={isEditing ? handleBlur : undefined}
@@ -338,6 +358,7 @@ const LogoBadge = ({
   editorMode,
   frame,
   onPositionChange,
+  onHide,
   borderRadius,
 }: {
   logoImage?: string;
@@ -347,6 +368,7 @@ const LogoBadge = ({
   editorMode: boolean;
   frame: { width: number; height: number };
   onPositionChange?: (pos: LogoPosition) => void;
+  onHide?: () => void;
   borderRadius?: number;
 }) => {
   const badgeContent = (
@@ -417,10 +439,25 @@ const LogoBadge = ({
       }}
       className="z-20"
     >
-      <div className="relative h-full w-full rounded-xl border border-orange-300/70 p-0.5">
-        <span className="absolute -top-4 left-1 rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
-          Logo
-        </span>
+      <div className="group/logo relative h-full w-full rounded-xl border border-transparent p-0.5 hover:border-orange-300/70">
+        <div className="absolute -top-4 left-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover/logo:opacity-100">
+          <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
+            Logo
+          </span>
+          {onHide ? (
+            <button
+              type="button"
+              aria-label="Hide Logo"
+              className="rounded bg-slate-950/80 p-1 text-white transition hover:bg-slate-950"
+              onClick={(event) => {
+                event.stopPropagation();
+                onHide();
+              }}
+            >
+              <EyeOff className="h-3 w-3" />
+            </button>
+          ) : null}
+        </div>
         {badgeContent}
       </div>
     </Rnd>
@@ -441,6 +478,22 @@ const EditorOverlay = ({
   frame: { width: number; height: number };
 }) => {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  // Track known block IDs to detect newly added custom blocks
+  const prevBlockCountRef = useRef(blocks.length);
+
+  useEffect(() => {
+    const prevCount = prevBlockCountRef.current;
+    prevBlockCountRef.current = blocks.length;
+
+    if (blocks.length > prevCount) {
+      // Find the last custom block — it's the newly added one
+      const lastCustom = [...blocks].reverse().find((b) => b.type === "custom");
+      if (lastCustom) {
+        const raf = requestAnimationFrame(() => setEditingBlockId(lastCustom.id));
+        return () => cancelAnimationFrame(raf);
+      }
+    }
+  }, [blocks]);
 
   const updateBlockRect = (
     block: OverlayCanvasBlock,
@@ -500,6 +553,23 @@ const EditorOverlay = ({
     [layout, onChange, frame.height],
   );
 
+  const updateBlockFontScale = (block: OverlayCanvasBlock, delta: number) => {
+    const next = Math.round(Math.min(2.4, Math.max(0.6, block.fontScale + delta)) * 100) / 100;
+    if (block.type === "canonical" && block.key) {
+      onChange({
+        ...layout,
+        [block.key]: { ...layout[block.key], fontScale: next },
+      });
+    } else {
+      onChange({
+        ...layout,
+        custom: (layout.custom ?? []).map((item) =>
+          item.id === block.id ? { ...item, fontScale: next } : item,
+        ),
+      });
+    }
+  };
+
   const removeBlock = (block: OverlayCanvasBlock) => {
     if (block.type === "canonical" && block.key) {
       onChange({
@@ -557,23 +627,52 @@ const EditorOverlay = ({
             }}
           >
             <div
-              className="relative w-full border border-orange-300/70"
+              className="group/block relative w-full border border-transparent hover:border-orange-300/70"
               style={{ borderRadius: block.borderRadius }}
             >
-              <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
+              <div className="absolute -top-5 left-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover/block:opacity-100">
                 <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
                   {block.label}
                 </span>
+                <div className="flex items-center gap-0.5 rounded bg-slate-950/80 px-1 py-0.5">
+                  <button
+                    type="button"
+                    aria-label="Decrease font scale"
+                    className="p-0.5 text-white transition hover:text-orange-300 disabled:opacity-40"
+                    disabled={block.fontScale <= 0.6}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      updateBlockFontScale(block, -0.1);
+                    }}
+                  >
+                    <Minus className="h-2.5 w-2.5" />
+                  </button>
+                  <span className="min-w-[3ch] text-center text-[9px] tabular-nums text-white/80">
+                    {block.fontScale.toFixed(1)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Increase font scale"
+                    className="p-0.5 text-white transition hover:text-orange-300 disabled:opacity-40"
+                    disabled={block.fontScale >= 2.4}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      updateBlockFontScale(block, 0.1);
+                    }}
+                  >
+                    <Plus className="h-2.5 w-2.5" />
+                  </button>
+                </div>
                 <button
                   type="button"
-                  aria-label={`Remove ${block.label}`}
+                  aria-label={`Hide ${block.label}`}
                   className="rounded bg-slate-950/80 p-1 text-white transition hover:bg-slate-950"
                   onClick={(event) => {
                     event.stopPropagation();
                     removeBlock(block);
                   }}
                 >
-                  <X className="h-3 w-3" />
+                  <EyeOff className="h-3 w-3" />
                 </button>
               </div>
               <div className={cn(`drag-${block.id} w-full`, !isEditing && "cursor-move")}>
@@ -752,6 +851,17 @@ export const PosterPreview = memo(
         [onOverlayLayoutChange, resolvedOverlayLayout],
       );
 
+      const handleLogoHide = useCallback(() => {
+        if (!onOverlayLayoutChange) return;
+        onOverlayLayoutChange({
+          ...resolvedOverlayLayout,
+          logo: {
+            ...(resolvedOverlayLayout.logo ?? DEFAULT_LOGO_POSITION),
+            visible: false,
+          },
+        });
+      }, [onOverlayLayoutChange, resolvedOverlayLayout]);
+
       return (
         <div
           ref={ref}
@@ -853,6 +963,7 @@ export const PosterPreview = memo(
               editorMode={canEdit}
               frame={frameSize}
               onPositionChange={canEdit ? handleLogoPositionChange : undefined}
+              onHide={canEdit ? handleLogoHide : undefined}
               borderRadius={resolvedOverlayLayout.hook.borderRadius}
             />
           ) : null}

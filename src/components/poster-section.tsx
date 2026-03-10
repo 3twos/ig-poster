@@ -1,13 +1,20 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { RefObject } from "react";
+import { Eye, Plus, Type } from "lucide-react";
+import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 
 import { PosterPreview } from "@/components/poster-preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { SaveStatus } from "@/hooks/use-auto-save";
-import type { AspectRatio, CreativeVariant, OverlayLayout } from "@/lib/creative";
+import {
+  DEFAULT_LOGO_POSITION,
+  type AspectRatio,
+  type CanonicalOverlayKey,
+  type CreativeVariant,
+  type OverlayLayout,
+} from "@/lib/creative";
 import { cn } from "@/lib/utils";
 
 function saveStatusLabel(saveStatus: SaveStatus) {
@@ -17,11 +24,41 @@ function saveStatusLabel(saveStatus: SaveStatus) {
     case "unsaved":
       return "Unsaved";
     case "error":
-      return "Save failed";
+      return "Retrying...";
     default:
       return "Saved";
   }
 }
+
+const MAX_CUSTOM_TEXT_BOXES = 6;
+
+function createCustomTextBox(
+  count: number,
+  opts?: { borderRadius?: number; bgOpacity?: number },
+): OverlayLayout["custom"][number] {
+  const offset = count * 4;
+  return {
+    id: `custom-${Date.now()}-${count}`,
+    label: `Text Box ${count + 1}`,
+    text: "New text",
+    x: Math.min(12 + offset, 56),
+    y: Math.min(14 + offset, 70),
+    width: 52,
+    height: 12,
+    fontScale: 1,
+    visible: true,
+    borderRadius: opts?.borderRadius,
+    bgOpacity: opts?.bgOpacity,
+  };
+}
+
+const CANONICAL_KEYS: CanonicalOverlayKey[] = ["hook", "headline", "supportingText", "cta"];
+const CANONICAL_LABELS: Record<CanonicalOverlayKey, string> = {
+  hook: "Hook",
+  headline: "Headline",
+  supportingText: "Body",
+  cta: "CTA",
+};
 
 type Props = {
   posterRef: RefObject<HTMLDivElement | null>;
@@ -56,6 +93,71 @@ export function PosterSection({
   previewClassName,
   dispatch,
 }: Props) {
+  const [showHiddenOpen, setShowHiddenOpen] = useState(false);
+  const hiddenDropdownRef = useRef<HTMLDivElement>(null);
+
+  type HiddenItem = { kind: "canonical"; key: CanonicalOverlayKey } | { kind: "logo" };
+
+  const hiddenItems = useMemo(() => {
+    if (!overlayLayout) return [] as HiddenItem[];
+    const items: HiddenItem[] = CANONICAL_KEYS
+      .filter((key) => !overlayLayout[key].visible)
+      .map((key) => ({ kind: "canonical" as const, key }));
+    if ((overlayLayout.logo?.visible ?? true) === false) {
+      items.push({ kind: "logo" });
+    }
+    return items;
+  }, [overlayLayout]);
+
+  const handleAddTextBox = useCallback(() => {
+    if (!overlayLayout || !activeVariant) return;
+    const currentCount = overlayLayout.custom?.length ?? 0;
+    if (currentCount >= MAX_CUSTOM_TEXT_BOXES) return;
+    dispatch({
+      type: "UPDATE_OVERLAY",
+      variantId: activeVariant.id,
+      layout: {
+        ...overlayLayout,
+        custom: [
+          ...(overlayLayout.custom ?? []),
+          createCustomTextBox(currentCount, {
+            borderRadius: overlayLayout.hook.borderRadius,
+            bgOpacity: overlayLayout.hook.bgOpacity,
+          }),
+        ],
+      },
+    });
+  }, [overlayLayout, activeVariant, dispatch]);
+
+  const handleShowHiddenItem = useCallback(
+    (item: HiddenItem) => {
+      if (!overlayLayout || !activeVariant) return;
+      if (item.kind === "logo") {
+        dispatch({
+          type: "UPDATE_OVERLAY",
+          variantId: activeVariant.id,
+          layout: {
+            ...overlayLayout,
+            logo: {
+              ...(overlayLayout.logo ?? DEFAULT_LOGO_POSITION),
+              visible: true,
+            },
+          },
+        });
+      } else {
+        dispatch({
+          type: "UPDATE_OVERLAY",
+          variantId: activeVariant.id,
+          layout: {
+            ...overlayLayout,
+            [item.key]: { ...overlayLayout[item.key], visible: true },
+          },
+        });
+      }
+    },
+    [overlayLayout, activeVariant, dispatch],
+  );
+
   if (!activeVariant) {
     return (
       <div
@@ -111,6 +213,49 @@ export function PosterSection({
             >
               Reset Layout
             </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={handleAddTextBox}
+              disabled={!overlayLayout || (overlayLayout.custom?.length ?? 0) >= MAX_CUSTOM_TEXT_BOXES}
+            >
+              <Type className="h-3.5 w-3.5" />
+              Add Text
+            </Button>
+            {hiddenItems.length > 0 ? (
+              <div className="relative" ref={hiddenDropdownRef}>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setShowHiddenOpen((v) => !v)}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  Show Hidden ({hiddenItems.length})
+                </Button>
+                {showHiddenOpen ? (
+                  <div className="absolute top-full left-0 z-50 mt-1 min-w-[140px] rounded-lg border border-white/15 bg-slate-900 p-1 shadow-xl">
+                    {hiddenItems.map((item) => {
+                      const label = item.kind === "logo" ? "Logo" : CANONICAL_LABELS[item.key];
+                      const itemKey = item.kind === "logo" ? "logo" : item.key;
+                      return (
+                        <button
+                          key={itemKey}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-slate-200 transition hover:bg-white/10"
+                          onClick={() => {
+                            handleShowHiddenItem(item);
+                            setShowHiddenOpen(false);
+                          }}
+                        >
+                          <Plus className="h-3 w-3 text-orange-300" />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <label className="flex items-center gap-1.5 text-[10px] text-slate-300 uppercase">
               Corners{" "}
               <span className="min-w-[2ch] text-right tabular-nums">{overlayLayout?.hook?.borderRadius ?? 16}</span>
