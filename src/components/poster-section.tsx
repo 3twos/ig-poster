@@ -24,7 +24,7 @@ function saveStatusLabel(saveStatus: SaveStatus) {
     case "unsaved":
       return "Unsaved";
     case "error":
-      return "Save failed";
+      return "Retrying...";
     default:
       return "Saved";
   }

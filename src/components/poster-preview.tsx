@@ -208,6 +208,20 @@ const OverlayBlockBody = ({
   const spanRef = useRef<HTMLSpanElement>(null);
   const cancelledRef = useRef(false);
 
+  // Auto-focus and select all text when entering edit mode
+  useEffect(() => {
+    if (!isEditing || !spanRef.current) return;
+    const span = spanRef.current;
+    span.focus();
+    const selection = window.getSelection();
+    if (selection) {
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }, [isEditing]);
+
   const handleBlur = useCallback(() => {
     if (cancelledRef.current) {
       cancelledRef.current = false;
@@ -464,6 +478,22 @@ const EditorOverlay = ({
   frame: { width: number; height: number };
 }) => {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  // Track known block IDs to detect newly added custom blocks
+  const prevBlockCountRef = useRef(blocks.length);
+
+  useEffect(() => {
+    const prevCount = prevBlockCountRef.current;
+    prevBlockCountRef.current = blocks.length;
+
+    if (blocks.length > prevCount) {
+      // Find the last custom block — it's the newly added one
+      const lastCustom = [...blocks].reverse().find((b) => b.type === "custom");
+      if (lastCustom) {
+        const raf = requestAnimationFrame(() => setEditingBlockId(lastCustom.id));
+        return () => cancelAnimationFrame(raf);
+      }
+    }
+  }, [blocks]);
 
   const updateBlockRect = (
     block: OverlayCanvasBlock,
@@ -600,7 +630,7 @@ const EditorOverlay = ({
               className="group/block relative w-full border border-transparent hover:border-orange-300/70"
               style={{ borderRadius: block.borderRadius }}
             >
-              <div className="absolute top-1 left-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover/block:opacity-100">
+              <div className="absolute -top-5 left-1 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover/block:opacity-100">
                 <span className="rounded bg-orange-300/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950 uppercase">
                   {block.label}
                 </span>
