@@ -31,7 +31,7 @@ Options:
   --project-name <name>        Short name used in spoken alerts
   --team-id <id>               Team/org id (default: $VERCEL_TEAM_ID or $VERCEL_ORG_ID)
   --token <token>              Vercel token (default: $VERCEL_TOKEN, or secure prompt)
-  --target <target>            Filter deployments by target (default: production)
+  --target production          Filter by target (only production is supported)
   --max-deployments <count>    Number of recent deployments to display (default: 6)
   --event-mode <mode>          auto | stream | poll (default: auto)
   --no-speak                   Disable spoken alerts
@@ -39,10 +39,7 @@ Options:
   -h, --help                   Show help
 
 Examples:
-  # Watch only production deployments for a project until Ctrl+C
-  VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --target production --interval 5
-
-  # Watch all deployments (production + preview)
+  # Watch production deployments for a project until Ctrl+C
   VERCEL_TOKEN=... VERCEL_PROJECT_ID=... ./scripts/monitor-vercel-deployment.sh --project-name "ig poster" --interval 5
 
   # Watch one deployment continuously until Ctrl+C
