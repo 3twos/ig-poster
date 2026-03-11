@@ -2,7 +2,7 @@ import { parseCommandOptions } from "../args";
 import type { CliContext } from "../context";
 import { CliError, EXIT_CODES } from "../errors";
 import { readJsonInput, readTextInput } from "../input";
-import { printJson } from "../output";
+import { printJsonEnvelope, printStreamJsonEvent } from "../output";
 
 type AskOptions = {
   history?: string;
@@ -108,7 +108,7 @@ const askChat = async (ctx: CliContext, argv: string[]) => {
     }
 
     if (ctx.globalOptions.streamJson) {
-      process.stdout.write(`${JSON.stringify(event)}\n`);
+      printStreamJsonEvent(event);
     }
 
     if (event.type === "error") {
@@ -152,7 +152,7 @@ const askChat = async (ctx: CliContext, argv: string[]) => {
   }
 
   if (ctx.globalOptions.json) {
-    printJson(
+    printJsonEnvelope(
       {
         message: assistantMessage,
         tokenCount: tokenCount ?? null,

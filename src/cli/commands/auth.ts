@@ -11,7 +11,12 @@ import {
 } from "../auth";
 import { CliError, EXIT_CODES } from "../errors";
 import { readTextInput } from "../input";
-import { printJson, printKeyValue, printSessionsTable } from "../output";
+import {
+  printJson,
+  printJsonEnvelope,
+  printKeyValue,
+  printSessionsTable,
+} from "../output";
 import { clearStoredRefreshToken } from "../secure-storage";
 import type { CliContext } from "../context";
 import { IgPosterClient } from "../client";
@@ -167,7 +172,7 @@ const login = async (ctx: CliContext, argv: string[]) => {
   await saveConfig(nextConfig);
 
   if (ctx.globalOptions.json) {
-    printJson({
+    printJsonEnvelope({
       profile: result.profile,
       host: result.host,
       actor: result.actor,
@@ -207,7 +212,7 @@ const logout = async (ctx: CliContext) => {
   await saveConfig(clearProfileToken(ctx.config, ctx.profileName));
 
   if (ctx.globalOptions.json) {
-    printJson({ profile: ctx.profileName, loggedOut: true });
+    printJsonEnvelope({ profile: ctx.profileName, loggedOut: true });
     return;
   }
 

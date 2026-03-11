@@ -29,3 +29,14 @@ export const exitCodeFromStatus = (status: number) => {
   if (status >= 500) return EXIT_CODES.upstream;
   return EXIT_CODES.transport;
 };
+
+export const errorCodeFromExitCode = (exitCode: number) => {
+  if (exitCode === EXIT_CODES.usage) return "INVALID_INPUT";
+  if (exitCode === EXIT_CODES.auth) return "AUTH_REQUIRED";
+  if (exitCode === EXIT_CODES.forbidden) return "FORBIDDEN";
+  if (exitCode === EXIT_CODES.notFound) return "NOT_FOUND";
+  if (exitCode === EXIT_CODES.conflict) return "CONFLICT";
+  if (exitCode === EXIT_CODES.upstream) return "UPSTREAM_ERROR";
+  if (exitCode === EXIT_CODES.partial) return "PARTIAL_SUCCESS";
+  return "TRANSPORT_ERROR";
+};
