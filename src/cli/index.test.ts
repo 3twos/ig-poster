@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXIT_CODES } from "@/cli/errors";
@@ -30,6 +34,34 @@ describe("runCli", () => {
     await expect(runCli(["--json", "--timeout", "nope"])).resolves.toBe(
       EXIT_CODES.usage,
     );
+
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"ok": false'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"code": "INVALID_INPUT"'),
+    );
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it("prints a json error envelope when --json comes from a flags file", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "ig-cli-flags-json-"));
+    const flagsPath = path.join(tempDir, "flags.json");
+    writeFileSync(flagsPath, JSON.stringify(["--json", "--timeout", "nope"]));
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    try {
+      await expect(runCli(["--flags-file", flagsPath])).resolves.toBe(
+        EXIT_CODES.usage,
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
 
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining('"ok": false'),

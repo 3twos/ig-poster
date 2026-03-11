@@ -294,9 +294,13 @@ const handleMessage = async (
   }
 
   if (request.method === "initialize") {
+    if (request.id === undefined) {
+      return null;
+    }
+
     return {
       jsonrpc: "2.0",
-      id: request.id ?? null,
+      id: request.id,
       result: {
         protocolVersion: negotiateProtocolVersion(request.params),
         capabilities: {
@@ -313,9 +317,13 @@ const handleMessage = async (
   }
 
   if (request.method === "tools/list") {
+    if (request.id === undefined) {
+      return null;
+    }
+
     return {
       jsonrpc: "2.0",
-      id: request.id ?? null,
+      id: request.id,
       result: {
         tools: TOOLS.map((tool) => ({
           name: tool.name,

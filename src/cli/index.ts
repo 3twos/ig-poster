@@ -1,4 +1,8 @@
-import { finalizeGlobalOptions, parseGlobalOptions } from "./args";
+import {
+  expandGlobalArgv,
+  finalizeGlobalOptions,
+  parseGlobalOptions,
+} from "./args";
 import { runApiCommand } from "./commands/api";
 import { runAssetsCommand } from "./commands/assets";
 import { runAuthCommand } from "./commands/auth";
@@ -172,13 +176,27 @@ export const runCli = async (argv: string[]) => {
   }
 };
 
-const detectRequestedOutputMode = (argv: string[]) => ({
-  json: argv.some((token) => token === "--json" || token.startsWith("--json=")),
-  streamJson: argv.some(
-    (token) =>
-      token === "--stream-json" || token.startsWith("--stream-json="),
-  ),
-});
+const detectRequestedOutputMode = (argv: string[]) => {
+  const expandedArgv = safelyExpandGlobalArgv(argv);
+
+  return {
+    json: expandedArgv.some(
+      (token) => token === "--json" || token.startsWith("--json="),
+    ),
+    streamJson: expandedArgv.some(
+      (token) =>
+        token === "--stream-json" || token.startsWith("--stream-json="),
+    ),
+  };
+};
+
+const safelyExpandGlobalArgv = (argv: string[]) => {
+  try {
+    return expandGlobalArgv(argv);
+  } catch {
+    return argv;
+  }
+};
 
 const shouldSkipAuthRefresh = (command: string, commandArgs: string[]) =>
   command === "mcp" ||

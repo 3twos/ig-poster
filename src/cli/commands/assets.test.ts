@@ -36,7 +36,7 @@ describe("runAssetsCommand", () => {
         },
       },
     });
-    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
     await runAssetsCommand(
       {
@@ -62,6 +62,12 @@ describe("runAssetsCommand", () => {
     expect(file).toBeInstanceOf(File);
     expect((file as File).name).toBe("clip.mov");
     expect((file as File).type).toBe("video/quicktime");
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"assets"'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"ok": true'),
+    );
   });
 
   it("rejects unsupported local file types before uploading", async () => {

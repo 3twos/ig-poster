@@ -55,10 +55,11 @@ export const inferUploadFolder = (
 };
 
 export const inferMediaType = (value: string) => {
-  const contentType =
-    value.includes("/") && !value.startsWith(".")
-      ? value
-      : inferContentType(path.basename(value));
+  const trimmedValue = value.trim();
+  const mimeTypePattern = /^[^\/\s]+\/[^\/\s]+$/;
+  const contentType = mimeTypePattern.test(trimmedValue)
+    ? trimmedValue
+    : inferContentType(path.basename(trimmedValue));
 
   return contentType?.startsWith("video/") ? "video" : "image";
 };

@@ -36,7 +36,7 @@ const GLOBAL_FLAG_TYPES: Record<string, FlagType> = {
 };
 
 export const parseGlobalOptions = (argv: string[]) => {
-  const expandedArgv = expandFlagsFiles(argv);
+  const expandedArgv = expandGlobalArgv(argv);
   const options: GlobalOptions = {
     json: false,
     streamJson: false,
@@ -231,6 +231,8 @@ export const parseCommandOptions = <T extends Record<string, string | boolean>>(
 
 const camelCase = (value: string) =>
   value.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+export const expandGlobalArgv = (argv: string[]) => expandFlagsFiles(argv);
 
 const expandFlagsFiles = (
   argv: string[],

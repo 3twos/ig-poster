@@ -1,7 +1,7 @@
 import { parseCommandOptions } from "../args";
 import type { CliContext } from "../context";
 import { CliError } from "../errors";
-import { printAssetsTable, printJson } from "../output";
+import { printAssetsTable, printJsonEnvelope } from "../output";
 import {
   buildUploadFormData,
   type UploadedAsset,
@@ -51,9 +51,8 @@ const uploadAssets = async (ctx: CliContext, argv: string[]) => {
     uploaded.push(response.data.asset);
   }
 
-  const result = { ok: true, data: { assets: uploaded } };
   if (ctx.globalOptions.json) {
-    printJson(result, ctx.globalOptions.jq);
+    printJsonEnvelope({ assets: uploaded }, ctx.globalOptions.jq);
     return;
   }
 

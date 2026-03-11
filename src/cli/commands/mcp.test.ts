@@ -64,4 +64,45 @@ describe("handleMcpMessage", () => {
       },
     });
   });
+
+  it("does not respond to initialize notifications", async () => {
+    const response = await handleMcpMessage(
+      {
+        json: false,
+        streamJson: false,
+        quiet: false,
+        noColor: false,
+        yes: false,
+        dryRun: false,
+      },
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-05",
+        },
+      }),
+    );
+
+    expect(response).toBeNull();
+  });
+
+  it("does not respond to tools/list notifications", async () => {
+    const response = await handleMcpMessage(
+      {
+        json: false,
+        streamJson: false,
+        quiet: false,
+        noColor: false,
+        yes: false,
+        dryRun: false,
+      },
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/list",
+      }),
+    );
+
+    expect(response).toBeNull();
+  });
 });
