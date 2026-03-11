@@ -30,6 +30,29 @@ flowchart LR
   MW --> APIV1
 ```
 
+## Planned macOS Apple Photos Companion
+
+Apple Photos support is planned as a local macOS companion, not as a rewrite of
+the core IG Poster product into a native-only app.
+
+Planned split of responsibilities:
+
+- web app + `/api/*` + `/api/v1/*`: source of truth for auth, posts, generation, publish, and queue state
+- `ig` CLI: automation surface for humans and agents
+- `IG Poster Companion.app`: native Apple Photos picker/search UI, PhotoKit access, managed export cache, and local bridge
+
+Planned flow:
+
+1. the companion app handles Photos permissions plus human-friendly selection via native macOS UI
+2. the companion app exposes a local bridge for CLI/MCP calls that need recent/search/export access
+3. the CLI uploads exported artifacts through the existing `/api/v1/assets` route and continues through normal post/generate/publish flows
+
+Why this shape:
+
+- human selection wants native macOS UI
+- agent workflows want a machine-readable local bridge, not a GUI
+- the server should stay Apple-agnostic and continue to operate on uploaded files, draft posts, and publish requests
+
 ## Runtime and Layers
 
 - App framework: Next.js App Router (Node runtime for server routes that need Node APIs).
@@ -170,6 +193,7 @@ Why this shape:
 - CLI output contracts are now normalized around stable JSON envelopes (`{ ok, data }` / `{ ok, error }`) and the CLI auto-prefers `--json` when stdout is not a TTY for normal commands, while `--stream-json` remains NDJSON event output for streaming workflows.
 - `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
 - `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
+- Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

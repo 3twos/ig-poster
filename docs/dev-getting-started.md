@@ -284,6 +284,12 @@ Additional CLI ergonomics:
 - `ig mcp` starts a stdio MCP adapter that exposes a focused set of CLI-backed tools for local agents.
 - Hidden dev-only `--local` targets `IG_POSTER_LOCAL_HOST` (default `http://localhost:3000`) while still calling the standard `/api/v1/*` routes. It is intended only for local development and testing, not production automation.
 
+Planned next CLI/macOS work:
+- Apple Photos support will be delivered as a macOS companion app plus a local bridge, not by moving core generation/publish logic into a native app.
+- Human-first flow: `ig photos pick` launches native macOS selection UI, exports chosen assets into a managed cache, then reuses the existing `/api/v1/assets` and `/api/v1/posts` workflows.
+- Agent-first flow: `ig photos recent|search|import|propose` and future MCP tools call the same local bridge for PhotoKit-backed enumeration/export, then continue through the normal CLI/service pipeline.
+- Keep Apple-specific behavior isolated to the companion app and bridge; do not introduce Apple-specific logic into the server routes or core domain services.
+
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.
 - Newline-delimited tokens for simple argument lists (blank lines and `#` comments are ignored).

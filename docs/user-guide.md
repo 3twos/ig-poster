@@ -158,6 +158,28 @@
 - `ig watch` ingests supported local image/video files into the remote service by uploading each file and creating a draft post around it. In human mode or `--stream-json`, it keeps polling the directory for new files; in `--json` mode it performs a single scan pass and emits one summary envelope.
 - `ig mcp` runs a stdio MCP adapter over the CLI so local agents can call tools like `status`, `posts_list`, `generate_run`, `chat_ask`, `publish`, and `queue_list` through the same authenticated CLI surface.
 
+### Planned macOS Apple Photos workflow
+
+This is not shipped yet, but the planned direction is:
+
+- a signed `IG Poster Companion.app` handles Apple Photos permissions, native picker/search UI, and export caching
+- `ig` continues to be the scripting surface
+- `ig mcp` exposes the same Photos capabilities to agents through the local CLI
+
+Planned commands:
+
+- `ig photos pick --create-draft --brand-kit <id>`
+- `ig photos recent --since 7d --limit 20`
+- `ig photos search --album Favorites --media image`
+- `ig photos import --ids <asset-id,...>`
+- `ig photos propose --since 7d --limit 20 --brand-kit <id>`
+
+Expected behavior:
+
+- human users should be able to browse and select from the Photos library in native macOS UI, then hand those assets into the normal upload/draft flow
+- agents should be able to enumerate recent/search results and import/export assets through CLI/MCP without touching Apple Photos internals directly
+- uploaded files should still go through the existing IG Poster service APIs after local export
+
 ## Working with Saved Posts
 
 - Selecting a different post saves pending edits first, then loads the selected draft.
