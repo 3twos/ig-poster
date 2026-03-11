@@ -286,9 +286,10 @@ Additional CLI ergonomics:
 
 Planned next CLI/macOS work:
 - Apple Photos support will be delivered as a macOS companion app plus a local bridge, not by moving core generation/publish logic into a native app.
-- Human-first flow: `ig photos pick` launches native macOS selection UI, exports chosen assets into a managed cache, then reuses the existing `/api/v1/assets` and `/api/v1/posts` workflows.
+- Human-first flow: the web editor launches native macOS selection UI through the companion app, exports chosen assets into a managed cache, then reuses the existing `/api/v1/assets` and `/api/v1/posts` workflows. `ig photos pick` remains the CLI equivalent.
 - Agent-first flow: `ig photos recent|search|import|propose` and future MCP tools call the same local bridge for PhotoKit-backed enumeration/export, then continue through the normal CLI/service pipeline.
 - Keep Apple-specific behavior isolated to the companion app and bridge; do not introduce Apple-specific logic into the server routes or core domain services.
+- Missing-helper behavior must be explicit: if the companion app or bridge is unavailable, the web app should fall back to install guidance plus normal file upload, and CLI/MCP should return machine-readable remediation codes.
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.

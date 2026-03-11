@@ -37,21 +37,24 @@ the core IG Poster product into a native-only app.
 
 Planned split of responsibilities:
 
-- web app + `/api/*` + `/api/v1/*`: source of truth for auth, posts, generation, publish, and queue state
+- web app + `/api/*` + `/api/v1/*`: source of truth for auth, posts, generation, publish, and queue state, and the primary human workflow surface
 - `ig` CLI: automation surface for humans and agents
 - `IG Poster Companion.app`: native Apple Photos picker/search UI, PhotoKit access, managed export cache, and local bridge
 
 Planned flow:
 
-1. the companion app handles Photos permissions plus human-friendly selection via native macOS UI
-2. the companion app exposes a local bridge for CLI/MCP calls that need recent/search/export access
-3. the CLI uploads exported artifacts through the existing `/api/v1/assets` route and continues through normal post/generate/publish flows
+1. the web editor starts the human `Add from Photos` flow
+2. the companion app handles Photos permissions plus human-friendly selection via native macOS UI
+3. the companion app exposes a local bridge for web/CLI/MCP calls that need recent/search/export access
+4. the web app or CLI uploads exported artifacts through the existing `/api/v1/assets` route and continues through normal post/generate/publish flows
 
 Why this shape:
 
 - human selection wants native macOS UI
+- human workflow should still feel like one web-driven product experience
 - agent workflows want a machine-readable local bridge, not a GUI
 - the server should stay Apple-agnostic and continue to operate on uploaded files, draft posts, and publish requests
+- missing-native-helper cases should degrade to install guidance plus the existing regular upload flow, not block the draft editor
 
 ## Runtime and Layers
 
