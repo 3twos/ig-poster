@@ -1,4 +1,4 @@
-import { parseGlobalOptions } from "./args";
+import { finalizeGlobalOptions, parseGlobalOptions } from "./args";
 import { runApiCommand } from "./commands/api";
 import { runAssetsCommand } from "./commands/assets";
 import { runAuthCommand } from "./commands/auth";
@@ -8,12 +8,22 @@ import { runCompletionCommand } from "./commands/completion";
 import { runConfigCommand } from "./commands/config";
 import { runGenerateCommand } from "./commands/generate";
 import { runLinkCommand, runUnlinkCommand } from "./commands/link";
+import { runMcpCommand } from "./commands/mcp";
 import { runPostsCommand } from "./commands/posts";
 import { runPublishCommand } from "./commands/publish";
 import { runQueueCommand } from "./commands/queue";
 import { runStatusCommand } from "./commands/status";
+import { runWatchCommand } from "./commands/watch";
 import { createContext } from "./context";
-import { CliError, EXIT_CODES } from "./errors";
+import {
+  CliError,
+  EXIT_CODES,
+  errorCodeFromExitCode,
+} from "./errors";
+import {
+  printJsonErrorEnvelope,
+  printStreamJsonEvent,
+} from "./output";
 
 const HELP_TEXT = `ig: IG Poster CLI (preview)
 
@@ -28,6 +38,8 @@ Usage:
   ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]
   ig unlink
   ig completion <bash|zsh|fish>
+  ig watch <dir>
+  ig mcp
   ig publish (--image <url> | --video <url> | --carousel <url,...>)
   ig api <METHOD> <PATH> [--body @file.json]
   ig posts <list|get|create|update|duplicate|archive>
@@ -46,9 +58,17 @@ Global options:
 `;
 
 export const runCli = async (argv: string[]) => {
+  let outputMode: { json?: boolean; streamJson?: boolean } | null =
+    detectRequestedOutputMode(argv);
+
   try {
-    const { options, rest } = parseGlobalOptions(argv);
-    const [command, ...commandArgs] = rest;
+    const parsed = parseGlobalOptions(argv);
+    const [command, ...commandArgs] = parsed.rest;
+    const options = finalizeGlobalOptions(parsed.options, {
+      command,
+      stdoutIsTTY: process.stdout.isTTY,
+    });
+    outputMode = options;
 
     if (!command || command === "help" || command === "--help") {
       process.stdout.write(HELP_TEXT);
@@ -60,69 +80,108 @@ export const runCli = async (argv: string[]) => {
       return EXIT_CODES.ok;
     }
 
+    if (command === "mcp") {
+      return runMcpCommand(options, commandArgs);
+    }
+
     const ctx = await createContext(options, {
       refreshAuth: !shouldSkipAuthRefresh(command, commandArgs),
     });
 
+    let result: number | void;
     switch (command) {
       case "status":
-        await runStatusCommand(ctx);
+        result = await runStatusCommand(ctx);
         break;
       case "auth":
-        await runAuthCommand(ctx, commandArgs);
+        result = await runAuthCommand(ctx, commandArgs);
         break;
       case "assets":
-        await runAssetsCommand(ctx, commandArgs);
+        result = await runAssetsCommand(ctx, commandArgs);
         break;
       case "config":
-        await runConfigCommand(ctx, commandArgs);
+        result = await runConfigCommand(ctx, commandArgs);
         break;
       case "generate":
-        await runGenerateCommand(ctx, commandArgs);
+        result = await runGenerateCommand(ctx, commandArgs);
         break;
       case "link":
-        await runLinkCommand(ctx, commandArgs);
+        result = await runLinkCommand(ctx, commandArgs);
         break;
       case "unlink":
-        await runUnlinkCommand(ctx, commandArgs);
+        result = await runUnlinkCommand(ctx, commandArgs);
         break;
       case "publish":
-        await runPublishCommand(ctx, commandArgs);
+        result = await runPublishCommand(ctx, commandArgs);
         break;
       case "brand-kits":
-        await runBrandKitsCommand(ctx, commandArgs);
+        result = await runBrandKitsCommand(ctx, commandArgs);
         break;
       case "chat":
-        await runChatCommand(ctx, commandArgs);
+        result = await runChatCommand(ctx, commandArgs);
         break;
       case "api":
-        await runApiCommand(ctx, commandArgs);
+        result = await runApiCommand(ctx, commandArgs);
         break;
       case "posts":
-        await runPostsCommand(ctx, commandArgs);
+        result = await runPostsCommand(ctx, commandArgs);
         break;
       case "queue":
-        await runQueueCommand(ctx, commandArgs);
+        result = await runQueueCommand(ctx, commandArgs);
+        break;
+      case "watch":
+        result = await runWatchCommand(ctx, commandArgs);
         break;
       default:
         throw new CliError(`Unknown command: ${command}`);
     }
 
-    return EXIT_CODES.ok;
+    return typeof result === "number" ? result : EXIT_CODES.ok;
   } catch (error) {
-    if (error instanceof CliError) {
-      process.stderr.write(`${error.message}\n`);
-      return error.exitCode;
+    const cliError =
+      error instanceof CliError
+        ? error
+        : new CliError(
+            error instanceof Error ? error.message : "Unexpected error",
+            EXIT_CODES.transport,
+          );
+
+    if (outputMode?.streamJson) {
+      printStreamJsonEvent({
+        type: "error",
+        error: {
+          code: errorCodeFromExitCode(cliError.exitCode),
+          message: cliError.message,
+          exitCode: cliError.exitCode,
+        },
+      });
+      return cliError.exitCode;
     }
 
-    process.stderr.write(
-      `${error instanceof Error ? error.message : "Unexpected error"}\n`,
-    );
-    return EXIT_CODES.transport;
+    if (outputMode?.json) {
+      printJsonErrorEnvelope({
+        code: errorCodeFromExitCode(cliError.exitCode),
+        message: cliError.message,
+        exitCode: cliError.exitCode,
+      });
+      return cliError.exitCode;
+    }
+
+    process.stderr.write(`${cliError.message}\n`);
+    return cliError.exitCode;
   }
 };
 
+const detectRequestedOutputMode = (argv: string[]) => ({
+  json: argv.some((token) => token === "--json" || token.startsWith("--json=")),
+  streamJson: argv.some(
+    (token) =>
+      token === "--stream-json" || token.startsWith("--stream-json="),
+  ),
+});
+
 const shouldSkipAuthRefresh = (command: string, commandArgs: string[]) =>
+  command === "mcp" ||
   command === "config" ||
   command === "link" ||
   command === "unlink" ||

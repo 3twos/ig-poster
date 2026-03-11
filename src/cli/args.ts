@@ -8,11 +8,13 @@ export type GlobalOptions = {
   profile?: string;
   json: boolean;
   streamJson: boolean;
+  outputExplicit?: boolean;
   jq?: string;
   quiet: boolean;
   noColor: boolean;
   yes: boolean;
   dryRun: boolean;
+  local?: boolean;
   timeoutMs?: number;
 };
 
@@ -29,6 +31,7 @@ const GLOBAL_FLAG_TYPES: Record<string, FlagType> = {
   "no-color": "boolean",
   yes: "boolean",
   "dry-run": "boolean",
+  local: "boolean",
   timeout: "string",
 };
 
@@ -37,10 +40,12 @@ export const parseGlobalOptions = (argv: string[]) => {
   const options: GlobalOptions = {
     json: false,
     streamJson: false,
+    outputExplicit: false,
     quiet: false,
     noColor: false,
     yes: false,
     dryRun: false,
+    local: false,
   };
   const rest: string[] = [];
 
@@ -74,6 +79,20 @@ export const parseGlobalOptions = (argv: string[]) => {
     }
   }
 
+  if (options.json && options.streamJson) {
+    throw new CliError(
+      "Choose only one of --json or --stream-json.",
+      EXIT_CODES.usage,
+    );
+  }
+
+  if (options.local && options.host) {
+    throw new CliError(
+      "Choose only one of --local or --host.",
+      EXIT_CODES.usage,
+    );
+  }
+
   return { options, rest };
 };
 
@@ -81,9 +100,11 @@ const setGlobalBoolean = (options: GlobalOptions, flag: string) => {
   switch (flag) {
     case "json":
       options.json = true;
+      options.outputExplicit = true;
       break;
     case "stream-json":
       options.streamJson = true;
+      options.outputExplicit = true;
       break;
     case "quiet":
       options.quiet = true;
@@ -97,10 +118,41 @@ const setGlobalBoolean = (options: GlobalOptions, flag: string) => {
     case "dry-run":
       options.dryRun = true;
       break;
+    case "local":
+      options.local = true;
+      break;
     default:
       break;
   }
 };
+
+export const finalizeGlobalOptions = (
+  options: GlobalOptions,
+  runtime: {
+    command?: string;
+    stdoutIsTTY?: boolean;
+  } = {},
+): GlobalOptions => {
+  if (
+    !options.outputExplicit &&
+    runtime.stdoutIsTTY === false &&
+    shouldAutoPreferJson(runtime.command)
+  ) {
+    return {
+      ...options,
+      json: true,
+    };
+  }
+
+  return options;
+};
+
+const shouldAutoPreferJson = (command?: string) =>
+  Boolean(command) &&
+  command !== "completion" &&
+  command !== "help" &&
+  command !== "--help" &&
+  command !== "mcp";
 
 const setGlobalString = (
   options: GlobalOptions,

@@ -157,6 +157,9 @@ export const resolveHost = (
   getProfileConfig(config, profileName).host ??
   "http://localhost:3000";
 
+export const resolveLocalHost = (env: NodeJS.ProcessEnv = process.env) =>
+  parseConfigHost(env.IG_POSTER_LOCAL_HOST ?? "http://localhost:3000");
+
 export const resolveToken = (
   config: CliConfig,
   profileName: string,

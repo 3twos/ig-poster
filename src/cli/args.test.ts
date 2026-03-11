@@ -5,7 +5,11 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { CliError, EXIT_CODES } from "@/cli/errors";
-import { parseCommandOptions, parseGlobalOptions } from "@/cli/args";
+import {
+  finalizeGlobalOptions,
+  parseCommandOptions,
+  parseGlobalOptions,
+} from "@/cli/args";
 
 describe("parseGlobalOptions", () => {
   it("extracts global options without consuming command flags", () => {
@@ -32,6 +36,13 @@ describe("parseGlobalOptions", () => {
 
     expect(parsed.options.streamJson).toBe(true);
     expect(parsed.rest).toEqual(["generate", "run", "--post", "post-1"]);
+  });
+
+  it("parses hidden local mode without passing it to the command", () => {
+    const parsed = parseGlobalOptions(["--local", "status"]);
+
+    expect(parsed.options.local).toBe(true);
+    expect(parsed.rest).toEqual(["status"]);
   });
 
   it("expands a json flags file before parsing", () => {
@@ -147,6 +158,73 @@ describe("parseGlobalOptions", () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("rejects conflicting machine-readable output flags", () => {
+    expect(() =>
+      parseGlobalOptions(["status", "--json", "--stream-json"]),
+    ).toThrow("Choose only one of --json or --stream-json.");
+  });
+
+  it("rejects conflicting local and host targeting flags", () => {
+    expect(() =>
+      parseGlobalOptions(["--local", "--host", "https://ig.example.com", "status"]),
+    ).toThrow("Choose only one of --local or --host.");
+  });
+});
+
+describe("finalizeGlobalOptions", () => {
+  it("auto-enables json for structured commands on non-tty stdout", () => {
+    const options = finalizeGlobalOptions(
+      {
+        json: false,
+        streamJson: false,
+        quiet: false,
+        noColor: false,
+        yes: false,
+        dryRun: false,
+      },
+      {
+        command: "status",
+        stdoutIsTTY: false,
+      },
+    );
+
+    expect(options.json).toBe(true);
+  });
+
+  it("does not auto-enable json for mcp or completion commands", () => {
+    const completion = finalizeGlobalOptions(
+      {
+        json: false,
+        streamJson: false,
+        quiet: false,
+        noColor: false,
+        yes: false,
+        dryRun: false,
+      },
+      {
+        command: "completion",
+        stdoutIsTTY: false,
+      },
+    );
+    const mcp = finalizeGlobalOptions(
+      {
+        json: false,
+        streamJson: false,
+        quiet: false,
+        noColor: false,
+        yes: false,
+        dryRun: false,
+      },
+      {
+        command: "mcp",
+        stdoutIsTTY: false,
+      },
+    );
+
+    expect(completion.json).toBe(false);
+    expect(mcp.json).toBe(false);
   });
 });
 
