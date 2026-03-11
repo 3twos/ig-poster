@@ -1,4 +1,4 @@
-import { printJson, printKeyValue } from "../output";
+import { printJsonEnvelope, printKeyValue } from "../output";
 import type { CliContext } from "../context";
 
 type StatusResponse = {
@@ -87,7 +87,7 @@ export const runStatusCommand = async (ctx: CliContext) => {
   };
 
   if (ctx.globalOptions.json) {
-    printJson(payload, ctx.globalOptions.jq);
+    printJsonEnvelope(payload, ctx.globalOptions.jq);
     return;
   }
 

@@ -6,6 +6,7 @@ import { readJsonInput } from "../input";
 import {
   printGenerationVariantsTable,
   printJson,
+  printStreamJsonEvent,
   printKeyValue,
   printLines,
 } from "../output";
@@ -156,6 +157,9 @@ const runGenerate = async (ctx: CliContext, argv: string[]) => {
       type: "run-complete",
       ...payload,
     });
+    if (ctx.globalOptions.streamJson) {
+      printStreamJsonEvent({ type: "done" });
+    }
     return printGenerateResult(ctx, payload);
   }
 
@@ -224,6 +228,10 @@ const runGenerate = async (ctx: CliContext, argv: string[]) => {
 
   if (!finalResult) {
     throw new CliError("Generation completed without a final result.");
+  }
+
+  if (ctx.globalOptions.streamJson) {
+    printStreamJsonEvent({ type: "done" });
   }
 
   return printGenerateResult(ctx, finalResult);
@@ -308,7 +316,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const emitRunEvent = (ctx: CliContext, event: GenerationRunEvent) => {
   if (ctx.globalOptions.streamJson) {
-    process.stdout.write(`${JSON.stringify(event)}\n`);
+    printStreamJsonEvent(event);
     return;
   }
 

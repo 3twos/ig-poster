@@ -62,6 +62,8 @@ flowchart LR
   - `src/services/meta-auth.ts` resolves CLI-safe Meta auth for bearer-auth `/api/v1/*` publish and location-search requests, preferring stored OAuth connections when available and falling back to env credentials.
   - `src/services/publish-jobs.ts` owns extracted publish-job queue reads and mutation rules (`list`, `get`, `update`) for the CLI-facing API surface.
   - `src/services/status.ts` aggregates CLI-safe bearer-auth status data for `/api/v1/status`, combining actor info, Meta readiness, LLM provider availability, and publish-window usage.
+  - `src/cli/commands/watch.ts` orchestrates local-directory polling and ingest for agent workflows by reusing the normal assets + posts API surface.
+  - `src/cli/commands/mcp.ts` exposes a focused MCP stdio tool surface by invoking the existing CLI commands in structured-output mode.
 - Data layer:
   - `src/db/schema.ts` defines relational post records.
   - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.
@@ -161,8 +163,13 @@ Why this shape:
 - Sessions are signed JWTs in `workspace_session` cookie.
 - CLI preview requests can also authenticate with `Authorization: Bearer <token>`. Bearer auth is resolved before cookies for `/api/v1/*` consumers.
 - Browser-assisted CLI login now runs through `/api/v1/auth/cli/start` and `/api/v1/auth/cli/exchange`, which mint short-lived CLI access tokens plus rolling refresh sessions.
+- Device-code CLI login now uses `POST /api/v1/auth/cli/start` and `POST /api/v1/auth/cli/poll`, plus the workspace-gated approval page at `/cli/device` and the approval form handler at `/api/auth/cli/device/approve`.
 - Refresh/session lifecycle routes live at `/api/v1/auth/cli/refresh`, `/api/v1/auth/cli/logout`, `/api/v1/auth/sessions`, and `/api/v1/auth/sessions/:id/revoke`.
-- CLI refresh-session records are stored in the private credential store namespace `cli_session` (backed by Postgres). Locally, the CLI now stores refresh tokens in macOS Keychain when available, while still persisting access tokens and session metadata in `~/.config/ig-poster/config.json`; non-macOS environments fall back to storing the refresh token in that config file as well.
+- Interactive CLI commands first try the cached access token and refresh token, then automatically bootstrap the browser login flow when no valid CLI session exists. Non-interactive callers must authenticate explicitly ahead of time or provide `IG_POSTER_TOKEN`.
+- CLI refresh-session records are stored in the private credential store namespace `cli_session` (backed by Postgres). Short-lived pending device approvals are stored in the same credential store under `cli_device_code`. Locally, the CLI now stores refresh tokens in macOS Keychain when available, while still persisting access tokens and session metadata in `~/.config/ig-poster/config.json`; non-macOS environments fall back to storing the refresh token in that config file as well.
+- CLI output contracts are now normalized around stable JSON envelopes (`{ ok, data }` / `{ ok, error }`) and the CLI auto-prefers `--json` when stdout is not a TTY for normal commands, while `--stream-json` remains NDJSON event output for streaming workflows.
+- `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
+- `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

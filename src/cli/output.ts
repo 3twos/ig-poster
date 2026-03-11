@@ -2,11 +2,48 @@ import { inspect } from "node:util";
 
 import { CliError, EXIT_CODES } from "./errors";
 
+export type JsonSuccessEnvelope<T> = {
+  ok: true;
+  data: T;
+};
+
+export type JsonErrorEnvelope = {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    exitCode?: number;
+  };
+};
+
 export const printJson = (value: unknown, jq?: string) => {
   const output = jq ? applyJq(value, jq) : value;
   process.stdout.write(
     `${JSON.stringify(output === undefined ? null : output, null, 2)}\n`,
   );
+};
+
+export const printJsonEnvelope = <T>(value: T, jq?: string) => {
+  printJson(
+    {
+      ok: true,
+      data: value,
+    } satisfies JsonSuccessEnvelope<T>,
+    jq,
+  );
+};
+
+export const printJsonErrorEnvelope = (
+  error: JsonErrorEnvelope["error"],
+) => {
+  printJson({
+    ok: false,
+    error,
+  } satisfies JsonErrorEnvelope);
+};
+
+export const printStreamJsonEvent = (event: unknown) => {
+  process.stdout.write(`${JSON.stringify(event)}\n`);
 };
 
 export const printLines = (lines: string[]) => {

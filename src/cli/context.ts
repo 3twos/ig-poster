@@ -1,14 +1,22 @@
 import {
+  getProfileConfig,
   getProfileName,
   loadConfig,
   resolveHost,
+  resolveLocalHost,
   resolveToken,
+  saveConfig,
   type CliConfig,
   type CliProfileConfig,
 } from "./config";
 import type { GlobalOptions } from "./args";
-import { refreshProfileAuth } from "./auth";
+import {
+  loginWithBrowser,
+  persistCliAuthTokens,
+  refreshProfileAuth,
+} from "./auth";
 import { IgPosterClient } from "./client";
+import { CliError, EXIT_CODES } from "./errors";
 import { loadProjectLink, type LoadedProjectLink } from "./project";
 import { resolveProfileConfigSecrets } from "./secure-storage";
 
@@ -42,25 +50,26 @@ export const createContext = async (
     process.env,
     projectLink?.config.host,
   );
+  const resolvedHost = globalOptions.local ? resolveLocalHost(process.env) : host;
 
   if (options.refreshAuth === false) {
     const profileConfig = await resolveProfileConfigSecrets(
       initialConfig,
       profileName,
-      host,
+      resolvedHost,
     );
     const token = resolveToken(initialConfig, profileName);
 
     return {
       client: new IgPosterClient({
-        host,
+        host: resolvedHost,
         token,
         timeoutMs: globalOptions.timeoutMs ?? 30_000,
       }),
       config: initialConfig,
       profileConfig,
       profileName,
-      host,
+      host: resolvedHost,
       token,
       projectLink,
       globalOptions,
@@ -70,22 +79,67 @@ export const createContext = async (
   const resolved = await refreshProfileAuth({
     config: initialConfig,
     profileName,
-    host,
+    host: resolvedHost,
     timeoutMs: globalOptions.timeoutMs ?? 30_000,
   });
 
+  if (!resolved.token) {
+    if (!canAutoBootstrapBrowserAuth()) {
+      throw new CliError(
+        "Authentication required. Run `ig auth login` interactively first, or set IG_POSTER_TOKEN.",
+        EXIT_CODES.auth,
+      );
+    }
+
+    if (!globalOptions.quiet) {
+      process.stderr.write(
+        `No IG Poster CLI session found for profile "${profileName}". Opening browser login...\n`,
+      );
+    }
+
+    const tokens = await loginWithBrowser({
+      host: resolvedHost,
+      timeoutMs: Math.max(globalOptions.timeoutMs ?? 30_000, 120_000),
+    });
+    const nextConfig = await persistCliAuthTokens(
+      resolved.config,
+      profileName,
+      resolvedHost,
+      tokens,
+    );
+    await saveConfig(nextConfig);
+
+    return {
+      client: new IgPosterClient({
+        host: resolvedHost,
+        token: tokens.accessToken,
+        timeoutMs: globalOptions.timeoutMs ?? 30_000,
+      }),
+      config: nextConfig,
+      profileConfig: getProfileConfig(nextConfig, profileName),
+      profileName,
+      host: resolvedHost,
+      token: tokens.accessToken,
+      projectLink,
+      globalOptions,
+    } satisfies CliContext;
+  }
+
   return {
     client: new IgPosterClient({
-      host,
+      host: resolvedHost,
       token: resolved.token,
       timeoutMs: globalOptions.timeoutMs ?? 30_000,
     }),
     config: resolved.config,
     profileConfig: resolved.profileConfig,
     profileName,
-    host,
+    host: resolvedHost,
     token: resolved.token,
     projectLink,
     globalOptions,
   } satisfies CliContext;
 };
+
+const canAutoBootstrapBrowserAuth = () =>
+  Boolean(process.stdin.isTTY && process.stderr.isTTY);
