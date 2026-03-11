@@ -38,12 +38,15 @@ export function useAutoSave(
   // Immediate save
   const saveNow = useCallback(async () => {
     const d = draftRef.current;
-    if (!d) return;
-    if (d.status === "posted") return;
+    if (!d) return true;
+    if (d.status === "posted") return true;
 
     const cached = lastSerializedRef.current;
     const serialized = (cached && cached.id === d.id) ? cached.json : withPerfSync("autoSave:serialize", () => serializeDraft(d));
-    if (serialized === lastSavedRef.current) return;
+    if (serialized === lastSavedRef.current) {
+      setSaveStatus("saved");
+      return true;
+    }
 
     // Cancel any pending debounce
     if (timerRef.current) {
@@ -73,12 +76,14 @@ export function useAutoSave(
         lastSavedRef.current = serialized;
         setSaveStatus("saved");
         onSavedRef.current?.();
+        return true;
       } else {
         setSaveStatus("error");
         // Retry after 5 seconds
         timerRef.current = setTimeout(() => {
           void saveNow();
         }, 5000);
+        return false;
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
@@ -88,6 +93,7 @@ export function useAutoSave(
           void saveNow();
         }, 5000);
       }
+      return false;
     } finally {
       if (controllerRef.current === controller) {
         controllerRef.current = null;
