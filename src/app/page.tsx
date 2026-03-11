@@ -158,11 +158,14 @@ export default function Home() {
   const activePostStatusRef = useRef<PostStatus | null>(activePost?.status ?? null);
   const assetUploadAbortRef = useRef<{ postId: string; controller: AbortController } | null>(null);
   const editorModeRef = useRef(editorMode);
+  const saveStatusRef = useRef(saveStatus);
+  const isTogglingEditorModeRef = useRef(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   activePostIdRef.current = activePost?.id ?? null;
   activePostStatusRef.current = activePost?.status ?? null;
   editorModeRef.current = editorMode;
+  saveStatusRef.current = saveStatus;
 
   const brand: BrandState = useMemo(() => {
     if (!activePost?.brand) return INITIAL_BRAND;
@@ -698,19 +701,28 @@ export default function Home() {
   const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
 
   const toggleEditorMode = useCallback(async () => {
-    if (activePostStatusRef.current === "posted") {
+    if (
+      activePostStatusRef.current === "posted" ||
+      saveStatusRef.current === "saving" ||
+      isTogglingEditorModeRef.current
+    ) {
       return;
     }
 
-    if (editorModeRef.current) {
-      const didSave = await saveNow();
-      if (!didSave) {
-        toast.error("Could not save draft changes. Keep this tab open and try again.");
-        return;
+    isTogglingEditorModeRef.current = true;
+    try {
+      if (editorModeRef.current) {
+        const didSave = await saveNow();
+        if (!didSave) {
+          toast.error("Could not save draft changes. Keep this tab open and try again.");
+          return;
+        }
       }
-    }
 
-    setEditorMode((current) => !current);
+      setEditorMode((current) => !current);
+    } finally {
+      isTogglingEditorModeRef.current = false;
+    }
   }, [saveNow]);
 
 
@@ -726,7 +738,7 @@ export default function Home() {
     if (isPublishing) return { tone: "active" as const, text: "Publishing to Instagram...", elapsedMs: undefined, showStop: false };
     if (isRefining) return { tone: "active" as const, text: "Refining selected variant...", elapsedMs: undefined, showStop: false };
     if (generation.error) return { tone: "error" as const, text: generation.error, elapsedMs: undefined, showStop: false };
-    if (saveStatus === "error") return { tone: "error" as const, text: "Autosave failed. Keep this tab open and press Cmd+S before leaving.", elapsedMs: undefined, showStop: false };
+    if (saveStatus === "error") return { tone: "error" as const, text: "Autosave failed. Keep this tab open and press Cmd/Ctrl+S before leaving.", elapsedMs: undefined, showStop: false };
     if (saveStatus === "saving") return { tone: "active" as const, text: "Saving draft changes...", elapsedMs: undefined, showStop: false };
     if (saveStatus === "unsaved") return { tone: "active" as const, text: "Draft changes pending autosave...", elapsedMs: undefined, showStop: false };
     if (generation.agentRun?.status === "success") return { tone: "success" as const, text: generation.agentRun.summary ?? "Concept generation complete.", elapsedMs: typeof generation.agentRun.endedAt === "number" ? generation.agentRun.endedAt - generation.agentRun.startedAt : undefined, showStop: false };
@@ -1402,6 +1414,7 @@ export default function Home() {
         <Button
           variant="outline"
           onClick={() => void toggleEditorMode()}
+          disabled={saveStatus === "saving"}
           className={cn(editorMode && "border-orange-300/50 bg-orange-500/15 text-orange-100")}
         >
           {editorMode ? (

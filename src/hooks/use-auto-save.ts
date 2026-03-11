@@ -86,13 +86,15 @@ export function useAutoSave(
         return false;
       }
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        setSaveStatus("error");
-        // Retry after 5 seconds
-        timerRef.current = setTimeout(() => {
-          void saveNow();
-        }, 5000);
+      if ((err as Error).name === "AbortError") {
+        return true;
       }
+
+      setSaveStatus("error");
+      // Retry after 5 seconds
+      timerRef.current = setTimeout(() => {
+        void saveNow();
+      }, 5000);
       return false;
     } finally {
       if (controllerRef.current === controller) {

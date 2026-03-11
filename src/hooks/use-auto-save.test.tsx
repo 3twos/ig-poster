@@ -89,4 +89,60 @@ describe("useAutoSave", () => {
 
     unmount();
   });
+
+  it("returns true without refetching when the draft is already saved", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    let firstSave = false;
+    let secondSave = false;
+    await act(async () => {
+      firstSave = await result.current.saveNow();
+      secondSave = await result.current.saveNow();
+    });
+
+    expect(firstSave).toBe(true);
+    expect(secondSave).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it("treats an aborted save as non-failure when a newer save supersedes it", async () => {
+    let requestCount = 0;
+    let resolveLatestRequest: ((value: { ok: boolean }) => void) | null = null;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      requestCount += 1;
+      return new Promise<{ ok: boolean }>((resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true },
+        );
+
+        if (requestCount === 2) {
+          resolveLatestRequest = resolve;
+        }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    let firstSave!: Promise<boolean>;
+    let secondSave!: Promise<boolean>;
+    await act(async () => {
+      firstSave = result.current.saveNow();
+      secondSave = result.current.saveNow();
+      resolveLatestRequest?.({ ok: true });
+    });
+
+    await expect(firstSave).resolves.toBe(true);
+    await expect(secondSave).resolves.toBe(true);
+    expect(result.current.saveStatus).toBe("saved");
+
+    unmount();
+  });
 });
