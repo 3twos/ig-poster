@@ -1,6 +1,6 @@
 # Meta Publishing Roadmap
 
-Last updated: 2026-03-08
+Last updated: 2026-03-12
 
 This document tracks the Meta/Instagram content publishing rollout in this repo so the plan is not trapped in PR history or chat context.
 
@@ -57,4 +57,5 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
 ## Notes
 
 - This roadmap is intentionally pragmatic. It tracks the concrete rollout already shipped in PRs instead of a speculative long-term platform plan.
+- Strategic future-state planning for Facebook + Instagram support now lives in [docs/meta-multi-destination-rfc-2026-03-12.md](./meta-multi-destination-rfc-2026-03-12.md).
 - When a phase changes scope, update this file in the same PR so status stays current.
