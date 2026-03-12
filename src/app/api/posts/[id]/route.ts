@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { attachPostDestinations } from "@/lib/post-destinations";
 import { PostUpdateRequestSchema } from "@/lib/post-schemas";
 import { resolveActorFromRequest } from "@/services/actors";
+import { getStoredPostDestinations } from "@/services/post-destinations";
 import {
   deletePost,
   getPost,
@@ -28,7 +30,8 @@ export async function GET(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json(row);
+    const destinations = await getStoredPostDestinations(row.id);
+    return NextResponse.json(attachPostDestinations(row, destinations));
   } catch (err) {
     console.error("[api/posts/id]", err);
     return NextResponse.json(
@@ -52,7 +55,8 @@ export async function PUT(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json(updated);
+    const destinations = await getStoredPostDestinations(updated.id);
+    return NextResponse.json(attachPostDestinations(updated, destinations));
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       return NextResponse.json(

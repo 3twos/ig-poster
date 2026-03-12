@@ -14,11 +14,11 @@ import {
 
 import type { PostSummary } from "@/lib/post";
 import { DuplicatePostResponseSchema } from "@/lib/post-api";
-import type { PostRow } from "@/db/schema";
 import {
   postReducer,
   type PostAction,
   type PostDraft,
+  type PostRowWithDestinations,
 } from "@/hooks/use-post-reducer";
 import { useAutoSave, type SaveStatus } from "@/hooks/use-auto-save";
 
@@ -53,6 +53,11 @@ type PostContextValue = {
 
 const PostContext = createContext<PostContextValue | null>(null);
 
+const destinationsEqual = (
+  left: PostSummary["destinations"],
+  right: PostSummary["destinations"],
+) => JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
+
 function summariesEqual(a: PostSummary, b: PostSummary): boolean {
   // Keep this in sync with PostSummary fields to avoid stale comparisons.
   return (
@@ -64,7 +69,8 @@ function summariesEqual(a: PostSummary, b: PostSummary): boolean {
     a.archivedAt === b.archivedAt &&
     a.assetCount === b.assetCount &&
     a.variantCount === b.variantCount &&
-    a.thumbnail === b.thumbnail
+    a.thumbnail === b.thumbnail &&
+    destinationsEqual(a.destinations, b.destinations)
   );
 }
 
@@ -205,7 +211,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
         if (requestSeq !== selectRequestSeqRef.current) {
           return;
         }
-        dispatch({ type: "LOAD_POST", row });
+        dispatch({ type: "LOAD_POST", row: row as PostRowWithDestinations });
         // markSaved is called in a separate effect that fires after LOAD_POST
         // updates the draft, ensuring the snapshot matches the loaded state
 
@@ -251,7 +257,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
     const json = await res.json();
     const id = json.id as string;
 
-    dispatch({ type: "LOAD_POST", row: json.post as PostRow });
+    dispatch({ type: "LOAD_POST", row: json.post as PostRowWithDestinations });
     // markSaved is called in a separate effect that fires after LOAD_POST
     // updates the draft, ensuring the snapshot matches the loaded state
 
@@ -276,7 +282,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
     const json = DuplicatePostResponseSchema.parse(await res.json());
     const duplicatedId = json.id;
 
-    dispatch({ type: "LOAD_POST", row: json.post as PostRow });
+    dispatch({ type: "LOAD_POST", row: json.post as PostRowWithDestinations });
 
     const url = new URL(window.location.href);
     url.searchParams.set("post", duplicatedId);

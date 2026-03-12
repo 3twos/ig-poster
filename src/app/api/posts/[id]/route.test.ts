@@ -13,13 +13,25 @@ vi.mock("@/services/posts", () => ({
   updatePost: vi.fn(),
 }));
 
-import { DELETE, PUT } from "@/app/api/posts/[id]/route";
+vi.mock("@/services/post-destinations", () => ({
+  getStoredPostDestinations: vi.fn(),
+}));
+
+import { DELETE, GET, PUT } from "@/app/api/posts/[id]/route";
 import { resolveActorFromRequest } from "@/services/actors";
-import { deletePost, PostServiceError, updatePost } from "@/services/posts";
+import { getStoredPostDestinations } from "@/services/post-destinations";
+import {
+  deletePost,
+  getPost,
+  PostServiceError,
+  updatePost,
+} from "@/services/posts";
 
 const mockedResolveActorFromRequest = vi.mocked(resolveActorFromRequest);
 const mockedUpdatePost = vi.mocked(updatePost);
 const mockedDeletePost = vi.mocked(deletePost);
+const mockedGetPost = vi.mocked(getPost);
+const mockedGetStoredPostDestinations = vi.mocked(getStoredPostDestinations);
 
 const actor = {
   ownerHash: "owner_hash",
@@ -28,10 +40,47 @@ const actor = {
   authSource: "cookie",
 } as never;
 
+const instagramDestination = {
+  id: "dest_1",
+  postId: "p1",
+  destination: "instagram",
+  enabled: true,
+  syncMode: "app_managed",
+  desiredState: "draft",
+  remoteState: "draft",
+  caption: "Caption",
+  firstComment: "First comment",
+  locationId: "123",
+  userTags: null,
+  publishAt: null,
+  remoteObjectId: null,
+  remoteContainerId: null,
+  remotePermalink: null,
+  remoteStatePayload: {},
+  lastSyncedAt: null,
+  lastError: null,
+  createdAt: new Date("2026-03-12T18:00:00.000Z"),
+  updatedAt: new Date("2026-03-12T18:00:00.000Z"),
+} as const;
+
+const makePostRow = () => ({
+  id: "p1",
+  title: "Updated",
+  status: "draft",
+  publishSettings: {
+    caption: "Caption",
+    firstComment: "First comment",
+    locationId: "123",
+    reelShareToFeed: true,
+  },
+  publishHistory: [],
+});
+
 describe("PUT /api/posts/:id", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedResolveActorFromRequest.mockResolvedValue(actor);
+    mockedGetStoredPostDestinations.mockResolvedValue([]);
   });
 
   it("returns 401 when auth is missing", async () => {
@@ -59,12 +108,26 @@ describe("PUT /api/posts/:id", () => {
     await expect(res.json()).resolves.toMatchObject({ error: "Invalid request body" });
   });
 
-  it("delegates valid updates to the shared post service", async () => {
-    mockedUpdatePost.mockResolvedValue({
+  it("loads a post with destinations", async () => {
+    mockedGetPost.mockResolvedValue(makePostRow() as never);
+    mockedGetStoredPostDestinations.mockResolvedValue([instagramDestination] as never);
+
+    const req = new Request("https://app.example.com/api/posts/p1");
+    const res = await GET(req, { params: Promise.resolve({ id: "p1" }) });
+
+    expect(res.status).toBe(200);
+    expect(mockedGetStoredPostDestinations).toHaveBeenCalledWith("p1");
+    await expect(res.json()).resolves.toMatchObject({
       id: "p1",
-      title: "Updated",
-      status: "draft",
-    } as never);
+      destinations: expect.arrayContaining([
+        expect.objectContaining({ destination: "instagram" }),
+      ]),
+    });
+  });
+
+  it("delegates valid updates to the shared post service", async () => {
+    mockedUpdatePost.mockResolvedValue(makePostRow() as never);
+    mockedGetStoredPostDestinations.mockResolvedValue([instagramDestination] as never);
 
     const req = new Request("https://app.example.com/api/posts/p1", {
       method: "PUT",
@@ -82,7 +145,12 @@ describe("PUT /api/posts/:id", () => {
       title: "Updated",
       mediaComposition: null,
     });
-    await expect(res.json()).resolves.toMatchObject({ title: "Updated" });
+    await expect(res.json()).resolves.toMatchObject({
+      title: "Updated",
+      destinations: expect.arrayContaining([
+        expect.objectContaining({ destination: "instagram" }),
+      ]),
+    });
   });
 
   it("rejects updates to posted posts", async () => {

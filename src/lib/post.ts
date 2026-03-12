@@ -1,4 +1,8 @@
-import type { PostRow } from "@/db/schema";
+import type { PostDestinationRow, PostRow } from "@/db/schema";
+import {
+  buildPostDestinationResources,
+  type PostDestinationResource,
+} from "@/lib/post-destinations";
 
 export type PostStatus =
   | "draft"
@@ -15,6 +19,7 @@ export type PostSummary = {
   assetCount: number;
   variantCount: number;
   thumbnail?: string;
+  destinations?: PostDestinationResource[];
 };
 
 export function deriveTitle(
@@ -43,7 +48,10 @@ function deriveThumbnail(row: PostRow): string | undefined {
   return undefined;
 }
 
-export function toSummary(row: PostRow): PostSummary {
+export function toSummary(
+  row: PostRow,
+  destinations?: PostDestinationRow[],
+): PostSummary {
   const result = row.result as Record<string, unknown> | null;
   const variants = Array.isArray(result?.variants) ? result.variants : [];
 
@@ -57,5 +65,6 @@ export function toSummary(row: PostRow): PostSummary {
     assetCount: row.assets?.length ?? 0,
     variantCount: variants.length,
     thumbnail: deriveThumbnail(row),
+    destinations: buildPostDestinationResources(row, destinations),
   };
 }

@@ -32,6 +32,10 @@ export type PostDestinationResource = {
   lastError: string | null;
 };
 
+export type PostWithDestinations<TRow> = TRow & {
+  destinations: PostDestinationResource[];
+};
+
 const DESTINATION_ORDER: Array<PostDestinationResource["destination"]> = [
   "facebook",
   "instagram",
@@ -182,3 +186,32 @@ export const buildPostDestinationResources = (
 
   return buildFallbackPostDestinationResources(row);
 };
+
+export const attachPostDestinations = <
+  TRow extends Pick<PostRow, "status" | "publishSettings" | "publishHistory">,
+>(
+  row: TRow,
+  storedDestinations?: Array<
+    Pick<
+      PostDestinationRow,
+      | "destination"
+      | "enabled"
+      | "syncMode"
+      | "desiredState"
+      | "remoteState"
+      | "caption"
+      | "firstComment"
+      | "locationId"
+      | "userTags"
+      | "publishAt"
+      | "remoteObjectId"
+      | "remoteContainerId"
+      | "remotePermalink"
+      | "lastSyncedAt"
+      | "lastError"
+    >
+  >,
+): PostWithDestinations<TRow> => ({
+  ...row,
+  destinations: buildPostDestinationResources(row, storedDestinations),
+});

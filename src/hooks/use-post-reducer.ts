@@ -1,6 +1,7 @@
 import type { GenerationResponse, OverlayLayout } from "@/lib/creative";
 import type { MediaComposition } from "@/lib/media-composer";
 import type { PostStatus } from "@/lib/post";
+import type { PostDestinationResource } from "@/lib/post-destinations";
 import type { StoredAsset } from "@/lib/project";
 import type {
   BrandState,
@@ -10,6 +11,10 @@ import type {
 } from "@/lib/types";
 import { INITIAL_PUBLISH_SETTINGS } from "@/lib/types";
 import type { PostRow, PublishHistoryEntry } from "@/db/schema";
+
+export type PostRowWithDestinations = PostRow & {
+  destinations?: PostDestinationResource[];
+};
 
 /** Client-side post state — extends DB row with transient fields */
 export type PostDraft = {
@@ -32,12 +37,13 @@ export type PostDraft = {
   shareUrl: string | null;
   shareProjectId: string | null;
   publishHistory: PublishHistoryEntry[];
+  destinations: PostDestinationResource[];
   // Transient (not persisted)
   activeSlideIndex: number;
 };
 
 export type PostAction =
-  | { type: "LOAD_POST"; row: PostRow }
+  | { type: "LOAD_POST"; row: PostRowWithDestinations }
   | { type: "SET_DRAFT"; draft: PostDraft | null }
   | { type: "UPDATE_BRAND"; brand: Partial<BrandState> }
   | { type: "UPDATE_BRIEF"; brief: Partial<PostState> }
@@ -85,7 +91,7 @@ function matchesOwnedAction(
   return state !== null && (!action.postId || state.id === action.postId);
 }
 
-export function rowToDraft(row: PostRow): PostDraft {
+export function rowToDraft(row: PostRowWithDestinations): PostDraft {
   return {
     id: row.id,
     title: row.title,
@@ -109,6 +115,7 @@ export function rowToDraft(row: PostRow): PostDraft {
     shareUrl: row.shareUrl,
     shareProjectId: row.shareProjectId,
     publishHistory: row.publishHistory ?? [],
+    destinations: row.destinations ?? [],
     activeSlideIndex: 0,
   };
 }

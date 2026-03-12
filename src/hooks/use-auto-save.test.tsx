@@ -31,6 +31,7 @@ const baseDraft: PostDraft = {
   shareUrl: null,
   shareProjectId: null,
   publishHistory: [],
+  destinations: [],
   activeSlideIndex: 2,
 };
 
