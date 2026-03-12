@@ -86,6 +86,32 @@ describe("buildFallbackPostDestinationResources", () => {
       }),
     ]);
   });
+
+  it("preserves explicitly empty publish metadata values", () => {
+    expect(
+      buildFallbackPostDestinationResources({
+        status: "draft",
+        publishSettings: {
+          caption: "",
+          firstComment: "",
+          locationId: "",
+          reelShareToFeed: true,
+        },
+        publishHistory: [],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        destination: "facebook",
+        caption: "",
+      }),
+      expect.objectContaining({
+        destination: "instagram",
+        caption: "",
+        firstComment: "",
+        locationId: "",
+      }),
+    ]);
+  });
 });
 
 describe("buildPostDestinationResources", () => {
