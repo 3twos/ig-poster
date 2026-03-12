@@ -224,6 +224,47 @@ describe("GET /api/cron/publish", () => {
     );
   });
 
+  it("fails Facebook jobs with an explicit unsupported-destination error", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([
+      { ...baseJob, destination: "facebook" as const },
+    ]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      graphVersion: "v22.0",
+    });
+    mockedCompletePublishJobFailure.mockResolvedValue({
+      ...baseJob,
+      destination: "facebook" as const,
+      status: "failed",
+    } as never);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 0,
+      failed: 1,
+      errorCount: 1,
+      errors: [
+        {
+          id: "job_1",
+          detail: "Facebook publish execution is not implemented yet.",
+        },
+      ],
+    });
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+    expect(mockedCompletePublishJobFailure).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_1", destination: "facebook" }),
+      "Facebook publish execution is not implemented yet.",
+    );
+  });
+
   it("posts first comment for jobs that include one", async () => {
     mockedClaimDuePublishJobs.mockResolvedValue([
       { ...baseJob, firstComment: "First comment" },
