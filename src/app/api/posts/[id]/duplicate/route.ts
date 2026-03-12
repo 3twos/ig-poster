@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { attachPostDestinations } from "@/lib/post-destinations";
 import { resolveActorFromRequest } from "@/services/actors";
+import { getStoredPostDestinations } from "@/services/post-destinations";
 import { duplicatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
@@ -20,7 +22,11 @@ export async function POST(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ id: duplicated.id, post: duplicated });
+    const destinations = await getStoredPostDestinations(duplicated.id);
+    return NextResponse.json({
+      id: duplicated.id,
+      post: attachPostDestinations(duplicated, destinations),
+    });
   } catch (error) {
     console.error("[api/posts/id/duplicate]", error);
     return NextResponse.json(
