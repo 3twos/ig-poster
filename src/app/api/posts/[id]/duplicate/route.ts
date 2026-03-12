@@ -1,74 +1,24 @@
-import { randomUUID } from "node:crypto";
-
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { getDb } from "@/db";
-import { posts, type PostRow } from "@/db/schema";
-import { deriveTitle } from "@/lib/post";
-import { hashEmail } from "@/lib/server-utils";
-import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveActorFromRequest } from "@/services/actors";
+import { duplicatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-const randomId = () => randomUUID().replace(/-/g, "").slice(0, 18);
-
-const duplicateTitle = (source: Pick<PostRow, "title" | "brief" | "result">) => {
-  const base = deriveTitle(source).trim() || "Untitled Post";
-  return `${base} Copy`.slice(0, 120);
-};
-
 export async function POST(req: Request, ctx: Ctx) {
   try {
-    const session = await readWorkspaceSessionFromRequest(req);
-    if (!session) {
+    const actor = await resolveActorFromRequest(req);
+    if (!actor) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { id } = await ctx.params;
-    const ownerHash = hashEmail(session.email);
-    const db = getDb();
-    const [existing] = await db
-      .select()
-      .from(posts)
-      .where(and(eq(posts.id, id), eq(posts.ownerHash, ownerHash)))
-      .limit(1);
-
-    if (!existing) {
+    const duplicated = await duplicatePost(actor, id);
+    if (!duplicated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-
-    const now = new Date();
-    const [duplicated] = await db
-      .insert(posts)
-      .values({
-        id: randomId(),
-        ownerHash,
-        title: duplicateTitle(existing),
-        status: "draft",
-        brand: existing.brand ?? null,
-        brief: existing.brief ?? null,
-        assets: existing.assets ?? [],
-        logoUrl: existing.logoUrl,
-        brandKitId: existing.brandKitId,
-        promptConfig: existing.promptConfig ?? null,
-        result: existing.result ?? null,
-        activeVariantId: existing.activeVariantId,
-        overlayLayouts: existing.overlayLayouts ?? {},
-        mediaComposition: existing.mediaComposition,
-        publishSettings: existing.publishSettings,
-        renderedPosterUrl: null,
-        shareUrl: null,
-        shareProjectId: null,
-        publishHistory: [],
-        createdAt: now,
-        updatedAt: now,
-        archivedAt: null,
-        publishedAt: null,
-      })
-      .returning();
 
     return NextResponse.json({ id: duplicated.id, post: duplicated });
   } catch (error) {

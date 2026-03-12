@@ -1,33 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/db", () => ({
-  getDb: vi.fn(),
+vi.mock("@/services/actors", () => ({
+  resolveActorFromRequest: vi.fn(),
 }));
 
-vi.mock("@/lib/workspace-auth", () => ({
-  readWorkspaceSessionFromRequest: vi.fn(),
+vi.mock("@/services/posts", () => ({
+  createPost: vi.fn(),
+  listPosts: vi.fn(),
 }));
 
 import { POST } from "@/app/api/posts/route";
-import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveActorFromRequest } from "@/services/actors";
+import { createPost } from "@/services/posts";
 
-const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
+const mockedResolveActorFromRequest = vi.mocked(resolveActorFromRequest);
+const mockedCreatePost = vi.mocked(createPost);
 
-const session = {
-  sub: "user-1",
+const actor = {
+  ownerHash: "owner_hash",
   email: "person@example.com",
   domain: "example.com",
-  issuedAt: new Date().toISOString(),
-  expiresAt: new Date(Date.now() + 60_000).toISOString(),
-};
+  authSource: "cookie",
+} as never;
 
 describe("POST /api/posts", () => {
   beforeEach(() => {
-    mockedReadWorkspace.mockReset();
+    vi.resetAllMocks();
+    mockedResolveActorFromRequest.mockResolvedValue(actor);
   });
 
-  it("returns 401 when workspace session is missing", async () => {
-    mockedReadWorkspace.mockResolvedValue(null);
+  it("returns 401 when auth is missing", async () => {
+    mockedResolveActorFromRequest.mockResolvedValue(null);
 
     const req = new Request("https://app.example.com/api/posts", {
       method: "POST",
@@ -40,8 +43,6 @@ describe("POST /api/posts", () => {
   });
 
   it("returns 400 for invalid create payloads", async () => {
-    mockedReadWorkspace.mockResolvedValue(session);
-
     const req = new Request("https://app.example.com/api/posts", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -53,5 +54,33 @@ describe("POST /api/posts", () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({ error: "Invalid request body" });
+  });
+
+  it("delegates post creation to the shared post service", async () => {
+    mockedCreatePost.mockResolvedValue({
+      id: "post_1",
+      title: "Launch day",
+      status: "draft",
+    } as never);
+
+    const req = new Request("https://app.example.com/api/posts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Launch day" }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(mockedCreatePost).toHaveBeenCalledWith(actor, {
+      title: "Launch day",
+    });
+    await expect(res.json()).resolves.toMatchObject({
+      id: "post_1",
+      post: {
+        id: "post_1",
+        title: "Launch day",
+      },
+    });
   });
 });

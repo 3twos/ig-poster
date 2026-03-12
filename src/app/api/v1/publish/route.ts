@@ -93,6 +93,7 @@ export async function POST(req: Request) {
 
     const resolvedAuth = await resolveMetaAuthForApi({
       connectionId: payload.connectionId,
+      ownerHash: actor.ownerHash,
     });
     const publishAt = payload.publishAt
       ? new Date(payload.publishAt).getTime()
