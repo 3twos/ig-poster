@@ -43,11 +43,11 @@ const seedDestination = (
   syncMode: DEFAULT_DESTINATION_BEHAVIOR[destination].syncMode,
   desiredState: "draft" as const,
   remoteState: "draft" as const,
-  caption: publishSettings?.caption || null,
+  caption: publishSettings?.caption ?? null,
   firstComment:
-    destination === "instagram" ? publishSettings?.firstComment || null : null,
+    destination === "instagram" ? publishSettings?.firstComment ?? null : null,
   locationId:
-    destination === "instagram" ? publishSettings?.locationId || null : null,
+    destination === "instagram" ? publishSettings?.locationId ?? null : null,
   publishAt: null,
   remoteObjectId: null,
   remoteContainerId: null,
@@ -87,7 +87,7 @@ export const clonePostDestinations = async (
       return seedDestination(
         duplicatedPost.id,
         destination,
-        sourcePost.publishSettings,
+        duplicatedPost.publishSettings,
       );
     }
 

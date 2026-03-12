@@ -47,6 +47,33 @@ describe("post-destinations", () => {
     );
   });
 
+  it("preserves explicitly empty publish metadata values", () => {
+    const seeds = buildDefaultPostDestinationSeeds({
+      id: "post_1",
+      publishSettings: {
+        caption: "",
+        firstComment: "",
+        locationId: "",
+        reelShareToFeed: true,
+      },
+    });
+
+    expect(seeds).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          destination: "facebook",
+          caption: "",
+        }),
+        expect.objectContaining({
+          destination: "instagram",
+          caption: "",
+          firstComment: "",
+          locationId: "",
+        }),
+      ]),
+    );
+  });
+
   it("clones saved destination configuration and resets remote publish state", async () => {
     const existingDestinations = [
       {
@@ -93,6 +120,12 @@ describe("post-destinations", () => {
       },
       {
         id: "copy_1",
+        publishSettings: {
+          caption: "Duplicated caption",
+          firstComment: "Duplicated comment",
+          locationId: "456",
+          reelShareToFeed: true,
+        },
       },
     );
 
@@ -120,7 +153,7 @@ describe("post-destinations", () => {
           postId: "copy_1",
           destination: "facebook",
           enabled: false,
-          caption: "Shared caption",
+          caption: "Duplicated caption",
           firstComment: null,
           locationId: null,
           desiredState: "draft",
