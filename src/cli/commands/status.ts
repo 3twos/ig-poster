@@ -19,11 +19,23 @@ type StatusResponse = {
       source: "oauth" | "env" | null;
       account?: {
         connectionId?: string;
+        accountKey?: string;
+        pageId?: string;
+        pageName?: string;
         instagramUserId: string;
         instagramUsername?: string;
         instagramName?: string;
-        pageName?: string;
         tokenExpiresAt?: string;
+        capabilities?: {
+          facebook: {
+            publishEnabled: boolean;
+            syncMode: "remote_authoritative" | "app_managed";
+          };
+          instagram: {
+            publishEnabled: boolean;
+            syncMode: "remote_authoritative" | "app_managed";
+          };
+        };
       };
       detail?: string;
     };
@@ -101,6 +113,18 @@ export const runStatusCommand = async (ctx: CliContext) => {
       ? `@${payload.meta.account.instagramUsername}`
       : payload.meta.account.instagramUserId
     : undefined;
+  const metaDestinations = payload.meta?.account?.capabilities
+    ? [
+        payload.meta.account.capabilities.facebook.publishEnabled
+          ? `facebook:${payload.meta.account.capabilities.facebook.syncMode}`
+          : null,
+        payload.meta.account.capabilities.instagram.publishEnabled
+          ? `instagram:${payload.meta.account.capabilities.instagram.syncMode}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : undefined;
   const publishWindowUsage =
     payload.publishWindow?.available &&
     payload.publishWindow.limit !== null &&
@@ -126,8 +150,11 @@ export const runStatusCommand = async (ctx: CliContext) => {
     ["outputDir", payload.projectLink?.defaults?.outputDir],
     ["metaConnected", payload.meta ? String(payload.meta.connected) : undefined],
     ["metaSource", payload.meta?.source ?? undefined],
+    ["metaAccountKey", payload.meta?.account?.accountKey],
     ["metaAccount", metaAccount],
+    ["metaPageId", payload.meta?.account?.pageId],
     ["metaPage", payload.meta?.account?.pageName],
+    ["metaDestinations", metaDestinations],
     ["metaTokenExpiresAt", payload.meta?.account?.tokenExpiresAt],
     ["metaDetail", payload.meta?.detail],
     ["llmConnected", payload.llm ? String(payload.llm.connected) : undefined],

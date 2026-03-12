@@ -80,6 +80,12 @@ export async function POST(req: Request) {
       const job = await createPublishJob(db, {
         ownerHash,
         postId: payload.postId,
+        destination: "instagram",
+        remoteAuthority:
+          resolvedAuth.account.capabilities?.instagram.syncMode ?? "app_managed",
+        accountKey: resolvedAuth.account.accountKey,
+        pageId: resolvedAuth.account.pageId,
+        instagramUserId: resolvedAuth.account.instagramUserId,
         caption: payload.caption,
         firstComment: payload.firstComment,
         locationId: payload.locationId,
@@ -101,6 +107,12 @@ export async function POST(req: Request) {
     const reservedJob = await reserveImmediatePublishJob(db, {
       ownerHash,
       postId: payload.postId,
+      destination: "instagram",
+      remoteAuthority:
+        resolvedAuth.account.capabilities?.instagram.syncMode ?? "app_managed",
+      accountKey: resolvedAuth.account.accountKey,
+      pageId: resolvedAuth.account.pageId,
+      instagramUserId: resolvedAuth.account.instagramUserId,
       caption: payload.caption,
       firstComment: payload.firstComment,
       locationId: payload.locationId,

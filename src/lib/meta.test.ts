@@ -31,6 +31,19 @@ describe("meta auth/env helpers", () => {
       graphVersion: "v22.0",
     });
   });
+
+  it("includes the page id when Meta page env configuration is present", () => {
+    vi.stubEnv("INSTAGRAM_ACCESS_TOKEN", "token");
+    vi.stubEnv("INSTAGRAM_BUSINESS_ID", "biz-id");
+    vi.stubEnv("META_PAGE_ID", "page-id");
+
+    expect(getEnvMetaAuth()).toEqual({
+      accessToken: "token",
+      instagramUserId: "biz-id",
+      pageId: "page-id",
+      graphVersion: "v22.0",
+    });
+  });
 });
 
 describe("getMediaInsights", () => {

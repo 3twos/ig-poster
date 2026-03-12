@@ -6,6 +6,7 @@ import {
   type MetaOAuthConnection,
   type ResolvedMetaAuth,
 } from "@/lib/meta-auth";
+import { buildMetaAccountKey, buildMetaDestinationCapabilities } from "@/lib/meta-accounts";
 import {
   isCredentialStoreEnabled,
   listCredentialRecords,
@@ -53,15 +54,25 @@ const resolveStoredMetaConnection = (
     auth: {
       accessToken,
       instagramUserId: connection.instagramUserId,
+      pageId: connection.pageId,
       graphVersion: connection.graphVersion,
     },
     account: {
       connectionId: connection.id,
+      accountKey: buildMetaAccountKey({
+        pageId: connection.pageId,
+        instagramUserId: connection.instagramUserId,
+      }),
+      pageId: connection.pageId,
+      pageName: connection.pageName,
       instagramUserId: connection.instagramUserId,
       instagramUsername: connection.instagramUsername,
       instagramName: connection.instagramName,
-      pageName: connection.pageName,
       tokenExpiresAt: connection.tokenExpiresAt,
+      capabilities: buildMetaDestinationCapabilities({
+        pageId: connection.pageId,
+        instagramUserId: connection.instagramUserId,
+      }),
     },
   };
 };
@@ -110,7 +121,16 @@ export const resolveMetaAuthForApi = async (options: {
       source: "env",
       auth: envAuth,
       account: {
+        accountKey: buildMetaAccountKey({
+          pageId: envAuth.pageId,
+          instagramUserId: envAuth.instagramUserId,
+        }),
+        pageId: envAuth.pageId,
         instagramUserId: envAuth.instagramUserId,
+        capabilities: buildMetaDestinationCapabilities({
+          pageId: envAuth.pageId,
+          instagramUserId: envAuth.instagramUserId,
+        }),
       },
     };
   }

@@ -17,19 +17,27 @@ import type {
 export type MetaAuthContext = {
   accessToken: string;
   instagramUserId: string;
+  pageId?: string;
   graphVersion: string;
 };
 
 export const getEnvMetaAuth = (): MetaAuthContext | null => {
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
   const instagramUserId = process.env.INSTAGRAM_BUSINESS_ID;
+  const pageId =
+    process.env.META_PAGE_ID?.trim() || process.env.FACEBOOK_PAGE_ID?.trim();
   const graphVersion = process.env.META_GRAPH_VERSION ?? "v22.0";
 
   if (!accessToken || !instagramUserId) {
     return null;
   }
 
-  return { accessToken, instagramUserId, graphVersion };
+  return {
+    accessToken,
+    instagramUserId,
+    graphVersion,
+    ...(pageId ? { pageId } : {}),
+  };
 };
 
 type GraphResponse = {

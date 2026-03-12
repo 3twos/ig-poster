@@ -92,10 +92,13 @@ describe("POST /api/v1/publish", () => {
       auth: {
         accessToken: "token",
         instagramUserId: "ig-id",
+        pageId: "page_1",
         graphVersion: "v22.0",
       },
       account: {
         connectionId: "conn_1",
+        accountKey: "page_1:ig-id",
+        pageId: "page_1",
         instagramUserId: "ig-id",
       },
     });
@@ -109,6 +112,11 @@ describe("POST /api/v1/publish", () => {
       id: "job_1",
       ownerHash: "owner_hash",
       postId: null,
+      destination: "instagram",
+      remoteAuthority: "app_managed",
+      accountKey: "page_1:ig-id",
+      pageId: "page_1",
+      instagramUserId: "ig-id",
       status: "processing",
       caption: "Now",
       firstComment: null,

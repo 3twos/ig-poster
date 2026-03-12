@@ -241,7 +241,9 @@ Why this shape:
   - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
   - chat index: `chat/<ownerHash>/index.json`
 - Postgres persistence now includes:
-  - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), attempts/retries, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), and event timeline.
+  - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), destination/account scope metadata, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), and event timeline.
+  - `meta_accounts` table as the foundation for Meta Page + Instagram account-pair state, graph version tracking, token expiry metadata, and capability snapshots.
+  - `post_destinations` table as the foundation for per-post Facebook/Instagram delivery state, remote identifiers, sync mode, and reconciliation metadata.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `scheduled`, `posted`).
 - `posts.archivedAt` is the soft-archive flag; archived posts keep their publish status instead of switching to a separate archived enum value.
@@ -271,6 +273,7 @@ Why this shape:
 - Location/user-tag metadata is validated against the publish-media mode across schedule, queue-edit, planner, and publish runtime paths (for example, carousel tags must be per-image item and carousel videos cannot be tagged).
 - Location search uses the same Meta auth context as publish requests, so suggestions reflect the connected account/token path.
 - Scheduling: cron fails stale `processing` jobs, claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
+- Meta account resolution now treats the linked Facebook Page + Instagram professional account as one publishing pair, while the active runtime still publishes through the existing Instagram destination flow.
 - Failed jobs remain queryable in Postgres for inspection/recovery.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
 - Blob-dependent features return clear 503 errors when storage is not configured (uploads, share snapshots, outcomes sync).

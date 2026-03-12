@@ -356,7 +356,7 @@ export default function Home() {
       const r = await fetch("/api/auth/meta/status", { cache: "no-store" });
       const j = (await r.json()) as InstagramAuthStatus;
       setAuthStatus({ connected: Boolean(j.connected), source: j.source ?? null, account: j.account, detail: j.detail });
-    } catch { setAuthStatus({ connected: false, source: null, detail: "Could not load Instagram auth status." }); }
+    } catch { setAuthStatus({ connected: false, source: null, detail: "Could not load Meta auth status." }); }
     finally { setIsAuthLoading(false); }
   }, []);
 
@@ -416,7 +416,7 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
     const detail = params.get("detail");
-    if (auth === "connected") { setPublishMessageState({ postId: activePostIdRef.current, text: "Instagram account connected." }); toast.success("Instagram account connected."); }
+    if (auth === "connected") { setPublishMessageState({ postId: activePostIdRef.current, text: "Meta publishing pair connected." }); toast.success("Meta publishing pair connected."); }
     if (auth === "error" && detail) { const s = detail.slice(0, 200).replace(/[<>"']/g, ""); generation.setError(s); toast.error(s); }
     if (auth) { params.delete("auth"); params.delete("detail"); const n = params.toString(); window.history.replaceState({}, "", n ? `${window.location.pathname}?${n}` : window.location.pathname); }
   }, [loadAuthStatus, loadLlmStatus, loadBrandKits]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -29,7 +29,7 @@ export function GeneralSection() {
         detail: json.detail,
       });
     } catch {
-      setMetaStatus({ connected: false, source: null, detail: "Could not load Instagram auth status." });
+      setMetaStatus({ connected: false, source: null, detail: "Could not load Meta auth status." });
     } finally {
       setIsMetaLoading(false);
     }
@@ -45,9 +45,9 @@ export function GeneralSection() {
       const response = await fetch("/api/auth/meta/disconnect", { method: "POST" });
       if (!response.ok) throw new Error(await parseApiError(response));
       setMetaStatus({ connected: false, source: null });
-      toast.success("Instagram OAuth disconnected.");
+      toast.success("Meta OAuth disconnected.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not disconnect Instagram OAuth");
+      toast.error(error instanceof Error ? error.message : "Could not disconnect Meta OAuth");
     } finally {
       setIsMetaDisconnecting(false);
     }
@@ -55,11 +55,11 @@ export function GeneralSection() {
 
   return (
     <div className="space-y-6">
-      {/* Instagram Publishing */}
+      {/* Meta Publishing Pair */}
       <div className="rounded-3xl border border-white/15 bg-slate-900/55 p-5 backdrop-blur-xl md:p-6">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
           <KeyRound className="h-4 w-4 text-blue-300" />
-          Instagram Publishing
+          Meta Publishing Pair
         </div>
 
         {isMetaLoading ? (
@@ -96,7 +96,7 @@ export function GeneralSection() {
           </div>
         ) : (
           <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
-            <p>Connect a Meta account to publish and schedule to Instagram from this workspace.</p>
+            <p>Connect a Meta publishing pair to publish to Instagram now and prepare Facebook destination sync from this workspace.</p>
             <a
               href="/api/auth/meta/start"
               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"

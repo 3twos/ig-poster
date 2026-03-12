@@ -93,6 +93,11 @@ export const createPublishJob = async (
   input: {
     ownerHash: string;
     postId?: string;
+    destination?: "facebook" | "instagram";
+    remoteAuthority?: "remote_authoritative" | "app_managed";
+    accountKey?: string;
+    pageId?: string;
+    instagramUserId?: string;
     caption: string;
     firstComment?: string;
     locationId?: string;
@@ -112,6 +117,11 @@ export const createPublishJob = async (
       id: buildJobId(),
       ownerHash: input.ownerHash,
       postId: input.postId,
+      destination: input.destination ?? "instagram",
+      remoteAuthority: input.remoteAuthority ?? "app_managed",
+      accountKey: input.accountKey,
+      pageId: input.pageId,
+      instagramUserId: input.instagramUserId,
       status: "queued",
       caption: input.caption,
       firstComment: input.firstComment,
@@ -170,6 +180,11 @@ export const reserveImmediatePublishJob = async (
   input: {
     ownerHash: string;
     postId?: string;
+    destination?: "facebook" | "instagram";
+    remoteAuthority?: "remote_authoritative" | "app_managed";
+    accountKey?: string;
+    pageId?: string;
+    instagramUserId?: string;
     caption: string;
     firstComment?: string;
     locationId?: string;
@@ -196,6 +211,11 @@ export const reserveImmediatePublishJob = async (
         id: buildJobId(),
         ownerHash: input.ownerHash,
         postId: input.postId,
+        destination: input.destination ?? "instagram",
+        remoteAuthority: input.remoteAuthority ?? "app_managed",
+        accountKey: input.accountKey,
+        pageId: input.pageId,
+        instagramUserId: input.instagramUserId,
         status: "processing",
         caption: input.caption,
         firstComment: input.firstComment,

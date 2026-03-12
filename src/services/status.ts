@@ -7,9 +7,9 @@ import {
 } from "@/lib/llm-constants";
 import { getPublishWindowUsage } from "@/lib/publish-jobs";
 import type {
-  InstagramAuthStatus,
   LlmConnectionStatus,
   LlmMultiAuthStatus,
+  MetaAuthStatus,
 } from "@/lib/types";
 import { getUserSettingsPath, type UserSettings } from "@/lib/user-settings";
 import type { Actor } from "@/services/actors";
@@ -35,12 +35,12 @@ export type ApiStatus = {
     issuedAt: string;
     expiresAt: string;
   };
-  meta: InstagramAuthStatus;
+  meta: MetaAuthStatus;
   llm: LlmMultiAuthStatus;
   publishWindow: PublishWindowStatus;
 };
 
-const resolveMetaStatus = async (): Promise<InstagramAuthStatus> => {
+const resolveMetaStatus = async (): Promise<MetaAuthStatus> => {
   try {
     const resolved = await resolveMetaAuthForApi();
     return {

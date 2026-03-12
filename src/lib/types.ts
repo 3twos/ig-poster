@@ -1,5 +1,6 @@
 import type { AspectRatio } from "@/lib/creative";
 import type { LlmProvider, MultiModelMode } from "@/lib/llm-constants";
+import type { MetaDestinationCapabilities } from "@/lib/meta-accounts";
 import {
   DEFAULT_PUBLISH_SETTINGS,
   type PublishSettingsState as PublishSettingsStateType,
@@ -56,19 +57,26 @@ export type PostState = {
   aspectRatio: AspectRatio;
 };
 
-export type InstagramAuthStatus = {
+export type MetaPublishingAccount = {
+  connectionId?: string;
+  accountKey?: string;
+  pageId?: string;
+  pageName?: string;
+  instagramUserId: string;
+  instagramUsername?: string;
+  instagramName?: string;
+  tokenExpiresAt?: string;
+  capabilities?: MetaDestinationCapabilities;
+};
+
+export type MetaAuthStatus = {
   connected: boolean;
   source: "oauth" | "env" | null;
-  account?: {
-    connectionId?: string;
-    instagramUserId: string;
-    instagramUsername?: string;
-    instagramName?: string;
-    pageName?: string;
-    tokenExpiresAt?: string;
-  };
+  account?: MetaPublishingAccount;
   detail?: string;
 };
+
+export type InstagramAuthStatus = MetaAuthStatus;
 
 export type LlmAuthStatus = {
   connected: boolean;

@@ -7,6 +7,11 @@ import {
   requireAppEncryptionSecret,
 } from "@/lib/app-encryption";
 import { readCookieFromRequest } from "@/lib/cookies";
+import {
+  buildMetaAccountKey,
+  buildMetaDestinationCapabilities,
+  type MetaDestinationCapabilities,
+} from "@/lib/meta-accounts";
 import { getEnvMetaAuth, type MetaAuthContext } from "@/lib/meta";
 import {
   deleteCredentialRecord,
@@ -66,6 +71,7 @@ export type MetaOAuthConnection = z.infer<typeof MetaOAuthConnectionSchema>;
 
 const InlineMetaOAuthConnectionSchema = z.object({
   graphVersion: z.string().min(1),
+  pageId: z.string().min(1),
   instagramUserId: z.string().min(1),
   instagramUsername: z.string().optional().default(""),
   instagramName: z.string().optional().default(""),
@@ -76,17 +82,22 @@ const InlineMetaOAuthConnectionSchema = z.object({
 
 type InlineMetaOAuthConnection = z.infer<typeof InlineMetaOAuthConnectionSchema>;
 
+type ResolvedMetaAccount = {
+  connectionId?: string;
+  accountKey?: string;
+  pageId?: string;
+  pageName?: string;
+  instagramUserId: string;
+  instagramUsername?: string;
+  instagramName?: string;
+  tokenExpiresAt?: string;
+  capabilities?: MetaDestinationCapabilities;
+};
+
 export type ResolvedMetaAuth = {
   source: "oauth" | "env";
   auth: MetaAuthContext;
-  account: {
-    connectionId?: string;
-    instagramUserId: string;
-    instagramUsername?: string;
-    instagramName?: string;
-    pageName?: string;
-    tokenExpiresAt?: string;
-  };
+  account: ResolvedMetaAccount;
 };
 
 const getMetaOAuthConfig = (origin: string) => {
@@ -163,16 +174,35 @@ const decryptConnectionToken = (connection: MetaOAuthConnection) => {
   return decryptString(connection.encryptedAccessToken, secret);
 };
 
+const buildResolvedMetaAccount = (params: {
+  connectionId?: string;
+  pageId?: string;
+  pageName?: string;
+  instagramUserId: string;
+  instagramUsername?: string;
+  instagramName?: string;
+  tokenExpiresAt?: string;
+}): ResolvedMetaAccount => ({
+  connectionId: params.connectionId,
+  accountKey: buildMetaAccountKey({
+    pageId: params.pageId,
+    instagramUserId: params.instagramUserId,
+  }),
+  pageId: params.pageId,
+  pageName: params.pageName,
+  instagramUserId: params.instagramUserId,
+  instagramUsername: params.instagramUsername,
+  instagramName: params.instagramName,
+  tokenExpiresAt: params.tokenExpiresAt,
+  capabilities: buildMetaDestinationCapabilities({
+    pageId: params.pageId,
+    instagramUserId: params.instagramUserId,
+  }),
+});
+
 type SavedMetaConnection = {
   cookieValue: string;
-  account: {
-    connectionId?: string;
-    instagramUserId: string;
-    instagramUsername?: string;
-    instagramName?: string;
-    pageName?: string;
-    tokenExpiresAt?: string;
-  };
+  account: ResolvedMetaAccount;
 };
 
 const saveMetaConnection = async (params: {
@@ -212,19 +242,21 @@ const saveMetaConnection = async (params: {
     await putCredentialRecord(META_CONNECTION_NAMESPACE, id, connection);
     return {
       cookieValue: connection.id,
-      account: {
+      account: buildResolvedMetaAccount({
         connectionId: connection.id,
+        pageId: connection.pageId,
+        pageName: connection.pageName,
         instagramUserId: connection.instagramUserId,
         instagramUsername: connection.instagramUsername,
         instagramName: connection.instagramName,
-        pageName: connection.pageName,
         tokenExpiresAt: connection.tokenExpiresAt,
-      },
+      }),
     };
   }
 
   const inline = InlineMetaOAuthConnectionSchema.parse({
     graphVersion: params.graphVersion,
+    pageId: params.pageId,
     instagramUserId: params.instagramUserId,
     instagramUsername: params.instagramUsername,
     instagramName: params.instagramName,
@@ -241,13 +273,14 @@ const saveMetaConnection = async (params: {
 
   return {
     cookieValue: `${INLINE_CONNECTION_PREFIX}${encryptedInline}`,
-    account: {
+    account: buildResolvedMetaAccount({
+      pageId: inline.pageId,
+      pageName: inline.pageName,
       instagramUserId: inline.instagramUserId,
       instagramUsername: inline.instagramUsername,
       instagramName: inline.instagramName,
-      pageName: inline.pageName,
       tokenExpiresAt: inline.tokenExpiresAt,
-    },
+    }),
   };
 };
 
@@ -289,6 +322,8 @@ export const createMetaOAuthStartUrl = (origin: string, state: string) => {
     "instagram_content_publish",
     "pages_show_list",
     "pages_read_engagement",
+    "pages_manage_posts",
+    "pages_manage_metadata",
     "business_management",
   ].join(",");
 
@@ -400,15 +435,17 @@ export const resolveMetaAuthFromRequest = async (
         auth: {
           accessToken: inline.accessToken,
           instagramUserId: inline.instagramUserId,
+          pageId: inline.pageId,
           graphVersion: inline.graphVersion,
         },
-        account: {
+        account: buildResolvedMetaAccount({
+          pageId: inline.pageId,
+          pageName: inline.pageName,
           instagramUserId: inline.instagramUserId,
           instagramUsername: inline.instagramUsername,
           instagramName: inline.instagramName,
-          pageName: inline.pageName,
           tokenExpiresAt: inline.tokenExpiresAt,
-        },
+        }),
       };
     } catch (error) {
       console.warn(
@@ -428,16 +465,18 @@ export const resolveMetaAuthFromRequest = async (
           auth: {
             accessToken: token,
             instagramUserId: connection.instagramUserId,
+            pageId: connection.pageId,
             graphVersion: connection.graphVersion,
           },
-          account: {
+          account: buildResolvedMetaAccount({
             connectionId: connection.id,
+            pageId: connection.pageId,
+            pageName: connection.pageName,
             instagramUserId: connection.instagramUserId,
             instagramUsername: connection.instagramUsername,
             instagramName: connection.instagramName,
-            pageName: connection.pageName,
             tokenExpiresAt: connection.tokenExpiresAt,
-          },
+          }),
         };
       }
     } catch (error) {
@@ -453,9 +492,10 @@ export const resolveMetaAuthFromRequest = async (
     return {
       source: "env",
       auth: env,
-      account: {
+      account: buildResolvedMetaAccount({
+        pageId: env.pageId,
         instagramUserId: env.instagramUserId,
-      },
+      }),
     };
   }
 
