@@ -8,7 +8,6 @@ import { getDb } from "@/db";
 import { posts } from "@/db/schema";
 import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
-import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import {
   MetaScheduleRequestSchema,
   publishInstagramContent,
@@ -27,6 +26,7 @@ import {
 } from "@/lib/publish-jobs";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
 
 class MetaScheduleClientError extends Error {
   constructor(message: string) {
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const resolvedAuth = await resolveMetaAuthFromRequest(req);
+    const resolvedAuth = await resolveMetaAuthForRequest(req, { ownerHash });
     const now = Date.now();
     const publishAt = payload.publishAt ? new Date(payload.publishAt).getTime() : undefined;
 

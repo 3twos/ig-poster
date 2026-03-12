@@ -24,6 +24,10 @@ vi.mock("@/lib/secure", () => ({
   decryptString: vi.fn(),
 }));
 
+vi.mock("@/services/meta-accounts", () => ({
+  bestEffortUpsertMetaAccountSnapshot: vi.fn(),
+}));
+
 import { getEnvMetaAuth } from "@/lib/meta";
 import { getEncryptionSecret, getMetaConnection } from "@/lib/meta-auth";
 import {
@@ -31,6 +35,7 @@ import {
   listCredentialRecords,
 } from "@/lib/private-credential-store";
 import { decryptString } from "@/lib/secure";
+import { bestEffortUpsertMetaAccountSnapshot } from "@/services/meta-accounts";
 import {
   MetaAuthServiceError,
   resolveMetaAuthForApi,
@@ -42,6 +47,9 @@ const mockedGetMetaConnection = vi.mocked(getMetaConnection);
 const mockedIsCredentialStoreEnabled = vi.mocked(isCredentialStoreEnabled);
 const mockedListCredentialRecords = vi.mocked(listCredentialRecords);
 const mockedDecryptString = vi.mocked(decryptString);
+const mockedBestEffortUpsertMetaAccountSnapshot = vi.mocked(
+  bestEffortUpsertMetaAccountSnapshot,
+);
 
 const makeConnection = (id: string) => ({
   id,
@@ -67,6 +75,7 @@ describe("resolveMetaAuthForApi", () => {
     mockedIsCredentialStoreEnabled.mockReturnValue(false);
     mockedListCredentialRecords.mockResolvedValue([]);
     mockedGetMetaConnection.mockResolvedValue(null);
+    mockedBestEffortUpsertMetaAccountSnapshot.mockResolvedValue(null);
   });
 
   it("resolves an explicit stored connection id", async () => {
@@ -74,7 +83,10 @@ describe("resolveMetaAuthForApi", () => {
     mockedGetMetaConnection.mockResolvedValue(makeConnection("conn-1"));
 
     await expect(
-      resolveMetaAuthForApi({ connectionId: "conn-1" }),
+      resolveMetaAuthForApi({
+        connectionId: "conn-1",
+        ownerHash: "owner_hash",
+      }),
     ).resolves.toMatchObject({
       source: "oauth",
       auth: {
@@ -101,6 +113,14 @@ describe("resolveMetaAuthForApi", () => {
     });
 
     expect(mockedGetMetaConnection).toHaveBeenCalledWith("conn-1");
+    expect(mockedBestEffortUpsertMetaAccountSnapshot).toHaveBeenCalledWith(
+      "owner_hash",
+      expect.objectContaining({
+        account: expect.objectContaining({
+          accountKey: "page-conn-1:ig-conn-1",
+        }),
+      }),
+    );
   });
 
   it("rejects explicit stored connection ids when credential storage is disabled", async () => {
@@ -171,6 +191,31 @@ describe("resolveMetaAuthForApi", () => {
         },
       },
     });
+  });
+
+  it("delegates snapshot persistence through the best-effort helper", async () => {
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "env-token",
+      instagramUserId: "ig-env",
+      pageId: "page-env",
+      graphVersion: "v22.0",
+    });
+
+    await expect(resolveMetaAuthForApi()).resolves.toMatchObject({
+      source: "env",
+      account: {
+        accountKey: "page-env:ig-env",
+      },
+    });
+
+    expect(mockedBestEffortUpsertMetaAccountSnapshot).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        account: expect.objectContaining({
+          accountKey: "page-env:ig-env",
+        }),
+      }),
+    );
   });
 
   it("returns a connection error when no Meta auth is available", async () => {

@@ -10,13 +10,19 @@ vi.mock("@/services/posts", () => ({
   updatePost: vi.fn(),
 }));
 
+vi.mock("@/services/post-destinations", () => ({
+  getStoredPostDestinations: vi.fn(),
+}));
+
 import { GET, PATCH } from "@/app/api/v1/posts/[id]/route";
 import { resolveActorFromRequest } from "@/services/actors";
+import { getStoredPostDestinations } from "@/services/post-destinations";
 import { getPost, updatePost } from "@/services/posts";
 
 const mockedResolveActor = vi.mocked(resolveActorFromRequest);
 const mockedGetPost = vi.mocked(getPost);
 const mockedUpdatePost = vi.mocked(updatePost);
+const mockedGetStoredPostDestinations = vi.mocked(getStoredPostDestinations);
 
 const actor = {
   type: "workspace-user" as const,
@@ -35,6 +41,8 @@ describe("GET /api/v1/posts/:id", () => {
     mockedResolveActor.mockReset();
     mockedGetPost.mockReset();
     mockedUpdatePost.mockReset();
+    mockedGetStoredPostDestinations.mockReset();
+    mockedGetStoredPostDestinations.mockResolvedValue([]);
   });
 
   it("returns 404 when the post is missing", async () => {
@@ -83,10 +91,24 @@ describe("GET /api/v1/posts/:id", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mockedGetStoredPostDestinations).toHaveBeenCalledWith("post-1");
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        post: { id: "post-1", title: "Launch" },
+        post: {
+          id: "post-1",
+          title: "Launch",
+          destinations: [
+            {
+              destination: "facebook",
+              enabled: false,
+            },
+            {
+              destination: "instagram",
+              enabled: true,
+            },
+          ],
+        },
       },
     });
   });
@@ -97,6 +119,8 @@ describe("PATCH /api/v1/posts/:id", () => {
     mockedResolveActor.mockReset();
     mockedGetPost.mockReset();
     mockedUpdatePost.mockReset();
+    mockedGetStoredPostDestinations.mockReset();
+    mockedGetStoredPostDestinations.mockResolvedValue([]);
   });
 
   it("returns 400 for invalid request bodies", async () => {
@@ -161,10 +185,24 @@ describe("PATCH /api/v1/posts/:id", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mockedGetStoredPostDestinations).toHaveBeenCalledWith("post-1");
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        post: { id: "post-1", title: "Updated" },
+        post: {
+          id: "post-1",
+          title: "Updated",
+          destinations: [
+            {
+              destination: "facebook",
+              enabled: false,
+            },
+            {
+              destination: "instagram",
+              enabled: true,
+            },
+          ],
+        },
       },
     });
   });

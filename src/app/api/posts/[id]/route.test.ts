@@ -1,36 +1,41 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/db", () => ({
-  getDb: vi.fn(),
+vi.mock("@/services/actors", () => ({
+  resolveActorFromRequest: vi.fn(),
 }));
 
-vi.mock("@/lib/workspace-auth", () => ({
-  readWorkspaceSessionFromRequest: vi.fn(),
+vi.mock("@/services/posts", () => ({
+  deletePost: vi.fn(),
+  getPost: vi.fn(),
+  PostServiceError: class PostServiceError extends Error {
+    status = 409;
+  },
+  updatePost: vi.fn(),
 }));
 
 import { DELETE, PUT } from "@/app/api/posts/[id]/route";
-import { getDb } from "@/db";
-import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveActorFromRequest } from "@/services/actors";
+import { deletePost, PostServiceError, updatePost } from "@/services/posts";
 
-const mockedGetDb = vi.mocked(getDb);
-const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
+const mockedResolveActorFromRequest = vi.mocked(resolveActorFromRequest);
+const mockedUpdatePost = vi.mocked(updatePost);
+const mockedDeletePost = vi.mocked(deletePost);
 
-const session = {
-  sub: "user-1",
+const actor = {
+  ownerHash: "owner_hash",
   email: "person@example.com",
   domain: "example.com",
-  issuedAt: new Date().toISOString(),
-  expiresAt: new Date(Date.now() + 60_000).toISOString(),
-};
+  authSource: "cookie",
+} as never;
 
 describe("PUT /api/posts/:id", () => {
   beforeEach(() => {
-    mockedGetDb.mockReset();
-    mockedReadWorkspace.mockReset();
+    vi.resetAllMocks();
+    mockedResolveActorFromRequest.mockResolvedValue(actor);
   });
 
-  it("returns 401 when workspace session is missing", async () => {
-    mockedReadWorkspace.mockResolvedValue(null);
+  it("returns 401 when auth is missing", async () => {
+    mockedResolveActorFromRequest.mockResolvedValue(null);
 
     const req = new Request("https://app.example.com/api/posts/p1", {
       method: "PUT",
@@ -43,8 +48,6 @@ describe("PUT /api/posts/:id", () => {
   });
 
   it("returns 400 for invalid update payloads", async () => {
-    mockedReadWorkspace.mockResolvedValue(session);
-
     const req = new Request("https://app.example.com/api/posts/p1", {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -56,39 +59,12 @@ describe("PUT /api/posts/:id", () => {
     await expect(res.json()).resolves.toMatchObject({ error: "Invalid request body" });
   });
 
-  it("ignores null mediaComposition updates so the db payload stays non-null", async () => {
-    mockedReadWorkspace.mockResolvedValue(session);
-
-    const existing = {
+  it("delegates valid updates to the shared post service", async () => {
+    mockedUpdatePost.mockResolvedValue({
       id: "p1",
-      ownerHash: "owner",
-      title: "Original",
-      mediaComposition: {
-        orientation: "portrait",
-        items: [{ assetId: "asset-1", excludedFromPost: false }],
-      },
-      brand: null,
-      brief: null,
-      promptConfig: null,
-      overlayLayouts: null,
+      title: "Updated",
       status: "draft",
-    };
-    const selectLimit = vi.fn().mockResolvedValue([existing]);
-    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
-    const selectFrom = vi.fn(() => ({ where: selectWhere }));
-    const updateReturning = vi.fn().mockResolvedValue([
-      { ...existing, title: "Updated" },
-    ]);
-    const updateWhere = vi.fn(() => ({ returning: updateReturning }));
-    const updateSet = vi.fn((payload: Record<string, unknown>) => {
-      void payload;
-      return { where: updateWhere };
-    });
-
-    mockedGetDb.mockReturnValue({
-      select: vi.fn(() => ({ from: selectFrom })),
-      update: vi.fn(() => ({ set: updateSet })),
-    } as unknown as ReturnType<typeof getDb>);
+    } as never);
 
     const req = new Request("https://app.example.com/api/posts/p1", {
       method: "PUT",
@@ -102,35 +78,19 @@ describe("PUT /api/posts/:id", () => {
     const res = await PUT(req, { params: Promise.resolve({ id: "p1" }) });
 
     expect(res.status).toBe(200);
-    expect(updateSet).toHaveBeenCalledTimes(1);
-    const [updatePayload] = updateSet.mock.calls[0];
-    expect(updatePayload).not.toHaveProperty("mediaComposition");
+    expect(mockedUpdatePost).toHaveBeenCalledWith(actor, "p1", {
+      title: "Updated",
+      mediaComposition: null,
+    });
     await expect(res.json()).resolves.toMatchObject({ title: "Updated" });
   });
 
   it("rejects updates to posted posts", async () => {
-    mockedReadWorkspace.mockResolvedValue(session);
-
-    const existing = {
-      id: "p1",
-      ownerHash: "owner",
-      title: "Posted post",
-      mediaComposition: null,
-      brand: null,
-      brief: null,
-      promptConfig: null,
-      overlayLayouts: null,
-      publishSettings: null,
-      status: "posted",
-    };
-    const selectLimit = vi.fn().mockResolvedValue([existing]);
-    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
-    const selectFrom = vi.fn(() => ({ where: selectWhere }));
-
-    mockedGetDb.mockReturnValue({
-      select: vi.fn(() => ({ from: selectFrom })),
-      update: vi.fn(),
-    } as unknown as ReturnType<typeof getDb>);
+    mockedUpdatePost.mockRejectedValue(
+      new PostServiceError(
+        "Posted posts are locked. Duplicate the post to make changes.",
+      ),
+    );
 
     const req = new Request("https://app.example.com/api/posts/p1", {
       method: "PUT",
@@ -147,17 +107,11 @@ describe("PUT /api/posts/:id", () => {
   });
 
   it("rejects deleting posted posts", async () => {
-    mockedReadWorkspace.mockResolvedValue(session);
-
-    const selectLimit = vi.fn().mockResolvedValue([{ status: "posted" as const }]);
-    const selectWhere = vi.fn(() => ({ limit: selectLimit }));
-    const selectFrom = vi.fn(() => ({ where: selectWhere }));
-    const deleteWhere = vi.fn();
-
-    mockedGetDb.mockReturnValue({
-      select: vi.fn(() => ({ from: selectFrom })),
-      delete: vi.fn(() => ({ where: deleteWhere })),
-    } as unknown as ReturnType<typeof getDb>);
+    mockedDeletePost.mockRejectedValue(
+      new PostServiceError(
+        "Posted posts cannot be deleted. Archive the post instead.",
+      ),
+    );
 
     const req = new Request("https://app.example.com/api/posts/p1", {
       method: "DELETE",
@@ -166,7 +120,7 @@ describe("PUT /api/posts/:id", () => {
     const res = await DELETE(req, { params: Promise.resolve({ id: "p1" }) });
 
     expect(res.status).toBe(409);
-    expect(deleteWhere).not.toHaveBeenCalled();
+    expect(mockedDeletePost).toHaveBeenCalledWith(actor, "p1");
     await expect(res.json()).resolves.toMatchObject({
       error: "Posted posts cannot be deleted. Archive the post instead.",
     });

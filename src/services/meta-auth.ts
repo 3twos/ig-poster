@@ -3,6 +3,7 @@ import {
   getEncryptionSecret,
   getMetaConnection,
   MetaOAuthConnectionSchema,
+  resolveMetaAuthFromRequest as resolveMetaAuthFromRequestRaw,
   type MetaOAuthConnection,
   type ResolvedMetaAuth,
 } from "@/lib/meta-auth";
@@ -12,6 +13,7 @@ import {
   listCredentialRecords,
 } from "@/lib/private-credential-store";
 import { decryptString } from "@/lib/secure";
+import { bestEffortUpsertMetaAccountSnapshot } from "@/services/meta-accounts";
 
 const NOT_CONNECTED_MESSAGE =
   "Instagram account is not connected. Use Meta OAuth connect, or set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ID.";
@@ -93,6 +95,7 @@ const readLatestStoredMetaConnection = async () => {
 
 export const resolveMetaAuthForApi = async (options: {
   connectionId?: string;
+  ownerHash?: string;
 } = {}): Promise<ResolvedMetaAuth> => {
   if (options.connectionId) {
     if (!isCredentialStoreEnabled()) {
@@ -107,17 +110,21 @@ export const resolveMetaAuthForApi = async (options: {
       throw new MetaAuthServiceError(404, "Meta connection not found.");
     }
 
-    return resolveStoredMetaConnection(connection);
+    const resolved = resolveStoredMetaConnection(connection);
+    await bestEffortUpsertMetaAccountSnapshot(options.ownerHash, resolved);
+    return resolved;
   }
 
   const latestConnection = await readLatestStoredMetaConnection();
   if (latestConnection) {
-    return resolveStoredMetaConnection(latestConnection);
+    const resolved = resolveStoredMetaConnection(latestConnection);
+    await bestEffortUpsertMetaAccountSnapshot(options.ownerHash, resolved);
+    return resolved;
   }
 
   const envAuth = getEnvMetaAuth();
   if (envAuth) {
-    return {
+    const resolved: ResolvedMetaAuth = {
       source: "env",
       auth: envAuth,
       account: {
@@ -133,7 +140,20 @@ export const resolveMetaAuthForApi = async (options: {
         }),
       },
     };
+    await bestEffortUpsertMetaAccountSnapshot(options.ownerHash, resolved);
+    return resolved;
   }
 
   throw new MetaAuthServiceError(401, NOT_CONNECTED_MESSAGE);
+};
+
+export const resolveMetaAuthForRequest = async (
+  req: Request,
+  options: {
+    ownerHash?: string;
+  } = {},
+) => {
+  const resolved = await resolveMetaAuthFromRequestRaw(req);
+  await bestEffortUpsertMetaAccountSnapshot(options.ownerHash, resolved);
+  return resolved;
 };

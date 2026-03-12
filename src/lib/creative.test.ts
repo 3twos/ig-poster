@@ -4,6 +4,7 @@ import {
   applyRefinementDirectives,
   GenerationRequestSchema,
   applyLayoutCopyBudget,
+  buildGenerationUserPrompt,
   buildRefineUserPrompt,
   createFittedOverlayLayout,
   buildPerformanceContext,
@@ -108,6 +109,36 @@ describe("creative helpers", () => {
     expect(new Set(picked.map((v) => v.postType)).size).toBe(3);
   });
 
+  it("prefers brief-aligned variants over generic engagement tropes", () => {
+    const generic = {
+      ...makeVariant("generic", "single-image"),
+      hook: "3 tips to grow faster",
+      headline: "Save this content framework",
+      supportingText:
+        "Use this framework to boost engagement, shares, and reach with simple repeatable content moves.",
+      cta: "Save this post",
+      caption:
+        "Save this and share it with your team if you want more engagement from your content next week.",
+    };
+    const aligned = {
+      ...makeVariant("aligned", "single-image"),
+      hook: "Trust by design starts with visible proof",
+      headline: "Designing trust for founders",
+      supportingText:
+        "Trust is built through repeated proof moments users can feel. Founders need proof before they believe the promise.",
+      cta: "Visit profile",
+      caption:
+        "Trust by design is not a slogan. It comes from repeated proof moments users can feel, especially for founders evaluating whether your product is credible enough to explore further. Visit the profile for the full point of view.",
+    };
+
+    const picked = selectTopVariants([generic, aligned], 1, {
+      brand: generationRequest.brand,
+      post: generationRequest.post,
+    });
+
+    expect(picked[0]?.id).toBe("aligned");
+  });
+
   it("applies model scores when selecting top variants", () => {
     const variants: CreativeVariant[] = [
       makeVariant("a", "single-image"),
@@ -129,6 +160,78 @@ describe("creative helpers", () => {
     expect(picked[0]?.id).toBe("b");
     expect(picked[0]?.score).toBe(9);
     expect(picked[0]?.scoreRationale).toBe("strong");
+  });
+
+  it("uses brief alignment as a tie-break when model scores are equal", () => {
+    const generic = {
+      ...makeVariant("generic-score", "single-image"),
+      hook: "3 tips to grow faster",
+      headline: "Save this content framework",
+      supportingText:
+        "Use this framework to boost engagement, shares, and reach with simple repeatable content moves.",
+      cta: "Save this post",
+      caption:
+        "Save this and share it with your team if you want more engagement from your content next week.",
+    };
+    const aligned = {
+      ...makeVariant("aligned-score", "single-image"),
+      hook: "Trust by design starts with visible proof",
+      headline: "Designing trust for founders",
+      supportingText:
+        "Trust is built through repeated proof moments users can feel. Founders need proof before they believe the promise.",
+      cta: "Visit profile",
+      caption:
+        "Trust by design is not a slogan. It comes from repeated proof moments users can feel, especially for founders evaluating whether your product is credible enough to explore further. Visit the profile for the full point of view.",
+    };
+
+    const picked = selectTopVariantsWithScores(
+      [generic, aligned],
+      [
+        { id: "generic-score", score: 8, rationale: "solid" },
+        { id: "aligned-score", score: 8, rationale: "solid" },
+      ],
+      1,
+      {
+        brand: generationRequest.brand,
+        post: generationRequest.post,
+      },
+    );
+
+    expect(picked[0]?.id).toBe("aligned-score");
+  });
+
+  it("does not treat partial-word overlaps as full brief alignment", () => {
+    const partial = {
+      ...makeVariant("partial-word", "single-image"),
+      hook: "Career system design for skeptical teams",
+      headline: "Career system proof",
+      supportingText:
+        "Career system design can create better process clarity, but that is not the same idea as a care system.",
+      cta: "Visit profile",
+      caption:
+        "Career system language should not be treated as a full match for a care-system brief.",
+    };
+    const aligned = {
+      ...makeVariant("whole-word", "single-image"),
+      hook: "Care system design for skeptical teams",
+      headline: "Care system proof",
+      supportingText:
+        "Care system design creates trust when the proof is easy to see and feel in the experience.",
+      cta: "Visit profile",
+      caption:
+        "Care system language should win because it matches the brief exactly.",
+    };
+
+    const picked = selectTopVariants([partial, aligned], 1, {
+      brand: generationRequest.brand,
+      post: {
+        ...generationRequest.post,
+        subject: "Care system",
+        thought: "Proof builds trust through visible product moments.",
+      },
+    });
+
+    expect(picked[0]?.id).toBe("whole-word");
   });
 
   it("builds a ranked performance context string from insights", () => {
@@ -273,6 +376,28 @@ describe("creative helpers", () => {
     expect(prompt).toContain("Remove CTA text.");
     expect(prompt).toContain('set "cta" to an empty string');
     expect(prompt).toContain("Layout-fit priorities");
+  });
+
+  it("builds generation prompts with explicit brief precedence", () => {
+    const prompt = buildGenerationUserPrompt(generationRequest, {
+      websiteStyleContext: "Confident editorial layouts with motion-heavy cutaways.",
+      websiteBodyText:
+        "We help teams scale performance content with clearer systems and more reusable assets.",
+      performanceContext:
+        "Top performers led with proof-first hooks and concise captions aimed at profile visits.",
+    });
+
+    expect(prompt).toContain("Priority order for this task:");
+    expect(prompt).toContain("Saved post brief and custom user instructions");
+    expect(prompt).toContain(
+      "Do not let website cues, best-practice tips, or reference examples override the saved brief.",
+    );
+    expect(prompt).toContain(
+      "Supporting website-derived style cues (use only if they reinforce the saved brief):",
+    );
+    expect(prompt.match(/Supporting website-derived style cues/g)).toHaveLength(1);
+    expect(prompt.match(/Supporting website body content/g)).toHaveLength(1);
+    expect(prompt.match(/Supporting performance context/g)).toHaveLength(1);
   });
 
   it("enforces refine directives for shorter copy, shorter caption, and no CTA", () => {

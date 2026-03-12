@@ -4,8 +4,8 @@ vi.mock("@/lib/workspace-auth", () => ({
   readWorkspaceSessionFromRequest: vi.fn(),
 }));
 
-vi.mock("@/lib/meta-auth", () => ({
-  resolveMetaAuthFromRequest: vi.fn(),
+vi.mock("@/services/meta-auth", () => ({
+  resolveMetaAuthForRequest: vi.fn(),
 }));
 
 vi.mock("@/lib/meta", () => ({
@@ -13,12 +13,12 @@ vi.mock("@/lib/meta", () => ({
 }));
 
 import { GET } from "@/app/api/meta/locations/route";
-import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { searchMetaLocations } from "@/lib/meta";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
 
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
-const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthFromRequest);
+const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthForRequest);
 const mockedSearchMetaLocations = vi.mocked(searchMetaLocations);
 
 const session = {
@@ -95,6 +95,12 @@ describe("GET /api/meta/locations", () => {
       instagramUserId: "ig-1",
       graphVersion: "v22.0",
     });
+    expect(mockedResolveMetaAuth).toHaveBeenCalledWith(
+      req,
+      expect.objectContaining({
+        ownerHash: expect.any(String),
+      }),
+    );
   });
 
   it("returns 401 when Meta auth is not connected", async () => {

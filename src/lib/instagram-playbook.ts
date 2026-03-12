@@ -30,15 +30,15 @@ export const VIDEO_EDIT_HEURISTICS = [
 ] as const;
 
 export const ENGAGEMENT_PATTERNS = [
-  "Hook formula: open with a bold claim, contradiction, or specific number in the first line of the caption.",
+  "Hook formula: if it fits the brief, open with a bold claim, contradiction, or specific number in the first line of the caption. Do not force formulas that distort the saved subject or thought.",
   "Only use save/share CTAs when they directly serve the objective; otherwise let specificity and usefulness carry the post.",
   "Caption structure: Hook line, then 2-3 value lines, then an optional next step if the brief calls for it, then hashtag block. Keep whitespace between sections.",
   "Carousel authority pattern: first slide = bold promise or question, middle slides = proof/steps/stats, last slide = key takeaway, optional CTA, or brand sign-off.",
   "Reel retention: pattern interrupt every 2-3 seconds, text reveals timed to cuts, end with a loop or cliffhanger to boost replays.",
-  "Specificity wins: '3 signs your growth strategy is working' beats 'tips for better growth'. Use concrete numbers and outcomes.",
+  "Specificity wins when it is anchored in the saved brief and audience, not in generic growth-marketing language. Use concrete numbers and outcomes only when they are supported by the brief.",
 ] as const;
 
-export const FEW_SHOT_VARIANT_EXAMPLE = `Example of a strong single-image variant (for quality reference only — do not copy content):
+export const FEW_SHOT_VARIANT_EXAMPLE = `Example of a strong single-image variant (structure and quality reference only — ignore its topic, metrics, hashtags, and CTA stance unless the saved brief independently points there):
 {"id":"ex-1","name":"Authority Proof","postType":"single-image","hook":"3 signs your growth strategy is actually working","headline":"Proof over promises","supportingText":"Most brands track vanity metrics. Here is what actually moves revenue for teams that measure what matters.","cta":"","caption":"3 signs your growth strategy is actually working\\n\\nMost brands obsess over follower count.\\nBut the teams winning right now track three things:\\n\\n1. Repeat engagement rate\\n2. Save-to-impression ratio\\n3. Profile visits from non-followers\\n\\nSpecific proof beats generic positioning every time.","hashtags":["#GrowthStrategy","#StartupMarketing","#BrandBuilding","#ContentThatConverts","#MarketingTips","#SocialMediaStrategy"],"layout":"hero-quote","textAlign":"left","colorHexes":["#0F172A","#F97316","#FFFFFF"],"overlayStrength":0.55,"assetSequence":["asset-1"]}` as const;
 
 export const VINEYARD_MARKETING_GUARDRAILS = [
@@ -74,9 +74,9 @@ export const isWineBrandSignals = (
 
 export const buildPromptBestPracticeContext = (isWineBrand: boolean) => {
   const sections = [
-    "Instagram best-practice constraints:",
+    "Instagram best-practice guidance (apply only when it supports the saved brief):",
     ...OFFICIAL_BEST_PRACTICE_NOTES.map((note) => `- ${note}`),
-    "Engagement pattern guidance:",
+    "Optional engagement pattern guidance:",
     ...ENGAGEMENT_PATTERNS.map((note) => `- ${note}`),
     "Video editing constraints:",
     ...VIDEO_EDIT_HEURISTICS.map((note) => `- ${note}`),
@@ -89,7 +89,11 @@ export const buildPromptBestPracticeContext = (isWineBrand: boolean) => {
     );
   }
 
-  sections.push("", "Reference example (for quality and structure guidance):", FEW_SHOT_VARIANT_EXAMPLE);
+  sections.push(
+    "",
+    "Reference example (structure only; do not let it override the saved brief):",
+    FEW_SHOT_VARIANT_EXAMPLE,
+  );
 
   return sections.join("\n");
 };
