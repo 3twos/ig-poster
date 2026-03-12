@@ -162,7 +162,11 @@ export const metaAccounts = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("meta_accounts_account_key_idx").on(table.accountKey),
+    uniqueIndex("meta_accounts_owner_account_key_idx").on(
+      table.ownerHash,
+      table.accountKey,
+    ),
+    index("meta_accounts_account_key_idx").on(table.accountKey),
     index("meta_accounts_owner_updated_idx").on(table.ownerHash, table.updatedAt),
     index("meta_accounts_owner_ig_idx").on(
       table.ownerHash,

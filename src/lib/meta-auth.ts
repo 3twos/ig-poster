@@ -71,7 +71,7 @@ export type MetaOAuthConnection = z.infer<typeof MetaOAuthConnectionSchema>;
 
 const InlineMetaOAuthConnectionSchema = z.object({
   graphVersion: z.string().min(1),
-  pageId: z.string().min(1),
+  pageId: z.string().min(1).optional(),
   instagramUserId: z.string().min(1),
   instagramUsername: z.string().optional().default(""),
   instagramName: z.string().optional().default(""),
