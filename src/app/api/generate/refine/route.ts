@@ -7,7 +7,7 @@ import {
   CreativeVariantSchema,
   OverlayLayoutSchema,
   PostInputSchema,
-  applyLayoutCopyBudget,
+  applyRefinementDirectives,
   buildRefineSystemPrompt,
   buildRefineUserPrompt,
 } from "@/lib/creative";
@@ -67,7 +67,13 @@ export async function POST(req: Request) {
         }),
       );
 
-      const refined = applyLayoutCopyBudget(CreativeVariantSchema.parse(generated));
+      const refined = CreativeVariantSchema.parse(
+        applyRefinementDirectives({
+          currentVariant: variant,
+          refinedVariant: CreativeVariantSchema.parse(generated),
+          instruction,
+        }),
+      );
       return NextResponse.json({
         source: "model",
         variant: { ...refined, id: variant.id },

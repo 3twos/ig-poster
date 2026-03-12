@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyRefinementDirectives,
   GenerationRequestSchema,
   applyLayoutCopyBudget,
   buildRefineUserPrompt,
@@ -268,8 +269,102 @@ describe("creative helpers", () => {
 
     expect(prompt).toContain("Original post brief:");
     expect(prompt).toContain("Current overlay layout JSON:");
+    expect(prompt).toContain("Parsed refinement constraints:");
+    expect(prompt).toContain("Remove CTA text.");
     expect(prompt).toContain('set "cta" to an empty string');
     expect(prompt).toContain("Layout-fit priorities");
+  });
+
+  it("enforces refine directives for shorter copy, shorter caption, and no CTA", () => {
+    const currentVariant: CreativeVariant = {
+      ...makeVariant("refine-enforced", "carousel"),
+      layout: "magazine",
+      hook:
+        "A longer hook that should be tightened once refinement asks for shorter copy across the on-canvas components.",
+      headline:
+        "A headline that is intentionally verbose so the deterministic refine policy has to shorten it meaningfully.",
+      supportingText:
+        "This supporting text is intentionally wordy so the deterministic refinement pass has to trim the component copy while keeping the overall idea intact for the user.",
+      cta: "Visit the profile to get the full breakdown",
+      caption:
+        "This caption is intentionally long and detailed so the deterministic refinement pass can make it significantly shorter while preserving the main message for the audience and keeping it coherent.",
+      carouselSlides: [
+        {
+          index: 1,
+          goal: "A long first-slide goal that should become shorter after refinement",
+          headline: "A long first-slide headline that should also tighten up",
+          body: "A long first-slide body that should become noticeably shorter after the refine instruction is enforced.",
+          assetHint: "Cover",
+        },
+        {
+          index: 2,
+          goal: "A long second-slide goal that should become shorter after refinement",
+          headline: "A long second-slide headline that should also tighten up",
+          body: "A long second-slide body that should become noticeably shorter after the refine instruction is enforced.",
+          assetHint: "Proof",
+        },
+        {
+          index: 3,
+          goal: "A long final-slide goal that should become shorter after refinement",
+          headline: "A long final-slide headline that should also tighten up",
+          body: "A long final-slide body that should become noticeably shorter after the refine instruction is enforced.",
+          assetHint: "Finish",
+        },
+      ],
+    };
+
+    const refined = applyRefinementDirectives({
+      currentVariant,
+      refinedVariant: {
+        ...currentVariant,
+        hook: `${currentVariant.hook} Extra copy that the model forgot to trim.`,
+        headline: `${currentVariant.headline} Additional detail that should not survive.`,
+        supportingText: `${currentVariant.supportingText} Additional explanation that should be shortened away by policy.`,
+        cta: "Save, share, and visit the profile for the full breakdown",
+        caption: `${currentVariant.caption} Extra closing lines that should be trimmed away when the caption is made much shorter.`,
+        carouselSlides: currentVariant.carouselSlides?.map((slide) => ({
+          ...slide,
+          body: `${slide.body} More slide copy that should be shortened.`,
+        })),
+      },
+      instruction:
+        "Use shorter text in components, make the caption significantly shorter, and avoid CTA.",
+    });
+
+    expect(refined.cta).toBe("");
+    expect(refined.hook.length).toBeLessThan(currentVariant.hook.length);
+    expect(refined.headline.length).toBeLessThan(currentVariant.headline.length);
+    expect(refined.supportingText.length).toBeLessThan(
+      currentVariant.supportingText.length,
+    );
+    expect(refined.caption.length).toBeLessThan(currentVariant.caption.length);
+    expect(refined.carouselSlides?.[1]?.body.length).toBeLessThan(
+      currentVariant.carouselSlides?.[1]?.body.length ?? Infinity,
+    );
+  });
+
+  it("keeps overlay copy intact for caption-only shortening instructions", () => {
+    const currentVariant: CreativeVariant = {
+      ...makeVariant("caption-only", "single-image"),
+      caption:
+        "This caption is intentionally long so the deterministic refine pass can shorten it when the user asks for a tighter caption while keeping the on-canvas copy stable.",
+      cta: "Visit profile",
+    };
+
+    const refined = applyRefinementDirectives({
+      currentVariant,
+      refinedVariant: {
+        ...currentVariant,
+        caption: `${currentVariant.caption} Extra detail that should be trimmed away.`,
+      },
+      instruction: "Make the caption shorter and remove CTA.",
+    });
+
+    expect(refined.hook).toBe(currentVariant.hook);
+    expect(refined.headline).toBe(currentVariant.headline);
+    expect(refined.supportingText).toBe(currentVariant.supportingText);
+    expect(refined.caption.length).toBeLessThan(currentVariant.caption.length);
+    expect(refined.cta).toBe("");
   });
 
   it("creates fitted layouts that stack canonical blocks without overlap", () => {
@@ -373,6 +468,10 @@ describe("creative helpers", () => {
       ],
       cta: "Visit profile",
     };
+    const editorialCarousel = {
+      ...carouselVariant,
+      cta: "",
+    };
 
     expect(resolveVariantOverlayCopy(carouselVariant, 0)).toMatchObject({
       hook: carouselVariant.hook,
@@ -391,6 +490,12 @@ describe("creative helpers", () => {
       headline: "Slide three headline",
       supportingText: "Slide three body with enough detail to satisfy the schema.",
       cta: "Visit profile",
+    });
+    expect(resolveVariantOverlayCopy(editorialCarousel, 1)).toMatchObject({
+      hook: "Show the proof",
+      headline: "Slide two headline",
+      supportingText: "Slide two body with enough detail to satisfy the schema.",
+      cta: "",
     });
   });
 });

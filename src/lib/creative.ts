@@ -416,6 +416,213 @@ export const applyLayoutCopyBudget = (
   };
 };
 
+type RefineShortenIntensity = "standard" | "aggressive";
+
+export type RefinementDirectives = {
+  removeCta: boolean;
+  preserveEmptyCta: boolean;
+  shortenOverlayText: boolean;
+  shortenCaption: boolean;
+  shortenIntensity: RefineShortenIntensity;
+};
+
+const CTA_REMOVE_PATTERN =
+  /\b(?:avoid|remove|drop|skip|omit|without|no)\s+(?:the\s+)?(?:cta|call[\s-]?to[\s-]?action)s?\b/;
+const CTA_ADD_PATTERN =
+  /\b(?:add|include|write|create)\s+(?:an?\s+)?(?:cta|call[\s-]?to[\s-]?action)\b/;
+const SHORTEN_PATTERN =
+  /\b(?:shorter|shorten|concise|punchier|tighter|trim|reduce|leaner)\b|(?:less|fewer)\s+(?:text|copy|words)/;
+const AGGRESSIVE_SHORTEN_PATTERN =
+  /\b(?:significantly|substantially|dramatically|considerably)\b|\b(?:much|way|far)\s+shorter\b/;
+const CAPTION_PATTERN = /\b(?:caption|captions|hashtags)\b/;
+const OVERLAY_PATTERN =
+  /\b(?:component|components|overlay|hook|headline|body|supporting text|on-canvas|text boxes)\b/;
+const EDITORIAL_ONLY_PATTERN =
+  /\b(?:(?:purely|strictly|fully)\s+editorial|editorial[- ]only)\b/;
+
+const REFINE_SHORTEN_FACTORS: Record<RefineShortenIntensity, number> = {
+  standard: 0.82,
+  aggressive: 0.68,
+};
+
+const trimTowardLength = (
+  candidate: string,
+  current: string,
+  options: { minLength: number; maxLength: number; factor: number },
+) => {
+  const nextValue = candidate.trim();
+  const currentValue = current.trim();
+
+  if (!nextValue || !currentValue) {
+    return nextValue;
+  }
+
+  const rawTarget = Math.floor(currentValue.length * options.factor);
+  const target = Math.min(
+    options.maxLength,
+    Math.max(options.minLength, rawTarget),
+  );
+
+  if (nextValue.length <= target) {
+    return nextValue;
+  }
+
+  if (target < 4) {
+    return options.minLength === 0 ? "" : nextValue.slice(0, target).trim();
+  }
+
+  return trimToWordBoundary(nextValue, target);
+};
+
+export const deriveRefinementDirectives = (
+  instruction: string,
+  variant: Pick<CreativeVariant, "cta">,
+): RefinementDirectives => {
+  const normalized = instruction.trim().toLowerCase();
+  const shortenRequested = SHORTEN_PATTERN.test(normalized);
+  const mentionsCaption = CAPTION_PATTERN.test(normalized);
+  const mentionsOverlay = OVERLAY_PATTERN.test(normalized);
+
+  return {
+    removeCta:
+      CTA_REMOVE_PATTERN.test(normalized) || EDITORIAL_ONLY_PATTERN.test(normalized),
+    preserveEmptyCta:
+      variant.cta.trim().length === 0 && !CTA_ADD_PATTERN.test(normalized),
+    shortenOverlayText:
+      shortenRequested && (mentionsOverlay || !mentionsCaption),
+    shortenCaption:
+      shortenRequested && (mentionsCaption || !mentionsOverlay),
+    shortenIntensity: AGGRESSIVE_SHORTEN_PATTERN.test(normalized)
+      ? "aggressive"
+      : "standard",
+  };
+};
+
+const buildRefinementDirectiveBlock = (directives: RefinementDirectives) => {
+  const lines: string[] = [];
+
+  if (directives.removeCta) {
+    lines.push("- Remove CTA text.");
+  } else if (directives.preserveEmptyCta) {
+    lines.push("- Keep CTA empty unless the user explicitly asks to add one.");
+  }
+
+  if (directives.shortenOverlayText) {
+    lines.push(
+      `- Shorten on-canvas copy (${directives.shortenIntensity === "aggressive" ? "aggressively" : "moderately"}).`,
+    );
+  }
+
+  if (directives.shortenCaption) {
+    lines.push(
+      `- Shorten the caption (${directives.shortenIntensity === "aggressive" ? "aggressively" : "moderately"}).`,
+    );
+  }
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return `Parsed refinement constraints:\n${lines.join("\n")}\n\n`;
+};
+
+export const applyRefinementDirectives = (input: {
+  currentVariant: CreativeVariant;
+  refinedVariant: CreativeVariant;
+  instruction: string;
+}): CreativeVariant => {
+  const directives = deriveRefinementDirectives(
+    input.instruction,
+    input.currentVariant,
+  );
+  const factor = REFINE_SHORTEN_FACTORS[directives.shortenIntensity];
+  const budget = LAYOUT_COPY_BUDGETS[input.currentVariant.layout];
+
+  let nextVariant: CreativeVariant = {
+    ...input.refinedVariant,
+    carouselSlides: input.refinedVariant.carouselSlides?.map((slide) => ({ ...slide })),
+    reelPlan: input.refinedVariant.reelPlan
+      ? {
+          ...input.refinedVariant.reelPlan,
+          editingActions: [...input.refinedVariant.reelPlan.editingActions],
+          beats: input.refinedVariant.reelPlan.beats.map((beat) => ({ ...beat })),
+        }
+      : undefined,
+  };
+
+  if (directives.shortenOverlayText) {
+    nextVariant = {
+      ...nextVariant,
+      hook: trimTowardLength(nextVariant.hook, input.currentVariant.hook, {
+        minLength: 8,
+        maxLength: budget.hook,
+        factor,
+      }),
+      headline: trimTowardLength(nextVariant.headline, input.currentVariant.headline, {
+        minLength: 8,
+        maxLength: budget.headline,
+        factor,
+      }),
+      supportingText: trimTowardLength(
+        nextVariant.supportingText,
+        input.currentVariant.supportingText,
+        {
+          minLength: 20,
+          maxLength: budget.supportingText,
+          factor,
+        },
+      ),
+    };
+
+    if (nextVariant.cta.trim()) {
+      nextVariant.cta = trimTowardLength(nextVariant.cta, input.currentVariant.cta, {
+        minLength: 0,
+        maxLength: budget.cta,
+        factor,
+      });
+    }
+
+    if (nextVariant.carouselSlides?.length) {
+      nextVariant.carouselSlides = nextVariant.carouselSlides.map((slide, index) => {
+        const currentSlide = input.currentVariant.carouselSlides?.[index] ?? slide;
+
+        return {
+          ...slide,
+          goal: trimTowardLength(slide.goal, currentSlide.goal, {
+            minLength: 6,
+            maxLength: budget.hook,
+            factor,
+          }),
+          headline: trimTowardLength(slide.headline, currentSlide.headline, {
+            minLength: 4,
+            maxLength: budget.headline,
+            factor,
+          }),
+          body: trimTowardLength(slide.body, currentSlide.body, {
+            minLength: 12,
+            maxLength: budget.supportingText,
+            factor,
+          }),
+        };
+      });
+    }
+  }
+
+  if (directives.shortenCaption) {
+    nextVariant.caption = trimTowardLength(nextVariant.caption, input.currentVariant.caption, {
+      minLength: 40,
+      maxLength: 700,
+      factor,
+    });
+  }
+
+  if (directives.removeCta || directives.preserveEmptyCta) {
+    nextVariant.cta = "";
+  }
+
+  return applyLayoutCopyBudget(nextVariant);
+};
+
 const estimateTextLines = (
   text: string,
   availableWidthPx: number,
@@ -500,7 +707,12 @@ export const resolveVariantOverlayCopy = (
     hook: slide.goal,
     headline: slide.headline,
     supportingText: slide.body,
-    cta: clampedSlideIndex === lastSlideIndex ? variant.cta : "Swipe for more",
+    cta:
+      clampedSlideIndex === lastSlideIndex
+        ? variant.cta
+        : variant.cta.trim()
+          ? "Swipe for more"
+          : "",
   };
 };
 
@@ -1294,6 +1506,9 @@ ${JSON.stringify(input.overlayLayout, null, 2)}
 `
     : "";
   const budget = LAYOUT_COPY_BUDGETS[input.variant.layout];
+  const directiveBlock = buildRefinementDirectiveBlock(
+    deriveRefinementDirectives(input.instruction, input.variant),
+  );
 
   return `Refine this Instagram creative variant according to the instruction below.
 
@@ -1312,7 +1527,7 @@ ${overlayLayoutBlock}Layout-fit priorities for ${input.variant.layout}:
 - supportingText <= ${budget.supportingText} chars
 - cta optional and <= ${budget.cta} chars
 
-Refinement instruction: "${input.instruction}"
+${directiveBlock}Refinement instruction: "${input.instruction}"
 
 Refinement rules:
 - Preserve postType, layout, assetSequence, and overall visual direction unless the user explicitly asks to change them.
