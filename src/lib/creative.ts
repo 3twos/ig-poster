@@ -825,14 +825,38 @@ export const createFittedOverlayLayout = (
     brandDefaults,
   );
 
+const inferOverlayBrandDefaults = (layout: OverlayLayout) => {
+  const canonicalBlocks = [
+    layout.hook,
+    layout.headline,
+    layout.supportingText,
+    layout.cta,
+  ];
+
+  return {
+    cornerRadius: canonicalBlocks.find((block) => block.borderRadius != null)
+      ?.borderRadius,
+    bgOpacity: canonicalBlocks.find((block) => block.bgOpacity != null)?.bgOpacity,
+  };
+};
+
 export const syncOverlayLayoutToVariantCopy = (input: {
   variant: Pick<
     CreativeVariant,
     "layout" | "hook" | "headline" | "supportingText" | "cta"
   >;
+  currentLayout: CreativeLayout;
   overlayLayout: OverlayLayout;
   aspectRatio: AspectRatio;
 }) => {
+  if (input.currentLayout !== input.variant.layout) {
+    return createFittedOverlayLayout(
+      input.variant,
+      input.aspectRatio,
+      inferOverlayBrandDefaults(input.overlayLayout),
+    );
+  }
+
   const nextCopy = {
     hook: input.overlayLayout.hook.text.trim()
       ? input.variant.hook
@@ -870,7 +894,7 @@ export const syncOverlayLayoutToVariantCopy = (input: {
 
   return fitOverlayLayoutToCopy(
     {
-      layout: input.variant.layout,
+      layout: input.currentLayout,
       hook: nextCopy.hook,
       headline: nextCopy.headline,
       supportingText: nextCopy.supportingText,
@@ -1204,51 +1228,231 @@ export const buildGenerationSystemPrompt = (promptConfig?: PromptConfig): string
   return `${DEFAULT_GENERATION_SYSTEM_PROMPT}\n\nAdditional system directives:\n${customSystem}`;
 };
 
+type VariantSelectionContext = {
+  brand?: Pick<
+    GenerationRequest["brand"],
+    "brandName" | "voice" | "values" | "principles"
+  >;
+  post?: Pick<
+    GenerationRequest["post"],
+    "theme" | "subject" | "thought" | "objective" | "audience" | "mood"
+  >;
+};
+
+const ALIGNMENT_STOP_WORDS = new Set([
+  "about",
+  "actually",
+  "after",
+  "also",
+  "because",
+  "been",
+  "being",
+  "between",
+  "build",
+  "built",
+  "does",
+  "each",
+  "feel",
+  "from",
+  "have",
+  "into",
+  "just",
+  "more",
+  "most",
+  "only",
+  "over",
+  "really",
+  "that",
+  "their",
+  "them",
+  "then",
+  "there",
+  "these",
+  "this",
+  "through",
+  "under",
+  "with",
+  "your",
+]);
+
+const GENERIC_ENGAGEMENT_CTA_PATTERN =
+  /\b(?:save|share|bookmark|tag(?:\s+(?:a\s+friend|someone))?|send this)\b/i;
+const OBJECTIVE_ENGAGEMENT_PATTERN =
+  /\b(?:save|share|bookmark|comment|engagement|awareness|reach|followers?|viral)\b/i;
+const MODEL_SCORE_WEIGHT = 20;
+
+const normalizeAlignmentPhrase = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const tokenizeAlignmentField = (value: string) =>
+  normalizeAlignmentPhrase(value)
+    .split(" ")
+    .filter(
+      (token) =>
+        token.length >= 4 && !ALIGNMENT_STOP_WORDS.has(token),
+    );
+
+const buildVariantAlignmentText = (variant: CreativeVariant) =>
+  normalizeAlignmentPhrase(
+    [
+      variant.name,
+      variant.hook,
+      variant.headline,
+      variant.supportingText,
+      variant.cta,
+      variant.caption,
+      variant.hashtags.join(" "),
+      ...(variant.carouselSlides?.flatMap((slide) => [
+        slide.goal,
+        slide.headline,
+        slide.body,
+        slide.assetHint,
+      ]) ?? []),
+      ...(variant.reelPlan
+        ? [
+            variant.reelPlan.hook,
+            variant.reelPlan.coverFrameDirection,
+            variant.reelPlan.audioDirection,
+            variant.reelPlan.endCardCta,
+            ...variant.reelPlan.editingActions,
+            ...variant.reelPlan.beats.flatMap((beat) => [
+              beat.visual,
+              beat.onScreenText,
+              beat.editAction,
+            ]),
+          ]
+        : []),
+    ].join(" "),
+  );
+
+const scoreBriefFieldAlignment = (
+  variantText: string,
+  variantTokens: Set<string>,
+  value: string,
+  weight: number,
+) => {
+  const normalizedValue = normalizeAlignmentPhrase(value);
+  if (!normalizedValue) {
+    return 0;
+  }
+
+  if (normalizedValue.length >= 10 && variantText.includes(normalizedValue)) {
+    return weight;
+  }
+
+  const tokens = tokenizeAlignmentField(value);
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  if (variantTokens.size === 0) {
+    return 0;
+  }
+
+  const matchedTokens = new Set(tokens.filter((token) => variantTokens.has(token)))
+    .size;
+  if (matchedTokens === 0) {
+    return 0;
+  }
+
+  const ratio = matchedTokens / tokens.length;
+  const multiTokenBonus = matchedTokens >= 2 ? 0.15 : 0;
+  return Math.round(weight * Math.min(1, ratio + multiTokenBonus));
+};
+
+const scoreVariantSelectionHeuristic = (
+  variant: CreativeVariant,
+  context?: VariantSelectionContext,
+) => {
+  let score = 0;
+  const budget = LAYOUT_COPY_BUDGETS[variant.layout];
+
+  const captionLen = variant.caption.length;
+  if (captionLen >= 100 && captionLen <= 500) {
+    score += 2;
+  } else if (captionLen >= 40) {
+    score += 1;
+  }
+
+  if (variant.hook.length <= budget.hook) {
+    score += 1;
+  }
+  if (variant.headline.length <= budget.headline) {
+    score += 2;
+  }
+  if (variant.supportingText.length <= budget.supportingText) {
+    score += 2;
+  }
+  if (!variant.cta || variant.cta.length <= budget.cta) {
+    score += 1;
+  }
+
+  if (/\d/.test(variant.hook) || variant.hook.includes("?")) {
+    score += 1;
+  }
+
+  if (variant.hashtags.length >= 7 && variant.hashtags.length <= 10) {
+    score += 1;
+  }
+
+  if (!context?.post) {
+    return score;
+  }
+
+  const variantText = buildVariantAlignmentText(variant);
+  const variantTokens = new Set(tokenizeAlignmentField(variantText));
+  score += scoreBriefFieldAlignment(variantText, variantTokens, context.post.theme, 6);
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.subject,
+    8,
+  );
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.thought,
+    8,
+  );
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.audience,
+    4,
+  );
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.objective,
+    4,
+  );
+  score += scoreBriefFieldAlignment(variantText, variantTokens, context.post.mood, 2);
+
+  if (
+    GENERIC_ENGAGEMENT_CTA_PATTERN.test(`${variant.cta} ${variant.caption}`) &&
+    !OBJECTIVE_ENGAGEMENT_PATTERN.test(context.post.objective)
+  ) {
+    score -= 3;
+  }
+
+  return score;
+};
+
 export const selectTopVariants = (
   variants: CreativeVariant[],
   targetCount = 3,
+  context?: VariantSelectionContext,
 ): CreativeVariant[] => {
   if (variants.length <= targetCount) {
     return variants;
   }
 
   const scored = variants.map((variant) => {
-    let score = 0;
-    const budget = LAYOUT_COPY_BUDGETS[variant.layout];
-
-    // Caption quality: prefer 100-500 char range
-    const captionLen = variant.caption.length;
-    if (captionLen >= 100 && captionLen <= 500) {
-      score += 2;
-    } else if (captionLen >= 40) {
-      score += 1;
-    }
-
-    // Prefer overlay copy that is more likely to fit the chosen layout cleanly.
-    if (variant.hook.length <= budget.hook) {
-      score += 1;
-    }
-    if (variant.headline.length <= budget.headline) {
-      score += 2;
-    }
-    if (variant.supportingText.length <= budget.supportingText) {
-      score += 2;
-    }
-    if (!variant.cta || variant.cta.length <= budget.cta) {
-      score += 1;
-    }
-
-    // Hook strength: specific numbers or questions
-    if (/\d/.test(variant.hook) || variant.hook.includes("?")) {
-      score += 1;
-    }
-
-    // Hashtag count quality (prefer 7-10)
-    if (variant.hashtags.length >= 7 && variant.hashtags.length <= 10) {
-      score += 1;
-    }
-
-    return { variant, score };
+    return { variant, score: scoreVariantSelectionHeuristic(variant, context) };
   });
 
   scored.sort((a, b) => b.score - a.score);
@@ -1302,8 +1506,16 @@ type VariantScore = z.infer<typeof VariantScoreSchema>;
 export const scoreVariantsWithLlm = async (
   auth: ResolvedLlmAuth,
   variants: CreativeVariant[],
-  brand: { brandName: string; voice: string },
-  post: { theme: string; audience: string; objective: string },
+  brand: { brandName: string; voice: string; values: string; principles: string },
+  post: {
+    theme: string;
+    subject: string;
+    thought: string;
+    audience: string;
+    objective: string;
+    mood: string;
+  },
+  customInstructions?: string,
   signal?: AbortSignal,
 ): Promise<VariantScore[]> => {
   const variantSummaries = variants.map((v) => ({
@@ -1319,11 +1531,24 @@ export const scoreVariantsWithLlm = async (
   const result = await generateStructuredJson<unknown>({
     auth,
     systemPrompt:
-      "You are an Instagram content quality judge. Score each variant on a 1-10 scale. Evaluate brief alignment, audience specificity, hook strength, brand voice alignment, layout fit, and engagement potential. Do not reward CTA language unless it clearly serves the stated objective. Return strict JSON only.",
+      "You are an Instagram content quality judge. The saved brief is the highest-priority constraint. Score each variant on a 1-10 scale. Evaluate in this order: brief alignment (theme, subject, core thought, audience, objective, mood), brand voice/principles alignment, layout fit, hook strength, and then engagement potential. Penalize generic Instagram tropes or save/share CTA language when they drift away from the brief or stated objective. Return strict JSON only.",
     signal,
-    userPrompt: `Score these Instagram creative variants for the brand "${brand.brandName}" (voice: ${brand.voice}).
+    userPrompt: `Score these Instagram creative variants for the brand "${brand.brandName}".
 
-Post context: Theme="${post.theme}", Audience="${post.audience}", Objective="${post.objective}"
+Brand context:
+- Voice: ${brand.voice}
+- Values: ${brand.values}
+- Principles: ${brand.principles}
+
+Saved post brief:
+- Theme: ${post.theme}
+- Subject: ${post.subject}
+- Core thought: ${post.thought}
+- Audience: ${post.audience}
+- Objective: ${post.objective}
+- Mood: ${post.mood}
+${customInstructions?.trim() ? `\nSaved campaign instructions:\n${customInstructions.trim()}\n` : ""}
+Judge a variant strongest when it clearly expresses the saved subject and core thought for the stated audience, even if it avoids generic engagement formulas.
 
 Variants:
 ${JSON.stringify(variantSummaries, null, 2)}
@@ -1350,15 +1575,17 @@ export const selectTopVariantsWithScores = (
   variants: CreativeVariant[],
   scores: VariantScore[],
   targetCount = 3,
+  context?: VariantSelectionContext,
 ): CreativeVariant[] => {
   const scoreMap = new Map(scores.map((s) => [s.id, s]));
 
   // Attach scores to variants
   const withScores = variants.map((v) => {
     const s = scoreMap.get(v.id);
+    const heuristicScore = scoreVariantSelectionHeuristic(v, context);
     return {
       variant: { ...v, score: s?.score, scoreRationale: s?.rationale },
-      score: s?.score ?? 0,
+      score: (s?.score ?? 0) * MODEL_SCORE_WEIGHT + heuristicScore,
     };
   });
 
@@ -1447,18 +1674,34 @@ export const buildGenerationUserPrompt = (
   const videoCount = request.assets.filter((asset) => asset.mediaType === "video").length;
   const wineBrand = isWineBrandSignals(request.brand, request.post);
   const websiteStyleBlock = options?.websiteStyleContext
-    ? `Website-derived style cues:\n${options.websiteStyleContext}\n`
+    ? `Supporting website-derived style cues (use only if they reinforce the saved brief):\n${options.websiteStyleContext}\n`
     : "";
   const websiteBodyBlock = options?.websiteBodyText
-    ? `Website body content (use for brand voice and messaging context):\n${options.websiteBodyText}\n`
+    ? `Supporting website body content (use only for brand voice and messaging context, not to override the brief):\n${options.websiteBodyText}\n`
     : "";
   const performanceBlock = options?.performanceContext
-    ? `${options.performanceContext}\n`
+    ? `Supporting performance context (learn from it without overriding the saved brief):\n${options.performanceContext}\n`
     : "";
   const customInstructionBlock = request.promptConfig?.customInstructions?.trim()
     ? `Custom user instructions:\n${request.promptConfig.customInstructions.trim()}\n`
     : "";
   const layoutBudgetBlock = `${buildLayoutBudgetGuidance()}\n`;
+  const briefPriorityBlock = `Priority order for this task:
+1. Saved post brief and custom user instructions
+2. Brand voice, values, principles, and story
+3. Supporting website and performance context
+4. Best-practice guidance and reference examples
+
+Interpret the saved brief this way:
+- Theme = overall topic arena: ${request.post.theme}
+- Subject = the specific angle this post must be about: ${request.post.subject}
+- Core thought = the point of view or claim the post must express: ${request.post.thought}
+- Audience = who the copy should feel written for: ${request.post.audience}
+- Objective = the desired next step or outcome: ${request.post.objective}
+- Mood = the tonal/aesthetic direction to preserve: ${request.post.mood}
+
+Do not let website cues, best-practice tips, or reference examples override the saved brief. Avoid generic growth-marketing language unless the brief itself calls for it.
+`;
 
   const variantCount = options?.candidateCount ?? 3;
 
@@ -1474,7 +1717,6 @@ Brand:
 - Visual direction: ${request.brand.visualDirection}
 - Palette notes: ${request.brand.palette}
 - Logo guidance: ${request.brand.logoNotes || "No extra logo guidance"}
-${websiteStyleBlock}${websiteBodyBlock}${performanceBlock}
 Post brief:
 - Theme: ${request.post.theme}
 - Subject: ${request.post.subject}
@@ -1484,14 +1726,13 @@ Post brief:
 - Mood: ${request.post.mood}
 - Preferred canvas: ${request.post.aspectRatio}
 
-Available assets (${request.assets.length}; images=${imageCount}, videos=${videoCount}):
+${customInstructionBlock}${briefPriorityBlock}${websiteStyleBlock}${websiteBodyBlock}${performanceBlock}Available assets (${request.assets.length}; images=${imageCount}, videos=${videoCount}):
 ${assetList.join("\n")}
 Has logo available: ${request.hasLogo ? "yes" : "no"}
 
+Supporting guidance (secondary to the saved brief):
 ${buildPromptBestPracticeContext(wineBrand)}
-${customInstructionBlock}
 ${layoutBudgetBlock}
-
 Output constraints:
 - Return JSON object with keys: strategy, variants.
 - strategy: concise rationale focused on reach + conversion.

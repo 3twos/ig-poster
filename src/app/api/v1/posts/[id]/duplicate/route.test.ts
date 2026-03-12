@@ -8,12 +8,18 @@ vi.mock("@/services/posts", () => ({
   duplicatePost: vi.fn(),
 }));
 
+vi.mock("@/services/post-destinations", () => ({
+  getStoredPostDestinations: vi.fn(),
+}));
+
 import { POST } from "@/app/api/v1/posts/[id]/duplicate/route";
 import { resolveActorFromRequest } from "@/services/actors";
+import { getStoredPostDestinations } from "@/services/post-destinations";
 import { duplicatePost } from "@/services/posts";
 
 const mockedResolveActor = vi.mocked(resolveActorFromRequest);
 const mockedDuplicatePost = vi.mocked(duplicatePost);
+const mockedGetStoredPostDestinations = vi.mocked(getStoredPostDestinations);
 
 const actor = {
   type: "workspace-user" as const,
@@ -31,6 +37,8 @@ describe("POST /api/v1/posts/:id/duplicate", () => {
   beforeEach(() => {
     mockedResolveActor.mockReset();
     mockedDuplicatePost.mockReset();
+    mockedGetStoredPostDestinations.mockReset();
+    mockedGetStoredPostDestinations.mockResolvedValue([]);
   });
 
   it("returns the duplicated post resource envelope", async () => {
@@ -69,10 +77,25 @@ describe("POST /api/v1/posts/:id/duplicate", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mockedGetStoredPostDestinations).toHaveBeenCalledWith("copy-1");
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        post: { id: "copy-1", title: "Launch Copy", status: "draft" },
+        post: {
+          id: "copy-1",
+          title: "Launch Copy",
+          status: "draft",
+          destinations: [
+            {
+              destination: "facebook",
+              enabled: false,
+            },
+            {
+              destination: "instagram",
+              enabled: true,
+            },
+          ],
+        },
       },
     });
   });

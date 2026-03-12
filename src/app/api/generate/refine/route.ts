@@ -49,19 +49,21 @@ export async function POST(req: Request) {
     }
 
     try {
+      const systemPrompt = buildRefineSystemPrompt(promptConfig);
+      const userPrompt = buildRefineUserPrompt({
+        variant,
+        instruction,
+        brand,
+        post,
+        promptConfig,
+        overlayLayout,
+      });
       const { result: generated } = await generateWithFallback<unknown>(
         authList.connections,
         (auth) => ({
           auth,
-          systemPrompt: buildRefineSystemPrompt(promptConfig),
-          userPrompt: buildRefineUserPrompt({
-            variant,
-            instruction,
-            brand,
-            post,
-            promptConfig,
-            overlayLayout,
-          }),
+          systemPrompt,
+          userPrompt,
           temperature: 0.5,
           maxTokens: 2000,
         }),
@@ -77,6 +79,10 @@ export async function POST(req: Request) {
       return NextResponse.json({
         source: "model",
         variant: { ...refined, id: variant.id },
+        promptPreview: {
+          systemPrompt,
+          userPrompt,
+        },
       });
     } catch (refinementError) {
       const detail =

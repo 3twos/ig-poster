@@ -10,13 +10,26 @@ vi.mock("@/services/posts", () => ({
   createPost: vi.fn(),
 }));
 
+vi.mock("@/services/post-destinations", () => ({
+  getStoredPostDestinations: vi.fn(),
+  listStoredPostDestinationsByPostId: vi.fn(),
+}));
+
 import { GET, POST } from "@/app/api/v1/posts/route";
 import { resolveActorFromRequest } from "@/services/actors";
+import {
+  getStoredPostDestinations,
+  listStoredPostDestinationsByPostId,
+} from "@/services/post-destinations";
 import { createPost, listPosts } from "@/services/posts";
 
 const mockedResolveActor = vi.mocked(resolveActorFromRequest);
 const mockedListPosts = vi.mocked(listPosts);
 const mockedCreatePost = vi.mocked(createPost);
+const mockedGetStoredPostDestinations = vi.mocked(getStoredPostDestinations);
+const mockedListStoredPostDestinationsByPostId = vi.mocked(
+  listStoredPostDestinationsByPostId,
+);
 
 const actor = {
   type: "workspace-user" as const,
@@ -35,6 +48,9 @@ describe("GET /api/v1/posts", () => {
     mockedResolveActor.mockReset();
     mockedListPosts.mockReset();
     mockedCreatePost.mockReset();
+    mockedGetStoredPostDestinations.mockReset();
+    mockedListStoredPostDestinationsByPostId.mockReset();
+    mockedListStoredPostDestinationsByPostId.mockResolvedValue(new Map());
   });
 
   it("returns 401 when the request is unauthenticated", async () => {
@@ -86,10 +102,27 @@ describe("GET /api/v1/posts", () => {
       archived: false,
       status: "draft",
     });
+    expect(mockedListStoredPostDestinationsByPostId).toHaveBeenCalledWith(["post-1"]);
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        posts: [{ id: "post-1", title: "Launch", status: "draft" }],
+        posts: [
+          {
+            id: "post-1",
+            title: "Launch",
+            status: "draft",
+            destinations: [
+              {
+                destination: "facebook",
+                enabled: false,
+              },
+              {
+                destination: "instagram",
+                enabled: true,
+              },
+            ],
+          },
+        ],
       },
     });
   });
@@ -100,6 +133,9 @@ describe("POST /api/v1/posts", () => {
     mockedResolveActor.mockReset();
     mockedListPosts.mockReset();
     mockedCreatePost.mockReset();
+    mockedGetStoredPostDestinations.mockReset();
+    mockedListStoredPostDestinationsByPostId.mockReset();
+    mockedGetStoredPostDestinations.mockResolvedValue([]);
   });
 
   it("returns 400 for invalid request bodies", async () => {
@@ -162,10 +198,24 @@ describe("POST /api/v1/posts", () => {
     );
 
     expect(response.status).toBe(201);
+    expect(mockedGetStoredPostDestinations).toHaveBeenCalledWith("post-1");
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        post: { id: "post-1", title: "Launch" },
+        post: {
+          id: "post-1",
+          title: "Launch",
+          destinations: [
+            {
+              destination: "facebook",
+              enabled: false,
+            },
+            {
+              destination: "instagram",
+              enabled: true,
+            },
+          ],
+        },
       },
     });
   });

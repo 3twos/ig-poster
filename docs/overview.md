@@ -17,8 +17,9 @@
 - New posts default to the first available brand kit for that user (when one exists), so brand/prompt context and the kit's primary logo are prefilled consistently.
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
 - New generated layouts are now fit against the current overlay copy using deterministic safe-zone stacking, and the editor exposes an `Auto-fit Layout` recovery action for existing drafts.
-- Refine now combines richer prompt context with deterministic post-processing for common instructions like shorter component copy, shorter captions, and removing CTA text, and successful refine updates now re-fit the canonical overlay stack to reduce overlap.
-- Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel, and exposes the exact assembled generation prompt used for each run.
+- Generation prompt assembly and variant ranking now prioritize the saved brief over website cues, reference examples, and generic engagement formulas.
+- Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel, exposes the exact assembled generation prompt used for each run, and now shows the exact last refine prompt in the strategy panel after each refinement.
+- Refine now combines richer prompt context with deterministic post-processing for common instructions like shorter component copy, shorter captions, and removing CTA text, and successful refine updates now also re-fit the canonical overlay stack to reduce overlap.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
 - Sidebar post rows expose quick publish actions (`Post now`, `Post at`) plus `Duplicate` in the context menu, in addition to archive/delete controls.
 - Keeps the post lifecycle intentionally narrow: `draft`, `scheduled`, and `posted`, with posted posts locked from further edits or deletion and archivable instead.
@@ -61,8 +62,8 @@
    - Select a brand kit (or use the default), choose one of that kit's named logos in the post brief, use the Asset Manager controls to attach assets, fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
-   - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, and fine-tune the canvas layout or copy without regenerating.
-   - Use `Refine` to revise copy while preserving the current editor layout/look unless you explicitly ask for visual changes. Common asks like "shorter components," "shorter caption," and "avoid CTA" are now enforced after the model step as well, and the refined overlay stack is re-fit to reduce collisions before it lands back in the editor. Use `Generate` when you want a full fresh result from the saved brief and assets, even if that means discarding prior manual/refine component edits.
+   - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, fine-tune the canvas layout or copy without regenerating, and inspect the last refine prompt directly from the strategy panel when a refine result feels off.
+   - Use `Refine` to revise copy while preserving the current editor layout/look unless you explicitly ask for visual changes. Common asks like "shorter components," "shorter caption," and "avoid CTA" are now enforced after the model step as well, so the result is less dependent on prompt compliance alone, and the refined overlay stack is re-fit to reduce collisions before it lands back in the editor. `Generate` now also prioritizes the saved brief more aggressively when drafting and ranking variants, so parameter drift is less likely to win the final selection. Use `Generate` when you want a full fresh result from the saved brief and assets, even if that means discarding prior manual/refine component edits.
 
 3. Collaborate asynchronously
    - Save a project snapshot and send a share link so teammates can review the selected concept.

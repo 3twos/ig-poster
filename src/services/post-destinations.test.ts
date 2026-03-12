@@ -1,14 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/db", () => ({
+  getDb: vi.fn(),
+}));
+
+import { getDb } from "@/db";
 import {
   buildDefaultPostDestinationSeeds,
   clonePostDestinations,
   deletePostDestinations,
+  getStoredPostDestinations,
+  listStoredPostDestinationsByPostId,
 } from "@/services/post-destinations";
+
+const mockedGetDb = vi.mocked(getDb);
 
 describe("post-destinations", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockedGetDb.mockReset();
   });
 
   it("builds both destination rows for new posts", () => {
@@ -172,5 +182,43 @@ describe("post-destinations", () => {
     await deletePostDestinations(db as never, "post_1");
 
     expect(where).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads stored destination rows for a single post", async () => {
+    const rows = [{ postId: "post_1", destination: "instagram" }];
+    const where = vi.fn().mockResolvedValue(rows);
+
+    mockedGetDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where })),
+      })),
+    } as never);
+
+    await expect(getStoredPostDestinations("post_1")).resolves.toEqual(rows);
+    expect(where).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups stored destination rows by post id", async () => {
+    const rows = [
+      { postId: "post_1", destination: "instagram" },
+      { postId: "post_1", destination: "facebook" },
+      { postId: "post_2", destination: "instagram" },
+    ];
+    const where = vi.fn().mockResolvedValue(rows);
+
+    mockedGetDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where })),
+      })),
+    } as never);
+
+    const grouped = await listStoredPostDestinationsByPostId([
+      "post_1",
+      "post_2",
+      "post_1",
+    ]);
+
+    expect(grouped.get("post_1")).toEqual(rows.slice(0, 2));
+    expect(grouped.get("post_2")).toEqual(rows.slice(2));
   });
 });

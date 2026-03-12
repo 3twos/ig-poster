@@ -157,7 +157,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time (optionally hidden on pages that render their own fixed status controls).
 - `src/app/settings/page.tsx`: dedicated settings page with sidebar tabs (General, LLM Provider, Brand Kits). Section components live in `src/components/settings/`.
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
-- `src/components/strategy-section.tsx`: strategy text, variant tiles, persisted post-caption editing, refine controls, and the canvas editor inspector (save state, text overrides, custom boxes).
+- `src/components/strategy-section.tsx`: strategy text, variant tiles, persisted post-caption editing, refine controls, the last refine prompt preview, and the canvas editor inspector (save state, text overrides, custom boxes).
 - `src/components/publish-metadata-editor.tsx`: persisted publish metadata editor for first comment, location, reel feed-sharing, and per-asset user tags.
 - `src/components/publish-section.tsx`: share link, Instagram auth, planner entry point, schedule/post controls, and the queued/failed publish queue.
 - `src/components/scheduled-planner.tsx`: calendar-style scheduled-post surface with reschedule, open-post, cancel, and move-to-draft actions.
@@ -189,7 +189,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/status.ts`: aggregated CLI status summaries for actor auth, Meta readiness, LLM providers, and publish-window usage.
 - `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
-- `src/lib/creative.ts`: generation schemas, prompt builders, fallback output, deterministic overlay fitting, refine-directive enforcement, and refine-time overlay sync helpers.
+- `src/lib/creative.ts`: generation schemas, prompt builders, fallback output, deterministic overlay fitting, refine-directive enforcement helpers, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
