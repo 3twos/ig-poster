@@ -1,6 +1,7 @@
 import { apiError, apiOk } from "@/lib/api/v1/envelope";
 import { toPostResource } from "@/lib/api/v1/posts";
 import { resolveActorFromRequest } from "@/services/actors";
+import { getStoredPostDestinations } from "@/services/post-destinations";
 import { duplicatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
@@ -23,7 +24,8 @@ export async function POST(
       return apiError(404, "NOT_FOUND", "Post not found");
     }
 
-    return apiOk({ post: toPostResource(row) });
+    const destinations = await getStoredPostDestinations(row.id);
+    return apiOk({ post: toPostResource(row, destinations) });
   } catch (error) {
     console.error("[api/v1/posts/id/duplicate]", error);
     return apiError(500, "INTERNAL_ERROR", "Failed to duplicate post");

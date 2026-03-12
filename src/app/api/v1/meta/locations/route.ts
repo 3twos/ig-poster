@@ -36,6 +36,7 @@ export async function GET(req: Request) {
     });
     const resolvedAuth = await resolveMetaAuthForApi({
       connectionId: query.connectionId,
+      ownerHash: actor.ownerHash,
     });
     const locations = await searchMetaLocations(query.q, resolvedAuth.auth);
 

@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiErrorResponse } from "@/lib/api-error";
-import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { searchMetaLocations } from "@/lib/meta";
+import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
 
 const MetaLocationSearchQuerySchema = z.object({
   q: z.string().trim().min(2).max(80),
@@ -38,7 +39,9 @@ export async function GET(req: Request) {
     });
     let resolvedAuth;
     try {
-      resolvedAuth = await resolveMetaAuthFromRequest(req);
+      resolvedAuth = await resolveMetaAuthForRequest(req, {
+        ownerHash: hashEmail(session.email),
+      });
     } catch (error) {
       throw new MetaLocationSearchClientError(
         error instanceof Error
@@ -60,7 +63,9 @@ export async function GET(req: Request) {
         : "Could not search Meta locations",
       status: error instanceof MetaLocationSearchClientError
         ? error.status
-        : isClientError ? 400 : 502,
+        : isClientError
+          ? 400
+          : 502,
     });
   }
 }

@@ -1,12 +1,11 @@
-import { createHash } from "node:crypto";
-
 import { NextResponse } from "next/server";
 
 import { isBlobEnabled, listBlobsPaginated, putJson } from "@/lib/blob-store";
 import { PublishOutcomeSchema, type PublishOutcome } from "@/lib/creative";
-import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import { getMediaInsights } from "@/lib/meta";
+import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
 
 export const runtime = "nodejs";
 
@@ -22,7 +21,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const resolvedAuth = await resolveMetaAuthFromRequest(req);
     const session = await readWorkspaceSessionFromRequest(req);
     if (!session) {
       return NextResponse.json(
@@ -30,9 +28,10 @@ export async function POST(req: Request) {
         { status: 401 },
       );
     }
-    const emailHash = createHash("sha256")
-      .update(session.email.trim().toLowerCase())
-      .digest("hex");
+    const emailHash = hashEmail(session.email);
+    const resolvedAuth = await resolveMetaAuthForRequest(req, {
+      ownerHash: emailHash,
+    });
 
     const blobs = await listBlobsPaginated(`outcomes/${emailHash}/`, {
       pageSize: 500,

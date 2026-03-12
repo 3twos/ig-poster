@@ -131,6 +131,9 @@ describe("getApiStatus", () => {
       remaining: 38,
       windowStart: "2026-03-09T12:00:00.000Z",
     });
+    expect(mockedResolveMetaAuthForApi).toHaveBeenCalledWith({
+      ownerHash: "owner-hash",
+    });
   });
 
   it("returns graceful fallback details when remote status is unavailable", async () => {

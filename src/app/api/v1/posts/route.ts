@@ -7,6 +7,10 @@ import {
   toPostSummaryResource,
 } from "@/lib/api/v1/posts";
 import { resolveActorFromRequest } from "@/services/actors";
+import {
+  getStoredPostDestinations,
+  listStoredPostDestinationsByPostId,
+} from "@/services/post-destinations";
 import { createPost, listPosts } from "@/services/posts";
 
 export const runtime = "nodejs";
@@ -25,9 +29,14 @@ export async function GET(req: Request) {
       archived: archived === "true",
       status: status ? PostStatusSchema.parse(status) : undefined,
     });
+    const destinationsByPostId = await listStoredPostDestinationsByPostId(
+      rows.map((row) => row.id),
+    );
 
     return apiOk({
-      posts: rows.map(toPostSummaryResource),
+      posts: rows.map((row) =>
+        toPostSummaryResource(row, destinationsByPostId.get(row.id)),
+      ),
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -47,7 +56,8 @@ export async function POST(req: Request) {
     }
 
     const row = await createPost(actor, await req.json());
-    return apiOk({ post: toPostResource(row) }, { status: 201 });
+    const destinations = await getStoredPostDestinations(row.id);
+    return apiOk({ post: toPostResource(row, destinations) }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       return apiError(400, "INVALID_INPUT", "Invalid request body");

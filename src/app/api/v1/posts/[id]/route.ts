@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiError, apiOk } from "@/lib/api/v1/envelope";
 import { toPostResource } from "@/lib/api/v1/posts";
 import { resolveActorFromRequest } from "@/services/actors";
+import { getStoredPostDestinations } from "@/services/post-destinations";
 import { getPost, updatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
@@ -26,7 +27,8 @@ export async function GET(
       return apiError(404, "NOT_FOUND", "Post not found");
     }
 
-    return apiOk({ post: toPostResource(row) });
+    const destinations = await getStoredPostDestinations(row.id);
+    return apiOk({ post: toPostResource(row, destinations) });
   } catch (error) {
     console.error("[api/v1/posts/id]", error);
     return apiError(500, "INTERNAL_ERROR", "Failed to load post");
@@ -50,7 +52,8 @@ export async function PATCH(
       return apiError(404, "NOT_FOUND", "Post not found");
     }
 
-    return apiOk({ post: toPostResource(row) });
+    const destinations = await getStoredPostDestinations(row.id);
+    return apiOk({ post: toPostResource(row, destinations) });
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       return apiError(400, "INVALID_INPUT", "Invalid request body");
