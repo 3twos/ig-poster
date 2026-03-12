@@ -126,16 +126,21 @@ export const deletePostDestinations = async (db: DbExecutor, postId: string) => 
 const buildLegacyPublishSettingsPatch = (
   destination: MetaDestination,
   publishSettings?: PublishSettings | null,
-) => ({
-  caption: publishSettings?.caption ?? null,
-  ...(destination === "instagram"
-    ? {
-        firstComment: publishSettings?.firstComment ?? null,
-        locationId: publishSettings?.locationId ?? null,
-      }
-    : {}),
-  updatedAt: new Date(),
-});
+) => {
+  const patch = {
+    caption: publishSettings?.caption ?? null,
+    firstComment: null as string | null,
+    locationId: null as string | null,
+    updatedAt: new Date(),
+  };
+
+  if (destination === "instagram") {
+    patch.firstComment = publishSettings?.firstComment ?? null;
+    patch.locationId = publishSettings?.locationId ?? null;
+  }
+
+  return patch;
+};
 
 export const syncPostDestinationsFromPublishSettings = async (
   db: DbExecutor,

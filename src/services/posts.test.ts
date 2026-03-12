@@ -142,10 +142,16 @@ describe("post services", () => {
         void payload;
         return { where: updateWhere };
       });
-
-      mockedGetDb.mockReturnValue({
+      const tx = {
         select: vi.fn(() => ({ from: selectFrom })),
         update: vi.fn(() => ({ set: updateSet })),
+      };
+      const transaction = vi.fn(async (callback: (db: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+      );
+
+      mockedGetDb.mockReturnValue({
+        transaction,
       } as unknown as ReturnType<typeof getDb>);
 
       await updatePost(actor, "p1", {
@@ -185,10 +191,16 @@ describe("post services", () => {
         void payload;
         return { where: updateWhere };
       });
-
-      mockedGetDb.mockReturnValue({
+      const tx = {
         select: vi.fn(() => ({ from: selectFrom })),
         update: vi.fn(() => ({ set: updateSet })),
+      };
+      const transaction = vi.fn(async (callback: (db: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+      );
+
+      mockedGetDb.mockReturnValue({
+        transaction,
       } as unknown as ReturnType<typeof getDb>);
 
       await updatePost(actor, "p1", {
@@ -239,12 +251,17 @@ describe("post services", () => {
       const updateReturning = vi.fn().mockResolvedValue([updatedRow]);
       const updateWhere = vi.fn(() => ({ returning: updateReturning }));
       const updateSet = vi.fn(() => ({ where: updateWhere }));
-      const db = {
+      const tx = {
         select: vi.fn(() => ({ from: selectFrom })),
         update: vi.fn(() => ({ set: updateSet })),
-      } as unknown as ReturnType<typeof getDb>;
+      };
+      const transaction = vi.fn(async (callback: (db: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+      );
 
-      mockedGetDb.mockReturnValue(db);
+      mockedGetDb.mockReturnValue({
+        transaction,
+      } as unknown as ReturnType<typeof getDb>);
 
       await expect(
         updatePost(actor, "p1", {
@@ -267,7 +284,71 @@ describe("post services", () => {
           },
         }),
       );
-      expect(mockedSyncPostDestinationsFromPublishSettings).toHaveBeenCalledWith(db, {
+      expect(mockedSyncPostDestinationsFromPublishSettings).toHaveBeenCalledWith(tx, {
+        id: "p1",
+        publishSettings: updatedRow.publishSettings,
+      });
+    });
+
+    it("fails the update when destination sync fails", async () => {
+      const existing = {
+        id: "p1",
+        ownerHash: "hash",
+        title: "Original",
+        mediaComposition: {
+          orientation: "portrait",
+          items: [{ assetId: "asset-1", excludedFromPost: false }],
+        },
+        overlayLayouts: {},
+        brand: null,
+        brief: null,
+        promptConfig: null,
+        publishSettings: {
+          caption: "Original caption",
+          firstComment: "Original comment",
+          locationId: "123",
+          reelShareToFeed: true,
+        },
+        status: "draft",
+      };
+      const selectLimit = vi.fn().mockResolvedValue([existing]);
+      const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+      const selectFrom = vi.fn(() => ({ where: selectWhere }));
+      const updatedRow = {
+        ...existing,
+        publishSettings: {
+          caption: "Updated caption",
+          firstComment: "Updated comment",
+          locationId: "456",
+          reelShareToFeed: true,
+        },
+      };
+      const updateReturning = vi.fn().mockResolvedValue([updatedRow]);
+      const updateWhere = vi.fn(() => ({ returning: updateReturning }));
+      const updateSet = vi.fn(() => ({ where: updateWhere }));
+      const tx = {
+        select: vi.fn(() => ({ from: selectFrom })),
+        update: vi.fn(() => ({ set: updateSet })),
+      };
+      const transaction = vi.fn(async (callback: (db: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+      );
+
+      mockedGetDb.mockReturnValue({
+        transaction,
+      } as unknown as ReturnType<typeof getDb>);
+      mockedSyncPostDestinationsFromPublishSettings.mockRejectedValueOnce(
+        new Error("sync failed"),
+      );
+
+      await expect(
+        updatePost(actor, "p1", {
+          publishSettings: {
+            caption: "Updated caption",
+          },
+        }),
+      ).rejects.toThrow("sync failed");
+      expect(mockedSyncPostDestinationsFromPublishSettings).toHaveBeenCalledWith(tx, {
         id: "p1",
         publishSettings: updatedRow.publishSettings,
       });

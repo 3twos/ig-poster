@@ -216,6 +216,8 @@ describe("post-destinations", () => {
       1,
       expect.objectContaining({
         caption: "Updated caption",
+        firstComment: null,
+        locationId: null,
         updatedAt: expect.any(Date),
       }),
     );
@@ -225,6 +227,42 @@ describe("post-destinations", () => {
         caption: "Updated caption",
         firstComment: "Updated first comment",
         locationId: "456",
+        updatedAt: expect.any(Date),
+      }),
+    );
+  });
+
+  it("clears stale non-instagram metadata while syncing publish settings", async () => {
+    const rows = [
+      { postId: "post_1", destination: "facebook" as const },
+      { postId: "post_1", destination: "instagram" as const },
+    ];
+    const selectWhere = vi.fn().mockResolvedValue(rows);
+    const updateWhere = vi.fn().mockResolvedValue(undefined);
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    const db = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where: selectWhere })),
+      })),
+      insert: vi.fn(),
+      update: vi.fn(() => ({ set: updateSet })),
+    };
+
+    await syncPostDestinationsFromPublishSettings(db as never, {
+      id: "post_1",
+      publishSettings: {
+        caption: "Caption",
+        firstComment: "Should not stick",
+        locationId: "999",
+        reelShareToFeed: true,
+      },
+    });
+
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caption: "Caption",
+        firstComment: null,
+        locationId: null,
         updatedAt: expect.any(Date),
       }),
     );
