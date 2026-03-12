@@ -60,13 +60,30 @@ describe("getApiStatus", () => {
       auth: {
         accessToken: "secret",
         instagramUserId: "ig_123",
+        pageId: "page_123",
         graphVersion: "v22.0",
       },
       account: {
         connectionId: "meta-1",
+        accountKey: "page_123:ig_123",
+        pageId: "page_123",
         instagramUserId: "ig_123",
         instagramUsername: "brand",
         pageName: "Brand Page",
+        capabilities: {
+          facebook: {
+            destination: "facebook",
+            publishEnabled: true,
+            syncMode: "remote_authoritative",
+            sourceOfTruth: "meta",
+          },
+          instagram: {
+            destination: "instagram",
+            publishEnabled: true,
+            syncMode: "app_managed",
+            sourceOfTruth: "app",
+          },
+        },
         tokenExpiresAt: "2026-03-20T00:00:00.000Z",
       },
     });

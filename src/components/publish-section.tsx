@@ -72,14 +72,14 @@ export function PublishSection({
       </p>
 
       <div className="rounded-xl border border-white/15 bg-white/5 p-3 text-xs text-slate-200">
-        <p className="font-semibold text-slate-100">Instagram Publishing Account</p>
+        <p className="font-semibold text-slate-100">Meta Publishing Pair</p>
         {isAuthLoading ? (
           <p className="mt-1 text-slate-300">Checking connection...</p>
         ) : (
           <p className="mt-1 text-slate-300">
             {authStatus.connected
               ? `Connected via ${(authStatus.source ?? "oauth").toUpperCase()}${authStatus.account?.instagramUsername ? ` as @${authStatus.account.instagramUsername}` : ""}${authStatus.account?.pageName ? ` (${authStatus.account.pageName})` : ""}.`
-              : "No account connected. Configure Meta publishing access from Settings."}
+              : "No publishing pair connected. Configure Meta publishing access from Settings."}
           </p>
         )}
         {authStatus.account?.tokenExpiresAt ? (

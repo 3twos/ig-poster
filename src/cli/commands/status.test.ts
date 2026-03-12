@@ -68,9 +68,21 @@ describe("runStatusCommand", () => {
           connected: true,
           source: "oauth",
           account: {
+            accountKey: "page_123:ig_123",
+            pageId: "page_123",
             instagramUserId: "ig_123",
             instagramUsername: "brand",
             pageName: "Brand Page",
+            capabilities: {
+              facebook: {
+                publishEnabled: true,
+                syncMode: "remote_authoritative",
+              },
+              instagram: {
+                publishEnabled: true,
+                syncMode: "app_managed",
+              },
+            },
             tokenExpiresAt: "2026-03-20T00:00:00.000Z",
           },
         },
@@ -132,6 +144,9 @@ describe("runStatusCommand", () => {
     });
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("metaConnected: true"),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining("metaDestinations: facebook:remote_authoritative, instagram:app_managed"),
     );
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("llmConnections: openai:gpt-4.1 [connection], anthropic:claude-sonnet-4-6 [env]"),

@@ -85,6 +85,11 @@ const reservedJob = {
   id: "job_1",
   ownerHash: "owner_hash",
   postId: "post_1",
+  destination: "instagram" as const,
+  remoteAuthority: "app_managed" as const,
+  accountKey: "page_1:ig-id",
+  pageId: "page_1",
+  instagramUserId: "ig-id",
   status: "processing",
   caption: "Now",
   firstComment: null,
@@ -118,10 +123,13 @@ describe("POST /api/meta/schedule", () => {
       auth: {
         accessToken: "token",
         instagramUserId: "ig-id",
+        pageId: "page_1",
         graphVersion: "v22.0",
       },
       account: {
         connectionId: "conn_1",
+        accountKey: "page_1:ig-id",
+        pageId: "page_1",
         instagramUserId: "ig-id",
       },
     });

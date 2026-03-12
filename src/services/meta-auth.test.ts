@@ -80,9 +80,23 @@ describe("resolveMetaAuthForApi", () => {
       auth: {
         accessToken: "decrypted-token",
         instagramUserId: "ig-conn-1",
+        pageId: "page-conn-1",
       },
       account: {
         connectionId: "conn-1",
+        accountKey: "page-conn-1:ig-conn-1",
+        pageId: "page-conn-1",
+        pageName: "Page conn-1",
+        capabilities: {
+          facebook: {
+            publishEnabled: true,
+            syncMode: "remote_authoritative",
+          },
+          instagram: {
+            publishEnabled: true,
+            syncMode: "app_managed",
+          },
+        },
       },
     });
 
@@ -112,9 +126,11 @@ describe("resolveMetaAuthForApi", () => {
       auth: {
         accessToken: "decrypted-token",
         instagramUserId: "ig-conn-2",
+        pageId: "page-conn-2",
       },
       account: {
         connectionId: "conn-2",
+        accountKey: "page-conn-2:ig-conn-2",
       },
     });
   });
@@ -123,6 +139,7 @@ describe("resolveMetaAuthForApi", () => {
     mockedGetEnvMetaAuth.mockReturnValue({
       accessToken: "env-token",
       instagramUserId: "ig-env",
+      pageId: "page-env",
       graphVersion: "v22.0",
     });
 
@@ -131,10 +148,27 @@ describe("resolveMetaAuthForApi", () => {
       auth: {
         accessToken: "env-token",
         instagramUserId: "ig-env",
+        pageId: "page-env",
         graphVersion: "v22.0",
       },
       account: {
+        accountKey: "page-env:ig-env",
+        pageId: "page-env",
         instagramUserId: "ig-env",
+        capabilities: {
+          facebook: {
+            destination: "facebook",
+            publishEnabled: true,
+            syncMode: "remote_authoritative",
+            sourceOfTruth: "meta",
+          },
+          instagram: {
+            destination: "instagram",
+            publishEnabled: true,
+            syncMode: "app_managed",
+            sourceOfTruth: "app",
+          },
+        },
       },
     });
   });

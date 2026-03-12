@@ -100,6 +100,7 @@ export async function GET(req: Request) {
           auth = {
             accessToken: decryptString(connection.encryptedAccessToken, requireAppEncryptionSecret("decrypting OAuth token")),
             instagramUserId: connection.instagramUserId,
+            pageId: connection.pageId,
             graphVersion: connection.graphVersion,
           };
         }
