@@ -222,7 +222,7 @@ If the macOS companion app is not installed or not reachable:
 - Scheduled posts are processed by `/api/cron/publish` (every 15 minutes in Vercel cron config).
 - Scheduled queue processing claims due jobs from Postgres-backed publish jobs.
 - If a job gets stranded in `processing` for too long, the cron hardening sweep marks it `failed` with a diagnostic note so it can be reviewed and retried manually instead of silently blocking capacity.
-- Failed jobs stay visible in the publish queue with their latest error so they can be retried immediately or edited and re-queued.
+- Failed jobs stay visible in the publish queue with their latest error, destination badge, and sync-mode badge so they can be retried immediately or edited and re-queued.
 - If the 24-hour publish window is saturated, immediate publish returns a clear limit message and due queued jobs are deferred automatically (without consuming retry attempts) until capacity returns.
 - First-comment posting is best effort: publish success is preserved even if first-comment posting fails.
 - Because posted posts are locked, any further iteration happens by duplicating the post into a new draft rather than editing the posted record in place.

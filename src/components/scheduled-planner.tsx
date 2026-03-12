@@ -113,6 +113,19 @@ const monthLabel = (monthKey: string, localTimeZone: string) => {
   }).format(date);
 };
 
+const destinationTone = (destination: PublishJobClient["destination"]) =>
+  destination === "facebook"
+    ? "border-sky-300/35 bg-sky-400/10 text-sky-100"
+    : "border-pink-300/35 bg-pink-400/10 text-pink-100";
+
+const destinationLabel = (destination: PublishJobClient["destination"]) =>
+  destination === "facebook" ? "Facebook" : "Instagram";
+
+const remoteAuthorityLabel = (
+  remoteAuthority: PublishJobClient["remoteAuthority"],
+) =>
+  remoteAuthority === "remote_authoritative" ? "Meta-synced" : "App-managed";
+
 const buildMonthGrid = (monthKey: string) => {
   const [yearString, monthString] = monthKey.split("-");
   const year = Number(yearString);
@@ -265,7 +278,7 @@ export function ScheduledPlanner({
             Planner
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            Review upcoming scheduled posts by day and move them back to draft when plans change.
+            Review upcoming scheduled Meta publishes by day and destination.
           </p>
         </div>
         <Badge variant="outline" className="text-[10px] uppercase">
@@ -395,6 +408,20 @@ export function ScheduledPlanner({
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="outline" className="text-[10px] uppercase">
                           {job.status}
+                        </Badge>
+                        <Badge
+                          className={cn(
+                            "text-[10px] uppercase",
+                            destinationTone(job.destination),
+                          )}
+                        >
+                          {destinationLabel(job.destination)}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] uppercase"
+                        >
+                          {remoteAuthorityLabel(job.remoteAuthority)}
                         </Badge>
                         {job.postId && job.postId === activePostId ? (
                           <Badge variant="outline" className="text-[10px] uppercase">

@@ -2,7 +2,9 @@ import { z } from "zod";
 
 import type { PublishJobRow } from "@/db/schema";
 import {
+  MetaDestinationSchema,
   MetaScheduleRequestSchema,
+  MetaSyncModeSchema,
   PublishJobEventSchema,
   PublishJobStatusSchema,
 } from "@/lib/meta-schemas";
@@ -10,6 +12,8 @@ import {
 export const PublishJobResourceSchema = z.object({
   id: z.string().min(1),
   postId: z.string().nullable(),
+  destination: MetaDestinationSchema,
+  remoteAuthority: MetaSyncModeSchema,
   status: PublishJobStatusSchema,
   caption: z.string(),
   firstComment: z.string().nullable(),
@@ -47,6 +51,8 @@ export { PublishJobStatusSchema };
 export const toPublishJobResource = (row: PublishJobRow) => ({
   id: row.id,
   postId: row.postId ?? null,
+  destination: row.destination,
+  remoteAuthority: row.remoteAuthority,
   status: row.status,
   caption: row.caption,
   firstComment: row.firstComment ?? null,

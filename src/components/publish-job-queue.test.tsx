@@ -36,6 +36,8 @@ const mockQueueLoad = (
 const makeJob = (overrides?: Partial<PublishJobClient>): PublishJobClient => ({
   id: "job-1",
   postId: "post-1",
+  destination: "instagram",
+  remoteAuthority: "app_managed",
   status: "queued",
   caption: "Caption",
   firstComment: null,
@@ -95,6 +97,8 @@ describe("PublishJobQueue", () => {
         makeJob({
           id: "job-2",
           postId: "post-9",
+          destination: "facebook",
+          remoteAuthority: "remote_authoritative",
           status: "failed",
           lastError: "OAuth token expired",
           outcomeContext: {
@@ -121,6 +125,10 @@ describe("PublishJobQueue", () => {
     expect(screen.getByText("This post")).not.toBeNull();
     expect(screen.getByText("OAuth token expired")).not.toBeNull();
     expect(screen.getByText("Failed")).not.toBeNull();
+    expect(screen.getByText("Instagram")).not.toBeNull();
+    expect(screen.getByText("Facebook")).not.toBeNull();
+    expect(screen.getByText("App-managed")).not.toBeNull();
+    expect(screen.getByText("Meta-synced")).not.toBeNull();
     expect(screen.getByText("Recent activity")).not.toBeNull();
     expect(screen.getByText(/Retry scheduled/)).not.toBeNull();
     expect(screen.getByText(/Attempt failed: upstream timeout/)).not.toBeNull();

@@ -33,6 +33,16 @@ export const MetaLocationSearchResponseSchema = z.object({
   locations: z.array(MetaLocationSearchResultSchema),
 });
 
+export const MetaDestinationSchema = z.enum([
+  "facebook",
+  "instagram",
+]);
+
+export const MetaSyncModeSchema = z.enum([
+  "remote_authoritative",
+  "app_managed",
+]);
+
 export const CarouselItemSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   url: z.string().url(),
@@ -191,6 +201,8 @@ export const PublishJobUpdateRequestSchema = z.discriminatedUnion("action", [
 export const PublishJobClientSchema = z.object({
   id: z.string(),
   postId: z.string().nullable().optional(),
+  destination: MetaDestinationSchema,
+  remoteAuthority: MetaSyncModeSchema,
   status: PublishJobStatusSchema,
   caption: z.string(),
   firstComment: z.string().nullable().optional(),
@@ -221,6 +233,8 @@ export const PublishJobListResponseSchema = z.object({
 
 export const ScheduledJobSchema = z.object({
   id: z.string(),
+  destination: MetaDestinationSchema,
+  remoteAuthority: MetaSyncModeSchema,
   caption: z.string().min(1).max(2200),
   firstComment: FirstCommentSchema.optional(),
   locationId: LocationIdSchema.optional(),

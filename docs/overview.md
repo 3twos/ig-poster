@@ -28,7 +28,7 @@
 - Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed Postgres queue.
 - Promotes caption editing into a persisted post-composer field, while keeping the generated caption bundle available as a one-click suggestion.
 - Adds explicit lifecycle controls for `Move to draft`, `Duplicate post`, `Archive`, and a planner sheet for scheduled posts.
-- Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor.
+- Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, see each job's Meta destination/sync mode, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor.
 - Supports Meta location search assist plus structured user tagging for single-image posts, reels, and carousel image items, with per-item carousel tagging persisted in media-composition state.
 - For reels, supports choosing whether the publish should also appear on the main feed (`share_to_feed`), with the default remaining on.
 - Automatically fails stale `processing` publish jobs after a timeout so abandoned work does not keep consuming publish-window capacity, and shows recent job activity directly in the queue UI.

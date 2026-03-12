@@ -66,6 +66,8 @@ describe("GET /api/v1/publish-jobs/:id", () => {
       id: "job-1",
       ownerHash: "hash",
       postId: "post-1",
+      destination: "instagram",
+      remoteAuthority: "app_managed",
       status: "queued",
       caption: "Launch day",
       firstComment: null,
@@ -99,7 +101,13 @@ describe("GET /api/v1/publish-jobs/:id", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        job: { id: "job-1", status: "queued", postId: "post-1" },
+        job: {
+          id: "job-1",
+          postId: "post-1",
+          destination: "instagram",
+          remoteAuthority: "app_managed",
+          status: "queued",
+        },
       },
     });
   });
@@ -167,6 +175,8 @@ describe("PATCH /api/v1/publish-jobs/:id", () => {
       id: "job-1",
       ownerHash: "hash",
       postId: "post-1",
+      destination: "instagram",
+      remoteAuthority: "app_managed",
       status: "canceled",
       caption: "Launch day",
       firstComment: null,
@@ -204,7 +214,12 @@ describe("PATCH /api/v1/publish-jobs/:id", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        job: { id: "job-1", status: "canceled" },
+        job: {
+          id: "job-1",
+          destination: "instagram",
+          remoteAuthority: "app_managed",
+          status: "canceled",
+        },
       },
     });
   });

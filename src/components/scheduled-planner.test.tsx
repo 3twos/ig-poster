@@ -26,6 +26,8 @@ const jsonResponse = (body: unknown, status = 200) =>
 const makeJob = (overrides?: Partial<PublishJobClient>): PublishJobClient => ({
   id: "job-1",
   postId: "post-1",
+  destination: "instagram",
+  remoteAuthority: "app_managed",
   status: "queued",
   caption: "Caption",
   firstComment: null,
@@ -93,6 +95,8 @@ describe("ScheduledPlanner", () => {
         }).format(new Date("2026-03-10T18:30:00.000Z"))} (UTC)`,
       ),
     ).not.toBeNull();
+    expect(screen.getByText("Instagram")).not.toBeNull();
+    expect(screen.getByText("App-managed")).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /open post/i }));
     expect(onSelectPost).toHaveBeenCalledWith("post-1");
