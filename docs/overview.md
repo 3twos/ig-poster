@@ -18,7 +18,7 @@
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
 - New generated layouts are now fit against the current overlay copy using deterministic safe-zone stacking, and the editor exposes an `Auto-fit Layout` recovery action for existing drafts.
 - Refine now combines richer prompt context with deterministic post-processing for common instructions like shorter component copy, shorter captions, and removing CTA text.
-- Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel, and exposes the exact assembled generation prompt used for each run.
+- Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel, exposes the exact assembled generation prompt used for each run, and now shows the exact last refine prompt in the strategy panel after each refinement.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
 - Sidebar post rows expose quick publish actions (`Post now`, `Post at`) plus `Duplicate` in the context menu, in addition to archive/delete controls.
 - Keeps the post lifecycle intentionally narrow: `draft`, `scheduled`, and `posted`, with posted posts locked from further edits or deletion and archivable instead.
@@ -39,7 +39,6 @@
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
 - Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, automatic browser auth bootstrap for interactive auth-required commands, explicit device-code login for headless environments, stable JSON envelopes with non-TTY auto-defaulting, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, macOS Keychain-backed refresh-token storage, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, directory watch ingestion, an MCP stdio adapter, and publish-job queue controls backed by `/api/v1/*`.
-<<<<<<< HEAD
 - Starts the Apple Photos ingestion path with a macOS-only `Add from Photos` entry point in the asset panel. Today that action stays web-first and falls back to the normal upload flow with clear remediation copy, while the native companion app and local bridge remain the next planned step for richer human and agent workflows.
 
 ## Key Features
@@ -62,7 +61,7 @@
    - Select a brand kit (or use the default), choose one of that kit's named logos in the post brief, use the Asset Manager controls to attach assets, fill post inputs, generate variants, pick one, and export.
 
 2. Build reusable campaign options
-   - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, and fine-tune the canvas layout or copy without regenerating.
+   - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, fine-tune the canvas layout or copy without regenerating, and inspect the last refine prompt directly from the strategy panel when a refine result feels off.
    - Use `Refine` to revise copy while preserving the current editor layout/look unless you explicitly ask for visual changes. Common asks like "shorter components," "shorter caption," and "avoid CTA" are now enforced after the model step as well, so the result is less dependent on prompt compliance alone. Use `Generate` when you want a full fresh result from the saved brief and assets, even if that means discarding prior manual/refine component edits.
 
 3. Collaborate asynchronously

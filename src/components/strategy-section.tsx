@@ -61,6 +61,10 @@ type Props = {
   onUseGeneratedCaption: () => void;
   onCopyCaption: () => void;
   copyState: "idle" | "done";
+  lastRefinePromptPreview?: {
+    systemPrompt: string;
+    userPrompt: string;
+  } | null;
 };
 
 export function StrategySection({
@@ -74,6 +78,7 @@ export function StrategySection({
   onUseGeneratedCaption,
   onCopyCaption,
   copyState,
+  lastRefinePromptPreview,
 }: Props) {
   const [refineInstruction, setRefineInstruction] = useState("");
 
@@ -309,6 +314,31 @@ export function StrategySection({
                 {isRefining ? "Refining..." : "Refine"}
               </Button>
             </div>
+            {lastRefinePromptPreview ? (
+              <details className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                <summary className="cursor-pointer text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+                  Last refine prompt used
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
+                      System prompt
+                    </p>
+                    <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-black/25 p-2 text-[11px] leading-relaxed text-slate-200">
+                      {lastRefinePromptPreview.systemPrompt}
+                    </pre>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
+                      User prompt
+                    </p>
+                    <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/25 p-2 text-[11px] leading-relaxed text-slate-200">
+                      {lastRefinePromptPreview.userPrompt}
+                    </pre>
+                  </div>
+                </div>
+              </details>
+            ) : null}
           </div>
         </>
       ) : null}

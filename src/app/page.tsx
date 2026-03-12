@@ -57,6 +57,7 @@ import type { BrandKitRow } from "@/db/schema";
 import { useGeneration } from "@/hooks/use-generation";
 import { inferLogoNameFromUrl } from "@/lib/brand-kit";
 import {
+  type CreativeVariant,
   createFittedOverlayLayout,
   fitOverlayLayoutToCopy,
   resolveVariantOverlayCopy,
@@ -113,6 +114,11 @@ const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
     }))
     .filter((tag) => tag.username.length > 0);
 
+type RefinePromptPreview = {
+  systemPrompt: string;
+  userPrompt: string;
+};
+
 export default function Home() {
   const {
     activePost,
@@ -148,6 +154,7 @@ export default function Home() {
   const [pendingPublishRequest, setPendingPublishRequest] = useState<{ postId: string; scheduleAt?: string } | null>(null);
   const [publishJobsRefreshKey, setPublishJobsRefreshKey] = useState(0);
   const [publishImagePreviewUrl, setPublishImagePreviewUrl] = useState<string | null>(null);
+  const [refinePromptPreviews, setRefinePromptPreviews] = useState<Record<string, RefinePromptPreview>>({});
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
@@ -1047,9 +1054,20 @@ export default function Home() {
         }),
       });
       if (!r.ok) throw new Error(await parseApiError(r));
-      const j = await r.json();
+      const j = (await r.json()) as {
+        source?: string;
+        variant: CreativeVariant;
+        promptPreview?: RefinePromptPreview;
+      };
       if (j.source !== "model") throw new Error("Refinement could not be applied.");
       if (!isPostStillActive(postId)) return;
+      const promptPreview = j.promptPreview;
+      if (postId && promptPreview) {
+        setRefinePromptPreviews((current) => ({
+          ...current,
+          [postId]: promptPreview,
+        }));
+      }
       if (result) {
         const refinedVariant = { ...j.variant, id: activeVariant.id };
         const syncedOverlayLayout = activeOverlayLayout
@@ -1741,7 +1759,7 @@ export default function Home() {
                     ) : null}
                     {result && !isPostedPost ? (
                       <section className="border-b border-white/10 pb-6">
-                        <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} />
+                        <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} lastRefinePromptPreview={activePost?.id ? refinePromptPreviews[activePost.id] ?? null : null} />
                       </section>
                     ) : null}
                     {activeVariant && !isPostedPost ? (
@@ -1808,7 +1826,7 @@ export default function Home() {
                 disabled={isAgentBusy}
               />
             ) : null}
-            {result && !isPostedPost ? <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} /> : null}
+            {result && !isPostedPost ? <StrategySection result={result} activeVariant={activeVariant} isRefining={isRefining} dispatch={typedDispatch} captionValue={publishSettings.caption} onCaptionChange={(value) => updatePublishSettings({ caption: value })} onUseGeneratedCaption={() => updatePublishSettings({ caption: generatedCaptionBundle })} onRefineVariant={(inst) => void refineVariant(inst)} onCopyCaption={() => void copyCaption()} copyState={copyState} lastRefinePromptPreview={activePost?.id ? refinePromptPreviews[activePost.id] ?? null : null} /> : null}
             {activeVariant && !isPostedPost ? (
               <div className="space-y-4">
                 <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />

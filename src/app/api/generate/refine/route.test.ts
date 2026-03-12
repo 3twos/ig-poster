@@ -103,6 +103,10 @@ describe("POST /api/generate/refine", () => {
         id: "variant-1",
         cta: "",
       },
+      promptPreview: {
+        systemPrompt: expect.stringContaining("You refine Instagram creative variants."),
+        userPrompt: expect.stringContaining("Refinement instruction:"),
+      },
     });
     expect(payload.variant.hook.length).toBeLessThan(variant.hook.length);
     expect(payload.variant.headline.length).toBeLessThan(variant.headline.length);

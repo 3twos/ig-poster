@@ -86,4 +86,31 @@ describe("StrategySection", () => {
     expect(screen.getByRole("button", { name: "Shorter caption" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Use generated" })).not.toBeNull();
   });
+
+  it("shows the last refine prompt preview when provided", () => {
+    render(
+      <TooltipProvider>
+        <StrategySection
+          result={result}
+          activeVariant={variant}
+          isRefining={false}
+          dispatch={vi.fn()}
+          captionValue=""
+          onCaptionChange={vi.fn()}
+          onUseGeneratedCaption={vi.fn()}
+          onRefineVariant={vi.fn()}
+          onCopyCaption={vi.fn()}
+          copyState="idle"
+          lastRefinePromptPreview={{
+            systemPrompt: "You refine Instagram creative variants.",
+            userPrompt: "Refinement instruction: \"Shorten the CTA.\"",
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText("Last refine prompt used")).not.toBeNull();
+    expect(screen.getByText("You refine Instagram creative variants.")).not.toBeNull();
+    expect(screen.getByText('Refinement instruction: "Shorten the CTA."')).not.toBeNull();
+  });
 });

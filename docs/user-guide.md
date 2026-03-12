@@ -80,6 +80,7 @@
    - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.
    - `Refine` is the incremental path: it updates the selected variant while preserving the current editor placement and visual treatment unless you explicitly ask the AI to change them.
    - Refine requests include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have the right context.
+   - The Refine card now shows the exact last refine prompt used, including the system prompt and assembled user prompt, so you can inspect how your instruction was translated.
    - Refine now also applies a deterministic instruction-enforcement pass after the model response for common requests such as shorter on-canvas copy, shorter captions, and removing CTA text.
    - Carousel slide copy follows the same refine policy, and blank CTA variants no longer force a mid-slide `Swipe for more` label.
    - `Duplicate post` forks the current post into a new editable draft copy. If the source post is already posted, duplication is the only way to continue iterating.
