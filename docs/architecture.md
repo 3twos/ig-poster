@@ -96,6 +96,7 @@ Why this shape:
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
+  - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text
   - LLM provider abstraction
   - auth/session/token helpers
   - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
@@ -137,6 +138,7 @@ Why this shape:
 - Fallback response keeps the core workflow available during outages or unconfigured environments.
 - Keeps `Generate` as a clean re-run from persisted brief inputs, while `Refine` remains the incremental path that preserves the current canvas look unless asked otherwise.
 - Gives refine requests more context by sending the saved brief, prompt instructions, and current overlay layout state alongside the selected variant.
+- Runs a deterministic refine-enforcement pass after model output for recurring instruction families (for example shorter copy and no-CTA requests), so the UX does not rely entirely on prompt obedience.
 
 ### 3) Share Project
 

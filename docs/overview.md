@@ -17,6 +17,7 @@
 - New posts default to the first available brand kit for that user (when one exists), so brand/prompt context and the kit's primary logo are prefilled consistently.
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
 - New generated layouts are now fit against the current overlay copy using deterministic safe-zone stacking, and the editor exposes an `Auto-fit Layout` recovery action for existing drafts.
+- Refine now combines richer prompt context with deterministic post-processing for common instructions like shorter component copy, shorter captions, and removing CTA text.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel, and exposes the exact assembled generation prompt used for each run.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
 - Sidebar post rows expose quick publish actions (`Post now`, `Post at`) plus `Duplicate` in the context menu, in addition to archive/delete controls.
@@ -62,7 +63,7 @@
 
 2. Build reusable campaign options
    - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, and fine-tune the canvas layout or copy without regenerating.
-   - Use `Refine` to revise copy while preserving the current editor layout/look unless you explicitly ask for visual changes. Use `Generate` when you want a full fresh result from the saved brief and assets, even if that means discarding prior manual/refine component edits.
+   - Use `Refine` to revise copy while preserving the current editor layout/look unless you explicitly ask for visual changes. Common asks like "shorter components," "shorter caption," and "avoid CTA" are now enforced after the model step as well, so the result is less dependent on prompt compliance alone. Use `Generate` when you want a full fresh result from the saved brief and assets, even if that means discarding prior manual/refine component edits.
 
 3. Collaborate asynchronously
    - Save a project snapshot and send a share link so teammates can review the selected concept.

@@ -79,7 +79,9 @@
    - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
    - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.
    - `Refine` is the incremental path: it updates the selected variant while preserving the current editor placement and visual treatment unless you explicitly ask the AI to change them.
-   - Refine requests now include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have more context than the selected variant alone.
+   - Refine requests include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have the right context.
+   - Refine now also applies a deterministic instruction-enforcement pass after the model response for common requests such as shorter on-canvas copy, shorter captions, and removing CTA text.
+   - Carousel slide copy follows the same refine policy, and blank CTA variants no longer force a mid-slide `Swipe for more` label.
    - `Duplicate post` forks the current post into a new editable draft copy. If the source post is already posted, duplication is the only way to continue iterating.
    - Scheduled posts can be moved back into `Draft` with `Move to draft`.
 
