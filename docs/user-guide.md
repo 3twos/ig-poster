@@ -60,6 +60,7 @@
      - post type and media sequencing
    - `Generate` keeps the post in `Draft`. Running it again uses the current brief, assets, brand kit, and logo selection to create a fresh result.
    - A fresh `Generate` pass intentionally ignores prior `Refine` instructions and manual editor component changes. Use it when you want a reset, not an incremental tweak.
+   - Generation now treats the saved brief as the highest-priority input. Theme, subject, core thought, audience, objective, and mood outrank website cues, best-practice tips, and reference examples.
    - During generation, the right panel streams LLM reasoning tokens in real time. Expand "Show reasoning" to see the model's thought process.
    - The Agent Activity panel also exposes the exact generation prompt used for each run so you can inspect the system prompt and assembled user prompt directly.
 
@@ -82,6 +83,7 @@
    - Refine requests include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have the right context.
    - Refine now also applies a deterministic instruction-enforcement pass after the model response for common requests such as shorter on-canvas copy, shorter captions, and removing CTA text.
    - Carousel slide copy follows the same refine policy, and blank CTA variants no longer force a mid-slide `Swipe for more` label.
+   - When multiple generated candidates come back, IG Poster now ranks them with brief-aware selection heuristics so generic save/share-style copy is less likely to beat a variant that actually matches your saved angle and audience.
    - `Duplicate post` forks the current post into a new editable draft copy. If the source post is already posted, duplication is the only way to continue iterating.
    - Scheduled posts can be moved back into `Draft` with `Move to draft`.
 
