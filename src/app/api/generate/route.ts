@@ -275,27 +275,44 @@ export async function POST(req: Request) {
           // Draft variants: fallback or parallel mode
           // ---------------------------------------------------------------
 
-          const buildLlmOptions = (auth: ResolvedLlmAuth, candidateCount: number) => ({
-            auth,
-            systemPrompt: buildGenerationSystemPrompt(request.promptConfig),
-            userPrompt: buildGenerationUserPrompt(request, {
-              websiteStyleContext: websiteResult?.notes,
-              websiteBodyText: websiteResult?.bodyText,
-              candidateCount,
-              performanceContext: performanceContext || undefined,
-            }),
-            temperature: resolveGenerationTemperature(auth.model),
-            maxTokens: resolveGenerationMaxTokens(auth.model),
-            signal: generationAbortController.signal,
-            onChunk: (text: string) => {
-              send({ type: "llm-thinking", stepId: "draft-variants", text });
-            },
-          });
-
           let allVariants: CreativeVariant[] = [];
           let strategyText = "";
           let scoringAuth: ResolvedLlmAuth = authList.connections[0];
           let generationSucceeded = false;
+          const promptPreviewKeys = new Set<string>();
+
+          const buildLlmOptions = (auth: ResolvedLlmAuth, candidateCount: number) => {
+            const systemPrompt = buildGenerationSystemPrompt(request.promptConfig);
+            const userPrompt = buildGenerationUserPrompt(request, {
+              websiteStyleContext: websiteResult?.notes,
+              websiteBodyText: websiteResult?.bodyText,
+              candidateCount,
+              performanceContext: performanceContext || undefined,
+            });
+            const previewKey = `${auth.provider}:${auth.model}:${candidateCount}`;
+
+            if (!promptPreviewKeys.has(previewKey)) {
+              promptPreviewKeys.add(previewKey);
+              send({
+                type: "prompt-preview",
+                title: `Generation prompt (${auth.provider.toUpperCase()} ${auth.model})`,
+                systemPrompt,
+                userPrompt,
+              });
+            }
+
+            return {
+              auth,
+              systemPrompt,
+              userPrompt,
+              temperature: resolveGenerationTemperature(auth.model),
+              maxTokens: resolveGenerationMaxTokens(auth.model),
+              signal: generationAbortController.signal,
+              onChunk: (text: string) => {
+                send({ type: "llm-thinking", stepId: "draft-variants", text });
+              },
+            };
+          };
 
           if (authList.mode === "parallel" && authList.connections.length > 1) {
             // ---------- Parallel mode ----------

@@ -3,6 +3,8 @@ import {
   CreativeVariantSchema,
   GenerationRequestSchema,
   GenerationResponseSchema,
+  OverlayLayoutSchema,
+  PostInputSchema,
   type GenerationRequest,
   type CreativeVariant,
 } from "@/lib/creative";
@@ -67,6 +69,9 @@ export const buildRefineRequestFromPost = async (params: {
 }): Promise<{
   variant: CreativeVariant;
   brand: ReturnType<typeof BrandInputSchema.parse>;
+  post?: ReturnType<typeof PostInputSchema.parse>;
+  promptConfig?: Partial<GenerationRequest["promptConfig"]>;
+  overlayLayout?: ReturnType<typeof OverlayLayoutSchema.parse>;
 }> => {
   const post = await getPost(params.actor, params.postId);
   if (!post) {
@@ -84,6 +89,8 @@ export const buildRefineRequestFromPost = async (params: {
   if (!result.success || result.data.variants.length === 0) {
     throw conflict("Post has no generated variants to refine.");
   }
+  const parsedPost = PostInputSchema.safeParse(post.brief ?? undefined);
+  const promptConfig = post.promptConfig ?? undefined;
 
   if (params.variantId) {
     const requestedVariant = result.data.variants.find(
@@ -92,10 +99,18 @@ export const buildRefineRequestFromPost = async (params: {
     if (!requestedVariant) {
       throw notFound("Variant not found for this post.");
     }
+    const requestedOverlayLayout = OverlayLayoutSchema.safeParse(
+      post.overlayLayouts?.[requestedVariant.id] ?? undefined,
+    );
 
     return {
       variant: CreativeVariantSchema.parse(requestedVariant),
       brand: brand.data,
+      post: parsedPost.success ? parsedPost.data : undefined,
+      promptConfig,
+      overlayLayout: requestedOverlayLayout.success
+        ? requestedOverlayLayout.data
+        : undefined,
     };
   }
 
@@ -105,9 +120,17 @@ export const buildRefineRequestFromPost = async (params: {
           (candidate) => candidate.id === post.activeVariantId,
         )
       : undefined) ?? result.data.variants[0];
+  const parsedOverlayLayout = OverlayLayoutSchema.safeParse(
+    variant ? post.overlayLayouts?.[variant.id] ?? undefined : undefined,
+  );
 
   return {
     variant: CreativeVariantSchema.parse(variant),
     brand: brand.data,
+    post: parsedPost.success ? parsedPost.data : undefined,
+    promptConfig,
+    overlayLayout: parsedOverlayLayout.success
+      ? parsedOverlayLayout.data
+      : undefined,
   };
 };

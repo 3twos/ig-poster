@@ -99,6 +99,7 @@ export function useGeneration({
           summary: undefined,
           error: undefined,
           steps: [],
+          promptSnapshots: [],
           logLines: [`${stamp} Run started: ${event.label}`],
         };
       }
@@ -126,6 +127,21 @@ export function useGeneration({
           return patch(step);
         });
       };
+
+      if (event.type === "prompt-preview") {
+        return {
+          ...current,
+          promptSnapshots: [
+            ...current.promptSnapshots,
+            {
+              title: event.title,
+              systemPrompt: event.systemPrompt,
+              userPrompt: event.userPrompt,
+            },
+          ],
+          logLines: withLog(`Prompt ready: ${event.title}`),
+        };
+      }
 
       if (event.type === "step-start") {
         const steps: AgentStep[] = current.steps.map((step): AgentStep =>
@@ -353,6 +369,19 @@ export function useGeneration({
       `Duration: ${formatElapsed(runDuration)}`,
       `Fallback used: ${agentRun.fallbackUsed ? "yes" : "no"}`,
       "",
+      ...(agentRun.promptSnapshots.length
+        ? [
+            "Prompts:",
+            ...agentRun.promptSnapshots.flatMap((snapshot) => [
+              `- ${snapshot.title}`,
+              "  System:",
+              ...snapshot.systemPrompt.split("\n").map((line) => `    ${line}`),
+              "  User:",
+              ...snapshot.userPrompt.split("\n").map((line) => `    ${line}`),
+            ]),
+            "",
+          ]
+        : []),
       "Steps:",
       ...agentRun.steps.map((step) => {
         const stepDuration =

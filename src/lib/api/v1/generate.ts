@@ -4,6 +4,8 @@ import {
   BrandInputSchema,
   CreativeVariantSchema,
   GenerationRequestSchema,
+  OverlayLayoutSchema,
+  PostInputSchema,
 } from "@/lib/creative";
 
 export const GenerateRunBodySchema = z.union([
@@ -28,6 +30,12 @@ export const GenerateRefineBodySchema = z.union([
     variant: CreativeVariantSchema,
     instruction: z.string().trim().min(3).max(500),
     brand: BrandInputSchema,
+    post: PostInputSchema.optional(),
+    promptConfig: z.object({
+      systemPrompt: z.string().trim().max(2000).optional(),
+      customInstructions: z.string().trim().max(4000).optional(),
+    }).optional(),
+    overlayLayout: OverlayLayoutSchema.optional(),
   }).strict(),
 ]);
 

@@ -149,6 +149,22 @@ export function AgentActivityPanel({
             </div>
           </div>
 
+          {agentRun.promptSnapshots.length ? (
+            <div className="space-y-2 rounded-xl border border-white/15 bg-black/20 p-3">
+              <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-300 uppercase">
+                Prompt Used
+              </p>
+              {agentRun.promptSnapshots.map((snapshot, index) => (
+                <PromptSnapshotCard
+                  key={`${snapshot.title}-${index}`}
+                  title={snapshot.title}
+                  systemPrompt={snapshot.systemPrompt}
+                  userPrompt={snapshot.userPrompt}
+                />
+              ))}
+            </div>
+          ) : null}
+
           {showStepDetails ? (
             <div className="space-y-2">
               {visibleAgentSteps.length ? (
@@ -187,6 +203,55 @@ export function AgentActivityPanel({
           No active run yet. Start generation to see planning and execution steps.
         </p>
       )}
+    </div>
+  );
+}
+
+function PromptSnapshotCard({
+  title,
+  systemPrompt,
+  userPrompt,
+}: {
+  title: string;
+  systemPrompt: string;
+  userPrompt: string;
+}) {
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+      <button
+        type="button"
+        onClick={() => setShowPrompt((value) => !value)}
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-300 hover:text-blue-200"
+      >
+        {showPrompt ? (
+          <ChevronDown className="h-3 w-3" />
+        ) : (
+          <ChevronRight className="h-3 w-3" />
+        )}
+        {showPrompt ? `Hide ${title}` : `Show ${title}`}
+      </button>
+      {showPrompt ? (
+        <div className="mt-2 space-y-2">
+          <div>
+            <p className="text-[10px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
+              System
+            </p>
+            <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-2 font-mono text-[11px] text-slate-300">
+              {systemPrompt}
+            </pre>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
+              User
+            </p>
+            <pre className="mt-1 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/30 p-2 font-mono text-[11px] text-slate-300">
+              {userPrompt}
+            </pre>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

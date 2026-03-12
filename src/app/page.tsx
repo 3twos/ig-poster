@@ -996,7 +996,18 @@ export default function Home() {
       : activeVariant;
     setRefiningForPostId(postId); generation.setError(null);
     try {
-      const r = await fetch("/api/generate/refine", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ variant: variantForRefine, instruction: inst, brand }) });
+      const r = await fetch("/api/generate/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variant: variantForRefine,
+          instruction: inst,
+          brand,
+          post,
+          promptConfig,
+          overlayLayout: activeOverlayLayout,
+        }),
+      });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = await r.json();
       if (j.source !== "model") throw new Error("Refinement could not be applied.");

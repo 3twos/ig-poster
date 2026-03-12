@@ -61,6 +61,7 @@
    - `Generate` keeps the post in `Draft`. Running it again uses the current brief, assets, brand kit, and logo selection to create a fresh result.
    - A fresh `Generate` pass intentionally ignores prior `Refine` instructions and manual editor component changes. Use it when you want a reset, not an incremental tweak.
    - During generation, the right panel streams LLM reasoning tokens in real time. Expand "Show reasoning" to see the model's thought process.
+   - The Agent Activity panel also exposes the exact generation prompt used for each run so you can inspect the system prompt and assembled user prompt directly.
 
 8. Pick and edit a variant
    - Select a variant tile to preview.
@@ -77,6 +78,7 @@
    - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
    - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.
    - `Refine` is the incremental path: it updates the selected variant while preserving the current editor placement and visual treatment unless you explicitly ask the AI to change them.
+   - Refine requests now include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have more context than the selected variant alone.
    - `Duplicate post` forks the current post into a new editable draft copy. If the source post is already posted, duplication is the only way to continue iterating.
    - Scheduled posts can be moved back into `Draft` with `Move to draft`.
 

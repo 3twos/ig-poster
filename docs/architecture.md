@@ -41,7 +41,7 @@ flowchart LR
   - Extracted focused components: `post-brief-form.tsx`, `asset-manager.tsx`, `carousel-composer.tsx`, `poster-section.tsx`, `strategy-section.tsx`, `publish-metadata-editor.tsx`, `publish-section.tsx`, `scheduled-planner.tsx`, `agent-activity-panel.tsx`.
   - Settings and brand kit management live on a dedicated `/settings` page (`src/app/settings/page.tsx`) with sidebar tab navigation (General, LLM Provider, Brand Kits). Components are in `src/components/settings/`.
   - `src/components/chat/` contains the chat module: `chat-panel.tsx` (embeddable right-panel version), `chat-container.tsx` (full standalone with sidebar), message rendering, markdown, code blocks, and input components.
-  - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming.
+  - `src/hooks/use-generation.ts` encapsulates SSE-based generation state, including LLM thinking token streaming and prompt snapshot capture for the Agent Activity panel.
   - `src/hooks/use-chat.ts` manages chat message state, SSE streaming, and conversation operations.
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
@@ -56,7 +56,7 @@ flowchart LR
   - `src/services/actors.ts` resolves an authenticated actor from bearer auth first, then workspace cookies.
   - `src/services/assets.ts` owns transport-neutral blob upload validation and persistence for both the browser upload route and the CLI-facing v1 route.
   - `src/services/chat.ts` owns CLI chat prompt shaping, linked-post context injection, and bearer-auth streaming response setup for `/api/v1/chat`.
-  - `src/services/generation.ts` owns post-derived generation/refine request shaping for the CLI-facing v1 generation routes.
+  - `src/services/generation.ts` owns post-derived generation/refine request shaping for the CLI-facing v1 generation routes, including saved brief, prompt config, and active overlay layout context for refine calls.
   - `src/services/posts.ts` now owns extracted transport-neutral post workflows (`list`, `get`, `create`, `update`, `duplicate`, `archive`).
   - `src/services/brand-kits.ts` owns extracted brand-kit read workflows (`list`, `get`).
   - `src/services/meta-auth.ts` resolves CLI-safe Meta auth for bearer-auth `/api/v1/*` publish and location-search requests, preferring stored OAuth connections when available and falling back to env credentials.
@@ -98,7 +98,7 @@ Why this shape:
 5. Based on the user's selected `MultiModelMode`:
    - **Fallback**: `generateWithFallback` tries each model in priority order; the first successful response is used.
    - **Parallel**: all models are queried simultaneously, and results are merged and ranked.
-   LLM thinking/reasoning tokens are forwarded to the client as `llm-thinking` SSE events.
+   LLM thinking/reasoning tokens are forwarded to the client as `llm-thinking` SSE events, and assembled prompt snapshots are forwarded as `prompt-preview` SSE events.
 6. Response is validated with `GenerationResponseSchema`.
 7. If all models fail, fallback response generator returns deterministic variants.
 8. Regeneration replaces the stored result for the post and does not attempt to merge prior refine instructions or manual editor component overrides back into the new output.
@@ -107,6 +107,7 @@ Why this shape:
 - Schema-first contracts reduce malformed LLM output risk.
 - Fallback response keeps the core workflow available during outages or unconfigured environments.
 - Keeps `Generate` as a clean re-run from persisted brief inputs, while `Refine` remains the incremental path that preserves the current canvas look unless asked otherwise.
+- Gives refine requests more context by sending the saved brief, prompt instructions, and current overlay layout state alongside the selected variant.
 
 ### 3) Share Project
 
