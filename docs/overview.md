@@ -37,6 +37,7 @@
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
 - Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, automatic browser auth bootstrap for interactive auth-required commands, explicit device-code login for headless environments, stable JSON envelopes with non-TTY auto-defaulting, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, macOS Keychain-backed refresh-token storage, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, directory watch ingestion, an MCP stdio adapter, and publish-job queue controls backed by `/api/v1/*`.
+- The next planned CLI/macOS phase is Apple Photos ingestion through a macOS companion app and local bridge, with the web app remaining the primary human workflow surface. Humans should trigger native Photos selection from the web editor, while CLI and MCP flows stay scriptable. This is not shipped yet.
 
 ## Key Features
 
@@ -90,3 +91,4 @@
 - CLI commands now emit stable `{ ok, data }` JSON envelopes in `--json` mode and auto-prefer that machine-readable output when stdout is not a TTY (except for `help`, `completion`, and `mcp`).
 - A hidden dev-only `--local` flag pins the CLI to the local dev server host (`IG_POSTER_LOCAL_HOST` or `http://localhost:3000`) while still calling the same `/api/v1/*` service interfaces.
 - The CLI preview can also store repo-local project defaults in `.ig-poster/project.json`, which currently cover linked host/profile plus optional brand-kit and output-directory preferences.
+- Apple Photos support is still planned, not shipped. The approved direction is a web-first flow with a macOS companion app plus local bridge for Photos-only access, while the web app and versioned API remain the source of truth for auth, uploads, posts, generation, and publish state. If the companion is missing, the product should fall back to install guidance plus the normal upload flow rather than blocking the user.
