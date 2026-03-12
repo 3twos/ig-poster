@@ -61,6 +61,7 @@ import {
   createFittedOverlayLayout,
   fitOverlayLayoutToCopy,
   resolveVariantOverlayCopy,
+  syncOverlayLayoutToVariantCopy,
   type GenerationResponse,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
@@ -1071,33 +1072,12 @@ export default function Home() {
       if (result) {
         const refinedVariant = { ...j.variant, id: activeVariant.id };
         const syncedOverlayLayout = activeOverlayLayout
-          ? {
-              ...activeOverlayLayout,
-              hook: {
-                ...activeOverlayLayout.hook,
-                text: activeOverlayLayout.hook.text.trim()
-                  ? refinedVariant.hook
-                  : activeOverlayLayout.hook.text,
-              },
-              headline: {
-                ...activeOverlayLayout.headline,
-                text: activeOverlayLayout.headline.text.trim()
-                  ? refinedVariant.headline
-                  : activeOverlayLayout.headline.text,
-              },
-              supportingText: {
-                ...activeOverlayLayout.supportingText,
-                text: activeOverlayLayout.supportingText.text.trim()
-                  ? refinedVariant.supportingText
-                  : activeOverlayLayout.supportingText.text,
-              },
-              cta: {
-                ...activeOverlayLayout.cta,
-                text: activeOverlayLayout.cta.text.trim()
-                  ? refinedVariant.cta
-                  : activeOverlayLayout.cta.text,
-              },
-            }
+          ? syncOverlayLayoutToVariantCopy({
+              variant: refinedVariant,
+              currentLayout: activeVariant.layout,
+              overlayLayout: activeOverlayLayout,
+              aspectRatio: post.aspectRatio,
+            })
           : undefined;
 
         dispatch({

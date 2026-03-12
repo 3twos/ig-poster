@@ -83,6 +83,7 @@
    - Refine requests include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have the right context.
    - The Refine card now shows the exact last refine prompt used, including the system prompt and assembled user prompt, so you can inspect how your instruction was translated.
    - Refine now also applies a deterministic instruction-enforcement pass after the model response for common requests such as shorter on-canvas copy, shorter captions, and removing CTA text.
+   - Successful refine updates also re-fit the canonical hook/headline/body/CTA stack against the current copy to reduce overlap while preserving widths, x positions, custom boxes, and visible/hidden state.
    - Carousel slide copy follows the same refine policy, and blank CTA variants no longer force a mid-slide `Swipe for more` label.
    - When multiple generated candidates come back, IG Poster now ranks them with brief-aware selection heuristics so generic save/share-style copy is less likely to beat a variant that actually matches your saved angle and audience.
    - `Duplicate post` forks the current post into a new editable draft copy. If the source post is already posted, duplication is the only way to continue iterating.

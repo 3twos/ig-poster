@@ -98,6 +98,7 @@ Why this shape:
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
   - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text
   - brief-aware variant ranking heuristics that prefer saved theme/subject/thought/audience alignment over generic engagement tropes when selecting finalists
+  - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses
   - LLM provider abstraction
   - auth/session/token helpers
   - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
@@ -141,6 +142,7 @@ Why this shape:
 - Gives refine requests more context by sending the saved brief, prompt instructions, and current overlay layout state alongside the selected variant.
 - Returns the assembled refine system/user prompts with successful refine responses so the UI can expose the exact last refine prompt used for debugging.
 - Runs a deterministic refine-enforcement pass after model output for recurring instruction families (for example shorter copy and no-CTA requests), so the UX does not rely entirely on prompt obedience.
+- Re-fits the canonical overlay stack after successful refine responses so updated copy is less likely to overlap, while preserving existing widths, x positions, custom boxes, and visibility choices from the current layout.
 - Builds generation prompts with an explicit priority order where the saved brief outranks supporting website/performance context and house best-practice examples, then uses the same brief signals again during finalist selection as a deterministic backstop.
 
 ### 3) Share Project

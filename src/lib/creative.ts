@@ -825,6 +825,86 @@ export const createFittedOverlayLayout = (
     brandDefaults,
   );
 
+const inferOverlayBrandDefaults = (layout: OverlayLayout) => {
+  const canonicalBlocks = [
+    layout.hook,
+    layout.headline,
+    layout.supportingText,
+    layout.cta,
+  ];
+
+  return {
+    cornerRadius: canonicalBlocks.find((block) => block.borderRadius != null)
+      ?.borderRadius,
+    bgOpacity: canonicalBlocks.find((block) => block.bgOpacity != null)?.bgOpacity,
+  };
+};
+
+export const syncOverlayLayoutToVariantCopy = (input: {
+  variant: Pick<
+    CreativeVariant,
+    "layout" | "hook" | "headline" | "supportingText" | "cta"
+  >;
+  currentLayout: CreativeLayout;
+  overlayLayout: OverlayLayout;
+  aspectRatio: AspectRatio;
+}) => {
+  if (input.currentLayout !== input.variant.layout) {
+    return createFittedOverlayLayout(
+      input.variant,
+      input.aspectRatio,
+      inferOverlayBrandDefaults(input.overlayLayout),
+    );
+  }
+
+  const nextCopy = {
+    hook: input.overlayLayout.hook.text.trim()
+      ? input.variant.hook
+      : input.overlayLayout.hook.text,
+    headline: input.overlayLayout.headline.text.trim()
+      ? input.variant.headline
+      : input.overlayLayout.headline.text,
+    supportingText: input.overlayLayout.supportingText.text.trim()
+      ? input.variant.supportingText
+      : input.overlayLayout.supportingText.text,
+    cta: input.overlayLayout.cta.text.trim()
+      ? input.variant.cta
+      : input.overlayLayout.cta.text,
+  };
+
+  const synced = {
+    ...input.overlayLayout,
+    hook: {
+      ...input.overlayLayout.hook,
+      text: nextCopy.hook,
+    },
+    headline: {
+      ...input.overlayLayout.headline,
+      text: nextCopy.headline,
+    },
+    supportingText: {
+      ...input.overlayLayout.supportingText,
+      text: nextCopy.supportingText,
+    },
+    cta: {
+      ...input.overlayLayout.cta,
+      text: nextCopy.cta,
+    },
+  };
+
+  return fitOverlayLayoutToCopy(
+    {
+      layout: input.currentLayout,
+      hook: nextCopy.hook,
+      headline: nextCopy.headline,
+      supportingText: nextCopy.supportingText,
+      cta: nextCopy.cta,
+    },
+    input.aspectRatio,
+    synced,
+  );
+};
+
 const buildLayoutBudgetGuidance = () =>
   [
     "Layout-fit copy budgets (important: keep copy inside these limits so it fits the canvas cleanly):",
