@@ -111,8 +111,11 @@ export function AssetManager({
 
   const activeAsset = activeId ? assets.find((a) => a.id === activeId) : null;
   const handleUseRegularUpload = () => {
+    const input = addAssetInputRef.current;
+    if (input) {
+      input.click();
+    }
     setApplePhotosDialogOpen(false);
-    window.setTimeout(() => addAssetInputRef.current?.click(), 0);
   };
 
   return (
