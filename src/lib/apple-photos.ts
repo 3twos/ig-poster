@@ -1,3 +1,5 @@
+import { APPLE_PHOTOS_COMPANION_APP_NAME } from "@/lib/apple-photos-bridge";
+
 export type ApplePhotosFallbackInfo = {
   code: "MACOS_COMPANION_REQUIRED" | "UNSUPPORTED_PLATFORM";
   title: string;
@@ -16,7 +18,7 @@ export const getApplePhotosFallbackInfo = (
       code: "MACOS_COMPANION_REQUIRED",
       title: "Use regular upload for now",
       description:
-        "Apple Photos import will eventually launch the IG Poster macOS companion from this draft. Until that companion exists on this Mac, keep working by uploading files you have already exported from Photos.",
+        `Apple Photos import will eventually launch ${APPLE_PHOTOS_COMPANION_APP_NAME} from this draft. Until that signed helper is installed on this Mac, keep working by uploading files you have already exported from Photos.`,
       actionLabel: "Use regular upload",
     };
   }
@@ -25,7 +27,7 @@ export const getApplePhotosFallbackInfo = (
     code: "UNSUPPORTED_PLATFORM",
     title: "Apple Photos import is planned for macOS",
     description:
-      "This draft editor will eventually hand off to a native macOS companion for Apple Photos browsing. On this device, keep using the regular upload flow for exported files.",
+      `This draft editor will eventually hand off to ${APPLE_PHOTOS_COMPANION_APP_NAME} for Apple Photos browsing. On this device, keep using the regular upload flow for exported files.`,
     actionLabel: "Use regular upload",
   };
 };

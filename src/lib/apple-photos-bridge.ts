@@ -1,0 +1,159 @@
+export const APPLE_PHOTOS_COMPANION_APP_NAME = "IG Poster Companion";
+export const APPLE_PHOTOS_COMPANION_URL_SCHEME = "igposter-companion";
+export const APPLE_PHOTOS_BRIDGE_VERSION = "v1";
+export const APPLE_PHOTOS_BRIDGE_HOST = "127.0.0.1";
+export const APPLE_PHOTOS_BRIDGE_PORT = 43123;
+export const APPLE_PHOTOS_BRIDGE_TOKEN_HEADER = "X-IG-Poster-Bridge-Token";
+export const APPLE_PHOTOS_BRIDGE_ORIGIN = `http://${APPLE_PHOTOS_BRIDGE_HOST}:${APPLE_PHOTOS_BRIDGE_PORT}`;
+
+export const APPLE_PHOTOS_BRIDGE_PATHS = {
+  health: "/v1/health",
+  recent: "/v1/photos/recent",
+  search: "/v1/photos/search",
+  pick: "/v1/photos/pick",
+  import: "/v1/photos/import",
+} as const;
+
+export type ApplePhotosBridgeErrorCode =
+  | "UNSUPPORTED_PLATFORM"
+  | "MACOS_COMPANION_REQUIRED"
+  | "MACOS_BRIDGE_UNAVAILABLE"
+  | "PHOTOS_PERMISSION_REQUIRED";
+
+export type ApplePhotosMediaType = "image" | "video" | "live-photo";
+
+export type ApplePhotosBridgeCapability =
+  | "pick"
+  | "recent"
+  | "search"
+  | "import";
+
+export type ApplePhotosBridgePhotoAsset = {
+  id: string;
+  filename: string;
+  mediaType: ApplePhotosMediaType;
+  createdAt: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+  favorite: boolean;
+  albumNames: string[];
+};
+
+export type ApplePhotosImportedAsset = ApplePhotosBridgePhotoAsset & {
+  exportPath: string;
+};
+
+export type ApplePhotosBridgeHealthResponse = {
+  appName: string;
+  version: string;
+  bridge: {
+    origin: string;
+    authTokenHeader: string;
+    healthUrl: string;
+    recentUrl: string;
+    searchUrl: string;
+    pickUrl: string;
+    importUrl: string;
+  };
+  capabilities: ApplePhotosBridgeCapability[];
+};
+
+export type ApplePhotosPickRequest = {
+  returnTo?: string;
+  draftId?: string;
+  profile?: string;
+};
+
+export type ApplePhotosPickResponse = {
+  assets: ApplePhotosImportedAsset[];
+  importedAt: string;
+};
+
+export type ApplePhotosImportRequest = {
+  ids: string[];
+  destinationFolder?: string;
+};
+
+export type ApplePhotosImportResponse = {
+  assets: ApplePhotosImportedAsset[];
+  importedAt: string;
+};
+
+export type ApplePhotosBridgeUrls = {
+  origin: string;
+  healthUrl: string;
+  recentUrl: string;
+  searchUrl: string;
+  pickUrl: string;
+  importUrl: string;
+};
+
+export type ApplePhotosCompanionLaunchAction = "open" | "pick";
+
+const trimTrailingSlash = (value: string) =>
+  value.endsWith("/") ? value.slice(0, -1) : value;
+
+export const getApplePhotosBridgeUrls = (
+  origin = APPLE_PHOTOS_BRIDGE_ORIGIN,
+): ApplePhotosBridgeUrls => {
+  const normalizedOrigin = trimTrailingSlash(origin);
+
+  return {
+    origin: normalizedOrigin,
+    healthUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.health}`,
+    recentUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.recent}`,
+    searchUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.search}`,
+    pickUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.pick}`,
+    importUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.import}`,
+  };
+};
+
+export const buildApplePhotosBridgeHealthResponse =
+  (): ApplePhotosBridgeHealthResponse => {
+    const urls = getApplePhotosBridgeUrls();
+
+    return {
+      appName: APPLE_PHOTOS_COMPANION_APP_NAME,
+      version: APPLE_PHOTOS_BRIDGE_VERSION,
+      bridge: {
+        origin: urls.origin,
+        authTokenHeader: APPLE_PHOTOS_BRIDGE_TOKEN_HEADER,
+        healthUrl: urls.healthUrl,
+        recentUrl: urls.recentUrl,
+        searchUrl: urls.searchUrl,
+        pickUrl: urls.pickUrl,
+        importUrl: urls.importUrl,
+      },
+      capabilities: ["pick", "recent", "search", "import"],
+    };
+  };
+
+export const buildApplePhotosCompanionLaunchUrl = (
+  action: ApplePhotosCompanionLaunchAction,
+  options: {
+    returnTo?: string;
+    draftId?: string;
+    profile?: string;
+    bridgeOrigin?: string;
+  } = {},
+) => {
+  const url = new URL(
+    `${APPLE_PHOTOS_COMPANION_URL_SCHEME}://photos/${action}`,
+  );
+
+  if (options.returnTo) {
+    url.searchParams.set("return_to", options.returnTo);
+  }
+  if (options.draftId) {
+    url.searchParams.set("draft_id", options.draftId);
+  }
+  if (options.profile) {
+    url.searchParams.set("profile", options.profile);
+  }
+  if (options.bridgeOrigin) {
+    url.searchParams.set("bridge_origin", trimTrailingSlash(options.bridgeOrigin));
+  }
+
+  return url.toString();
+};
