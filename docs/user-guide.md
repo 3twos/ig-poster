@@ -170,6 +170,7 @@
 - The repository now contains the first native companion scaffold under `companion/IGPosterCompanion`, but that scaffold is not packaged or installed for end users yet, so the web fallback behavior remains the current user-facing path.
 - If a local Apple Photos bridge is running on `127.0.0.1:43123`, the editor now probes it before falling back. When that probe succeeds, the draft offers to open the native companion handoff instead of immediately showing the fallback-only state.
 - The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and will surface the incoming draft ID, profile, bridge origin, and return URL in-app once the browser handoff lands there. Packaging and URL-scheme registration are still pending, so this is a developer-facing scaffold step rather than an end-user flow yet.
+- The native companion shell now also includes a real PhotosPicker button for ordered image/video selection. In this slice it stops at showing the selected local identifiers and content types; importing those selections back into the draft is still pending.
 
 ### Planned macOS Apple Photos workflow
 
@@ -201,6 +202,7 @@ If the macOS companion app is not installed or not reachable:
 - CLI/MCP should return a structured error with remediation instead of hanging or failing opaquely
 - for internal development, you can run `swift run ig-poster-companion-bridge` from `companion/IGPosterCompanion` to satisfy the web probe and exercise the handoff path
 - for internal development, `swift run ig-poster-companion` now includes a `Load sample handoff` action so you can inspect the native handoff state even before the app is packaged and registered with Launch Services
+- for internal development, that same shell now includes a native Photos picker button so you can validate the basic macOS selection UX before export/import is implemented
 
 ## Working with Saved Posts
 

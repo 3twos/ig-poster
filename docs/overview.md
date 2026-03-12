@@ -44,6 +44,7 @@
 - The repo now includes a buildable `companion/IGPosterCompanion` macOS scaffold with a shared bridge contract, SwiftUI shell, and localhost URL scheme/endpoint definitions for the future native Photos helper.
 - The companion scaffold now also ships a minimal localhost bridge executable for `GET /v1/health`, and the web asset panel will probe that bridge before falling back to the regular upload path.
 - The native companion shell now parses the shared `igposter-companion://photos/...` handoff URL and reflects the incoming draft/profile/return URL context, so the browser launch path has a meaningful native landing state before PhotosPicker is wired in.
+- The native companion shell now also embeds a real PhotosPicker-driven selection preview for ordered image/video picking, while export/import back into the draft flow remains the next slice.
 
 ## Key Features
 
@@ -98,4 +99,4 @@
 - A hidden dev-only `--local` flag pins the CLI to the local dev server host (`IG_POSTER_LOCAL_HOST` or `http://localhost:3000`) while still calling the same `/api/v1/*` service interfaces.
 - The CLI preview can also store repo-local project defaults in `.ig-poster/project.json`, which currently cover linked host/profile plus optional brand-kit and output-directory preferences.
 - Apple Photos support is still planned, not shipped. The approved direction is a web-first flow with a macOS companion app plus local bridge for Photos-only access, while the web app and versioned API remain the source of truth for auth, uploads, posts, generation, and publish state. If the companion is missing, the product should fall back to install guidance plus the normal upload flow rather than blocking the user.
-- The checked-in companion scaffold is intentionally narrow: it defines the native starting point, localhost health probe, and custom-URL handoff parsing, but it still does not talk to PhotosPicker or PhotoKit yet.
+- The checked-in companion scaffold is intentionally narrow: it defines the native starting point, localhost health probe, custom-URL handoff parsing, and a PhotosPicker preview, but it still does not export assets or use PhotoKit-backed enumeration yet.
