@@ -8,7 +8,6 @@ import {
   OverlayLayoutSchema,
   PostInputSchema,
   applyRefinementDirectives,
-  applyLayoutCopyBudget,
   buildRefineSystemPrompt,
   buildRefineUserPrompt,
 } from "@/lib/creative";
@@ -71,7 +70,7 @@ export async function POST(req: Request) {
       const refined = CreativeVariantSchema.parse(
         applyRefinementDirectives({
           currentVariant: variant,
-          refinedVariant: applyLayoutCopyBudget(CreativeVariantSchema.parse(generated)),
+          refinedVariant: CreativeVariantSchema.parse(generated),
           instruction,
         }),
       );

@@ -343,6 +343,30 @@ describe("creative helpers", () => {
     );
   });
 
+  it("keeps overlay copy intact for caption-only shortening instructions", () => {
+    const currentVariant: CreativeVariant = {
+      ...makeVariant("caption-only", "single-image"),
+      caption:
+        "This caption is intentionally long so the deterministic refine pass can shorten it when the user asks for a tighter caption while keeping the on-canvas copy stable.",
+      cta: "Visit profile",
+    };
+
+    const refined = applyRefinementDirectives({
+      currentVariant,
+      refinedVariant: {
+        ...currentVariant,
+        caption: `${currentVariant.caption} Extra detail that should be trimmed away.`,
+      },
+      instruction: "Make the caption shorter and remove CTA.",
+    });
+
+    expect(refined.hook).toBe(currentVariant.hook);
+    expect(refined.headline).toBe(currentVariant.headline);
+    expect(refined.supportingText).toBe(currentVariant.supportingText);
+    expect(refined.caption.length).toBeLessThan(currentVariant.caption.length);
+    expect(refined.cta).toBe("");
+  });
+
   it("creates fitted layouts that stack canonical blocks without overlap", () => {
     const fitted = createFittedOverlayLayout(
       {

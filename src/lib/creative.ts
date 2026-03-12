@@ -434,11 +434,11 @@ const SHORTEN_PATTERN =
   /\b(?:shorter|shorten|concise|punchier|tighter|trim|reduce|leaner)\b|(?:less|fewer)\s+(?:text|copy|words)/;
 const AGGRESSIVE_SHORTEN_PATTERN =
   /\b(?:significantly|substantially|dramatically|considerably)\b|\b(?:much|way|far)\s+shorter\b/;
-const CAPTION_PATTERN = /\bcaption|captions|hashtags\b/;
+const CAPTION_PATTERN = /\b(?:caption|captions|hashtags)\b/;
 const OVERLAY_PATTERN =
-  /\bcomponent|components|overlay|hook|headline|body|supporting text|on-canvas|text boxes|cta\b/;
+  /\b(?:component|components|overlay|hook|headline|body|supporting text|on-canvas|text boxes)\b/;
 const EDITORIAL_ONLY_PATTERN =
-  /\b(?:purely|strictly|fully)\s+editorial\b|\beditorial[- ]only\b/;
+  /\b(?:(?:purely|strictly|fully)\s+editorial|editorial[- ]only)\b/;
 
 const REFINE_SHORTEN_FACTORS: Record<RefineShortenIntensity, number> = {
   standard: 0.82,
