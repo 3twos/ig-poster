@@ -43,7 +43,7 @@ type PostContextValue = {
 
   // Save
   saveStatus: SaveStatus;
-  saveNow: () => Promise<void>;
+  saveNow: () => Promise<boolean>;
 
   // Mobile
   isSidebarOpen: boolean;

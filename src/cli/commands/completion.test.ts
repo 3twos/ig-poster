@@ -22,6 +22,9 @@ describe("runCompletionCommand", () => {
     );
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("publish"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("chat"));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("watch"));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("mcp"));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("--stream-json"));
   });
 
   it("prints a zsh completion script", async () => {

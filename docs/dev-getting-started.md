@@ -187,7 +187,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/meta-auth.ts`: CLI-safe Meta auth resolution for bearer-auth publish and Meta place-search routes.
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
 - `src/services/status.ts`: aggregated CLI status summaries for actor auth, Meta readiness, LLM providers, and publish-window usage.
-- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, direct publish commands, brand-kit commands, post commands, and queue commands.
+- `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -220,7 +220,11 @@ npm run build:cli
 npm run cli -- help
 ```
 
-The CLI reads profile state from `~/.config/ig-poster/config.json` by default. Override that location in tests or isolated runs with `IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli`. On macOS, browser-login refresh tokens are written to Keychain unless you set `IG_POSTER_DISABLE_KEYCHAIN=1`.
+The CLI reads profile state from `~/.config/ig-poster/config.json` by default. Override that location in tests or isolated runs with `IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli`. On macOS, CLI refresh tokens are written to Keychain unless you set `IG_POSTER_DISABLE_KEYCHAIN=1`.
+
+In an interactive terminal, auth-required commands now bootstrap browser login automatically when no valid CLI session exists. Non-interactive usage still requires a saved session or `IG_POSTER_TOKEN`, but you can also start an explicit headless approval flow with `npm run cli -- auth login --device-code` or `--no-browser`.
+
+For normal commands, non-TTY stdout now auto-enables `--json`, and `--json` output is always a stable `{ ok, data }` / `{ ok, error }` envelope. Streaming flows still use `--stream-json`.
 
 Repo-local defaults can also be linked in `.ig-poster/project.json`:
 
@@ -239,17 +243,33 @@ Then test the CLI from another terminal:
 
 ```bash
 export IG_POSTER_CONFIG_DIR=/tmp/ig-poster-cli
-npm run cli -- auth login
+npm run cli -- status --json
 npm run cli -- auth status --json
 npm run cli -- auth sessions list
 npm run cli -- publish --image https://cdn.example.com/poster.png --caption "Launch day" --dry-run
 npm run cli -- generate run --post <post-id> --stream-json
 npm run cli -- chat ask --post <post-id> "Give me three stronger hooks for this draft"
+npm run cli -- watch ./incoming --once --json
 npm run cli -- --flags-file .ig-poster/release.flags
 npm run cli -- posts list
 ```
 
-If the browser cannot be opened automatically, the CLI prints the login URL so you can open it manually.
+For a quick walkthrough that exercises the current preview commands while keeping project link state isolated to a temporary directory, run:
+
+```bash
+./scripts/cli-showcase.zsh
+```
+
+Optional showcase environment overrides:
+- `IG_SHOWCASE_HOST` / `IG_SHOWCASE_PROFILE` to target a non-default server or profile
+- `IG_SHOWCASE_CONFIG_DIR` to isolate CLI auth/config state
+- `IG_SHOWCASE_POST_ID` to enable `generate` / `chat` / `refine` examples
+- `IG_SHOWCASE_IMAGE_URL` to enable an `ig publish --dry-run` example
+- `IG_SHOWCASE_BRAND_KIT_ID` to choose the brand kit used by the temporary project link
+- `IG_SHOWCASE_CHAT_PROMPT` to customize the `chat ask` prompt
+- `IG_SHOWCASE_CAPTION` to customize the `ig publish --dry-run` caption
+
+The first auth-required command above should open the browser automatically if the CLI is not logged in yet. If the browser cannot be opened automatically, the CLI prints the login URL so you can open it manually. You can still run `npm run cli -- auth login` explicitly when you want to pre-authenticate ahead of time, or `npm run cli -- auth login --device-code` for a headless approval flow.
 
 Manual bearer bootstrap is still available when you need it:
 
@@ -257,7 +277,20 @@ Manual bearer bootstrap is still available when you need it:
 printf '%s' "$IG_POSTER_TOKEN" | npm run cli -- auth login --token-stdin
 ```
 
-Current limitation: device-code login is still pending. On non-macOS platforms, or when `IG_POSTER_DISABLE_KEYCHAIN=1` is set, refresh tokens still fall back to `~/.config/ig-poster/config.json` (mode `0600`).
+For headless login, the CLI now supports a hosted device-code approval page. On non-macOS platforms, or when `IG_POSTER_DISABLE_KEYCHAIN=1` is set, refresh tokens still fall back to `~/.config/ig-poster/config.json` (mode `0600`).
+
+Additional CLI ergonomics:
+- `ig watch <dir>` polls a local directory, uploads supported media through `/api/v1/assets`, and creates a draft post through `/api/v1/posts`. Use `--json` for one-shot scan summaries or `--stream-json` for live NDJSON events.
+- `ig mcp` starts a stdio MCP adapter that exposes a focused set of CLI-backed tools for local agents.
+- Hidden dev-only `--local` targets `IG_POSTER_LOCAL_HOST` (default `http://localhost:3000`) while still calling the standard `/api/v1/*` routes. It is intended only for local development and testing, not production automation.
+- The current web-side Apple Photos slice is intentionally partial: on macOS the asset panel exposes `Add from Photos`, but until the native companion exists it falls back to the regular upload flow with explicit remediation copy.
+
+Planned next CLI/macOS work:
+- Apple Photos support will be delivered as a macOS companion app plus a local bridge, not by moving core generation/publish logic into a native app.
+- Human-first flow: the web editor launches native macOS selection UI through the companion app, exports chosen assets into a managed cache, then reuses the existing `/api/v1/assets` and `/api/v1/posts` workflows. `ig photos pick` remains the CLI equivalent.
+- Agent-first flow: `ig photos recent|search|import|propose` and future MCP tools call the same local bridge for PhotoKit-backed enumeration/export, then continue through the normal CLI/service pipeline.
+- Keep Apple-specific behavior isolated to the companion app and bridge; do not introduce Apple-specific logic into the server routes or core domain services.
+- Missing-helper behavior must be explicit: if the companion app or bridge is unavailable, the web app should fall back to install guidance plus normal file upload, and CLI/MCP should return machine-readable remediation codes.
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.
@@ -277,6 +310,8 @@ Supported preview commands today:
 - `ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]`
 - `ig unlink`
 - `ig completion <bash|zsh|fish>`
+- `ig watch <dir> [--brand-kit <id>] [--folder <assets|videos|logos|renders>] [--interval <ms>] [--once]`
+- `ig mcp`
 - `ig publish (--image <url> | --video <url> | --carousel <url,...>) (--caption <text> | --caption-file <file>)`
 - `ig api <METHOD> <PATH>`
 - `ig posts list|get|create|update|duplicate|archive`

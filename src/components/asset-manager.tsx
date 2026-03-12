@@ -26,8 +26,27 @@ import {
   ImagePlus,
   X,
 } from "lucide-react";
-import { useId, useRef, useState, type ChangeEvent } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ChangeEvent,
+} from "react";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  getApplePhotosFallbackInfo,
+  isMacOsUserAgent,
+} from "@/lib/apple-photos";
 import type { LocalAsset } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/upload-helpers";
@@ -46,6 +65,8 @@ type Props = {
   onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
+const subscribeToClientStatus = () => () => {};
+
 export function AssetManager({
   assets,
   onRemove,
@@ -53,12 +74,21 @@ export function AssetManager({
   onAssetUpload,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [applePhotosDialogOpen, setApplePhotosDialogOpen] = useState(false);
   const addAssetInputId = useId();
   const addAssetInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  const isClient = useSyncExternalStore(
+    subscribeToClientStatus,
+    () => true,
+    () => false,
+  );
+  const userAgent = isClient ? window.navigator.userAgent : "";
+  const showApplePhotosEntry = isMacOsUserAgent(userAgent);
+  const applePhotosFallback = getApplePhotosFallbackInfo(userAgent);
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
@@ -80,71 +110,136 @@ export function AssetManager({
   };
 
   const activeAsset = activeId ? assets.find((a) => a.id === activeId) : null;
+  const handleUseRegularUpload = () => {
+    const input = addAssetInputRef.current;
+    if (input) {
+      input.click();
+    }
+    setApplePhotosDialogOpen(false);
+  };
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
-            Assets
+    <>
+      <div className="space-y-3">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold tracking-[0.2em] text-slate-300 uppercase">
+              Assets
+            </p>
+            <div className="flex items-center gap-2">
+              {showApplePhotosEntry ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/8 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300 hover:bg-white/12"
+                  onClick={() => setApplePhotosDialogOpen(true)}
+                >
+                  <ImageIcon className="h-3.5 w-3.5 text-orange-300" />
+                  Add from Photos
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300"
+                onClick={() => addAssetInputRef.current?.click()}
+              >
+                <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
+                {assets.length > 0 ? "Add assets" : "Attach assets"}
+              </button>
+            </div>
+            <input
+              id={addAssetInputId}
+              ref={addAssetInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="sr-only"
+              onChange={onAssetUpload}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">
+            Upload images and short videos for generation.
           </p>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-white/25 bg-black/20 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300"
-            onClick={() => addAssetInputRef.current?.click()}
-          >
-            <ImagePlus className="h-3.5 w-3.5 text-orange-300" />
-            {assets.length > 0 ? "Add assets" : "Attach assets"}
-          </button>
-          <input
-            id={addAssetInputId}
-            ref={addAssetInputRef}
-            type="file"
-            accept="image/*,video/*"
-            multiple
-            className="sr-only"
-            onChange={onAssetUpload}
-          />
-        </div>
-        <p className="mt-1 text-[11px] text-slate-400">
-          Upload images and short videos for generation.
-        </p>
+          {showApplePhotosEntry ? (
+            <p className="mt-1 text-[11px] text-slate-500">
+              On macOS, you can start Photos import from here. Until the
+              companion app ships, this falls back to regular upload.
+            </p>
+          ) : null}
 
-        {assets.length > 0 ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={(e) => setActiveId(String(e.active.id))}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveId(null)}
-          >
-            <SortableContext
-              items={assets.map((a) => a.id)}
-              strategy={rectSortingStrategy}
+          {assets.length > 0 ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={(e) => setActiveId(String(e.active.id))}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setActiveId(null)}
             >
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {assets.map((asset, idx) => (
-                  <SortableAssetTile
-                    key={asset.id}
-                    asset={asset}
-                    index={idx}
-                    total={assets.length}
-                    onRemove={() => onRemove(asset.id)}
-                    onMove={(dir) => moveAsset(asset.id, dir)}
-                  />
-                ))}
-              </div>
-            </SortableContext>
+              <SortableContext
+                items={assets.map((a) => a.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {assets.map((asset, idx) => (
+                    <SortableAssetTile
+                      key={asset.id}
+                      asset={asset}
+                      index={idx}
+                      total={assets.length}
+                      onRemove={() => onRemove(asset.id)}
+                      onMove={(dir) => moveAsset(asset.id, dir)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
 
-            <DragOverlay>
-              {activeAsset ? <AssetTileContent asset={activeAsset} isDragOverlay /> : null}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          <p className="mt-2 text-[11px] text-slate-400">No assets attached.</p>
-        )}
+              <DragOverlay>
+                {activeAsset ? (
+                  <AssetTileContent asset={activeAsset} isDragOverlay />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          ) : (
+            <p className="mt-2 text-[11px] text-slate-400">
+              No assets attached.
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+
+      <Dialog
+        open={applePhotosDialogOpen}
+        onOpenChange={setApplePhotosDialogOpen}
+      >
+        <DialogContent className="border-white/10 bg-slate-950 text-slate-100 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{applePhotosFallback.title}</DialogTitle>
+            <DialogDescription className="text-slate-300">
+              {applePhotosFallback.description}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-300">
+            <span className="font-semibold text-slate-100">Status:</span>{" "}
+            <code className="font-mono text-[10px] text-orange-200">
+              {applePhotosFallback.code}
+            </code>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setApplePhotosDialogOpen(false)}
+            >
+              Not now
+            </Button>
+            <Button
+              className="bg-orange-300 text-slate-950 hover:bg-orange-200"
+              onClick={handleUseRegularUpload}
+            >
+              {applePhotosFallback.actionLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

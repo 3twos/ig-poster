@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/cli/auth", () => ({
   loginWithBrowser: vi.fn(),
+  loginWithDeviceCode: vi.fn(),
   persistCliAuthTokens: vi.fn(async (config, profileName, host, tokens) => ({
     ...config,
     profiles: {
@@ -27,10 +28,11 @@ vi.mock("@/cli/secure-storage", () => ({
 
 import { runAuthCommand } from "@/cli/commands/auth";
 import { loadConfig } from "@/cli/config";
-import { loginWithBrowser } from "@/cli/auth";
+import { loginWithBrowser, loginWithDeviceCode } from "@/cli/auth";
 import { clearStoredRefreshToken } from "@/cli/secure-storage";
 
 const mockedLoginWithBrowser = vi.mocked(loginWithBrowser);
+const mockedLoginWithDeviceCode = vi.mocked(loginWithDeviceCode);
 const mockedClearStoredRefreshToken = vi.mocked(clearStoredRefreshToken);
 
 describe("runAuthCommand", () => {
@@ -40,6 +42,7 @@ describe("runAuthCommand", () => {
     configDir = await mkdtemp(path.join(os.tmpdir(), "ig-poster-cli-auth-cmd-"));
     process.env.IG_POSTER_CONFIG_DIR = configDir;
     mockedLoginWithBrowser.mockReset();
+    mockedLoginWithDeviceCode.mockReset();
     mockedClearStoredRefreshToken.mockReset();
   });
 
@@ -131,6 +134,42 @@ describe("runAuthCommand", () => {
       method: "GET",
       path: "/api/v1/auth/sessions",
     });
+  });
+
+  it("runs device-code login when requested", async () => {
+    mockedLoginWithDeviceCode.mockResolvedValue({
+      accessToken: "access-token",
+      accessTokenExpiresAt: "2026-03-09T20:00:00.000Z",
+      refreshToken: "session.secret",
+      refreshTokenExpiresAt: "2026-04-08T20:00:00.000Z",
+      session: {
+        id: "session-1",
+        label: "Laptop",
+        email: "person@example.com",
+        domain: "example.com",
+      },
+    });
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runAuthCommand(
+      {
+        config: await loadConfig(),
+        profileName: "default",
+        profileConfig: {},
+        host: "http://localhost:3000",
+        globalOptions: {
+          json: true,
+          quiet: false,
+          noColor: false,
+          yes: false,
+          dryRun: false,
+        },
+      } as never,
+      ["login", "--device-code"],
+    );
+
+    expect(mockedLoginWithDeviceCode).toHaveBeenCalled();
+    expect(mockedLoginWithBrowser).not.toHaveBeenCalled();
   });
 
   it("logs out persisted refresh sessions remotely and clears local state", async () => {
