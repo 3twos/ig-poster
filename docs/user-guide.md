@@ -81,6 +81,7 @@
    - `Refine` is the incremental path: it updates the selected variant while preserving the current editor placement and visual treatment unless you explicitly ask the AI to change them.
    - Refine requests include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have the right context.
    - Refine now also applies a deterministic instruction-enforcement pass after the model response for common requests such as shorter on-canvas copy, shorter captions, and removing CTA text.
+   - Successful refine updates also re-fit the canonical hook/headline/body/CTA stack against the current copy to reduce overlap while preserving widths, x positions, custom boxes, and visible/hidden state.
    - Carousel slide copy follows the same refine policy, and blank CTA variants no longer force a mid-slide `Swipe for more` label.
    - `Duplicate post` forks the current post into a new editable draft copy. If the source post is already posted, duplication is the only way to continue iterating.
    - Scheduled posts can be moved back into `Draft` with `Move to draft`.

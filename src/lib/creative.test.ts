@@ -14,6 +14,7 @@ import {
   resolveVariantOverlayCopy,
   selectTopVariants,
   selectTopVariantsWithScores,
+  syncOverlayLayoutToVariantCopy,
   type CreativeVariant,
 } from "@/lib/creative";
 
@@ -437,6 +438,56 @@ describe("creative helpers", () => {
     expect(fitted.headline.height).toBeLessThanOrEqual(100);
     expect(fitted.supportingText.height).toBeLessThanOrEqual(100);
     expect(fitted.cta.height).toBeLessThanOrEqual(100);
+  });
+
+  it("syncs refined copy into the overlay layout and re-fits canonical blocks", () => {
+    const base = createDefaultOverlayLayout("hero-quote");
+    base.hook.text = "Original hook";
+    base.headline.text = "Original headline";
+    base.headline.x = 14;
+    base.supportingText.text = "Original supporting text";
+    base.cta.text = "";
+    base.custom = [
+      {
+        id: "custom-1",
+        label: "Custom",
+        x: 12,
+        y: 12,
+        width: 20,
+        height: 8,
+        text: "Keep this custom box",
+        fontScale: 1,
+        visible: true,
+        bgOpacity: 0.2,
+        borderRadius: 12,
+      },
+    ];
+
+    const synced = syncOverlayLayoutToVariantCopy({
+      variant: {
+        ...makeVariant("refined-layout", "single-image"),
+        layout: "hero-quote",
+        hook: "A sharper hook after refinement",
+        headline:
+          "A significantly longer headline after refinement that should trigger a taller block and a safer stack",
+        supportingText:
+          "A longer supporting paragraph after refinement that should also restack below the headline instead of overlapping with it.",
+        cta: "Visit profile",
+      },
+      overlayLayout: base,
+      aspectRatio: "4:5",
+    });
+
+    expect(synced.hook.text).toBe("A sharper hook after refinement");
+    expect(synced.headline.text).toContain("significantly longer headline");
+    expect(synced.headline.x).toBe(14);
+    expect(synced.cta.text).toBe("");
+    expect(synced.custom[0]?.id).toBe("custom-1");
+    expect(synced.custom[0]?.text).toBe("Keep this custom box");
+    expect(synced.custom[0]?.x).toBe(12);
+    expect(synced.supportingText.y).toBeGreaterThanOrEqual(
+      synced.headline.y + synced.headline.height,
+    );
   });
 
   it("resolves overlay copy from the active carousel slide", () => {

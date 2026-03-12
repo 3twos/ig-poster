@@ -97,6 +97,7 @@ Why this shape:
   - creative generation schemas + prompt builders
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
   - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text
+  - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses
   - LLM provider abstraction
   - auth/session/token helpers
   - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
@@ -139,6 +140,7 @@ Why this shape:
 - Keeps `Generate` as a clean re-run from persisted brief inputs, while `Refine` remains the incremental path that preserves the current canvas look unless asked otherwise.
 - Gives refine requests more context by sending the saved brief, prompt instructions, and current overlay layout state alongside the selected variant.
 - Runs a deterministic refine-enforcement pass after model output for recurring instruction families (for example shorter copy and no-CTA requests), so the UX does not rely entirely on prompt obedience.
+- Re-fits the canonical overlay stack after successful refine responses so updated copy is less likely to overlap, while preserving existing widths, x positions, custom boxes, and visibility choices from the current layout.
 
 ### 3) Share Project
 
@@ -200,7 +202,6 @@ Why this shape:
 - CLI output contracts are now normalized around stable JSON envelopes (`{ ok, data }` / `{ ok, error }`) and the CLI auto-prefers `--json` when stdout is not a TTY for normal commands, while `--stream-json` remains NDJSON event output for streaming workflows.
 - `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
 - `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
-<<<<<<< HEAD
 - Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
 - The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. Until the native companion app exists, that entry point intentionally degrades to a regular-upload fallback dialog instead of attempting a broken native handoff.
 - OAuth flow:
