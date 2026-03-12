@@ -9,8 +9,6 @@ import { requireAppEncryptionSecret } from "@/lib/app-encryption";
 import { getMetaConnection } from "@/lib/meta-auth";
 import {
   getEnvMetaAuth,
-  publishInstagramContent,
-  publishInstagramFirstComment,
 } from "@/lib/meta";
 import {
   claimDuePublishJobs,
@@ -22,6 +20,7 @@ import {
   recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
 import { decryptString } from "@/lib/secure";
+import { executePublishJob } from "@/services/publish-executor";
 
 export const runtime = "nodejs";
 const QUOTA_DEFER_MINUTES = 15;
@@ -111,35 +110,10 @@ export async function GET(req: Request) {
           );
         }
 
-        const publish = await publishInstagramContent(
-          {
-            ...job.media,
-            caption: job.caption,
-            locationId: job.locationId ?? undefined,
-            userTags: job.userTags ?? undefined,
-          },
+        const { publish, firstCommentWarning } = await executePublishJob(
+          job,
           auth,
         );
-
-        let firstCommentWarning: string | undefined;
-        if (job.firstComment) {
-          if (!publish.publishId) {
-            firstCommentWarning =
-              "Published media id unavailable; could not post first comment.";
-          } else {
-            try {
-              await publishInstagramFirstComment(
-                publish.publishId,
-                job.firstComment,
-                auth,
-              );
-            } catch (error) {
-              firstCommentWarning = error instanceof Error
-                ? error.message
-                : "Could not post first comment.";
-            }
-          }
-        }
 
         await completePublishJobSuccess(db, job, {
           publishId: publish.publishId,

@@ -10,8 +10,6 @@ import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import {
   MetaScheduleRequestSchema,
-  publishInstagramContent,
-  publishInstagramFirstComment,
 } from "@/lib/meta";
 import {
   MetaMediaPreflightError,
@@ -27,6 +25,7 @@ import {
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { resolveMetaAuthForRequest } from "@/services/meta-auth";
+import { executeImmediateInstagramPublish } from "@/services/publish-executor";
 
 class MetaScheduleClientError extends Error {
   constructor(message: string) {
@@ -129,17 +128,19 @@ export async function POST(req: Request) {
       );
     }
 
-    let publish: Awaited<ReturnType<typeof publishInstagramContent>>;
+    let publish: Awaited<ReturnType<typeof executeImmediateInstagramPublish>>["publish"];
+    let firstCommentWarning: string | undefined;
     try {
-      publish = await publishInstagramContent(
+      ({ publish, firstCommentWarning } = await executeImmediateInstagramPublish(
         {
-          ...payload.media,
+          media: payload.media,
           caption: payload.caption,
+          firstComment: payload.firstComment,
           locationId: payload.locationId,
           userTags: payload.userTags,
         },
         resolvedAuth.auth,
-      );
+      ));
     } catch (error) {
       const detail = error instanceof Error
         ? error.message
@@ -150,26 +151,6 @@ export async function POST(req: Request) {
         // Best-effort cleanup; preserve upstream publish error response.
       }
       throw error;
-    }
-
-    let firstCommentWarning: string | undefined;
-    if (payload.firstComment) {
-      if (!publish.publishId) {
-        firstCommentWarning =
-          "Published media id unavailable; could not post first comment.";
-      } else {
-        try {
-          await publishInstagramFirstComment(
-            publish.publishId,
-            payload.firstComment,
-            resolvedAuth.auth,
-          );
-        } catch (error) {
-          firstCommentWarning = error instanceof Error
-            ? error.message
-            : "Could not post first comment.";
-        }
-      }
     }
 
     try {

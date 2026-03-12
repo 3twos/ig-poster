@@ -10,10 +10,6 @@ import {
 } from "@/lib/api/v1/publish";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import {
-  publishInstagramContent,
-  publishInstagramFirstComment,
-} from "@/lib/meta";
-import {
   MetaMediaPreflightError,
   preflightMetaMediaForPublish,
 } from "@/lib/meta-media-preflight";
@@ -29,6 +25,7 @@ import {
   MetaAuthServiceError,
   resolveMetaAuthForApi,
 } from "@/services/meta-auth";
+import { executeImmediateInstagramPublish } from "@/services/publish-executor";
 
 class PublishRouteError extends Error {
   readonly status: number;
@@ -191,17 +188,19 @@ export async function POST(req: Request) {
       );
     }
 
-    let publish: Awaited<ReturnType<typeof publishInstagramContent>>;
+    let publish: Awaited<ReturnType<typeof executeImmediateInstagramPublish>>["publish"];
+    let firstCommentWarning: string | undefined;
     try {
-      publish = await publishInstagramContent(
+      ({ publish, firstCommentWarning } = await executeImmediateInstagramPublish(
         {
-          ...payload.media,
+          media: payload.media,
           caption: payload.caption,
+          firstComment: payload.firstComment,
           locationId: payload.locationId,
           userTags: payload.userTags,
         },
         resolvedAuth.auth,
-      );
+      ));
     } catch (error) {
       const detail =
         error instanceof Error ? error.message : "Unknown publish failure";
@@ -211,27 +210,6 @@ export async function POST(req: Request) {
         // Preserve the upstream publish failure.
       }
       throw error;
-    }
-
-    let firstCommentWarning: string | undefined;
-    if (payload.firstComment) {
-      if (!publish.publishId) {
-        firstCommentWarning =
-          "Published media id unavailable; could not post first comment.";
-      } else {
-        try {
-          await publishInstagramFirstComment(
-            publish.publishId,
-            payload.firstComment,
-            resolvedAuth.auth,
-          );
-        } catch (error) {
-          firstCommentWarning =
-            error instanceof Error
-              ? error.message
-              : "Could not post first comment.";
-        }
-      }
     }
 
     try {
