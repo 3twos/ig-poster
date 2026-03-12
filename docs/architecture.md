@@ -97,6 +97,7 @@ Why this shape:
   - creative generation schemas + prompt builders
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
   - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text
+  - brief-aware variant ranking heuristics that prefer saved theme/subject/thought/audience alignment over generic engagement tropes when selecting finalists
   - LLM provider abstraction
   - auth/session/token helpers
   - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
@@ -139,6 +140,7 @@ Why this shape:
 - Keeps `Generate` as a clean re-run from persisted brief inputs, while `Refine` remains the incremental path that preserves the current canvas look unless asked otherwise.
 - Gives refine requests more context by sending the saved brief, prompt instructions, and current overlay layout state alongside the selected variant.
 - Runs a deterministic refine-enforcement pass after model output for recurring instruction families (for example shorter copy and no-CTA requests), so the UX does not rely entirely on prompt obedience.
+- Builds generation prompts with an explicit priority order where the saved brief outranks supporting website/performance context and house best-practice examples, then uses the same brief signals again during finalist selection as a deterministic backstop.
 
 ### 3) Share Project
 

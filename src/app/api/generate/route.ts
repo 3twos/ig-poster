@@ -454,13 +454,42 @@ export async function POST(req: Request) {
             const scores = await scoreVariantsWithLlm(
               scoringAuth,
               allVariants,
-              { brandName: request.brand.brandName, voice: request.brand.voice },
-              { theme: request.post.theme, audience: request.post.audience, objective: request.post.objective },
+              {
+                brandName: request.brand.brandName,
+                voice: request.brand.voice,
+                values: request.brand.values,
+                principles: request.brand.principles,
+              },
+              {
+                theme: request.post.theme,
+                subject: request.post.subject,
+                thought: request.post.thought,
+                audience: request.post.audience,
+                objective: request.post.objective,
+                mood: request.post.mood,
+              },
+              request.promptConfig?.customInstructions,
               generationAbortController.signal,
             );
-            topVariants = selectTopVariantsWithScores(allVariants, scores, 3);
+            topVariants = selectTopVariantsWithScores(allVariants, scores, 3, {
+              brand: {
+                brandName: request.brand.brandName,
+                voice: request.brand.voice,
+                values: request.brand.values,
+                principles: request.brand.principles,
+              },
+              post: request.post,
+            });
           } catch {
-            topVariants = selectTopVariants(allVariants, 3);
+            topVariants = selectTopVariants(allVariants, 3, {
+              brand: {
+                brandName: request.brand.brandName,
+                voice: request.brand.voice,
+                values: request.brand.values,
+                principles: request.brand.principles,
+              },
+              post: request.post,
+            });
           }
 
           const parsed = GenerationResponseSchema.parse({
