@@ -11,6 +11,7 @@ import {
   deletePostDestinations,
   getStoredPostDestinations,
   listStoredPostDestinationsByPostId,
+  syncPostDestinationsFromPublishSettings,
 } from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
@@ -182,6 +183,96 @@ describe("post-destinations", () => {
     await deletePostDestinations(db as never, "post_1");
 
     expect(where).toHaveBeenCalledTimes(1);
+  });
+
+  it("syncs legacy publish settings into stored destination rows", async () => {
+    const rows = [
+      { postId: "post_1", destination: "facebook" as const },
+      { postId: "post_1", destination: "instagram" as const },
+    ];
+    const selectWhere = vi.fn().mockResolvedValue(rows);
+    const updateWhere = vi.fn().mockResolvedValue(undefined);
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    const db = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where: selectWhere })),
+      })),
+      insert: vi.fn(),
+      update: vi.fn(() => ({ set: updateSet })),
+    };
+
+    await syncPostDestinationsFromPublishSettings(db as never, {
+      id: "post_1",
+      publishSettings: {
+        caption: "Updated caption",
+        firstComment: "Updated first comment",
+        locationId: "456",
+        reelShareToFeed: true,
+      },
+    });
+
+    expect(updateSet).toHaveBeenCalledTimes(2);
+    expect(updateSet).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        caption: "Updated caption",
+        updatedAt: expect.any(Date),
+      }),
+    );
+    expect(updateSet).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        caption: "Updated caption",
+        firstComment: "Updated first comment",
+        locationId: "456",
+        updatedAt: expect.any(Date),
+      }),
+    );
+  });
+
+  it("backfills missing destination rows while syncing publish settings", async () => {
+    const rows = [{ postId: "post_1", destination: "instagram" as const }];
+    const selectWhere = vi.fn().mockResolvedValue(rows);
+    const insertValues = vi.fn().mockResolvedValue(undefined);
+    const updateWhere = vi.fn().mockResolvedValue(undefined);
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    const db = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where: selectWhere })),
+      })),
+      insert: vi.fn(() => ({ values: insertValues })),
+      update: vi.fn(() => ({ set: updateSet })),
+    };
+
+    await syncPostDestinationsFromPublishSettings(db as never, {
+      id: "post_1",
+      publishSettings: {
+        caption: "Caption",
+        firstComment: "",
+        locationId: "",
+        reelShareToFeed: true,
+      },
+    });
+
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          postId: "post_1",
+          destination: "facebook",
+          caption: "Caption",
+          enabled: false,
+        }),
+      ]),
+    );
+    expect(updateSet).toHaveBeenCalledTimes(1);
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caption: "Caption",
+        firstComment: "",
+        locationId: "",
+        updatedAt: expect.any(Date),
+      }),
+    );
   });
 
   it("loads stored destination rows for a single post", async () => {

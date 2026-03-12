@@ -8,6 +8,7 @@ vi.mock("@/services/post-destinations", () => ({
   clonePostDestinations: vi.fn(),
   createDefaultPostDestinations: vi.fn(),
   deletePostDestinations: vi.fn(),
+  syncPostDestinationsFromPublishSettings: vi.fn(),
 }));
 
 import { getDb } from "@/db";
@@ -16,6 +17,7 @@ import {
   clonePostDestinations,
   createDefaultPostDestinations,
   deletePostDestinations,
+  syncPostDestinationsFromPublishSettings,
 } from "@/services/post-destinations";
 import {
   createPost,
@@ -29,6 +31,9 @@ const mockedGetDb = vi.mocked(getDb);
 const mockedCreateDefaultPostDestinations = vi.mocked(createDefaultPostDestinations);
 const mockedClonePostDestinations = vi.mocked(clonePostDestinations);
 const mockedDeletePostDestinations = vi.mocked(deletePostDestinations);
+const mockedSyncPostDestinationsFromPublishSettings = vi.mocked(
+  syncPostDestinationsFromPublishSettings,
+);
 
 const actor = {
   type: "workspace-user" as const,
@@ -106,6 +111,7 @@ describe("post services", () => {
     mockedCreateDefaultPostDestinations.mockReset();
     mockedClonePostDestinations.mockReset();
     mockedDeletePostDestinations.mockReset();
+    mockedSyncPostDestinationsFromPublishSettings.mockReset();
   });
 
   describe("updatePost", () => {
@@ -194,6 +200,76 @@ describe("post services", () => {
       const [updatePayload] = updateSet.mock.calls[0];
       expect(updatePayload).toMatchObject({
         status: "scheduled",
+      });
+    });
+
+    it("syncs destination rows after publish settings change", async () => {
+      const existing = {
+        id: "p1",
+        ownerHash: "hash",
+        title: "Original",
+        mediaComposition: {
+          orientation: "portrait",
+          items: [{ assetId: "asset-1", excludedFromPost: false }],
+        },
+        overlayLayouts: {},
+        brand: null,
+        brief: null,
+        promptConfig: null,
+        publishSettings: {
+          caption: "Original caption",
+          firstComment: "Original comment",
+          locationId: "123",
+          reelShareToFeed: true,
+        },
+        status: "draft",
+      };
+      const selectLimit = vi.fn().mockResolvedValue([existing]);
+      const selectWhere = vi.fn(() => ({ limit: selectLimit }));
+      const selectFrom = vi.fn(() => ({ where: selectWhere }));
+      const updatedRow = {
+        ...existing,
+        publishSettings: {
+          caption: "Updated caption",
+          firstComment: "Updated comment",
+          locationId: "456",
+          reelShareToFeed: true,
+        },
+      };
+      const updateReturning = vi.fn().mockResolvedValue([updatedRow]);
+      const updateWhere = vi.fn(() => ({ returning: updateReturning }));
+      const updateSet = vi.fn(() => ({ where: updateWhere }));
+      const db = {
+        select: vi.fn(() => ({ from: selectFrom })),
+        update: vi.fn(() => ({ set: updateSet })),
+      } as unknown as ReturnType<typeof getDb>;
+
+      mockedGetDb.mockReturnValue(db);
+
+      await expect(
+        updatePost(actor, "p1", {
+          publishSettings: {
+            caption: "Updated caption",
+            firstComment: "Updated comment",
+            locationId: "456",
+          },
+        }),
+      ).resolves.toEqual(updatedRow);
+
+      expect(updateSet).toHaveBeenCalledTimes(1);
+      expect(updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          publishSettings: {
+            caption: "Updated caption",
+            firstComment: "Updated comment",
+            locationId: "456",
+            reelShareToFeed: true,
+          },
+        }),
+      );
+      expect(mockedSyncPostDestinationsFromPublishSettings).toHaveBeenCalledWith(db, {
+        id: "p1",
+        publishSettings: updatedRow.publishSettings,
       });
     });
   });

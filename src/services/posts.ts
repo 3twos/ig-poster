@@ -17,6 +17,7 @@ import {
   clonePostDestinations,
   createDefaultPostDestinations,
   deletePostDestinations,
+  syncPostDestinationsFromPublishSettings,
 } from "@/services/post-destinations";
 
 const randomId = () =>
@@ -230,6 +231,13 @@ export const updatePost = async (
     .set(update)
     .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
     .returning();
+
+  if (updated && body.publishSettings !== undefined && body.publishSettings !== null) {
+    await syncPostDestinationsFromPublishSettings(db, {
+      id: updated.id,
+      publishSettings: updated.publishSettings,
+    });
+  }
 
   return updated;
 };
