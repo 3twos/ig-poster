@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-import type { PostRow } from "@/db/schema";
+import type { PostDestinationRow, PostRow } from "@/db/schema";
 import { deriveTitle, toSummary } from "@/lib/post";
+import { buildPostDestinationResources } from "@/lib/post-destinations";
 
 export const PostStatusSchema = z.enum([
   "draft",
@@ -19,6 +20,41 @@ export const PostSummaryResourceSchema = z.object({
   assetCount: z.number().int().nonnegative(),
   variantCount: z.number().int().nonnegative(),
   thumbnail: z.string().optional(),
+  destinations: z.array(
+    z.object({
+      destination: z.enum(["facebook", "instagram"]),
+      enabled: z.boolean(),
+      syncMode: z.enum(["remote_authoritative", "app_managed"]),
+      desiredState: z.enum([
+        "draft",
+        "scheduled",
+        "publishing",
+        "published",
+        "failed",
+        "canceled",
+        "out_of_sync",
+      ]),
+      remoteState: z.enum([
+        "draft",
+        "scheduled",
+        "publishing",
+        "published",
+        "failed",
+        "canceled",
+        "out_of_sync",
+      ]),
+      caption: z.string().nullable(),
+      firstComment: z.string().nullable(),
+      locationId: z.string().nullable(),
+      userTags: z.unknown().nullable(),
+      publishAt: z.string().datetime().nullable(),
+      remoteObjectId: z.string().nullable(),
+      remoteContainerId: z.string().nullable(),
+      remotePermalink: z.string().nullable(),
+      lastSyncedAt: z.string().datetime().nullable(),
+      lastError: z.string().nullable(),
+    }),
+  ),
 });
 
 export const PostResourceSchema = z.object({
@@ -34,6 +70,7 @@ export const PostResourceSchema = z.object({
   activeVariantId: z.string().nullable(),
   mediaComposition: z.unknown().nullable(),
   publishSettings: z.unknown().nullable(),
+  destinations: PostSummaryResourceSchema.shape.destinations,
   archivedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -56,9 +93,18 @@ export const PostsListQuerySchema = z.object({
   status: PostStatusSchema.optional(),
 });
 
-export const toPostSummaryResource = (row: PostRow) => toSummary(row);
+export const toPostSummaryResource = (
+  row: PostRow,
+  destinations?: PostDestinationRow[],
+) => ({
+  ...toSummary(row),
+  destinations: buildPostDestinationResources(row, destinations),
+});
 
-export const toPostResource = (row: PostRow) => ({
+export const toPostResource = (
+  row: PostRow,
+  destinations?: PostDestinationRow[],
+) => ({
   id: row.id,
   title: deriveTitle(row),
   status: row.status,
@@ -71,6 +117,7 @@ export const toPostResource = (row: PostRow) => ({
   activeVariantId: row.activeVariantId ?? null,
   mediaComposition: row.mediaComposition ?? null,
   publishSettings: row.publishSettings ?? null,
+  destinations: buildPostDestinationResources(row, destinations),
   archivedAt: row.archivedAt?.toISOString() ?? null,
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),

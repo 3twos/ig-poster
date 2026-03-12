@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { postDestinations } from "@/db/schema";
+import { postDestinations, type PostDestinationRow } from "@/db/schema";
 import {
   META_DESTINATIONS,
   type MetaDestination,
@@ -118,4 +118,46 @@ export const clonePostDestinations = async (
 
 export const deletePostDestinations = async (db: DbExecutor, postId: string) => {
   await db.delete(postDestinations).where(eq(postDestinations.postId, postId));
+};
+
+export const getStoredPostDestinations = async (
+  postId: string,
+): Promise<PostDestinationRow[]> => {
+  const db = getDb();
+  return db
+    .select()
+    .from(postDestinations)
+    .where(eq(postDestinations.postId, postId));
+};
+
+export const listStoredPostDestinationsByPostId = async (
+  postIds: string[],
+): Promise<Map<string, PostDestinationRow[]>> => {
+  const normalizedIds = [...new Set(postIds.map((postId) => postId.trim()).filter(Boolean))];
+  const map = new Map<string, PostDestinationRow[]>();
+  for (const postId of normalizedIds) {
+    map.set(postId, []);
+  }
+
+  if (normalizedIds.length === 0) {
+    return map;
+  }
+
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(postDestinations)
+    .where(inArray(postDestinations.postId, normalizedIds));
+
+  for (const row of rows) {
+    const current = map.get(row.postId);
+    if (current) {
+      current.push(row);
+      continue;
+    }
+
+    map.set(row.postId, [row]);
+  }
+
+  return map;
 };

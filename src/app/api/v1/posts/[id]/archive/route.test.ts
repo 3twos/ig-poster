@@ -8,12 +8,18 @@ vi.mock("@/services/posts", () => ({
   archivePost: vi.fn(),
 }));
 
+vi.mock("@/services/post-destinations", () => ({
+  getStoredPostDestinations: vi.fn(),
+}));
+
 import { POST } from "@/app/api/v1/posts/[id]/archive/route";
 import { resolveActorFromRequest } from "@/services/actors";
+import { getStoredPostDestinations } from "@/services/post-destinations";
 import { archivePost } from "@/services/posts";
 
 const mockedResolveActor = vi.mocked(resolveActorFromRequest);
 const mockedArchivePost = vi.mocked(archivePost);
+const mockedGetStoredPostDestinations = vi.mocked(getStoredPostDestinations);
 
 const actor = {
   type: "workspace-user" as const,
@@ -31,6 +37,8 @@ describe("POST /api/v1/posts/:id/archive", () => {
   beforeEach(() => {
     mockedResolveActor.mockReset();
     mockedArchivePost.mockReset();
+    mockedGetStoredPostDestinations.mockReset();
+    mockedGetStoredPostDestinations.mockResolvedValue([]);
   });
 
   it("returns the archived post resource envelope", async () => {
@@ -69,10 +77,24 @@ describe("POST /api/v1/posts/:id/archive", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mockedGetStoredPostDestinations).toHaveBeenCalledWith("post-1");
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        post: { id: "post-1", status: "draft" },
+        post: {
+          id: "post-1",
+          status: "draft",
+          destinations: [
+            {
+              destination: "facebook",
+              enabled: false,
+            },
+            {
+              destination: "instagram",
+              enabled: true,
+            },
+          ],
+        },
       },
     });
   });
