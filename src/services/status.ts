@@ -40,9 +40,11 @@ export type ApiStatus = {
   publishWindow: PublishWindowStatus;
 };
 
-const resolveMetaStatus = async (): Promise<MetaAuthStatus> => {
+const resolveMetaStatus = async (
+  actor: Actor,
+): Promise<MetaAuthStatus> => {
   try {
-    const resolved = await resolveMetaAuthForApi();
+    const resolved = await resolveMetaAuthForApi({ ownerHash: actor.ownerHash });
     return {
       connected: true,
       source: resolved.source,
@@ -173,7 +175,7 @@ const resolvePublishWindowStatus = async (
 
 export const getApiStatus = async (actor: Actor): Promise<ApiStatus> => {
   const [meta, llm, publishWindow] = await Promise.all([
-    resolveMetaStatus(),
+    resolveMetaStatus(actor),
     resolveLlmStatus(actor),
     resolvePublishWindowStatus(actor),
   ]);

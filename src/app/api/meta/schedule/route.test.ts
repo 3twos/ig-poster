@@ -8,8 +8,8 @@ vi.mock("@/lib/workspace-auth", () => ({
   readWorkspaceSessionFromRequest: vi.fn(),
 }));
 
-vi.mock("@/lib/meta-auth", () => ({
-  resolveMetaAuthFromRequest: vi.fn(),
+vi.mock("@/services/meta-auth", () => ({
+  resolveMetaAuthForRequest: vi.fn(),
 }));
 
 vi.mock("@/lib/meta-media-preflight", async () => {
@@ -51,7 +51,6 @@ import {
   preflightMetaMediaForPublish,
 } from "@/lib/meta-media-preflight";
 import { publishInstagramContent, publishInstagramFirstComment } from "@/lib/meta";
-import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
 import {
   completePublishJobFailure,
   completePublishJobSuccess,
@@ -60,10 +59,11 @@ import {
   reserveImmediatePublishJob,
 } from "@/lib/publish-jobs";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
-const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthFromRequest);
+const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthForRequest);
 const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);

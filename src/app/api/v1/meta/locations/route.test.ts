@@ -97,6 +97,7 @@ describe("GET /api/v1/meta/locations", () => {
     });
     expect(mockedResolveMetaAuthForApi).toHaveBeenCalledWith({
       connectionId: undefined,
+      ownerHash: "owner_hash",
     });
     expect(mockedSearchMetaLocations).toHaveBeenCalledWith("napa", {
       accessToken: "token",

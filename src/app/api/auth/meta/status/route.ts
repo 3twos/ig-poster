@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 
-import { resolveMetaAuthFromRequest } from "@/lib/meta-auth";
+import { resolveActorFromRequest } from "@/services/actors";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
-    const resolved = await resolveMetaAuthFromRequest(req);
+    const actor = await resolveActorFromRequest(req);
+    const resolved = await resolveMetaAuthForRequest(req, {
+      ownerHash: actor?.ownerHash,
+    });
 
     return NextResponse.json({
       connected: true,

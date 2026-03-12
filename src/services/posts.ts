@@ -13,6 +13,11 @@ import {
   PostUpdateRequestSchema,
 } from "@/lib/post-schemas";
 import type { Actor } from "@/services/actors";
+import {
+  clonePostDestinations,
+  createDefaultPostDestinations,
+  deletePostDestinations,
+} from "@/services/post-destinations";
 
 const randomId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(9)))
@@ -98,25 +103,38 @@ export const createPost = async (
     }
   }
 
-  const [row] = await db
-    .insert(posts)
-    .values({
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(posts)
+      .values({
+        id,
+        ownerHash: actor.ownerHash,
+        title: body.title ?? "",
+        status: "draft",
+        brand,
+        brief: body.brief ?? null,
+        assets: body.assets ?? [],
+        logoUrl,
+        brandKitId,
+        promptConfig,
+        mediaComposition: body.mediaComposition ?? undefined,
+        publishSettings: body.publishSettings ?? undefined,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    if (!created) {
+      throw new Error("Failed to create post record.");
+    }
+
+    await createDefaultPostDestinations(tx, {
       id,
-      ownerHash: actor.ownerHash,
-      title: body.title ?? "",
-      status: "draft",
-      brand,
-      brief: body.brief ?? null,
-      assets: body.assets ?? [],
-      logoUrl,
-      brandKitId,
-      promptConfig,
-      mediaComposition: body.mediaComposition ?? undefined,
-      publishSettings: body.publishSettings ?? undefined,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
+      publishSettings: created.publishSettings,
+    });
+
+    return created;
+  });
 
   return row;
 };
@@ -223,47 +241,98 @@ const duplicateTitle = (source: Pick<PostRow, "title" | "brief" | "result">) => 
 
 export const duplicatePost = async (actor: Actor, id: string) => {
   const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(posts)
-    .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
-    .limit(1);
-
-  if (!existing) {
-    return null;
-  }
-
   const now = new Date();
-  const [duplicated] = await db
-    .insert(posts)
-    .values({
-      id: randomUUID().replace(/-/g, "").slice(0, 18),
-      ownerHash: actor.ownerHash,
-      title: duplicateTitle(existing),
-      status: "draft",
-      brand: existing.brand ?? null,
-      brief: existing.brief ?? null,
-      assets: existing.assets ?? [],
-      logoUrl: existing.logoUrl,
-      brandKitId: existing.brandKitId,
-      promptConfig: existing.promptConfig ?? null,
-      result: existing.result ?? null,
-      activeVariantId: existing.activeVariantId,
-      overlayLayouts: existing.overlayLayouts ?? {},
-      mediaComposition: existing.mediaComposition,
-      publishSettings: existing.publishSettings,
-      renderedPosterUrl: null,
-      shareUrl: null,
-      shareProjectId: null,
-      publishHistory: [],
-      createdAt: now,
-      updatedAt: now,
-      archivedAt: null,
-      publishedAt: null,
-    })
-    .returning();
+  const duplicatedId = randomUUID().replace(/-/g, "").slice(0, 18);
+  const duplicated = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(posts)
+      .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
+      .limit(1);
+
+    if (!existing) {
+      return null;
+    }
+
+    const [created] = await tx
+      .insert(posts)
+      .values({
+        id: duplicatedId,
+        ownerHash: actor.ownerHash,
+        title: duplicateTitle(existing),
+        status: "draft",
+        brand: existing.brand ?? null,
+        brief: existing.brief ?? null,
+        assets: existing.assets ?? [],
+        logoUrl: existing.logoUrl,
+        brandKitId: existing.brandKitId,
+        promptConfig: existing.promptConfig ?? null,
+        result: existing.result ?? null,
+        activeVariantId: existing.activeVariantId,
+        overlayLayouts: existing.overlayLayouts ?? {},
+        mediaComposition: existing.mediaComposition,
+        publishSettings: existing.publishSettings,
+        renderedPosterUrl: null,
+        shareUrl: null,
+        shareProjectId: null,
+        publishHistory: [],
+        createdAt: now,
+        updatedAt: now,
+        archivedAt: null,
+        publishedAt: null,
+      })
+      .returning();
+
+    if (!created) {
+      throw new Error("Failed to duplicate post record.");
+    }
+
+    await clonePostDestinations(
+      tx,
+      {
+        id: existing.id,
+        publishSettings: existing.publishSettings,
+      },
+      {
+        id: duplicatedId,
+        publishSettings: created.publishSettings,
+      },
+    );
+
+    return created;
+  });
 
   return duplicated;
+};
+
+export const deletePost = async (actor: Actor, id: string) => {
+  const db = getDb();
+  const deleted = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ status: posts.status })
+      .from(posts)
+      .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
+      .limit(1);
+
+    if (!existing) {
+      return false;
+    }
+
+    if (existing.status === "posted") {
+      throw new PostServiceError(
+        "Posted posts cannot be deleted. Archive the post instead.",
+      );
+    }
+
+    await deletePostDestinations(tx, id);
+    await tx
+      .delete(posts)
+      .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)));
+
+    return true;
+  });
+
+  return deleted;
 };
 
 export const archivePost = async (actor: Actor, id: string) => {
