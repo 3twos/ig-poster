@@ -57,7 +57,8 @@ import type { BrandKitRow } from "@/db/schema";
 import { useGeneration } from "@/hooks/use-generation";
 import { inferLogoNameFromUrl } from "@/lib/brand-kit";
 import {
-  createDefaultOverlayLayout,
+  createFittedOverlayLayout,
+  fitOverlayLayoutToCopy,
   type GenerationResponse,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
@@ -517,9 +518,18 @@ export default function Home() {
     if (!activeVariant) return undefined;
     return (
       overlayLayouts[activeVariant.id] ??
-      createDefaultOverlayLayout(activeVariant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity })
+      createFittedOverlayLayout(activeVariant, post.aspectRatio, {
+        cornerRadius: brand.defaultCornerRadius,
+        bgOpacity: brand.defaultBgOpacity,
+      })
     );
-  }, [activeVariant, brand.defaultBgOpacity, brand.defaultCornerRadius, overlayLayouts]);
+  }, [
+    activeVariant,
+    brand.defaultBgOpacity,
+    brand.defaultCornerRadius,
+    overlayLayouts,
+    post.aspectRatio,
+  ]);
 
   const handleCarouselComposerSequenceChange = useCallback(
     (nextSequence: string[]) => {
@@ -1095,9 +1105,44 @@ export default function Home() {
       type: "UPDATE_OVERLAY",
       postId: activePostIdRef.current ?? undefined,
       variantId: activeVariant.id,
-      layout: createDefaultOverlayLayout(activeVariant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity }),
+      layout: createFittedOverlayLayout(activeVariant, post.aspectRatio, {
+        cornerRadius: brand.defaultCornerRadius,
+        bgOpacity: brand.defaultBgOpacity,
+      }),
     });
-  }, [activeVariant, brand.defaultCornerRadius, brand.defaultBgOpacity, dispatch]);
+  }, [
+    activeVariant,
+    brand.defaultCornerRadius,
+    brand.defaultBgOpacity,
+    dispatch,
+    post.aspectRatio,
+  ]);
+
+  const handleAutoFitTextLayout = useCallback(() => {
+    if (!activeVariant || !activeOverlayLayout || activePostStatusRef.current === "posted") {
+      return;
+    }
+
+    dispatch({
+      type: "UPDATE_OVERLAY",
+      postId: activePostIdRef.current ?? undefined,
+      variantId: activeVariant.id,
+      layout: fitOverlayLayoutToCopy(
+        {
+          layout: activeVariant.layout,
+          hook: activeOverlayLayout.hook.text.trim() || activeVariant.hook,
+          headline:
+            activeOverlayLayout.headline.text.trim() || activeVariant.headline,
+          supportingText:
+            activeOverlayLayout.supportingText.text.trim() ||
+            activeVariant.supportingText,
+          cta: activeOverlayLayout.cta.text.trim() || activeVariant.cta,
+        },
+        post.aspectRatio,
+        activeOverlayLayout,
+      ),
+    });
+  }, [activeOverlayLayout, activeVariant, dispatch, post.aspectRatio]);
 
   const createShareLink = async () => {
     const postId = activePostIdRef.current;
@@ -1662,7 +1707,7 @@ export default function Home() {
                           <div className="w-full max-w-[40rem]">
                             {renderComposerActions()}
                           </div>
-                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} onAutoFitTextLayout={handleAutoFitTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
                           {activeVariant?.postType === "carousel" && !isPostedPost ? (
                             <CarouselComposer
                               assets={localAssets}
@@ -1739,7 +1784,7 @@ export default function Home() {
             ) : (
               <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
             )}
-            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
+            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} onAutoFitTextLayout={handleAutoFitTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {activeVariant?.postType === "carousel" && !isPostedPost ? (
               <CarouselComposer
                 assets={localAssets}

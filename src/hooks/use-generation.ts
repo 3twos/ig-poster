@@ -16,7 +16,7 @@ import {
 import {
   GenerationResponseSchema,
   type GenerationResponse,
-  createDefaultOverlayLayout,
+  createFittedOverlayLayout,
 } from "@/lib/creative";
 import type { BrandState, LocalAsset, PostState } from "@/lib/types";
 import type { PromptConfigState } from "@/lib/types";
@@ -705,7 +705,10 @@ export function useGeneration({
       const layouts = Object.fromEntries(
         finalResult.variants.map((variant) => [
           variant.id,
-          createDefaultOverlayLayout(variant.layout, { cornerRadius: brand.defaultCornerRadius, bgOpacity: brand.defaultBgOpacity }),
+          createFittedOverlayLayout(variant, post.aspectRatio, {
+            cornerRadius: brand.defaultCornerRadius,
+            bgOpacity: brand.defaultBgOpacity,
+          }),
         ]),
       );
       if (!shouldCommitForCurrentPost()) {

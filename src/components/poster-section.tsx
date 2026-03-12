@@ -70,6 +70,7 @@ type Props = {
   logoImage?: string;
   editorMode: boolean;
   onResetTextLayout: () => void;
+  onAutoFitTextLayout: () => void;
   saveStatus: SaveStatus;
   overlayLayout?: OverlayLayout;
   activeSlideIndex: number;
@@ -87,6 +88,7 @@ export function PosterSection({
   logoImage,
   editorMode,
   onResetTextLayout,
+  onAutoFitTextLayout,
   saveStatus,
   overlayLayout,
   activeSlideIndex,
@@ -212,6 +214,13 @@ export function PosterSection({
               onClick={onResetTextLayout}
             >
               Reset Layout
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={onAutoFitTextLayout}
+            >
+              Auto-fit Layout
             </Button>
             <Button
               variant="outline"
