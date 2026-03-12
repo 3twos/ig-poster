@@ -283,6 +283,7 @@ Additional CLI ergonomics:
 - `ig watch <dir>` polls a local directory, uploads supported media through `/api/v1/assets`, and creates a draft post through `/api/v1/posts`. Use `--json` for one-shot scan summaries or `--stream-json` for live NDJSON events.
 - `ig mcp` starts a stdio MCP adapter that exposes a focused set of CLI-backed tools for local agents.
 - Hidden dev-only `--local` targets `IG_POSTER_LOCAL_HOST` (default `http://localhost:3000`) while still calling the standard `/api/v1/*` routes. It is intended only for local development and testing, not production automation.
+- The current web-side Apple Photos slice is intentionally partial: on macOS the asset panel exposes `Add from Photos`, but until the native companion exists it falls back to the regular upload flow with explicit remediation copy.
 
 Planned next CLI/macOS work:
 - Apple Photos support will be delivered as a macOS companion app plus a local bridge, not by moving core generation/publish logic into a native app.
