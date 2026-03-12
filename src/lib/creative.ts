@@ -197,6 +197,7 @@ export const PublishOutcomeSchema = z.object({
 export type AspectRatio = z.infer<typeof AspectRatioSchema>;
 export type GenerationRequest = z.infer<typeof GenerationRequestSchema>;
 export type PromptConfig = NonNullable<GenerationRequest["promptConfig"]>;
+export type CarouselSlide = z.infer<typeof CarouselSlideSchema>;
 export type CreativeVariant = z.infer<typeof CreativeVariantSchema>;
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 export type InternalGenerationResponse = z.infer<typeof InternalGenerationResponseSchema>;
@@ -467,7 +468,40 @@ const estimateCanonicalBlockHeight = (params: {
 
   const estimatedPx = lines * fontPx * metrics.lineHeight + metrics.paddingPx;
   const estimatedPct = (estimatedPx / canvas.height) * 100;
-  return Math.max(params.block.height, Math.round(estimatedPct * 10) / 10);
+  return Math.min(
+    100,
+    Math.max(params.block.height, Math.round(estimatedPct * 10) / 10),
+  );
+};
+
+export const resolveVariantOverlayCopy = (
+  variant: Pick<
+    CreativeVariant,
+    "postType" | "hook" | "headline" | "supportingText" | "cta" | "carouselSlides"
+  >,
+  activeSlideIndex = 0,
+  carouselSlides: CarouselSlide[] | undefined = variant.carouselSlides,
+) => {
+  const normalizedSlideIndex = Math.max(0, activeSlideIndex);
+  const lastSlideIndex = Math.max((carouselSlides?.length ?? 1) - 1, 0);
+  const clampedSlideIndex = Math.min(normalizedSlideIndex, lastSlideIndex);
+  const slide = carouselSlides?.[clampedSlideIndex];
+
+  if (!slide || variant.postType !== "carousel" || clampedSlideIndex === 0) {
+    return {
+      hook: variant.hook,
+      headline: variant.headline,
+      supportingText: variant.supportingText,
+      cta: variant.cta,
+    };
+  }
+
+  return {
+    hook: slide.goal,
+    headline: slide.headline,
+    supportingText: slide.body,
+    cta: clampedSlideIndex === lastSlideIndex ? variant.cta : "Swipe for more",
+  };
 };
 
 export const fitOverlayLayoutToCopy = (
@@ -544,7 +578,7 @@ export const fitOverlayLayoutToCopy = (
   let currentY =
     input.layout === "minimal-logo"
       ? stack.top
-      : Math.max(1, stack.bottom - totalHeight);
+      : Math.max(stack.top, stack.bottom - totalHeight);
 
   for (const key of activeKeys) {
     next[key] = {

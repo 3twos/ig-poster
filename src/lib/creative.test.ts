@@ -10,6 +10,7 @@ import {
   createDefaultOverlayLayout,
   fitOverlayLayoutToCopy,
   normalizeOverlayLayout,
+  resolveVariantOverlayCopy,
   selectTopVariants,
   selectTopVariantsWithScores,
   type CreativeVariant,
@@ -321,5 +322,75 @@ describe("creative helpers", () => {
     expect(fitted.supportingText.y).toBeGreaterThanOrEqual(
       fitted.headline.y + fitted.headline.height,
     );
+  });
+
+  it("clamps auto-fit blocks to valid sizes and safe stack bounds", () => {
+    const fitted = fitOverlayLayoutToCopy(
+      {
+        layout: "magazine",
+        hook: "This hook keeps the fitter active.",
+        headline:
+          "This headline is intentionally oversized to force the fitter to use the full safe stack rather than drifting above it.",
+        supportingText: "Long body ".repeat(700),
+        cta: "Learn more",
+      },
+      "4:5",
+    );
+
+    expect(fitted.hook.y).toBeGreaterThanOrEqual(66);
+    expect(fitted.hook.height).toBeLessThanOrEqual(100);
+    expect(fitted.headline.height).toBeLessThanOrEqual(100);
+    expect(fitted.supportingText.height).toBeLessThanOrEqual(100);
+    expect(fitted.cta.height).toBeLessThanOrEqual(100);
+  });
+
+  it("resolves overlay copy from the active carousel slide", () => {
+    const carouselVariant: CreativeVariant = {
+      ...makeVariant("carousel-fit", "carousel"),
+      assetSequence: ["asset-1", "asset-2", "asset-3"],
+      carouselSlides: [
+        {
+          index: 1,
+          goal: "Open with tension",
+          headline: "Slide one headline",
+          body: "Slide one body with enough detail to satisfy the schema.",
+          assetHint: "Cover",
+        },
+        {
+          index: 2,
+          goal: "Show the proof",
+          headline: "Slide two headline",
+          body: "Slide two body with enough detail to satisfy the schema.",
+          assetHint: "Proof",
+        },
+        {
+          index: 3,
+          goal: "Close the loop",
+          headline: "Slide three headline",
+          body: "Slide three body with enough detail to satisfy the schema.",
+          assetHint: "Finish",
+        },
+      ],
+      cta: "Visit profile",
+    };
+
+    expect(resolveVariantOverlayCopy(carouselVariant, 0)).toMatchObject({
+      hook: carouselVariant.hook,
+      headline: carouselVariant.headline,
+      supportingText: carouselVariant.supportingText,
+      cta: carouselVariant.cta,
+    });
+    expect(resolveVariantOverlayCopy(carouselVariant, 1)).toMatchObject({
+      hook: "Show the proof",
+      headline: "Slide two headline",
+      supportingText: "Slide two body with enough detail to satisfy the schema.",
+      cta: "Swipe for more",
+    });
+    expect(resolveVariantOverlayCopy(carouselVariant, 99)).toMatchObject({
+      hook: "Close the loop",
+      headline: "Slide three headline",
+      supportingText: "Slide three body with enough detail to satisfy the schema.",
+      cta: "Visit profile",
+    });
   });
 });

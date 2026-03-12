@@ -17,19 +17,13 @@ import {
   normalizeOverlayLayout,
   type AspectRatio,
   type CanonicalOverlayKey,
+  type CarouselSlide,
   type CreativeVariant,
   type LogoPosition,
   type OverlayLayout,
+  resolveVariantOverlayCopy,
 } from "@/lib/creative";
 import { cn, hexToRgba } from "@/lib/utils";
-
-type CarouselSlide = {
-  index: number;
-  goal: string;
-  headline: string;
-  body: string;
-  assetHint: string;
-};
 
 type PosterPreviewProps = {
   variant: CreativeVariant;
@@ -73,38 +67,17 @@ const ASPECT_MAP: Record<AspectRatio, string> = {
   "9:16": "9 / 16",
 };
 
-const resolveCarouselCopy = (
-  variant: CreativeVariant,
-  carouselSlides: CarouselSlide[] | undefined,
-  activeSlideIndex: number,
-) => {
-  const slide = carouselSlides?.[activeSlideIndex];
-  const lastSlideIndex = Math.max((carouselSlides?.length ?? 1) - 1, 0);
-
-  if (!slide || variant.postType !== "carousel" || activeSlideIndex === 0) {
-    return {
-      hook: variant.hook,
-      headline: variant.headline,
-      supportingText: variant.supportingText,
-      cta: variant.cta,
-    };
-  }
-
-  return {
-    hook: slide.goal,
-    headline: slide.headline,
-    supportingText: slide.body,
-    cta: activeSlideIndex === lastSlideIndex ? variant.cta : "Swipe for more",
-  };
-};
-
 const buildOverlayBlocks = (
   variant: CreativeVariant,
   overlayLayout: OverlayLayout,
   carouselSlides: CarouselSlide[] | undefined,
   activeSlideIndex: number,
 ): OverlayCanvasBlock[] => {
-  const resolvedCopy = resolveCarouselCopy(variant, carouselSlides, activeSlideIndex);
+  const resolvedCopy = resolveVariantOverlayCopy(
+    variant,
+    activeSlideIndex,
+    carouselSlides,
+  );
   const alignClass =
     variant.textAlign === "center" ? "items-center text-center" : "items-start text-left";
 

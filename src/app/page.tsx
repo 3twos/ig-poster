@@ -59,6 +59,7 @@ import { inferLogoNameFromUrl } from "@/lib/brand-kit";
 import {
   createFittedOverlayLayout,
   fitOverlayLayoutToCopy,
+  resolveVariantOverlayCopy,
   type GenerationResponse,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
@@ -1123,6 +1124,12 @@ export default function Home() {
       return;
     }
 
+    const resolvedCopy = resolveVariantOverlayCopy(
+      activeVariant,
+      activeSlideIndex,
+      activeVariant.carouselSlides,
+    );
+
     dispatch({
       type: "UPDATE_OVERLAY",
       postId: activePostIdRef.current ?? undefined,
@@ -1130,19 +1137,25 @@ export default function Home() {
       layout: fitOverlayLayoutToCopy(
         {
           layout: activeVariant.layout,
-          hook: activeOverlayLayout.hook.text.trim() || activeVariant.hook,
+          hook: activeOverlayLayout.hook.text.trim() || resolvedCopy.hook,
           headline:
-            activeOverlayLayout.headline.text.trim() || activeVariant.headline,
+            activeOverlayLayout.headline.text.trim() || resolvedCopy.headline,
           supportingText:
             activeOverlayLayout.supportingText.text.trim() ||
-            activeVariant.supportingText,
-          cta: activeOverlayLayout.cta.text.trim() || activeVariant.cta,
+            resolvedCopy.supportingText,
+          cta: activeOverlayLayout.cta.text.trim() || resolvedCopy.cta,
         },
         post.aspectRatio,
         activeOverlayLayout,
       ),
     });
-  }, [activeOverlayLayout, activeVariant, dispatch, post.aspectRatio]);
+  }, [
+    activeOverlayLayout,
+    activeSlideIndex,
+    activeVariant,
+    dispatch,
+    post.aspectRatio,
+  ]);
 
   const createShareLink = async () => {
     const postId = activePostIdRef.current;
