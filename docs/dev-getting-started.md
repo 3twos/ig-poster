@@ -298,14 +298,25 @@ Current native scaffold status:
 - `src/lib/apple-photos-bridge.ts` is now the shared TS-side contract for localhost endpoints, launch URLs, and remediation-code vocabulary.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/BridgeContract.swift` mirrors that contract on the native side.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes a narrow localhost bridge (`GET /v1/health`) so the web editor can probe for a running native helper before attempting handoff.
 - Validate the native scaffold locally with:
 
 ```bash
 cd companion/IGPosterCompanion
 swift build
 swift run ig-poster-companion-contract-smoke
+swift run ig-poster-companion-bridge --print-health
 swift run ig-poster-companion
 ```
+
+To exercise the new web-side probe locally:
+
+```bash
+cd companion/IGPosterCompanion
+swift run ig-poster-companion-bridge
+```
+
+Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health` before deciding whether to offer the native companion handoff or the regular-upload fallback.
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.

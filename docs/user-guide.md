@@ -168,6 +168,7 @@
 - `ig mcp` runs a stdio MCP adapter over the CLI so local agents can call tools like `status`, `posts_list`, `generate_run`, `chat_ask`, `publish`, and `queue_list` through the same authenticated CLI surface.
 - On macOS, the editor asset panel now shows `Add from Photos`. For now this is a safe fallback entry point: it explains that the native companion is not available yet and routes you back to the normal upload picker so your draft flow keeps moving.
 - The repository now contains the first native companion scaffold under `companion/IGPosterCompanion`, but that scaffold is not packaged or installed for end users yet, so the web fallback behavior remains the current user-facing path.
+- If a local Apple Photos bridge is running on `127.0.0.1:43123`, the editor now probes it before falling back. When that probe succeeds, the draft offers to open the native companion handoff instead of immediately showing the fallback-only state.
 
 ### Planned macOS Apple Photos workflow
 
@@ -197,6 +198,7 @@ If the macOS companion app is not installed or not reachable:
 
 - the web app should offer an install prompt plus a fallback to the normal file-upload flow
 - CLI/MCP should return a structured error with remediation instead of hanging or failing opaquely
+- for internal development, you can run `swift run ig-poster-companion-bridge` from `companion/IGPosterCompanion` to satisfy the web probe and exercise the handoff path
 
 ## Working with Saved Posts
 
