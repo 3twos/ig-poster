@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import { postDestinations, type PostDestinationRow } from "@/db/schema";
@@ -11,7 +11,10 @@ import {
 } from "@/lib/meta-accounts";
 import type { PublishSettings } from "@/lib/publish-settings";
 
-type DbExecutor = Pick<ReturnType<typeof getDb>, "delete" | "insert" | "select">;
+type DbExecutor = Pick<
+  ReturnType<typeof getDb>,
+  "delete" | "insert" | "select" | "update"
+>;
 type PostInsertLike = {
   id: string;
   publishSettings?: PublishSettings | null;
@@ -118,6 +121,55 @@ export const clonePostDestinations = async (
 
 export const deletePostDestinations = async (db: DbExecutor, postId: string) => {
   await db.delete(postDestinations).where(eq(postDestinations.postId, postId));
+};
+
+const buildLegacyPublishSettingsPatch = (
+  destination: MetaDestination,
+  publishSettings?: PublishSettings | null,
+) => {
+  const patch = {
+    caption: publishSettings?.caption ?? null,
+    firstComment: null as string | null,
+    locationId: null as string | null,
+    updatedAt: new Date(),
+  };
+
+  if (destination === "instagram") {
+    patch.firstComment = publishSettings?.firstComment ?? null;
+    patch.locationId = publishSettings?.locationId ?? null;
+  }
+
+  return patch;
+};
+
+export const syncPostDestinationsFromPublishSettings = async (
+  db: DbExecutor,
+  post: PostInsertLike,
+) => {
+  const existing = await db
+    .select()
+    .from(postDestinations)
+    .where(eq(postDestinations.postId, post.id));
+  const existingDestinations = new Set(existing.map((row) => row.destination));
+  const missingSeeds = META_DESTINATIONS.filter(
+    (destination) => !existingDestinations.has(destination),
+  ).map((destination) => seedDestination(post.id, destination, post.publishSettings));
+
+  if (missingSeeds.length > 0) {
+    await db.insert(postDestinations).values(missingSeeds);
+  }
+
+  for (const destination of existingDestinations) {
+    await db
+      .update(postDestinations)
+      .set(buildLegacyPublishSettingsPatch(destination, post.publishSettings))
+      .where(
+        and(
+          eq(postDestinations.postId, post.id),
+          eq(postDestinations.destination, destination),
+        ),
+      );
+  }
 };
 
 export const getStoredPostDestinations = async (

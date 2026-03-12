@@ -17,6 +17,7 @@ import {
   clonePostDestinations,
   createDefaultPostDestinations,
   deletePostDestinations,
+  syncPostDestinationsFromPublishSettings,
 } from "@/services/post-destinations";
 
 const randomId = () =>
@@ -146,92 +147,100 @@ export const updatePost = async (
 ) => {
   const body = PostUpdateRequestSchema.parse(input);
   const db = getDb();
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(posts)
+      .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
+      .limit(1);
 
-  const [existing] = await db
-    .select()
-    .from(posts)
-    .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
-    .limit(1);
+    if (!existing) {
+      return null;
+    }
 
-  if (!existing) {
-    return null;
-  }
+    if (existing.status === "posted") {
+      throw new PostServiceError(
+        "Posted posts are locked. Duplicate the post to make changes.",
+      );
+    }
 
-  if (existing.status === "posted") {
-    throw new PostServiceError(
-      "Posted posts are locked. Duplicate the post to make changes.",
-    );
-  }
+    const update: Record<string, unknown> = { updatedAt: new Date() };
 
-  const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.title !== undefined) update.title = body.title;
+    if (body.status !== undefined) update.status = body.status;
+    if (body.logoUrl !== undefined) update.logoUrl = body.logoUrl;
+    if (body.activeVariantId !== undefined)
+      update.activeVariantId = body.activeVariantId;
+    if (body.renderedPosterUrl !== undefined)
+      update.renderedPosterUrl = body.renderedPosterUrl;
+    if (body.shareUrl !== undefined) update.shareUrl = body.shareUrl;
+    if (body.shareProjectId !== undefined) update.shareProjectId = body.shareProjectId;
+    if (body.brandKitId !== undefined) update.brandKitId = body.brandKitId;
+    if (body.mediaComposition !== undefined && body.mediaComposition !== null) {
+      update.mediaComposition = body.mediaComposition;
+    }
+    if (body.publishSettings !== undefined && body.publishSettings !== null) {
+      update.publishSettings = {
+        ...(existing.publishSettings ?? {}),
+        ...body.publishSettings,
+      };
+    }
 
-  if (body.title !== undefined) update.title = body.title;
-  if (body.status !== undefined) update.status = body.status;
-  if (body.logoUrl !== undefined) update.logoUrl = body.logoUrl;
-  if (body.activeVariantId !== undefined)
-    update.activeVariantId = body.activeVariantId;
-  if (body.renderedPosterUrl !== undefined)
-    update.renderedPosterUrl = body.renderedPosterUrl;
-  if (body.shareUrl !== undefined) update.shareUrl = body.shareUrl;
-  if (body.shareProjectId !== undefined) update.shareProjectId = body.shareProjectId;
-  if (body.brandKitId !== undefined) update.brandKitId = body.brandKitId;
-  if (body.mediaComposition !== undefined && body.mediaComposition !== null) {
-    update.mediaComposition = body.mediaComposition;
-  }
-  if (body.publishSettings !== undefined && body.publishSettings !== null) {
-    update.publishSettings = {
-      ...(existing.publishSettings ?? {}),
-      ...body.publishSettings,
-    };
-  }
+    if (body.brand !== undefined) {
+      update.brand = body.brand
+        ? { ...(existing.brand ?? {}), ...body.brand }
+        : body.brand;
+    }
+    if (body.brief !== undefined) {
+      update.brief = body.brief
+        ? { ...(existing.brief ?? {}), ...body.brief }
+        : body.brief;
+    }
+    if (body.promptConfig !== undefined) {
+      update.promptConfig = body.promptConfig
+        ? { ...(existing.promptConfig ?? {}), ...body.promptConfig }
+        : body.promptConfig;
+    }
+    if (body.overlayLayouts !== undefined && body.overlayLayouts !== null) {
+      update.overlayLayouts = body.overlayLayouts
+        ? { ...(existing.overlayLayouts ?? {}), ...body.overlayLayouts }
+        : body.overlayLayouts;
+    }
 
-  if (body.brand !== undefined) {
-    update.brand = body.brand
-      ? { ...(existing.brand ?? {}), ...body.brand }
-      : body.brand;
-  }
-  if (body.brief !== undefined) {
-    update.brief = body.brief
-      ? { ...(existing.brief ?? {}), ...body.brief }
-      : body.brief;
-  }
-  if (body.promptConfig !== undefined) {
-    update.promptConfig = body.promptConfig
-      ? { ...(existing.promptConfig ?? {}), ...body.promptConfig }
-      : body.promptConfig;
-  }
-  if (body.overlayLayouts !== undefined && body.overlayLayouts !== null) {
-    update.overlayLayouts = body.overlayLayouts
-      ? { ...(existing.overlayLayouts ?? {}), ...body.overlayLayouts }
-      : body.overlayLayouts;
-  }
+    if (body.assets !== undefined) update.assets = body.assets;
+    if (body.result !== undefined) update.result = body.result;
+    if (body.publishHistory !== undefined) update.publishHistory = body.publishHistory;
 
-  if (body.assets !== undefined) update.assets = body.assets;
-  if (body.result !== undefined) update.result = body.result;
-  if (body.publishHistory !== undefined) update.publishHistory = body.publishHistory;
-
-  if (body.title === undefined) {
-    const mergedBrief = (update.brief ?? existing.brief) as
-      | Record<string, unknown>
-      | null;
-    if (mergedBrief) {
-      const derived =
-        (mergedBrief.subject as string) ||
-        (mergedBrief.theme as string) ||
-        "";
-      if (derived && derived !== existing.title) {
-        update.title = derived.slice(0, 120);
+    if (body.title === undefined) {
+      const mergedBrief = (update.brief ?? existing.brief) as
+        | Record<string, unknown>
+        | null;
+      if (mergedBrief) {
+        const derived =
+          (mergedBrief.subject as string) ||
+          (mergedBrief.theme as string) ||
+          "";
+        if (derived && derived !== existing.title) {
+          update.title = derived.slice(0, 120);
+        }
       }
     }
-  }
 
-  const [updated] = await db
-    .update(posts)
-    .set(update)
-    .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
-    .returning();
+    const [updated] = await tx
+      .update(posts)
+      .set(update)
+      .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
+      .returning();
 
-  return updated;
+    if (updated && body.publishSettings !== undefined && body.publishSettings !== null) {
+      await syncPostDestinationsFromPublishSettings(tx, {
+        id: updated.id,
+        publishSettings: updated.publishSettings,
+      });
+    }
+
+    return updated;
+  });
 };
 
 const duplicateTitle = (source: Pick<PostRow, "title" | "brief" | "result">) => {
