@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   GenerationRequestSchema,
+  applyLayoutCopyBudget,
+  buildRefineUserPrompt,
   buildPerformanceContext,
   coerceInternalGenerationResponse,
   createDefaultOverlayLayout,
@@ -173,6 +175,22 @@ describe("creative helpers", () => {
     expect(layout.cta.bgOpacity).toBeUndefined();
   });
 
+  it("keeps built-in overlay defaults inside the frame", () => {
+    const layouts = [
+      createDefaultOverlayLayout("hero-quote"),
+      createDefaultOverlayLayout("split-story"),
+      createDefaultOverlayLayout("magazine"),
+      createDefaultOverlayLayout("minimal-logo"),
+    ];
+
+    for (const layout of layouts) {
+      expect(layout.hook.y + layout.hook.height).toBeLessThanOrEqual(100);
+      expect(layout.headline.y + layout.headline.height).toBeLessThanOrEqual(100);
+      expect(layout.supportingText.y + layout.supportingText.height).toBeLessThanOrEqual(100);
+      expect(layout.cta.y + layout.cta.height).toBeLessThanOrEqual(100);
+    }
+  });
+
   it("normalizes older overlay layouts with editor defaults", () => {
     const normalized = normalizeOverlayLayout("hero-quote", {
       headline: {
@@ -213,5 +231,41 @@ describe("creative helpers", () => {
     expect(normalized.custom).toHaveLength(1);
     expect(normalized.custom[0]?.id).toBe("custom-1");
     expect(normalized.custom[0]?.label).toBe(" Custom Label ");
+  });
+
+  it("clips overlay copy to layout-aware budgets", () => {
+    const fitted = applyLayoutCopyBudget({
+      ...makeVariant("layout-fit", "single-image"),
+      layout: "magazine",
+      hook: "A very long hook that should be shortened because magazine layouts have tighter space for hook copy",
+      headline:
+        "A very long headline that should be shortened for a compact editorial layout without destroying the meaning",
+      supportingText:
+        "This supporting text is intentionally far too long for the compact magazine layout and should be trimmed to a shorter, cleaner version that is more likely to fit without colliding with the rest of the overlay blocks.",
+      cta: "Visit the profile to learn more about the full framework and process",
+    });
+
+    expect(fitted.hook.length).toBeLessThanOrEqual(34);
+    expect(fitted.headline.length).toBeLessThanOrEqual(42);
+    expect(fitted.supportingText.length).toBeLessThanOrEqual(82);
+    expect(fitted.cta.length).toBeLessThanOrEqual(20);
+  });
+
+  it("builds refine prompts with brief and layout context", () => {
+    const prompt = buildRefineUserPrompt({
+      variant: makeVariant("refine", "single-image"),
+      instruction: "Use shorter text in components and avoid CTA",
+      brand: generationRequest.brand,
+      post: generationRequest.post,
+      promptConfig: {
+        customInstructions: "Keep it editorial.",
+      },
+      overlayLayout: createDefaultOverlayLayout("hero-quote"),
+    });
+
+    expect(prompt).toContain("Original post brief:");
+    expect(prompt).toContain("Current overlay layout JSON:");
+    expect(prompt).toContain('set "cta" to an empty string');
+    expect(prompt).toContain("Layout-fit priorities");
   });
 });

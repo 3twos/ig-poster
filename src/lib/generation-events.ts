@@ -13,6 +13,12 @@ export type GenerationRunEvent =
       detail?: string;
     }
   | {
+      type: "prompt-preview";
+      title: string;
+      systemPrompt: string;
+      userPrompt: string;
+    }
+  | {
       type: "step-start";
       stepId: string;
       title: string;
@@ -55,6 +61,7 @@ export const toSseEvent = (event: GenerationRunEvent) =>
 
 const EVENT_TYPES = new Set<GenerationRunEvent["type"]>([
   "run-start",
+  "prompt-preview",
   "step-start",
   "step-complete",
   "step-error",
@@ -93,6 +100,14 @@ export const isGenerationRunEvent = (value: unknown): value is GenerationRunEven
       typeof value.runId === "string" &&
       typeof value.label === "string" &&
       (value.detail === undefined || typeof value.detail === "string")
+    );
+  }
+
+  if (type === "prompt-preview") {
+    return (
+      typeof value.title === "string" &&
+      typeof value.systemPrompt === "string" &&
+      typeof value.userPrompt === "string"
     );
   }
 

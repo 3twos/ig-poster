@@ -176,7 +176,9 @@ export default function ShareProjectPage() {
               <p className="text-xs font-semibold tracking-[0.2em] text-orange-200 uppercase">{activeVariant.name}</p>
               <p className="mt-3 text-3xl leading-tight font-semibold tracking-tight">{activeVariant.headline}</p>
               <p className="mt-3 text-sm text-slate-300">{activeVariant.supportingText}</p>
-              <p className="mt-4 text-sm font-semibold text-white">{activeVariant.cta}</p>
+              {activeVariant.cta ? (
+                <p className="mt-4 text-sm font-semibold text-white">{activeVariant.cta}</p>
+              ) : null}
               <p className="mt-6 text-sm whitespace-pre-wrap text-slate-200">{effectiveCaption}</p>
               <p className="mt-5 text-xs text-slate-400">Created {new Date(project.createdAt).toLocaleString()}</p>
             </div>

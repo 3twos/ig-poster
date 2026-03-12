@@ -106,7 +106,7 @@ export const CreativeVariantSchema = z.object({
   hook: z.string().trim().min(8).max(140),
   headline: z.string().trim().min(8).max(120),
   supportingText: z.string().trim().min(20).max(260),
-  cta: z.string().trim().min(5).max(80),
+  cta: z.string().trim().max(80).optional().default(""),
   caption: z.string().trim().min(40).max(700),
   hashtags: z
     .array(z.string().trim().regex(/^#[a-zA-Z0-9_]{2,30}$/))
@@ -232,10 +232,10 @@ const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
     logo: { ...DEFAULT_LOGO_POSITION },
   },
   magazine: {
-    hook: { x: 6, y: 72, width: 72, height: 7, fontScale: 1, visible: true, text: "" },
-    headline: { x: 6, y: 79, width: 84, height: 12, fontScale: 1, visible: true, text: "" },
-    supportingText: { x: 6, y: 90, width: 84, height: 8, fontScale: 1, visible: true, text: "" },
-    cta: { x: 6, y: 96, width: 56, height: 5, fontScale: 1, visible: true, text: "" },
+    hook: { x: 6, y: 68, width: 72, height: 7, fontScale: 1, visible: true, text: "" },
+    headline: { x: 6, y: 75, width: 84, height: 12, fontScale: 1, visible: true, text: "" },
+    supportingText: { x: 6, y: 87, width: 84, height: 8, fontScale: 1, visible: true, text: "" },
+    cta: { x: 6, y: 95, width: 56, height: 4, fontScale: 1, visible: true, text: "" },
     custom: [],
     logo: { ...DEFAULT_LOGO_POSITION },
   },
@@ -322,6 +322,57 @@ export const normalizeOverlayLayout = (
   };
 };
 
+const LAYOUT_COPY_BUDGETS: Record<
+  CreativeLayout,
+  { hook: number; headline: number; supportingText: number; cta: number }
+> = {
+  "hero-quote": { hook: 42, headline: 58, supportingText: 120, cta: 24 },
+  "split-story": { hook: 38, headline: 46, supportingText: 96, cta: 22 },
+  magazine: { hook: 34, headline: 42, supportingText: 82, cta: 20 },
+  "minimal-logo": { hook: 44, headline: 54, supportingText: 110, cta: 24 },
+};
+
+const trimToWordBoundary = (value: string, max: number) => {
+  const text = value.trim();
+  if (text.length <= max) {
+    return text;
+  }
+
+  const slice = text.slice(0, Math.max(0, max - 3));
+  const lastSpace = slice.lastIndexOf(" ");
+  const clipped = lastSpace >= Math.max(8, Math.floor(max * 0.55))
+    ? slice.slice(0, lastSpace)
+    : slice;
+  return `${clipped.trim()}...`;
+};
+
+export const applyLayoutCopyBudget = (
+  variant: CreativeVariant,
+): CreativeVariant => {
+  const budget = LAYOUT_COPY_BUDGETS[variant.layout];
+
+  return {
+    ...variant,
+    hook: trimToWordBoundary(variant.hook, budget.hook),
+    headline: trimToWordBoundary(variant.headline, budget.headline),
+    supportingText: trimToWordBoundary(
+      variant.supportingText,
+      budget.supportingText,
+    ),
+    cta: variant.cta ? trimToWordBoundary(variant.cta, budget.cta) : "",
+  };
+};
+
+const buildLayoutBudgetGuidance = () =>
+  [
+    "Layout-fit copy budgets (important: keep copy inside these limits so it fits the canvas cleanly):",
+    `- hero-quote: hook <= ${LAYOUT_COPY_BUDGETS["hero-quote"].hook} chars, headline <= ${LAYOUT_COPY_BUDGETS["hero-quote"].headline}, supportingText <= ${LAYOUT_COPY_BUDGETS["hero-quote"].supportingText}, CTA optional and <= ${LAYOUT_COPY_BUDGETS["hero-quote"].cta}.`,
+    `- split-story: hook <= ${LAYOUT_COPY_BUDGETS["split-story"].hook} chars, headline <= ${LAYOUT_COPY_BUDGETS["split-story"].headline}, supportingText <= ${LAYOUT_COPY_BUDGETS["split-story"].supportingText}, CTA optional and <= ${LAYOUT_COPY_BUDGETS["split-story"].cta}.`,
+    `- magazine: hook <= ${LAYOUT_COPY_BUDGETS.magazine.hook} chars, headline <= ${LAYOUT_COPY_BUDGETS.magazine.headline}, supportingText <= ${LAYOUT_COPY_BUDGETS.magazine.supportingText}, CTA optional and <= ${LAYOUT_COPY_BUDGETS.magazine.cta}.`,
+    `- minimal-logo: hook <= ${LAYOUT_COPY_BUDGETS["minimal-logo"].hook} chars, headline <= ${LAYOUT_COPY_BUDGETS["minimal-logo"].headline}, supportingText <= ${LAYOUT_COPY_BUDGETS["minimal-logo"].supportingText}, CTA optional and <= ${LAYOUT_COPY_BUDGETS["minimal-logo"].cta}.`,
+    "- If a CTA does not fit the brief or the instruction says to avoid it, return an empty string for cta.",
+  ].join("\n");
+
 const FALLBACK_COLORS = ["#0F172A", "#F97316", "#22C55E", "#FFFFFF"];
 
 const paletteToHex = (palette: string): string[] => {
@@ -356,22 +407,34 @@ const buildCarouselSlides = (count: number, theme: string, audience: string) => 
       index === 0
         ? "Stop the scroll with a sharp claim"
         : index === limit - 1
-          ? "Close with a direct CTA"
+          ? "Close with the clearest takeaway"
           : "Deliver one clear proof point",
     headline:
       index === 0
         ? `${theme} without the fluff`
         : index === limit - 1
-          ? "Ready to take the next step?"
+          ? "What should they remember?"
           : `Proof point ${index}`,
     body:
       index === 0
         ? `Start with the strongest insight for ${audience.toLowerCase()}.`
         : index === limit - 1
-          ? "Save this framework and share it with someone who needs it."
+          ? "Leave the audience with one practical takeaway they can act on."
           : "Keep each slide to one idea, one visual, one short sentence.",
     assetHint: index === 0 ? "Hero product shot" : index === limit - 1 ? "Lifestyle close" : "Detail or context shot",
   }));
+};
+
+const deriveObjectiveCta = (objective: string) => {
+  const text = objective.toLowerCase();
+
+  if (text.includes("profile")) return "Visit profile";
+  if (text.includes("call") || text.includes("demo")) return "Book a call";
+  if (text.includes("lead")) return "Get in touch";
+  if (text.includes("subscribe") || text.includes("newsletter")) return "Subscribe";
+  if (text.includes("download")) return "Download now";
+
+  return "";
 };
 
 export const createFallbackResponse = (
@@ -393,10 +456,11 @@ export const createFallbackResponse = (
   ];
 
   const hashtags = Array.from(new Set(tagPool.map(toTag))).slice(0, 10);
+  const derivedCta = deriveObjectiveCta(request.post.objective);
 
   const base = {
     supportingText: `${request.post.thought} Built for ${request.post.audience.toLowerCase()} with ${request.brand.brandName}'s core voice.`,
-    caption: `${request.post.thought}\n\n${request.brand.brandName} turns ${request.post.theme.toLowerCase()} into a clear action: ${request.post.objective}. Save this post and share it with your team.`,
+    caption: `${request.post.thought}\n\n${request.brand.brandName} approaches ${request.post.theme.toLowerCase()} through ${request.post.objective.toLowerCase()} with a more specific point of view.`,
     hashtags,
     colorHexes: colors.slice(0, 3),
   };
@@ -412,7 +476,7 @@ export const createFallbackResponse = (
       postType: "single-image",
       hook: `${request.post.theme}: a sharper way to lead the conversation.`,
       headline: `${request.post.subject} that actually moves people`,
-      cta: `Take the next step: ${request.post.objective}`,
+      cta: derivedCta,
       layout: "hero-quote",
       textAlign: "left",
       overlayStrength: 0.58,
@@ -425,7 +489,7 @@ export const createFallbackResponse = (
       postType: imageAssets.length >= 3 ? "carousel" : "single-image",
       hook: "From concept to result in clear steps",
       headline: `${request.post.theme} built on real principles`,
-      cta: `Swipe and save for your next purchase`,
+      cta: "",
       layout: "split-story",
       textAlign: "left",
       overlayStrength: 0.5,
@@ -443,7 +507,7 @@ export const createFallbackResponse = (
       postType: videoAssets.length ? "reel" : imageAssets.length >= 3 ? "carousel" : "single-image",
       hook: "Simple design. Strong conviction.",
       headline: `${request.brand.brandName} on ${request.post.theme}`,
-      cta: `Save for your next content sprint`,
+      cta: derivedCta,
       layout: "minimal-logo",
       textAlign: "center",
       overlayStrength: 0.42,
@@ -463,7 +527,7 @@ export const createFallbackResponse = (
               "Cut every 1.8-2.4 seconds",
               "Mix wide establishing shot, detail closeup, action macro",
               "Use bold captions centered in safe area",
-              "End with branded CTA card",
+              "End with a clean branded sign-off or optional CTA card",
             ],
             beats: [
               {
@@ -492,12 +556,12 @@ export const createFallbackResponse = (
               },
               {
                 atSec: 16,
-                visual: "Brand lockup + CTA card",
-                onScreenText: "Take the next step",
-                editAction: "Fade in CTA with subtle grain",
+                visual: "Brand lockup or closing card",
+                onScreenText: derivedCta || "Leave a clear final takeaway",
+                editAction: "Fade in the closing frame with subtle grain",
               },
             ],
-            endCardCta: "Visit profile to learn more and get started",
+            endCardCta: derivedCta || "Learn more",
           }
         : undefined,
       carouselSlides:
@@ -510,8 +574,8 @@ export const createFallbackResponse = (
 
   return {
     strategy:
-      "These concepts balance discovery reach and conversion: one bold single image for thumb-stop impact, one educational carousel for saves/shares, and one reel-style narrative for high watch-through when video is available.",
-    variants,
+      "These concepts balance discovery and conversion: one bold single image for thumb-stop impact, one educational carousel for depth, and one reel-style narrative for watch-through when video is available.",
+    variants: variants.map(applyLayoutCopyBudget),
   };
 };
 
@@ -556,7 +620,10 @@ export const coerceInternalGenerationResponse = (
   const strict = InternalGenerationResponseSchema.safeParse(payload);
   if (strict.success) {
     return {
-      response: strict.data,
+      response: {
+        ...strict.data,
+        variants: strict.data.variants.map(applyLayoutCopyBudget),
+      },
       recovery: {
         droppedInvalidVariants: 0,
         usedFallbackVariants: 0,
@@ -574,7 +641,7 @@ export const coerceInternalGenerationResponse = (
 
   const validVariants = rawVariants.flatMap((variant) => {
     const parsed = CreativeVariantSchema.safeParse(variant);
-    return parsed.success ? [parsed.data] : [];
+    return parsed.success ? [applyLayoutCopyBudget(parsed.data)] : [];
   });
 
   const droppedInvalidVariants = rawVariants.length - validVariants.length;
@@ -629,6 +696,7 @@ export const selectTopVariants = (
 
   const scored = variants.map((variant) => {
     let score = 0;
+    const budget = LAYOUT_COPY_BUDGETS[variant.layout];
 
     // Caption quality: prefer 100-500 char range
     const captionLen = variant.caption.length;
@@ -638,9 +706,18 @@ export const selectTopVariants = (
       score += 1;
     }
 
-    // CTA presence in caption
-    if (/save|share|bookmark|tag|comment|follow|visit|link/i.test(variant.caption)) {
+    // Prefer overlay copy that is more likely to fit the chosen layout cleanly.
+    if (variant.hook.length <= budget.hook) {
+      score += 1;
+    }
+    if (variant.headline.length <= budget.headline) {
       score += 2;
+    }
+    if (variant.supportingText.length <= budget.supportingText) {
+      score += 2;
+    }
+    if (!variant.cta || variant.cta.length <= budget.cta) {
+      score += 1;
     }
 
     // Hook strength: specific numbers or questions
@@ -724,7 +801,7 @@ export const scoreVariantsWithLlm = async (
   const result = await generateStructuredJson<unknown>({
     auth,
     systemPrompt:
-      "You are an Instagram content quality judge. Score each variant on a 1-10 scale. Evaluate hook strength, caption quality, CTA effectiveness, brand voice alignment, and engagement potential. Return strict JSON only.",
+      "You are an Instagram content quality judge. Score each variant on a 1-10 scale. Evaluate brief alignment, audience specificity, hook strength, brand voice alignment, layout fit, and engagement potential. Do not reward CTA language unless it clearly serves the stated objective. Return strict JSON only.",
     signal,
     userPrompt: `Score these Instagram creative variants for the brand "${brand.brandName}" (voice: ${brand.voice}).
 
@@ -863,6 +940,7 @@ export const buildGenerationUserPrompt = (
   const customInstructionBlock = request.promptConfig?.customInstructions?.trim()
     ? `Custom user instructions:\n${request.promptConfig.customInstructions.trim()}\n`
     : "";
+  const layoutBudgetBlock = `${buildLayoutBudgetGuidance()}\n`;
 
   const variantCount = options?.candidateCount ?? 3;
 
@@ -894,6 +972,7 @@ Has logo available: ${request.hasLogo ? "yes" : "no"}
 
 ${buildPromptBestPracticeContext(wineBrand)}
 ${customInstructionBlock}
+${layoutBudgetBlock}
 
 Output constraints:
 - Return JSON object with keys: strategy, variants.
@@ -905,7 +984,7 @@ Output constraints:
 - textAlign must be left or center.
 - hook and headline must each be at least 8 characters.
 - supportingText must be at least 20 characters.
-- cta must be at least 5 characters.
+- cta may be an empty string if the brief or instructions call for no CTA. If present, keep it short and specific.
 - caption must be at least 40 characters.
 - colorHexes must be 2-4 valid hex colors.
 - hashtags must be 5-12 items and each must match ^#[a-zA-Z0-9_]{2,30}$ (letters, numbers, underscore only).
@@ -916,6 +995,81 @@ Output constraints:
 - If videoCount > 0, at least one variant must be postType=reel.
 - If imageCount >= 3, at least one variant must be postType=carousel.
 - For wine/alcohol brands: avoid unsafe or non-compliant alcohol messaging.
+- Use a CTA only when it directly supports the objective. Editorial or authority-driven concepts may omit it.
 - Avoid generic language and avoid emojis.
 - Output JSON only.`;
+};
+
+export const buildRefineSystemPrompt = (
+  promptConfig?: Partial<PromptConfig> | null,
+): string => {
+  const base =
+    "You refine Instagram creative variants. Apply the user's refinement instruction while preserving the current strategy, postType, layout, asset sequence, and overall on-canvas feel unless the user explicitly asks for a broader change. Return strict JSON only.";
+  const customSystem = (promptConfig?.systemPrompt || "").trim();
+
+  if (!customSystem) {
+    return base;
+  }
+
+  return `${base}\n\nRelevant generation system addendum:\n${customSystem}`;
+};
+
+export const buildRefineUserPrompt = (input: {
+  variant: CreativeVariant;
+  instruction: string;
+  brand: GenerationRequest["brand"];
+  post?: GenerationRequest["post"];
+  promptConfig?: Partial<PromptConfig> | null;
+  overlayLayout?: OverlayLayout | null;
+}): string => {
+  const briefBlock = input.post
+    ? `Original post brief:
+- Theme: ${input.post.theme}
+- Subject: ${input.post.subject}
+- Core thought: ${input.post.thought}
+- Objective: ${input.post.objective}
+- Audience: ${input.post.audience}
+- Mood: ${input.post.mood}
+- Preferred canvas: ${input.post.aspectRatio}
+`
+    : "";
+  const customInstructionBlock = input.promptConfig?.customInstructions?.trim()
+    ? `Saved campaign instructions:
+${input.promptConfig.customInstructions.trim()}
+`
+    : "";
+  const overlayLayoutBlock = input.overlayLayout
+    ? `Current overlay layout JSON:
+${JSON.stringify(input.overlayLayout, null, 2)}
+`
+    : "";
+  const budget = LAYOUT_COPY_BUDGETS[input.variant.layout];
+
+  return `Refine this Instagram creative variant according to the instruction below.
+
+Brand:
+- Name: ${input.brand.brandName}
+- Voice: ${input.brand.voice}
+- Values: ${input.brand.values}
+- Principles: ${input.brand.principles}
+
+${briefBlock}${customInstructionBlock}Current variant:
+${JSON.stringify(input.variant, null, 2)}
+
+${overlayLayoutBlock}Layout-fit priorities for ${input.variant.layout}:
+- hook <= ${budget.hook} chars
+- headline <= ${budget.headline} chars
+- supportingText <= ${budget.supportingText} chars
+- cta optional and <= ${budget.cta} chars
+
+Refinement instruction: "${input.instruction}"
+
+Refinement rules:
+- Preserve postType, layout, assetSequence, and overall visual direction unless the user explicitly asks to change them.
+- Keep the variant tightly aligned to the original brief when that context is provided.
+- If the instruction asks for shorter text, prioritize shortening hook, headline, supportingText, and cta before changing the concept.
+- If the instruction says to avoid CTA, remove CTA, or keep the post purely editorial, set "cta" to an empty string.
+- Only change fields that need to change to satisfy the instruction or keep the variant coherent.
+
+Return the refined variant as a single JSON object with the exact same schema. Output JSON only.`;
 };

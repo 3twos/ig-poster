@@ -153,6 +153,29 @@ describe("generation services", () => {
           },
         ],
       },
+      brief: {
+        theme: "Category authority",
+        subject: "Designing trust",
+        thought: "Trust compounds through repeated proof moments.",
+        objective: "Drive profile visits",
+        audience: "Startup founders",
+        mood: "Premium",
+        aspectRatio: "4:5",
+      },
+      promptConfig: {
+        systemPrompt: "Stay sharp.",
+        customInstructions: "Keep it editorial.",
+      },
+      overlayLayouts: {
+        "variant-b": {
+          hook: { x: 6, y: 60, width: 56, height: 7, fontScale: 1, visible: true, text: "" },
+          headline: { x: 6, y: 67, width: 58, height: 14, fontScale: 1, visible: true, text: "" },
+          supportingText: { x: 6, y: 81, width: 58, height: 11, fontScale: 1, visible: true, text: "" },
+          cta: { x: 6, y: 92, width: 56, height: 6, fontScale: 1, visible: true, text: "" },
+          custom: [],
+          logo: { x: 3, y: 3, width: 20, height: 6, visible: true },
+        },
+      },
     } as never);
 
     await expect(
@@ -164,6 +187,19 @@ describe("generation services", () => {
       },
       brand: {
         brandName: "Nexa Labs",
+      },
+      post: {
+        theme: "Category authority",
+        audience: "Startup founders",
+      },
+      promptConfig: {
+        systemPrompt: "Stay sharp.",
+        customInstructions: "Keep it editorial.",
+      },
+      overlayLayout: {
+        headline: {
+          x: 6,
+        },
       },
     });
   });

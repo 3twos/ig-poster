@@ -15,6 +15,12 @@ export type AgentStep = {
   thinkingText?: string;
 };
 
+export type AgentPromptSnapshot = {
+  title: string;
+  systemPrompt: string;
+  userPrompt: string;
+};
+
 export type AgentRun = {
   id: string;
   label: string;
@@ -28,6 +34,7 @@ export type AgentRun = {
   summary?: string;
   error?: string;
   steps: AgentStep[];
+  promptSnapshots: AgentPromptSnapshot[];
   logLines: string[];
 };
 
@@ -106,6 +113,10 @@ export const summarizeRunEvent = (event: GenerationRunEvent) => {
 
   if (event.type === "step-start") {
     return event.detail || `Started: ${event.title}`;
+  }
+
+  if (event.type === "prompt-preview") {
+    return `Prompt ready: ${event.title}`;
   }
 
   if (event.type === "step-complete") {

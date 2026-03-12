@@ -91,4 +91,101 @@ describe("useGeneration", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(dispatch).not.toHaveBeenCalled();
   });
+
+  it("stores prompt preview events for completed runs", async () => {
+    const dispatch = vi.fn();
+    const encoder = new TextEncoder();
+    const payload = [
+      {
+        type: "run-start",
+        runId: "run-1",
+        label: "Generate SOTA Concepts",
+      },
+      {
+        type: "prompt-preview",
+        title: "Generation prompt (OPENAI gpt-test)",
+        systemPrompt: "system prompt body",
+        userPrompt: "user prompt body",
+      },
+      {
+        type: "run-complete",
+        result: {
+          strategy: "Use one clean concept with enough detail to satisfy the schema.",
+          variants: [
+            {
+              id: "variant-1",
+              name: "Authority Angle",
+              postType: "single-image",
+              hook: "Hook with enough detail",
+              headline: "Headline with enough detail",
+              supportingText:
+                "Supporting text with enough detail to satisfy the creative schema and render cleanly.",
+              cta: "",
+              caption:
+                "Caption with enough detail to satisfy the schema and represent a realistic generation result.",
+              hashtags: [
+                "#BrandPlaybook",
+                "#InstagramGrowth",
+                "#CreativeStrategy",
+                "#ContentDesign",
+                "#SocialMediaTips",
+              ],
+              layout: "hero-quote",
+              textAlign: "left",
+              colorHexes: ["#0F172A", "#F97316"],
+              overlayStrength: 0.42,
+              assetSequence: ["asset-1"],
+            },
+          ],
+        },
+        summary: "Generated 3 concept variants successfully.",
+        fallbackUsed: false,
+      },
+    ]
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join("");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(payload));
+              controller.close();
+            },
+          }),
+          {
+            headers: {
+              "content-type": "text/event-stream",
+            },
+          },
+        ),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useGeneration({
+        postId: "post-a",
+        brand: INITIAL_BRAND,
+        post: INITIAL_POST,
+        localAssets: [baseAsset],
+        localLogo: null,
+        promptConfig: { systemPrompt: "", customInstructions: "" },
+        dispatch,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.generate();
+    });
+
+    await waitFor(() => {
+      expect(result.current.agentRun?.status).toBe("success");
+      expect(result.current.agentRun?.promptSnapshots).toHaveLength(1);
+      expect(result.current.agentRun?.promptSnapshots[0]?.systemPrompt).toBe(
+        "system prompt body",
+      );
+    });
+  });
 });
