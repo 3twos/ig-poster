@@ -197,6 +197,7 @@ export const PublishOutcomeSchema = z.object({
 export type AspectRatio = z.infer<typeof AspectRatioSchema>;
 export type GenerationRequest = z.infer<typeof GenerationRequestSchema>;
 export type PromptConfig = NonNullable<GenerationRequest["promptConfig"]>;
+export type CarouselSlide = z.infer<typeof CarouselSlideSchema>;
 export type CreativeVariant = z.infer<typeof CreativeVariantSchema>;
 export type GenerationResponse = z.infer<typeof GenerationResponseSchema>;
 export type InternalGenerationResponse = z.infer<typeof InternalGenerationResponseSchema>;
@@ -322,6 +323,58 @@ export const normalizeOverlayLayout = (
   };
 };
 
+const VIRTUAL_CANVAS_SIZES: Record<AspectRatio, { width: number; height: number }> = {
+  "1:1": { width: 1000, height: 1000 },
+  "4:5": { width: 1000, height: 1250 },
+  "1.91:1": { width: 1000, height: 524 },
+  "9:16": { width: 1000, height: 1778 },
+};
+
+const LAYOUT_SAFE_STACKS: Record<
+  CreativeLayout,
+  { top: number; bottom: number; gap: number }
+> = {
+  "hero-quote": { top: 52, bottom: 99, gap: 1.5 },
+  "split-story": { top: 58, bottom: 98, gap: 1.35 },
+  magazine: { top: 66, bottom: 99, gap: 1.1 },
+  "minimal-logo": { top: 22, bottom: 84, gap: 1.4 },
+};
+
+const CANONICAL_BLOCK_METRICS: Record<
+  CanonicalOverlayKey,
+  {
+    baseFontRem: number;
+    lineHeight: number;
+    paddingPx: number;
+    charWidthFactor: number;
+  }
+> = {
+  hook: {
+    baseFontRem: 0.75,
+    lineHeight: 1.2,
+    paddingPx: 24,
+    charWidthFactor: 0.58,
+  },
+  headline: {
+    baseFontRem: 1.875,
+    lineHeight: 1.05,
+    paddingPx: 24,
+    charWidthFactor: 0.54,
+  },
+  supportingText: {
+    baseFontRem: 0.875,
+    lineHeight: 1.45,
+    paddingPx: 24,
+    charWidthFactor: 0.57,
+  },
+  cta: {
+    baseFontRem: 0.75,
+    lineHeight: 1.1,
+    paddingPx: 18,
+    charWidthFactor: 0.58,
+  },
+};
+
 const LAYOUT_COPY_BUDGETS: Record<
   CreativeLayout,
   { hook: number; headline: number; supportingText: number; cta: number }
@@ -362,6 +415,203 @@ export const applyLayoutCopyBudget = (
     cta: variant.cta ? trimToWordBoundary(variant.cta, budget.cta) : "",
   };
 };
+
+const estimateTextLines = (
+  text: string,
+  availableWidthPx: number,
+  fontPx: number,
+  charWidthFactor: number,
+) => {
+  const normalized = text.trim();
+  if (!normalized) {
+    return 0;
+  }
+
+  const charsPerLine = Math.max(
+    6,
+    Math.floor(availableWidthPx / Math.max(fontPx * charWidthFactor, 1)),
+  );
+
+  return normalized
+    .split("\n")
+    .reduce((total, line) => {
+      const nextLine = line.trim();
+      if (!nextLine) {
+        return total + 1;
+      }
+      return total + Math.max(1, Math.ceil(nextLine.length / charsPerLine));
+    }, 0);
+};
+
+const estimateCanonicalBlockHeight = (params: {
+  key: CanonicalOverlayKey;
+  block: OverlayBlock;
+  text: string;
+  aspectRatio: AspectRatio;
+}) => {
+  const metrics = CANONICAL_BLOCK_METRICS[params.key];
+  const canvas = VIRTUAL_CANVAS_SIZES[params.aspectRatio];
+  const fontPx = metrics.baseFontRem * params.block.fontScale * 16;
+  const availableWidthPx = Math.max(
+    64,
+    canvas.width * (params.block.width / 100) - metrics.paddingPx,
+  );
+  const lines = estimateTextLines(
+    params.text,
+    availableWidthPx,
+    fontPx,
+    metrics.charWidthFactor,
+  );
+  if (lines === 0) {
+    return params.block.height;
+  }
+
+  const estimatedPx = lines * fontPx * metrics.lineHeight + metrics.paddingPx;
+  const estimatedPct = (estimatedPx / canvas.height) * 100;
+  return Math.min(
+    100,
+    Math.max(params.block.height, Math.round(estimatedPct * 10) / 10),
+  );
+};
+
+export const resolveVariantOverlayCopy = (
+  variant: Pick<
+    CreativeVariant,
+    "postType" | "hook" | "headline" | "supportingText" | "cta" | "carouselSlides"
+  >,
+  activeSlideIndex = 0,
+  carouselSlides: CarouselSlide[] | undefined = variant.carouselSlides,
+) => {
+  const normalizedSlideIndex = Math.max(0, activeSlideIndex);
+  const lastSlideIndex = Math.max((carouselSlides?.length ?? 1) - 1, 0);
+  const clampedSlideIndex = Math.min(normalizedSlideIndex, lastSlideIndex);
+  const slide = carouselSlides?.[clampedSlideIndex];
+
+  if (!slide || variant.postType !== "carousel" || clampedSlideIndex === 0) {
+    return {
+      hook: variant.hook,
+      headline: variant.headline,
+      supportingText: variant.supportingText,
+      cta: variant.cta,
+    };
+  }
+
+  return {
+    hook: slide.goal,
+    headline: slide.headline,
+    supportingText: slide.body,
+    cta: clampedSlideIndex === lastSlideIndex ? variant.cta : "Swipe for more",
+  };
+};
+
+export const fitOverlayLayoutToCopy = (
+  input: {
+    layout: CreativeLayout;
+    hook: string;
+    headline: string;
+    supportingText: string;
+    cta?: string;
+  },
+  aspectRatio: AspectRatio,
+  layout?: Partial<OverlayLayout> | null,
+  brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
+): OverlayLayout => {
+  const base = layout
+    ? normalizeOverlayLayout(input.layout, layout)
+    : createDefaultOverlayLayout(input.layout, brandDefaults);
+  const stack = LAYOUT_SAFE_STACKS[input.layout];
+  const orderedKeys: CanonicalOverlayKey[] = [
+    "hook",
+    "headline",
+    "supportingText",
+    "cta",
+  ];
+  const copyByKey: Record<CanonicalOverlayKey, string> = {
+    hook: input.hook,
+    headline: input.headline,
+    supportingText: input.supportingText,
+    cta: input.cta ?? "",
+  };
+  const activeKeys = orderedKeys.filter((key) => {
+    const block = base[key];
+    return (block.visible ?? true) && copyByKey[key].trim().length > 0;
+  });
+
+  if (activeKeys.length === 0) {
+    return base;
+  }
+
+  const next: OverlayLayout = {
+    ...base,
+    hook: { ...base.hook },
+    headline: { ...base.headline },
+    supportingText: { ...base.supportingText },
+    cta: { ...base.cta },
+    custom: [...base.custom],
+    logo: base.logo ? { ...base.logo } : undefined,
+  };
+
+  const heights = Object.fromEntries(
+    activeKeys.map((key) => [
+      key,
+      estimateCanonicalBlockHeight({
+        key,
+        block: next[key],
+        text: copyByKey[key],
+        aspectRatio,
+      }),
+    ]),
+  ) as Record<CanonicalOverlayKey, number>;
+
+  const availableHeight = stack.bottom - stack.top;
+  const gapCount = Math.max(activeKeys.length - 1, 0);
+  let gap = stack.gap;
+  let totalHeight =
+    activeKeys.reduce((sum, key) => sum + heights[key], 0) + gap * gapCount;
+
+  if (gapCount > 0 && totalHeight > availableHeight) {
+    gap = Math.max(0.4, gap - (totalHeight - availableHeight) / gapCount);
+    totalHeight =
+      activeKeys.reduce((sum, key) => sum + heights[key], 0) + gap * gapCount;
+  }
+
+  let currentY =
+    input.layout === "minimal-logo"
+      ? stack.top
+      : Math.max(stack.top, stack.bottom - totalHeight);
+
+  for (const key of activeKeys) {
+    next[key] = {
+      ...next[key],
+      y: Math.round(currentY * 10) / 10,
+      height: heights[key],
+    };
+    currentY += heights[key] + gap;
+  }
+
+  return next;
+};
+
+export const createFittedOverlayLayout = (
+  variant: Pick<
+    CreativeVariant,
+    "layout" | "hook" | "headline" | "supportingText" | "cta"
+  >,
+  aspectRatio: AspectRatio,
+  brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
+) =>
+  fitOverlayLayoutToCopy(
+    {
+      layout: variant.layout,
+      hook: variant.hook,
+      headline: variant.headline,
+      supportingText: variant.supportingText,
+      cta: variant.cta,
+    },
+    aspectRatio,
+    null,
+    brandDefaults,
+  );
 
 const buildLayoutBudgetGuidance = () =>
   [

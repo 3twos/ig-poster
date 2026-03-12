@@ -16,6 +16,7 @@
 - Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
 - New posts default to the first available brand kit for that user (when one exists), so brand/prompt context and the kit's primary logo are prefilled consistently.
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
+- New generated layouts are now fit against the current overlay copy using deterministic safe-zone stacking, and the editor exposes an `Auto-fit Layout` recovery action for existing drafts.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel, and exposes the exact assembled generation prompt used for each run.
 - Switches between saved posts with race-safe request handling and stable sidebar summaries to reduce UI flicker during refreshes.
 - Sidebar post rows expose quick publish actions (`Post now`, `Post at`) plus `Duplicate` in the context menu, in addition to archive/delete controls.

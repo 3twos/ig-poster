@@ -95,6 +95,7 @@ Why this shape:
   - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
+  - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
   - LLM provider abstraction
   - auth/session/token helpers
   - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
