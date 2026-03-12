@@ -7,7 +7,12 @@ import {
   upsertProfile,
 } from "../config";
 import { CliError } from "../errors";
-import { printJson, printKeyValue, printValue } from "../output";
+import {
+  printJson,
+  printJsonEnvelope,
+  printKeyValue,
+  printValue,
+} from "../output";
 import type { CliContext } from "../context";
 
 export const runConfigCommand = async (ctx: CliContext, argv: string[]) => {
@@ -28,7 +33,7 @@ export const runConfigCommand = async (ctx: CliContext, argv: string[]) => {
 const listConfig = async (ctx: CliContext) => {
   const config = await loadConfig();
   if (ctx.globalOptions.json) {
-    printJson(config, ctx.globalOptions.jq);
+    printJsonEnvelope({ config }, ctx.globalOptions.jq);
     return;
   }
 
@@ -46,7 +51,7 @@ const getConfig = async (ctx: CliContext, argv: string[]) => {
   const value = profile[key as keyof typeof profile];
 
   if (ctx.globalOptions.json) {
-    printJson({ key, value });
+    printJsonEnvelope({ key, value }, ctx.globalOptions.jq);
     return;
   }
 
@@ -75,7 +80,10 @@ const setConfig = async (ctx: CliContext, argv: string[]) => {
   await saveConfig(upsertProfile(config, profileName, { host: normalizedHost }));
 
   if (ctx.globalOptions.json) {
-    printJson({ profile: profileName, key, value: normalizedHost });
+    printJsonEnvelope(
+      { profile: profileName, key, value: normalizedHost },
+      ctx.globalOptions.jq,
+    );
     return;
   }
 

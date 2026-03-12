@@ -30,6 +30,32 @@ flowchart LR
   MW --> APIV1
 ```
 
+## Planned macOS Apple Photos Companion
+
+Apple Photos support is planned as a local macOS companion, not as a rewrite of
+the core IG Poster product into a native-only app.
+
+Planned split of responsibilities:
+
+- web app + `/api/*` + `/api/v1/*`: source of truth for auth, posts, generation, publish, and queue state, and the primary human workflow surface
+- `ig` CLI: automation surface for humans and agents
+- `IG Poster Companion.app`: native Apple Photos picker/search UI, PhotoKit access, managed export cache, and local bridge
+
+Planned flow:
+
+1. the web editor starts the human `Add from Photos` flow
+2. the companion app handles Photos permissions plus human-friendly selection via native macOS UI
+3. the companion app exposes a local bridge for web/CLI/MCP calls that need recent/search/export access
+4. the web app or CLI uploads exported artifacts through the existing `/api/v1/assets` route and continues through normal post/generate/publish flows
+
+Why this shape:
+
+- human selection wants native macOS UI
+- human workflow should still feel like one web-driven product experience
+- agent workflows want a machine-readable local bridge, not a GUI
+- the server should stay Apple-agnostic and continue to operate on uploaded files, draft posts, and publish requests
+- missing-native-helper cases should degrade to install guidance plus the existing regular upload flow, not block the draft editor
+
 ## Runtime and Layers
 
 - App framework: Next.js App Router (Node runtime for server routes that need Node APIs).
@@ -62,6 +88,8 @@ flowchart LR
   - `src/services/meta-auth.ts` resolves CLI-safe Meta auth for bearer-auth `/api/v1/*` publish and location-search requests, preferring stored OAuth connections when available and falling back to env credentials.
   - `src/services/publish-jobs.ts` owns extracted publish-job queue reads and mutation rules (`list`, `get`, `update`) for the CLI-facing API surface.
   - `src/services/status.ts` aggregates CLI-safe bearer-auth status data for `/api/v1/status`, combining actor info, Meta readiness, LLM provider availability, and publish-window usage.
+  - `src/cli/commands/watch.ts` orchestrates local-directory polling and ingest for agent workflows by reusing the normal assets + posts API surface.
+  - `src/cli/commands/mcp.ts` exposes a focused MCP stdio tool surface by invoking the existing CLI commands in structured-output mode.
 - Data layer:
   - `src/db/schema.ts` defines relational post records.
   - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.
@@ -161,8 +189,16 @@ Why this shape:
 - Sessions are signed JWTs in `workspace_session` cookie.
 - CLI preview requests can also authenticate with `Authorization: Bearer <token>`. Bearer auth is resolved before cookies for `/api/v1/*` consumers.
 - Browser-assisted CLI login now runs through `/api/v1/auth/cli/start` and `/api/v1/auth/cli/exchange`, which mint short-lived CLI access tokens plus rolling refresh sessions.
+- Device-code CLI login now uses `POST /api/v1/auth/cli/start` and `POST /api/v1/auth/cli/poll`, plus the workspace-gated approval page at `/cli/device` and the approval form handler at `/api/auth/cli/device/approve`.
 - Refresh/session lifecycle routes live at `/api/v1/auth/cli/refresh`, `/api/v1/auth/cli/logout`, `/api/v1/auth/sessions`, and `/api/v1/auth/sessions/:id/revoke`.
-- CLI refresh-session records are stored in the private credential store namespace `cli_session` (backed by Postgres). Locally, the CLI now stores refresh tokens in macOS Keychain when available, while still persisting access tokens and session metadata in `~/.config/ig-poster/config.json`; non-macOS environments fall back to storing the refresh token in that config file as well.
+- Interactive CLI commands first try the cached access token and refresh token, then automatically bootstrap the browser login flow when no valid CLI session exists. Non-interactive callers must authenticate explicitly ahead of time or provide `IG_POSTER_TOKEN`.
+- CLI refresh-session records are stored in the private credential store namespace `cli_session` (backed by Postgres). Short-lived pending device approvals are stored in the same credential store under `cli_device_code`. Locally, the CLI now stores refresh tokens in macOS Keychain when available, while still persisting access tokens and session metadata in `~/.config/ig-poster/config.json`; non-macOS environments fall back to storing the refresh token in that config file as well.
+- CLI output contracts are now normalized around stable JSON envelopes (`{ ok, data }` / `{ ok, error }`) and the CLI auto-prefers `--json` when stdout is not a TTY for normal commands, while `--stream-json` remains NDJSON event output for streaming workflows.
+- `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
+- `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
+<<<<<<< HEAD
+- Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
+- The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. Until the native companion app exists, that entry point intentionally degrades to a regular-upload fallback dialog instead of attempting a broken native handoff.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

@@ -8,10 +8,12 @@ const COMMANDS = [
   "chat",
   "config",
   "generate",
+  "mcp",
   "api",
   "posts",
   "publish",
   "queue",
+  "watch",
   "link",
   "unlink",
   "completion",
@@ -23,6 +25,7 @@ const GLOBAL_FLAGS = [
   "--host",
   "--profile",
   "--json",
+  "--stream-json",
   "--jq",
   "--timeout",
   "--quiet",
@@ -113,8 +116,14 @@ _ig() {
     queue)
       COMPREPLY=( $(compgen -W "list get cancel retry move-to-draft update" -- "$cur") )
       ;;
+    watch)
+      COMPREPLY=( $(compgen -W "--brand-kit --folder --interval --once" -- "$cur") )
+      ;;
     completion)
       COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
+      ;;
+    mcp)
+      COMPREPLY=()
       ;;
     *)
       COMPREPLY=()
@@ -139,6 +148,8 @@ commands=(
   'posts:Post commands'
   'publish:Publish media to Instagram'
   'queue:Publish queue commands'
+  'watch:Watch a local directory and ingest assets'
+  'mcp:Run the MCP stdio adapter'
   'link:Link the current repo'
   'unlink:Remove the current repo link'
   'completion:Print shell completion scripts'
@@ -178,8 +189,14 @@ case $state in
       queue)
         _values 'queue command' list get cancel retry move-to-draft update
         ;;
+      watch)
+        _values 'watch option' --brand-kit --folder --interval --once
+        ;;
       completion)
         _values 'shell' bash zsh fish
+        ;;
+      mcp)
+        _values 'mcp'
         ;;
       *)
         _describe 'command' commands
@@ -201,6 +218,7 @@ const buildFishCompletion = () => [
   "complete -c ig -n '__fish_seen_subcommand_from publish' -a '--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed'",
   "complete -c ig -n '__fish_seen_subcommand_from posts' -a 'list get create update duplicate archive'",
   "complete -c ig -n '__fish_seen_subcommand_from queue' -a 'list get cancel retry move-to-draft update'",
+  "complete -c ig -n '__fish_seen_subcommand_from watch' -a '--brand-kit --folder --interval --once'",
   "complete -c ig -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'",
   ...GLOBAL_FLAGS.map((flag) => `complete -c ig -l ${flag.slice(2)}`),
   "",

@@ -116,6 +116,8 @@
 - Available preview commands:
   - `ig status`
   - `ig auth login`
+  - `ig auth login --device-code`
+  - `ig auth login --no-browser`
   - `ig auth login --token-stdin`
   - `ig auth status`
   - `ig auth logout`
@@ -131,23 +133,59 @@
   - `ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]`
   - `ig unlink`
   - `ig completion <bash|zsh|fish>`
+  - `ig watch <dir> [--brand-kit <id>] [--folder <assets|videos|logos|renders>] [--interval <ms>] [--once]`
+  - `ig mcp`
   - `ig publish (--image <url> | --video <url> | --carousel <url,...>) (--caption <text> | --caption-file <file>)`
   - `ig api <METHOD> <PATH>`
   - `ig posts list|get|create|update|duplicate|archive`
   - `ig queue list|get|cancel|retry|move-to-draft|update`
 - The CLI talks to `/api/v1/*` on a running IG Poster server. It does not run generation or publishing logic locally.
-- `ig auth login` now opens the browser, reuses the Google Workspace login gate, and stores a refreshable CLI session for the active profile.
+- `ig auth login` opens the browser, reuses the Google Workspace login gate, and stores a refreshable CLI session for the active profile.
+- `ig auth login --device-code` (or the alias `--no-browser`) starts a headless approval flow: the CLI prints a hosted verification URL plus a short code, you approve it in the browser under your normal workspace login, and the CLI polls until the session is issued.
+- In an interactive terminal, most auth-required commands now trigger the same browser login flow automatically when no valid CLI session exists yet. Non-interactive runs still need a saved session or `IG_POSTER_TOKEN`.
 - Manual bearer bootstrap is still available for testing and overrides: `IG_POSTER_TOKEN`, `--token`, `--token-file`, and `--token-stdin`.
 - `--flags-file <path>` can preload arguments from a file before normal parsing. Use either a JSON array of strings for values containing spaces, or a newline-delimited token file for simple cases. Nested `--flags-file` references are supported, and later CLI args still override earlier file-loaded args.
-- On macOS, CLI refresh tokens are stored in the user Keychain by default. Other environments fall back to `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). Device-code login is not shipped yet. Set `IG_POSTER_DISABLE_KEYCHAIN=1` to force the file fallback on macOS.
+- On macOS, CLI refresh tokens are stored in the user Keychain by default. Other environments fall back to `~/.config/ig-poster/config.json` with restrictive file permissions (`0600`). Set `IG_POSTER_DISABLE_KEYCHAIN=1` to force the file fallback on macOS.
+- `--json` now emits a stable `{ "ok": true, "data": ... }` envelope, and explicit CLI errors use `{ "ok": false, "error": ... }`. If stdout is not a TTY, the CLI defaults to `--json` automatically for normal commands unless you explicitly chose `--stream-json`.
 - `ig link` writes repo-local defaults to `.ig-poster/project.json`, and `ig status` now includes the active linked-project details when one is present.
 - When authenticated, `ig status` also summarizes the server-visible Meta publish connection, CLI-visible LLM providers plus execution mode, and current 24-hour publish-window usage.
 - `ig generate run` streams server-side generation events from `/api/v1/generate`; add `--stream-json` for newline-delimited events or `--json` to emit the final result envelope only.
-- `ig chat ask` streams server-side chat events from `/api/v1/chat`; add `--stream-json` for newline-delimited events, `--json` for the final assistant message object, and `--post <id>` to inject the saved draft context into the prompt.
+- `ig chat ask` streams server-side chat events from `/api/v1/chat`; add `--stream-json` for newline-delimited events, `--json` for the final assistant message envelope, and `--post <id>` to inject the saved draft context into the prompt.
 - Use `--json` for machine-readable output. A limited `--jq` dot-path helper is also available for simple field extraction.
 - `ig assets upload` reads local image/video files and sends them to the same Blob-backed upload path the browser uses, with an optional folder override for `assets`, `videos`, `logos`, or `renders`.
 - `ig publish` sends direct media publish/schedule requests through `/api/v1/publish`, supports `--dry-run`, and can resolve Meta place search with `--location` before attaching the final `locationId`.
 - `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.
+- `ig watch` ingests supported local image/video files into the remote service by uploading each file and creating a draft post around it. In human mode or `--stream-json`, it keeps polling the directory for new files; in `--json` mode it performs a single scan pass and emits one summary envelope.
+- `ig mcp` runs a stdio MCP adapter over the CLI so local agents can call tools like `status`, `posts_list`, `generate_run`, `chat_ask`, `publish`, and `queue_list` through the same authenticated CLI surface.
+- On macOS, the editor asset panel now shows `Add from Photos`. For now this is a safe fallback entry point: it explains that the native companion is not available yet and routes you back to the normal upload picker so your draft flow keeps moving.
+
+### Planned macOS Apple Photos workflow
+
+This is not shipped yet, but the planned direction is:
+
+- a signed `IG Poster Companion.app` handles Apple Photos permissions, native picker/search UI, and export caching
+- the web editor remains the main human workflow and should launch the native helper when needed
+- `ig` continues to be the scripting surface
+- `ig mcp` exposes the same Photos capabilities to agents through the local CLI
+
+Planned commands:
+
+- `ig photos pick --create-draft --brand-kit <id>`
+- `ig photos recent --since 7d --limit 20`
+- `ig photos search --album Favorites --media image`
+- `ig photos import --ids <asset-id,...>`
+- `ig photos propose --since 7d --limit 20 --brand-kit <id>`
+
+Expected behavior:
+
+- human users should be able to click `Add from Photos` in the web editor, browse and select from the Photos library in native macOS UI, and see those assets flow back into the current draft without manually switching products
+- agents should be able to enumerate recent/search results and import/export assets through CLI/MCP without touching Apple Photos internals directly
+- uploaded files should still go through the existing IG Poster service APIs after local export
+
+If the macOS companion app is not installed or not reachable:
+
+- the web app should offer an install prompt plus a fallback to the normal file-upload flow
+- CLI/MCP should return a structured error with remediation instead of hanging or failing opaquely
 
 ## Working with Saved Posts
 

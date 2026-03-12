@@ -2,7 +2,7 @@ import { parseCommandOptions } from "../args";
 import { parseConfigHost } from "../config";
 import type { CliContext } from "../context";
 import { CliError } from "../errors";
-import { printJson, printKeyValue } from "../output";
+import { printJsonEnvelope, printKeyValue } from "../output";
 import {
   loadProjectLinkAtDir,
   removeProjectLink,
@@ -55,7 +55,7 @@ export const runLinkCommand = async (ctx: CliContext, argv: string[]) => {
   });
 
   if (ctx.globalOptions.json) {
-    printJson({
+    printJsonEnvelope({
       linked: true,
       path: linked.configPath,
       project: linked.config,
@@ -81,7 +81,7 @@ export const runUnlinkCommand = async (ctx: CliContext, argv: string[]) => {
   const removed = await removeProjectLink();
 
   if (ctx.globalOptions.json) {
-    printJson({
+    printJsonEnvelope({
       linked: false,
       removed: Boolean(removed),
       path: removed?.configPath ?? null,

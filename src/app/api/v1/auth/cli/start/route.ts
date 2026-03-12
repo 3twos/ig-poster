@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { WORKSPACE_SCOPES } from "@/lib/auth-scopes";
-import { apiError } from "@/lib/api/v1/envelope";
+import {
+  CliDeviceCodeStartRequestSchema,
+  CliDeviceCodeStartSchema,
+} from "@/lib/api/v1/auth";
+import { apiError, apiOk } from "@/lib/api/v1/envelope";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import {
+  createCliDeviceCode,
   createCliAuthorizationCode,
   CliAuthServiceError,
   ensureCliAuthReady,
@@ -66,6 +71,37 @@ export async function GET(req: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return apiError(400, "INVALID_INPUT", "Invalid CLI auth start request");
+    }
+
+    if (error instanceof CliAuthServiceError) {
+      return apiError(
+        error.status,
+        errorCodeForStatus(error.status),
+        error.message,
+      );
+    }
+
+    console.error("[api/v1/auth/cli/start]", error);
+    return apiError(500, "INTERNAL_ERROR", "Failed to start CLI login");
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    ensureCliAuthReady();
+
+    const body = CliDeviceCodeStartRequestSchema.parse(await req.json());
+    const requestUrl = new URL(req.url);
+    const deviceCode = await createCliDeviceCode({
+      origin: requestUrl.origin,
+      label: body.label,
+      userAgent: req.headers.get("user-agent"),
+    });
+
+    return apiOk(CliDeviceCodeStartSchema.parse(deviceCode), { status: 201 });
+  } catch (error) {
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      return apiError(400, "INVALID_INPUT", "Invalid CLI device-code request");
     }
 
     if (error instanceof CliAuthServiceError) {
