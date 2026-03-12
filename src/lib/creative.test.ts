@@ -175,6 +175,22 @@ describe("creative helpers", () => {
     expect(layout.cta.bgOpacity).toBeUndefined();
   });
 
+  it("keeps built-in overlay defaults inside the frame", () => {
+    const layouts = [
+      createDefaultOverlayLayout("hero-quote"),
+      createDefaultOverlayLayout("split-story"),
+      createDefaultOverlayLayout("magazine"),
+      createDefaultOverlayLayout("minimal-logo"),
+    ];
+
+    for (const layout of layouts) {
+      expect(layout.hook.y + layout.hook.height).toBeLessThanOrEqual(100);
+      expect(layout.headline.y + layout.headline.height).toBeLessThanOrEqual(100);
+      expect(layout.supportingText.y + layout.supportingText.height).toBeLessThanOrEqual(100);
+      expect(layout.cta.y + layout.cta.height).toBeLessThanOrEqual(100);
+    }
+  });
+
   it("normalizes older overlay layouts with editor defaults", () => {
     const normalized = normalizeOverlayLayout("hero-quote", {
       headline: {
