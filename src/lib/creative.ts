@@ -1251,6 +1251,7 @@ const buildVariantAlignmentText = (variant: CreativeVariant) =>
 
 const scoreBriefFieldAlignment = (
   variantText: string,
+  variantTokens: Set<string>,
   value: string,
   weight: number,
 ) => {
@@ -1268,9 +1269,12 @@ const scoreBriefFieldAlignment = (
     return 0;
   }
 
-  const matchedTokens = new Set(
-    tokens.filter((token) => variantText.includes(token)),
-  ).size;
+  if (variantTokens.size === 0) {
+    return 0;
+  }
+
+  const matchedTokens = new Set(tokens.filter((token) => variantTokens.has(token)))
+    .size;
   if (matchedTokens === 0) {
     return 0;
   }
@@ -1320,12 +1324,33 @@ const scoreVariantSelectionHeuristic = (
   }
 
   const variantText = buildVariantAlignmentText(variant);
-  score += scoreBriefFieldAlignment(variantText, context.post.theme, 6);
-  score += scoreBriefFieldAlignment(variantText, context.post.subject, 8);
-  score += scoreBriefFieldAlignment(variantText, context.post.thought, 8);
-  score += scoreBriefFieldAlignment(variantText, context.post.audience, 4);
-  score += scoreBriefFieldAlignment(variantText, context.post.objective, 4);
-  score += scoreBriefFieldAlignment(variantText, context.post.mood, 2);
+  const variantTokens = new Set(tokenizeAlignmentField(variantText));
+  score += scoreBriefFieldAlignment(variantText, variantTokens, context.post.theme, 6);
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.subject,
+    8,
+  );
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.thought,
+    8,
+  );
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.audience,
+    4,
+  );
+  score += scoreBriefFieldAlignment(
+    variantText,
+    variantTokens,
+    context.post.objective,
+    4,
+  );
+  score += scoreBriefFieldAlignment(variantText, variantTokens, context.post.mood, 2);
 
   if (
     GENERIC_ENGAGEMENT_CTA_PATTERN.test(`${variant.cta} ${variant.caption}`) &&
@@ -1612,7 +1637,6 @@ Brand:
 - Visual direction: ${request.brand.visualDirection}
 - Palette notes: ${request.brand.palette}
 - Logo guidance: ${request.brand.logoNotes || "No extra logo guidance"}
-${websiteStyleBlock}${websiteBodyBlock}${performanceBlock}
 Post brief:
 - Theme: ${request.post.theme}
 - Subject: ${request.post.subject}
