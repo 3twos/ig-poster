@@ -157,6 +157,7 @@
 - `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.
 - `ig watch` ingests supported local image/video files into the remote service by uploading each file and creating a draft post around it. In human mode or `--stream-json`, it keeps polling the directory for new files; in `--json` mode it performs a single scan pass and emits one summary envelope.
 - `ig mcp` runs a stdio MCP adapter over the CLI so local agents can call tools like `status`, `posts_list`, `generate_run`, `chat_ask`, `publish`, and `queue_list` through the same authenticated CLI surface.
+- On macOS, the editor asset panel now shows `Add from Photos`. For now this is a safe fallback entry point: it explains that the native companion is not available yet and routes you back to the normal upload picker so your draft flow keeps moving.
 
 ### Planned macOS Apple Photos workflow
 

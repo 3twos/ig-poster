@@ -196,7 +196,9 @@ Why this shape:
 - CLI output contracts are now normalized around stable JSON envelopes (`{ ok, data }` / `{ ok, error }`) and the CLI auto-prefers `--json` when stdout is not a TTY for normal commands, while `--stream-json` remains NDJSON event output for streaming workflows.
 - `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
 - `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
+<<<<<<< HEAD
 - Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
+- The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. Until the native companion app exists, that entry point intentionally degrades to a regular-upload fallback dialog instead of attempting a broken native handoff.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

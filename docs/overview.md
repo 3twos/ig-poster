@@ -37,7 +37,8 @@
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
 - Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
 - Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, automatic browser auth bootstrap for interactive auth-required commands, explicit device-code login for headless environments, stable JSON envelopes with non-TTY auto-defaulting, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, macOS Keychain-backed refresh-token storage, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, directory watch ingestion, an MCP stdio adapter, and publish-job queue controls backed by `/api/v1/*`.
-- The next planned CLI/macOS phase is Apple Photos ingestion through a macOS companion app and local bridge, with the web app remaining the primary human workflow surface. Humans should trigger native Photos selection from the web editor, while CLI and MCP flows stay scriptable. This is not shipped yet.
+<<<<<<< HEAD
+- Starts the Apple Photos ingestion path with a macOS-only `Add from Photos` entry point in the asset panel. Today that action stays web-first and falls back to the normal upload flow with clear remediation copy, while the native companion app and local bridge remain the next planned step for richer human and agent workflows.
 
 ## Key Features
 
