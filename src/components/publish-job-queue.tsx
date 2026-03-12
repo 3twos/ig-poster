@@ -78,6 +78,19 @@ const statusLabel = (status: PublishJobClient["status"]) => {
   return "Failed";
 };
 
+const destinationTone = (destination: PublishJobClient["destination"]) =>
+  destination === "facebook"
+    ? "border-sky-300/35 bg-sky-400/10 text-sky-100"
+    : "border-pink-300/35 bg-pink-400/10 text-pink-100";
+
+const destinationLabel = (destination: PublishJobClient["destination"]) =>
+  destination === "facebook" ? "Facebook" : "Instagram";
+
+const remoteAuthorityLabel = (
+  remoteAuthority: PublishJobClient["remoteAuthority"],
+) =>
+  remoteAuthority === "remote_authoritative" ? "Meta-synced" : "App-managed";
+
 const formatTimestamp = (iso: string, localTimeZone: string) => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -508,7 +521,7 @@ export function PublishJobQueue({
             Publish Queue
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            Track upcoming, in-flight, and failed Instagram publishes for this workspace.
+            Track upcoming, in-flight, and failed Meta publishes for this workspace.
           </p>
         </div>
         <Button
@@ -570,6 +583,20 @@ export function PublishJobQueue({
                             <CalendarClock className="h-3 w-3" />
                           )}
                           {statusLabel(job.status)}
+                        </Badge>
+                        <Badge
+                          className={cn(
+                            "rounded-md px-2 py-0.5",
+                            destinationTone(job.destination),
+                          )}
+                        >
+                          {destinationLabel(job.destination)}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="rounded-md border-white/15 bg-white/5 text-slate-200"
+                        >
+                          {remoteAuthorityLabel(job.remoteAuthority)}
                         </Badge>
                         {job.postId && job.postId === activePostId ? (
                           <Badge

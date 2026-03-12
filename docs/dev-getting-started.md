@@ -159,9 +159,9 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, persisted post-caption editing, refine controls, the last refine prompt preview, and the canvas editor inspector (save state, text overrides, custom boxes).
 - `src/components/publish-metadata-editor.tsx`: persisted publish metadata editor for first comment, location, reel feed-sharing, and per-asset user tags.
-- `src/components/publish-section.tsx`: share link, Instagram auth, planner entry point, schedule/post controls, and the queued/failed publish queue.
-- `src/components/scheduled-planner.tsx`: calendar-style scheduled-post surface with reschedule, open-post, cancel, and move-to-draft actions.
-- `src/components/publish-job-queue.tsx`: queue viewer/editor with recent publish-job activity entries for diagnostics around retries, deferrals, and failures.
+- `src/components/publish-section.tsx`: share link, Meta publishing-pair status, planner entry point, schedule/post controls, and the queued/failed publish queue.
+- `src/components/scheduled-planner.tsx`: calendar-style scheduled-post surface with destination/sync-mode badges plus reschedule, open-post, cancel, and move-to-draft actions.
+- `src/components/publish-job-queue.tsx`: queue viewer/editor with destination/sync-mode badges and recent publish-job activity entries for diagnostics around retries, deferrals, and failures.
 - `src/components/meta-location-search.tsx`: shared Meta place-search assist used by both the main publish form and queue editor.
 - `src/components/poster-preview.tsx`: poster renderer, persisted overlay layout playback, carousel slide preview, adaptive logo chip, and editable overlay blocks.
 - `src/components/chat/`: chat module — `chat-panel.tsx` (embeddable for right panel), `chat-container.tsx` (standalone with sidebar), `chat-messages.tsx`, `chat-message.tsx`, `chat-input.tsx`, `chat-markdown.tsx`, `chat-code-block.tsx`, `chat-thinking.tsx`, `chat-empty.tsx`, `chat-header.tsx`, `chat-sidebar.tsx`.

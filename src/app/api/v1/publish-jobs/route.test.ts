@@ -60,6 +60,8 @@ describe("GET /api/v1/publish-jobs", () => {
         id: "job-1",
         ownerHash: "hash",
         postId: "post-1",
+        destination: "instagram",
+        remoteAuthority: "app_managed",
         status: "queued",
         caption: "Launch day",
         firstComment: null,
@@ -99,7 +101,15 @@ describe("GET /api/v1/publish-jobs", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       data: {
-        jobs: [{ id: "job-1", status: "queued", postId: "post-1" }],
+        jobs: [
+          {
+            id: "job-1",
+            postId: "post-1",
+            destination: "instagram",
+            remoteAuthority: "app_managed",
+            status: "queued",
+          },
+        ],
       },
     });
   });
