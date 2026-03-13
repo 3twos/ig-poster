@@ -202,7 +202,16 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       selection: stateStore.load()?.summary
     )
 
-    return (try? encoder.encode(payload)) ?? Data("{}".utf8)
+    if let encodedPayload = try? encoder.encode(payload) {
+      return encodedPayload
+    }
+
+    let fallbackPayload = ApplePhotosCompanionBridge.healthResponse(port: Int(port))
+    return (try? encoder.encode(fallbackPayload))
+      ?? errorBody(
+        code: "HEALTH_ENCODING_FAILED",
+        message: "The companion bridge could not encode its health payload."
+      )
   }
 
   private func errorBody(code: String, message: String) -> Data {

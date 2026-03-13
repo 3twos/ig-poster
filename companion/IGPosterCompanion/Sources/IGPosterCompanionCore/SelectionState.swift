@@ -59,9 +59,15 @@ public struct ApplePhotosCompanionStateStore: Sendable {
       return
     }
 
-    let baseDirectory = FileManager.default.homeDirectoryForCurrentUser
-      .appending(path: "Library/Application Support/IGPosterCompanion", directoryHint: .isDirectory)
-    self.stateURL = baseDirectory.appending(path: "selection-state.json")
+    let baseDirectory =
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? FileManager.default.homeDirectoryForCurrentUser
+        .appending(path: "Library/Application Support", directoryHint: .isDirectory)
+    let companionDirectory = baseDirectory.appending(
+      path: "IGPosterCompanion",
+      directoryHint: .isDirectory
+    )
+    self.stateURL = companionDirectory.appending(path: "selection-state.json")
   }
 
   public func load() -> ApplePhotosCompanionSelectionSnapshot? {
@@ -72,6 +78,11 @@ public struct ApplePhotosCompanionStateStore: Sendable {
         error.code == NSFileReadNoSuchFileError {
       return nil
     } catch {
+      fputs(
+        "IGPosterCompanion state store load failed for \(stateURL.path): \(error)\n",
+        stderr
+      )
+      try? FileManager.default.removeItem(at: stateURL)
       return nil
     }
   }

@@ -65,6 +65,7 @@ struct CompanionHomeView: View {
   @State private var invalidLaunchURL: String?
   @State private var selectedPickerItems: [PhotosPickerItem] = []
   @State private var persistedSelectionSnapshot: ApplePhotosCompanionSelectionSnapshot?
+  @State private var persistedSelectionError: String?
 
   private func handleIncomingURL(_ url: URL) {
     guard let request = ApplePhotosCompanionBridge.parseLaunchURL(url) else {
@@ -93,6 +94,7 @@ struct CompanionHomeView: View {
     if activeLaunchRequest == nil && pickedAssets.isEmpty {
       try? stateStore.clear()
       persistedSelectionSnapshot = nil
+      persistedSelectionError = nil
       return
     }
 
@@ -115,8 +117,10 @@ struct CompanionHomeView: View {
     do {
       try stateStore.save(snapshot)
       persistedSelectionSnapshot = snapshot
+      persistedSelectionError = nil
     } catch {
-      persistedSelectionSnapshot = snapshot
+      persistedSelectionSnapshot = stateStore.load()
+      persistedSelectionError = "Could not write the shared state file."
     }
   }
 
@@ -171,6 +175,12 @@ struct CompanionHomeView: View {
         Text("The companion now persists launch-and-selection metadata to a shared local state file so the bridge can describe the active picker context even before file export is wired in.")
           .foregroundStyle(.secondary)
 
+        if let persistedSelectionError {
+          Text(persistedSelectionError)
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(Color.red.opacity(0.9))
+        }
+
         Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
           GridRow {
             Text("Updated").foregroundStyle(.secondary)
@@ -198,6 +208,12 @@ struct CompanionHomeView: View {
       } else {
         Text("No shared selection snapshot has been persisted yet. Selecting Photos or loading a handoff will populate the local state store for the bridge.")
           .foregroundStyle(.secondary)
+
+        if let persistedSelectionError {
+          Text(persistedSelectionError)
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(Color.red.opacity(0.9))
+        }
       }
     }
   }
