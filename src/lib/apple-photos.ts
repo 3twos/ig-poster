@@ -98,7 +98,7 @@ const isApplePhotosBridgeHealthResponse = (
   if (!value || typeof value !== "object") return false;
 
   const candidate = value as ApplePhotosBridgeHealthResponse;
-      return (
+  return (
     typeof candidate.appName === "string" &&
     typeof candidate.version === "string" &&
     typeof candidate.bridge?.origin === "string" &&
@@ -183,11 +183,14 @@ const isApplePhotosCompanionOpenResponse = (
   if (!value || typeof value !== "object") return false;
 
   const candidate = value as ApplePhotosCompanionOpenResponse;
+  const companionApp = candidate.companionApp;
   return (
     typeof candidate.launchedAt === "string" &&
     typeof candidate.launchUrl === "string" &&
-    typeof candidate.companionApp?.installed === "boolean" &&
-    typeof candidate.companionApp?.bundlePath === "string"
+    !!companionApp &&
+    typeof companionApp.installed === "boolean" &&
+    (typeof companionApp.bundlePath === "undefined" ||
+      typeof companionApp.bundlePath === "string")
   );
 };
 

@@ -82,6 +82,8 @@ type ApplePhotosDialogState =
   | {
       kind: "launch";
       bridgeOrigin: string;
+      launchUrl: string;
+      launchMode: "bridge" | "legacy-url";
       selectionAssetCount: number;
     };
 
@@ -207,9 +209,13 @@ export function AssetManager({
 
     if (probe.available) {
       const selectionAssetCount = probe.health.selection?.assetCount ?? 0;
-      const companionInstalled = probe.health.companionApp?.installed ?? false;
+      const companionInstalled = probe.health.companionApp?.installed;
+      const launchMode =
+        probe.health.companionApp && probe.health.bridge.openCompanionUrl
+          ? "bridge"
+          : "legacy-url";
 
-      if (selectionAssetCount <= 0 && !companionInstalled) {
+      if (selectionAssetCount <= 0 && companionInstalled === false) {
         setApplePhotosDialogState({
           kind: "fallback",
           info: getApplePhotosFallbackInfo(userAgent, "MACOS_COMPANION_REQUIRED"),
@@ -221,6 +227,8 @@ export function AssetManager({
       setApplePhotosDialogState({
         kind: "launch",
         bridgeOrigin: probe.health.bridge.origin,
+        launchUrl: probe.launchUrl,
+        launchMode,
         selectionAssetCount,
       });
       setApplePhotosDialogOpen(true);
@@ -240,6 +248,16 @@ export function AssetManager({
     setApplePhotosOpenPending(true);
 
     try {
+      if (applePhotosDialogState.launchMode === "legacy-url") {
+        setApplePhotosImportSession({
+          launchedAt: Date.now(),
+        });
+        setApplePhotosDialogOpen(false);
+        setApplePhotosDialogState(null);
+        window.location.assign(applePhotosDialogState.launchUrl);
+        return;
+      }
+
       const launch = await openApplePhotosCompanion({
         bridgeOrigin: applePhotosDialogState.bridgeOrigin,
         returnTo: window.location.href,

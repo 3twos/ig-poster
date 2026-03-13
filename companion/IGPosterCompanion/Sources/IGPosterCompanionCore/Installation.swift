@@ -11,10 +11,14 @@ public enum ApplePhotosCompanionInstallation {
     fileManager: FileManager = .default
   ) -> URL? {
     for candidate in candidateBundleURLs(processInfo: processInfo, fileManager: fileManager) {
+      let bundleURL = candidate.standardizedFileURL
       var isDirectory = ObjCBool(false)
-      if fileManager.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
-         isDirectory.boolValue {
-        return candidate.standardizedFileURL
+      if fileManager.fileExists(atPath: bundleURL.path, isDirectory: &isDirectory),
+         isDirectory.boolValue,
+         fileManager.isExecutableFile(
+           atPath: appExecutableURL(bundleURL: bundleURL).path
+         ) {
+        return bundleURL
       }
     }
 
@@ -65,6 +69,13 @@ public enum ApplePhotosCompanionInstallation {
     )
 
     return candidates
+  }
+
+  private static func appExecutableURL(bundleURL: URL) -> URL {
+    bundleURL
+      .appending(path: "Contents", directoryHint: .isDirectory)
+      .appending(path: "MacOS", directoryHint: .isDirectory)
+      .appending(path: executableName, directoryHint: .notDirectory)
   }
 
   private static func homeDirectoryURL(

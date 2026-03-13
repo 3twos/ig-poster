@@ -367,9 +367,10 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       )
     }
 
+    let companionApp = ApplePhotosCompanionInstallation.appInfo()
     guard
-      let companionBundleURL = ApplePhotosCompanionInstallation.appBundleURL(),
-      let bundlePath = ApplePhotosCompanionInstallation.appInfo().bundlePath
+      companionApp.installed,
+      let bundlePath = companionApp.bundlePath
     else {
       return httpResponse(
         status: "409 Conflict",
@@ -379,6 +380,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
         )
       )
     }
+    let companionBundleURL = URL(fileURLWithPath: bundlePath, isDirectory: true)
 
     let launchURL = ApplePhotosCompanionBridge.launchURL(
       action: openRequest.action,
@@ -402,10 +404,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
         payload: ApplePhotosCompanionOpenResponse(
           launchedAt: timestamp(),
           launchURL: launchURL.absoluteString,
-          companionApp: ApplePhotosCompanionAppInfo(
-            installed: true,
-            bundlePath: bundlePath
-          )
+          companionApp: companionApp
         )
       )
     } catch {

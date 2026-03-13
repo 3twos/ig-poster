@@ -268,6 +268,13 @@ public struct ApplePhotosCompanionOpenRequest: Codable, Equatable, Sendable {
   public let draftId: String?
   public let profile: String?
 
+  enum CodingKeys: String, CodingKey {
+    case action
+    case returnTo
+    case draftId
+    case profile
+  }
+
   public init(
     action: ApplePhotosCompanionBridge.LaunchAction = .pick,
     returnTo: String? = nil,
@@ -278,6 +285,17 @@ public struct ApplePhotosCompanionOpenRequest: Codable, Equatable, Sendable {
     self.returnTo = returnTo
     self.draftId = draftId
     self.profile = profile
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    action = try container.decodeIfPresent(
+      ApplePhotosCompanionBridge.LaunchAction.self,
+      forKey: .action
+    ) ?? .pick
+    returnTo = try container.decodeIfPresent(String.self, forKey: .returnTo)
+    draftId = try container.decodeIfPresent(String.self, forKey: .draftId)
+    profile = try container.decodeIfPresent(String.self, forKey: .profile)
   }
 }
 
