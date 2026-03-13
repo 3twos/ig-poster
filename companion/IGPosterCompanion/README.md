@@ -26,7 +26,7 @@ swift run ig-poster-companion
 Local install helper:
 
 ```bash
-./scripts/install-companion-bridge.zsh
+../../scripts/install-companion-bridge.zsh
 ```
 
 That script builds the release bridge binary, installs it into

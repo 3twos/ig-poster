@@ -55,13 +55,17 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
 }
 
+is_integer() {
+  [[ "$1" == <-> ]]
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --port)
         shift
         [[ $# -gt 0 ]] || fail "Missing value for --port"
-        [[ "$1" == <-> ]] || fail "Port must be a positive integer."
+        is_integer "$1" || fail "Port must be a positive integer."
         PORT="$1"
         ;;
       --no-load)
@@ -116,15 +120,23 @@ uninstall_bridge() {
 }
 
 install_bridge() {
+  local build_bin_dir
+  local bin_path_file
+
   mkdir -p "$BIN_DIR" "$LOG_DIR" "$PLIST_DIR"
+  bin_path_file="$(mktemp "${TMPDIR:-/tmp}/ig-poster-companion-bin-path.XXXXXX")"
+  trap 'rm -f "$bin_path_file"' RETURN
 
   print "Building release bridge..."
   (
     cd "$PACKAGE_DIR"
     swift build -c release --product ig-poster-companion-bridge
+    swift build -c release --show-bin-path > "$bin_path_file"
   )
 
-  cp "$PACKAGE_DIR/.build/release/ig-poster-companion-bridge" "$BRIDGE_BIN"
+  build_bin_dir="$(<"$bin_path_file")"
+
+  cp "$build_bin_dir/ig-poster-companion-bridge" "$BRIDGE_BIN"
   render_plist > "$PLIST_PATH"
   plutil -lint "$PLIST_PATH" >/dev/null
 
@@ -154,6 +166,7 @@ main() {
   require_command launchctl
   require_command plutil
   [[ -f "$PLIST_TEMPLATE" ]] || fail "Missing LaunchAgent template: $PLIST_TEMPLATE"
+  is_integer "$PORT" || fail "Port must be a positive integer."
   [[ "$PORT" -ge 1 && "$PORT" -le 65535 ]] || fail "Port must be between 1 and 65535."
 
   if [[ "$UNINSTALL" -eq 1 ]]; then
