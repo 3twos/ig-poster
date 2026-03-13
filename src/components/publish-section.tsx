@@ -11,6 +11,10 @@ import { useState } from "react";
 
 import { ScheduledPlanner } from "@/components/scheduled-planner";
 import { PublishJobQueue } from "@/components/publish-job-queue";
+import {
+  getBrowserPublishTargetLabel,
+  type BrowserPublishTarget,
+} from "@/lib/meta-publish-target";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,17 +26,15 @@ import {
 } from "@/components/ui/sheet";
 import type { InstagramAuthStatus } from "@/lib/types";
 
-type PublishDestination = "facebook" | "instagram";
-
 type Props = {
   activePostId?: string;
   authStatus: InstagramAuthStatus;
-  availableDestinations: PublishDestination[];
+  availableDestinations: Array<"facebook" | "instagram">;
   isAuthLoading: boolean;
   isSharing: boolean;
   isPublishing: boolean;
   hasBlockingValidationError?: boolean;
-  publishDestination: PublishDestination;
+  publishDestination: BrowserPublishTarget;
   validationMessage?: string | null;
   onPublishJobsMutated?: (
     postId: string | undefined,
@@ -43,7 +45,7 @@ type Props = {
   shareCopyState: "idle" | "done";
   localTimeZone: string;
   onCreateShareLink: () => void;
-  onPublishDestinationChange: (destination: PublishDestination) => void;
+  onPublishDestinationChange: (destination: BrowserPublishTarget) => void;
   onPostNow: () => void;
   onSchedulePost: (scheduleAt: string) => void;
   onSelectPlannerPost?: (postId: string) => Promise<void> | void;
@@ -72,9 +74,12 @@ export function PublishSection({
 }: Props) {
   const [scheduleAt, setScheduleAt] = useState("");
   const [plannerOpen, setPlannerOpen] = useState(false);
-  const destinationLabel =
-    publishDestination === "facebook" ? "Facebook" : "Instagram";
+  const destinationLabel = getBrowserPublishTargetLabel(publishDestination);
   const destinationGroupLabelId = "publish-destination-label";
+  const destinationOptions =
+    availableDestinations.length > 1
+      ? (["both", ...availableDestinations] as const)
+      : availableDestinations;
 
   return (
     <div className="space-y-3">
@@ -116,9 +121,8 @@ export function PublishSection({
             aria-labelledby={destinationGroupLabelId}
             className="mt-1 flex flex-wrap gap-2"
           >
-            {availableDestinations.map((destination) => {
-              const label =
-                destination === "facebook" ? "Facebook" : "Instagram";
+            {destinationOptions.map((destination) => {
+              const label = getBrowserPublishTargetLabel(destination);
 
               return (
                 <Button
@@ -146,7 +150,9 @@ export function PublishSection({
           <p className="text-[11px] text-slate-400">
             {publishDestination === "facebook"
               ? "Facebook publishing currently supports single-image and single-video posts."
-              : "Instagram supports single-image, carousel, and reel publishing."}
+              : publishDestination === "both"
+                ? "Both publishes to Facebook and Instagram together. Instagram-only metadata stays on Instagram."
+                : "Instagram supports single-image, carousel, and reel publishing."}
           </p>
         </div>
       ) : null}
