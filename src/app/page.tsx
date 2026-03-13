@@ -57,6 +57,7 @@ import type { BrandKitRow } from "@/db/schema";
 import { useGeneration } from "@/hooks/use-generation";
 import { inferLogoNameFromUrl } from "@/lib/brand-kit";
 import {
+  type CanonicalOverlayKey,
   type CreativeVariant,
   createFittedOverlayLayout,
   fitOverlayLayoutToCopy,
@@ -169,6 +170,9 @@ export default function Home() {
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
+  const measuredCanonicalHeightsRef = useRef<
+    Record<string, Partial<Record<CanonicalOverlayKey, number>>>
+  >({});
   const assetCleanupRef = useRef<LocalAsset[]>([]);
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
@@ -1229,6 +1233,8 @@ export default function Home() {
       activeVariant.carouselSlides,
     );
 
+    const measuredHeights = measuredCanonicalHeightsRef.current[activeVariant.id];
+
     dispatch({
       type: "UPDATE_OVERLAY",
       postId: activePostIdRef.current ?? undefined,
@@ -1246,6 +1252,8 @@ export default function Home() {
         },
         post.aspectRatio,
         activeOverlayLayout,
+        undefined,
+        measuredHeights,
       ),
     });
   }, [
@@ -1255,6 +1263,14 @@ export default function Home() {
     dispatch,
     post.aspectRatio,
   ]);
+
+  const handleMeasuredCanonicalHeightsChange = useCallback(
+    (heights: Partial<Record<CanonicalOverlayKey, number>>) => {
+      if (!activeVariant) return;
+      measuredCanonicalHeightsRef.current[activeVariant.id] = heights;
+    },
+    [activeVariant],
+  );
 
   const createShareLink = async () => {
     const postId = activePostIdRef.current;
@@ -1836,7 +1852,7 @@ export default function Home() {
                           <div className="w-full max-w-[40rem]">
                             {renderComposerActions()}
                           </div>
-                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} onAutoFitTextLayout={handleAutoFitTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
+                          <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} onAutoFitTextLayout={handleAutoFitTextLayout} onMeasuredCanonicalHeightsChange={handleMeasuredCanonicalHeightsChange} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} previewClassName="max-w-[40rem]" dispatch={typedDispatch} />
                           {activeVariant?.postType === "carousel" && !isPostedPost ? (
                             <CarouselComposer
                               assets={localAssets}
@@ -1927,7 +1943,7 @@ export default function Home() {
                 draftId={activePost?.id ?? undefined}
               />
             )}
-            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} onAutoFitTextLayout={handleAutoFitTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
+            <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} onAutoFitTextLayout={handleAutoFitTextLayout} onMeasuredCanonicalHeightsChange={handleMeasuredCanonicalHeightsChange} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {activeVariant?.postType === "carousel" && !isPostedPost ? (
               <CarouselComposer
                 assets={localAssets}

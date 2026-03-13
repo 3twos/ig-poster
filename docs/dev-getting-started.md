@@ -164,7 +164,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/scheduled-planner.tsx`: calendar-style scheduled-post surface with destination/sync-mode badges plus reschedule, open-post, cancel, and move-to-draft actions.
 - `src/components/publish-job-queue.tsx`: queue viewer/editor with destination/sync-mode badges and recent publish-job activity entries for diagnostics around retries, deferrals, and failures.
 - `src/components/meta-location-search.tsx`: shared Meta place-search assist used by both the main publish form and queue editor.
-- `src/components/poster-preview.tsx`: poster renderer, persisted overlay layout playback, carousel slide preview, adaptive logo chip, editable overlay blocks, and the non-editor measured-height restack pass for canonical overlay copy.
+- `src/components/poster-preview.tsx`: poster renderer, persisted overlay layout playback, carousel slide preview, adaptive logo chip, editable overlay blocks, the non-editor measured-height restack pass for canonical overlay copy, and canonical height reporting that editor auto-fit can consume.
 - `src/components/chat/`: chat module — `chat-panel.tsx` (embeddable for right panel), `chat-container.tsx` (standalone with sidebar), `chat-messages.tsx`, `chat-message.tsx`, `chat-input.tsx`, `chat-markdown.tsx`, `chat-code-block.tsx`, `chat-thinking.tsx`, `chat-empty.tsx`, `chat-header.tsx`, `chat-sidebar.tsx`.
 - `src/hooks/use-generation.ts`: SSE-based generation orchestration, agent run state, thinking token handling.
 - `src/hooks/use-chat.ts`: chat message state, SSE streaming, send/stop/regenerate/edit.
