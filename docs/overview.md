@@ -25,11 +25,11 @@
 - Keeps the post lifecycle intentionally narrow: `draft`, `scheduled`, and `posted`, with posted posts locked from further edits or deletion and archivable instead.
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
-- Publishes directly to Instagram via Meta Graph API, or schedules publishing via a cron-backed Postgres queue.
-- Backend publish flows are now destination-aware for Meta: Instagram remains the default browser-app publish target, while the API/queue/executor stack can also publish single-image and single-video posts to a connected Facebook Page.
+- Publishes directly to Meta destinations via Graph API, or schedules publishing through either app-managed jobs or Meta-synced Facebook Page schedules.
+- Backend publish flows are now destination-aware for Meta: Instagram remains app-managed, while Facebook single-image and single-video posts can publish immediately or create a remote-authoritative scheduled Page post that is shadowed locally for planner/queue visibility.
 - Promotes caption editing into a persisted post-composer field, while keeping the generated caption bundle available as a one-click suggestion.
 - Adds explicit lifecycle controls for `Move to draft`, `Duplicate post`, `Archive`, and a planner sheet for scheduled posts.
-- Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, see each job's Meta destination/sync mode, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor.
+- Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, see each job's Meta destination/sync mode, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor. Meta-synced Facebook schedules currently surface as read-only shadow jobs.
 - Supports Meta location search assist plus structured user tagging for single-image posts, reels, and carousel image items, with per-item carousel tagging persisted in media-composition state.
 - For reels, supports choosing whether the publish should also appear on the main feed (`share_to_feed`), with the default remaining on.
 - Automatically fails stale `processing` publish jobs after a timeout so abandoned work does not keep consuming publish-window capacity, and shows recent job activity directly in the queue UI.
@@ -79,7 +79,8 @@
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.
-   - Review scheduled posts from the planner, move them back to draft when needed, and use the queue for lower-level retry/edit diagnostics.
+   - Instagram schedules stay app-managed; Facebook schedules create the remote Page schedule immediately, then appear in the planner/queue as Meta-synced shadow jobs that cron reconciles.
+   - Review scheduled posts from the planner, move app-managed jobs back to draft when needed, and use the queue for lower-level retry/edit diagnostics.
    - Once a post is posted, archive it to remove it from the main list or duplicate it to start a new editable version.
 
 6. Refine ideas with AI chat
@@ -94,6 +95,7 @@
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Meta publishing is unavailable.
 - Facebook publishing is currently limited to single-image and single-video payloads; carousel publishing plus Instagram-only metadata fields (`firstComment`, `locationId`, `userTags`) remain unsupported on the Facebook destination.
+- Meta-synced Facebook schedules are currently read-only in IG Poster until remote edit/cancel support is implemented.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).
 - The CLI preview now supports browser-based login with refreshable CLI sessions, including automatic on-demand login bootstrap for auth-required commands in interactive terminals, plus explicit device-code login for headless environments. On macOS, refresh tokens are stored in the user Keychain by default; other environments still fall back to `~/.config/ig-poster/config.json` with restrictive local file permissions.
 - CLI commands now emit stable `{ ok, data }` JSON envelopes in `--json` mode and auto-prefer that machine-readable output when stdout is not a TTY (except for `help`, `completion`, and `mcp`).

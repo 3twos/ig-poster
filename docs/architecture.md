@@ -107,7 +107,7 @@ Why this shape:
   - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses
   - LLM provider abstraction
   - auth/session/token helpers
-  - Meta Graph publish/schedule orchestration + publish job lifecycle utilities, including Facebook Page single-image/single-video execution
+  - Meta Graph publish/schedule orchestration + publish job lifecycle utilities, including Facebook Page single-image/single-video execution plus remote scheduled-post inspection
   - carousel/media-composition utilities
   - Blob storage wrappers
 
@@ -170,11 +170,11 @@ Before submitting, browser clients can call `GET /api/meta/locations?q=<query>` 
 1. Client submits caption + media payload to `POST /api/meta/schedule` (plus optional first comment, optional location metadata, optional user tags, and optional reel `shareToFeed` control).
 2. Route runs media preflight checks (public HTTPS URL validation + remote content-type probing).
 3. Route resolves auth context (OAuth connection first, env fallback second).
-4. If `publishAt` is >2 minutes in the future, route stores a scheduled job in Postgres (`publish_jobs`).
+4. If `publishAt` is >2 minutes in the future, Instagram routes store an app-managed scheduled job in Postgres (`publish_jobs`), while Facebook routes create the remote Page schedule first and then store a local shadow job with the returned remote identifiers.
 5. Otherwise route publishes immediately through Meta Graph API helpers.
 6. If provided, optional first-comment text is posted right after publish (`/{media-id}/comments`) for both immediate and cron-driven publishes. Optional `locationId` is passed through for feed/reel publish jobs, optional top-level `userTags` are passed through for single-image and reel jobs, and carousel image-item tags are passed through per child item. Optional reel `shareToFeed` is passed through for reel-mode publish jobs.
 7. Successful publish marks the linked post `posted`, appends publish history, and leaves that post immutable from the app's post-edit APIs.
-8. Cron route (`GET /api/cron/publish`) first fails stale `processing` jobs for manual review, then claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes, and transitions each job (`published`, deferred back to `queued`, or retry/`failed`).
+8. Cron route (`GET /api/cron/publish`) first fails stale `processing` jobs for manual review, then claims due queued jobs, enforces the rolling 24-hour Meta publish-window guardrail, resolves auth, publishes app-managed jobs, and reconciles remote-authoritative Facebook shadow jobs against Meta before transitioning each job (`published`, deferred back to `queued`, or retry/`failed`).
 
 For CLI preview consumers, `POST /api/v1/publish` mirrors the same scheduling/publish pipeline while resolving actor auth from bearer tokens and Meta auth from the latest stored OAuth connection (or env fallback) instead of browser cookies.
 
@@ -259,10 +259,10 @@ Why this shape:
   - chat conversations: `chat/<ownerHash>/conversations/<id>.json`
   - chat index: `chat/<ownerHash>/index.json`
 - Postgres persistence now includes:
-  - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), destination/account scope metadata, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), and event timeline.
+- `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), destination/account scope metadata, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), remote publish identifiers, and event timeline.
   - `meta_accounts` table as the foundation for Meta Page + Instagram account-pair state, graph version tracking, token expiry metadata, and capability snapshots.
   - `post_destinations` table as the foundation for per-post Facebook/Instagram delivery state, remote identifiers, sync mode, and reconciliation metadata.
-- Instagram immediate publishes still enforce the rolling 24-hour quota reservation in `src/lib/publish-jobs.ts`; Facebook jobs bypass that Instagram-specific guard while keeping the same destination-aware queue metadata.
+- Instagram immediate publishes still enforce the rolling 24-hour quota reservation in `src/lib/publish-jobs.ts`; Facebook jobs bypass that Instagram-specific guard while keeping the same destination-aware queue metadata. Remote-authoritative Facebook schedules are stored locally as read-only shadow jobs so planner/queue views can stay aligned with Meta.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `scheduled`, `posted`).
 - `posts.archivedAt` is the soft-archive flag; archived posts keep their publish status instead of switching to a separate archived enum value.
@@ -291,7 +291,7 @@ Why this shape:
 - First-comment posting failures are captured as publish warnings/events and do not roll back successful media publishes.
 - Location/user-tag metadata is validated against the publish-media mode across schedule, queue-edit, planner, and publish runtime paths (for example, carousel tags must be per-image item and carousel videos cannot be tagged).
 - Location search uses the same Meta auth context as publish requests, so suggestions reflect the connected account/token path.
-- Scheduling: cron fails stale `processing` jobs, claims due `publish_jobs`, marks attempts, retries with backoff, and stores terminal outcomes.
+- Scheduling: cron fails stale `processing` jobs, claims due `publish_jobs`, marks attempts, retries with backoff, stores terminal outcomes, and now polls remote-authoritative Facebook shadow jobs for final publish state instead of republishing them.
 - Meta account resolution now treats the linked Facebook Page + Instagram professional account as one publishing pair, while the active runtime still publishes through the existing Instagram destination flow.
 - Failed jobs remain queryable in Postgres for inspection/recovery.
 - Post workspace APIs require Postgres and return errors when neither `POSTGRES_URL` nor `DATABASE_URL` is configured.
