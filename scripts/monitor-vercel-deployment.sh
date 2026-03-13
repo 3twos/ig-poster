@@ -30,7 +30,9 @@ Options:
   --target production          Filter by target (only production is supported)
   --max-deployments <count>    Number of recent deployments to display (default: 6)
   --event-mode <mode>          auto | stream | poll (default: auto)
+  --voice <name>               macOS voice name (default: Ava (Premium)). Try: Moira, Daniel, Tessa
   --no-speak                   Disable spoken alerts
+  --notify                     Enable macOS desktop notifications
   --plain                      Print line-by-line logs instead of the dashboard view
   -h, --help                   Show help
 
@@ -676,13 +678,13 @@ friendly_status() {
   local status="$1"
 
   case "$status" in
-    READY) printf '%s' "Ready" ;;
-    BUILDING) printf '%s' "Building" ;;
-    QUEUED) printf '%s' "Queued" ;;
-    INITIALIZING) printf '%s' "Initializing" ;;
-    CANCELED) printf '%s' "Canceled" ;;
-    ERROR|FAILED) printf '%s' "Failed" ;;
-    UNKNOWN|"") printf '%s' "Unknown" ;;
+    READY) printf '%s' "${C_BOLD_GREEN}Ready${C_RESET}" ;;
+    BUILDING) printf '%s' "${C_YELLOW}Building${C_RESET}" ;;
+    QUEUED) printf '%s' "${C_BLUE}Queued${C_RESET}" ;;
+    INITIALIZING) printf '%s' "${C_BLUE}Initializing${C_RESET}" ;;
+    CANCELED) printf '%s' "${C_DIM}Canceled${C_RESET}" ;;
+    ERROR|FAILED) printf '%s' "${C_BOLD_RED}Failed${C_RESET}" ;;
+    UNKNOWN|"") printf '%s' "${C_DIM}Unknown${C_RESET}" ;;
     *) printf '%s' "$status" ;;
   esac
 }
@@ -1393,12 +1395,12 @@ status_icon() {
   local status="$1"
 
   case "$status" in
-    READY) printf '%s' "✓" ;;
-    ERROR|CANCELED|FAILED) printf '%s' "✖" ;;
-    BUILDING|INITIALIZING|QUEUED) printf '%s' "⏳" ;;
-    WAITING) printf '%s' "…" ;;
-    CONNECTION_ISSUE|API_ERROR|TIMED_OUT) printf '%s' "⚠" ;;
-    STOPPED) printf '%s' "■" ;;
+    READY) printf '%s' "${C_BOLD_GREEN}✓${C_RESET}" ;;
+    ERROR|CANCELED|FAILED) printf '%s' "${C_BOLD_RED}✖${C_RESET}" ;;
+    BUILDING|INITIALIZING|QUEUED) printf '%s' "${C_YELLOW}◑${C_RESET}" ;;
+    WAITING) printf '%s' "${C_DIM}…${C_RESET}" ;;
+    CONNECTION_ISSUE|API_ERROR|TIMED_OUT) printf '%s' "${C_BOLD_YELLOW}⚠${C_RESET}" ;;
+    STOPPED) printf '%s' "${C_DIM}■${C_RESET}" ;;
     *) printf '%s' "?" ;;
   esac
 }
@@ -1417,11 +1419,11 @@ alert_icon() {
   local level="$1"
 
   case "$level" in
-    success) printf '%s' "✓" ;;
-    error) printf '%s' "✖" ;;
-    warning) printf '%s' "⚠" ;;
-    info|"") printf '%s' "ℹ" ;;
-    *) printf '%s' "ℹ" ;;
+    success) printf '%s' "${C_BOLD_GREEN}✓${C_RESET}" ;;
+    error) printf '%s' "${C_BOLD_RED}✖${C_RESET}" ;;
+    warning) printf '%s' "${C_BOLD_YELLOW}⚠${C_RESET}" ;;
+    info|"") printf '%s' "${C_CYAN}ℹ${C_RESET}" ;;
+    *) printf '%s' "${C_CYAN}ℹ${C_RESET}" ;;
   esac
 }
 
@@ -2292,6 +2294,7 @@ process_deployment_transitions_and_alerts() {
         LAST_ALERT_LEVEL="info"
         log_line "Alert: ${alert_message}"
         speak_alert "$spoken_alert"
+        notify_desktop "Deploy Monitor" "$alert_message" "info"
       fi
     elif [[ "$status" != "$old_status" ]]; then
       log_line "Transition: ${old_status} -> ${status} (id=${dep_id})"
@@ -2389,6 +2392,7 @@ process_deployment_transitions_and_alerts() {
         LAST_ALERT_EPOCH="$(date +%s)"
         play_production_beat "${DEP_TARGET[i]:-preview}"
         speak_alert "$spoken_alert"
+        notify_desktop "Deploy Monitor" "$alert_message" "${LAST_ALERT_LEVEL}"
         DEP_TERMINAL_ANNOUNCED[i]=1
       fi
     else
@@ -2473,7 +2477,7 @@ render_dashboard() {
 
   begin_dashboard_render
 
-  print_dashboard_line "Vercel Deploy Monitor"
+  print_dashboard_linef '%sVercel Deploy Monitor%s' "${C_BOLD_CYAN}" "${C_RESET}"
   print_dashboard_line "====================="
   print_dashboard_linef 'Project      : %s' "${DASH_PROJECT_NAME:-n/a}"
   print_dashboard_linef 'Mode         : %s' "${DASH_MODE_LABEL:-n/a}"
@@ -2545,8 +2549,8 @@ render_dashboard() {
       branch_hint_label="$(branch_context_hint "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "$source_label" "$commit_label")"
       branch_hint_label="$(truncate_text "$branch_hint_label" 90)"
 
-      print_dashboard_linef '%2d. %s %s %-24s %-12s %s %3d%%' \
-        "$(( i + 1 ))" "$env_mark" "$row_status_icon" "$branch_label" "$status_label" "$progress_bar" "$progress_percent"
+      print_dashboard_linef '%2d. %s %s %s %s %s %3d%%' \
+        "$(( i + 1 ))" "$env_mark" "$(color_pad "$row_status_icon" 1)" "$(color_pad "$branch_label" 24)" "$(color_pad "$status_label" 12)" "$progress_bar" "$progress_percent"
       print_dashboard_linef '    step     : %s' "$step_label"
       print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
       if [[ "$pull_request_display" == "n/a" && "$change_title_label" == "n/a" && "$commit_label" != "n/a" ]]; then
@@ -2608,6 +2612,7 @@ TOKEN="${VERCEL_TOKEN:-}"
 TOKEN_FROM_ARG=0
 ENABLE_SPEAK=1
 FORCE_PLAIN=0
+VOICE_NAME="Ava (Premium)"
 TARGET=""
 TARGET_FILTER="production"
 MAX_DEPLOYMENTS=6
@@ -2702,6 +2707,18 @@ while [[ $# -gt 0 ]]; do
       fi
       EVENT_MODE="$2"
       shift 2
+      ;;
+    --voice)
+      if [[ $# -lt 2 ]]; then
+        print_error "$1 requires a value."
+        exit 1
+      fi
+      VOICE_NAME="$2"
+      shift 2
+      ;;
+    --notify)
+      DESKTOP_NOTIFICATIONS=1
+      shift
       ;;
     --no-speak)
       ENABLE_SPEAK=0
@@ -2808,6 +2825,9 @@ fi
 
 if (( ENABLE_SPEAK == 1 )); then
   detect_speaker_cmd
+  if [[ "$SPEAKER_CMD" == "say" && -n "$VOICE_NAME" ]]; then
+    SPEAKER_ARGS=(-v "$VOICE_NAME")
+  fi
 fi
 
 DASH_MODE_LABEL="$(friendly_mode_label)"
@@ -2888,7 +2908,11 @@ if [[ -n "$TEAM_ID" ]]; then
 fi
 
 if [[ -n "$SPEAKER_CMD" ]]; then
-  log_line "Spoken alerts enabled via '${SPEAKER_CMD}'."
+  if [[ "$SPEAKER_CMD" == "say" ]]; then
+    log_line "Spoken alerts enabled via '${SPEAKER_CMD}' (voice: ${VOICE_NAME})."
+  else
+    log_line "Spoken alerts enabled via '${SPEAKER_CMD}'."
+  fi
   if (( AUDIO_QUEUE_ENABLED == 1 )); then
     log_line "Voice alerts are serialized via audio queue."
   fi
