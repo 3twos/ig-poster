@@ -58,7 +58,15 @@ export async function PUT(req: Request, ctx: Ctx) {
     const destinations = await getStoredPostDestinations(updated.id);
     return NextResponse.json(attachPostDestinations(updated, destinations));
   } catch (error) {
-    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+    if (error instanceof z.ZodError) {
+      console.error("[api/posts/id] Zod validation failed:", JSON.stringify(error.issues, null, 2));
+      return NextResponse.json(
+        { error: "Invalid request body", issues: error.issues },
+        { status: 400 },
+      );
+    }
+
+    if (error instanceof SyntaxError) {
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 },

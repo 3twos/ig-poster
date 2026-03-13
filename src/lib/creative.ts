@@ -142,6 +142,66 @@ export const InternalGenerationResponseSchema = z.object({
   variants: z.array(CreativeVariantSchema).min(3).max(8),
 });
 
+// ---------------------------------------------------------------------------
+// Lenient "stored" schemas — used for persisting user-edited data.
+// Generation schemas enforce strict constraints (min lengths, exact counts)
+// for AI output quality. But once the user edits text in the canvas, values
+// can drift below those minimums. These stored variants drop min-length
+// constraints and relax array counts so saves never fail on valid edits.
+// ---------------------------------------------------------------------------
+
+const StoredCarouselSlideSchema = z.object({
+  index: z.number().int().min(1).max(10),
+  goal: z.string().trim().max(120),
+  headline: z.string().trim().max(90),
+  body: z.string().trim().max(180),
+  assetHint: z.string().trim().max(80),
+});
+
+const StoredReelBeatSchema = z.object({
+  atSec: z.number().min(0).max(180),
+  visual: z.string().trim().max(140),
+  onScreenText: z.string().trim().max(120),
+  editAction: z.string().trim().max(100),
+});
+
+const StoredReelPlanSchema = z.object({
+  targetDurationSec: z.number().min(6).max(90),
+  hook: z.string().trim().max(140),
+  coverFrameDirection: z.string().trim().max(140),
+  audioDirection: z.string().trim().max(120),
+  editingActions: z.array(z.string().trim().max(120)).max(10),
+  beats: z.array(StoredReelBeatSchema).max(12),
+  endCardCta: z.string().trim().max(120),
+});
+
+const StoredCreativeVariantSchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().max(42),
+  postType: PostTypeSchema,
+  hook: z.string().trim().max(140),
+  headline: z.string().trim().max(120),
+  supportingText: z.string().trim().max(260),
+  cta: z.string().trim().max(80).optional().default(""),
+  caption: z.string().trim().max(700),
+  hashtags: z.array(z.string().trim().max(32)).max(12),
+  layout: LayoutSchema,
+  textAlign: z.enum(["left", "center"]),
+  colorHexes: z.array(z.string().trim().max(9)).min(2).max(4),
+  overlayStrength: z.number().min(0).max(1),
+  assetSequence: z.array(z.string().trim().min(1)).max(10),
+  carouselSlides: z.array(StoredCarouselSlideSchema).max(10).optional(),
+  reelPlan: StoredReelPlanSchema.optional(),
+  score: z.number().min(1).max(10).optional(),
+  scoreRationale: z.string().max(300).optional(),
+});
+
+/** Lenient schema for persisting user-edited generation results. */
+export const StoredGenerationResponseSchema = z.object({
+  strategy: z.string().trim().max(800),
+  variants: z.array(StoredCreativeVariantSchema).min(1).max(8),
+});
+
 export const OverlayBlockSchema = z.object({
   x: z.number().min(0).max(100),
   y: z.number().min(0).max(100),
@@ -174,6 +234,42 @@ export const OverlayLayoutSchema = z.object({
   cta: OverlayBlockSchema,
   custom: z.array(CustomOverlayBlockSchema).max(6).optional().default([]),
   logo: LogoPositionSchema.optional(),
+});
+
+// Lenient overlay schema — allows blocks dragged/resized below strict minimums
+const StoredOverlayBlockSchema = z.object({
+  x: z.number().min(-10).max(110),
+  y: z.number().min(-10).max(110),
+  width: z.number().min(0).max(110),
+  height: z.number().min(0).max(110),
+  fontScale: z.number().min(0).max(5),
+  visible: z.boolean().optional().default(true),
+  text: z.string().trim().max(320).optional().default(""),
+  borderRadius: z.number().min(0).max(9999).optional(),
+  bgOpacity: z.number().min(0).max(100).optional(),
+});
+
+const StoredCustomOverlayBlockSchema = StoredOverlayBlockSchema.extend({
+  id: z.string().trim().min(1).max(64),
+  label: z.string().trim().max(32).optional().default("Custom"),
+});
+
+const StoredLogoPositionSchema = z.object({
+  x: z.number().min(-10).max(110),
+  y: z.number().min(-10).max(110),
+  width: z.number().min(0).max(110),
+  height: z.number().min(0).max(110),
+  visible: z.boolean().optional().default(true),
+});
+
+/** Lenient schema for persisting user-positioned overlay layouts. */
+export const StoredOverlayLayoutSchema = z.object({
+  hook: StoredOverlayBlockSchema,
+  headline: StoredOverlayBlockSchema,
+  supportingText: StoredOverlayBlockSchema,
+  cta: StoredOverlayBlockSchema,
+  custom: z.array(StoredCustomOverlayBlockSchema).max(6).optional().default([]),
+  logo: StoredLogoPositionSchema.optional(),
 });
 
 export const PublishOutcomeInsightsSchema = z.object({
