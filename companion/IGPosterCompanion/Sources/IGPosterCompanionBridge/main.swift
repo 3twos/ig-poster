@@ -19,7 +19,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
   private let port: UInt16
   private let serveOnce: Bool
   private let stopHandler: @Sendable () -> Void
-  private let healthJSON: Data
+  private let stateStore = ApplePhotosCompanionStateStore()
   private let completedRequestsLock = NSLock()
   private var completedRequests = 0
 
@@ -31,14 +31,6 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     port = options.port
     serveOnce = options.once
     self.stopHandler = stopHandler
-
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.sortedKeys]
-    healthJSON = try encoder.encode(
-      ApplePhotosCompanionBridge.healthResponse(
-        port: Int(options.port)
-      )
-    )
 
     let parameters = NWParameters.tcp
     parameters.allowLocalEndpointReuse = true
@@ -165,7 +157,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     }
 
     if request.method == "GET", request.path == ApplePhotosCompanionBridge.paths.health {
-      return httpResponse(status: "200 OK", body: healthJSON)
+      return httpResponse(status: "200 OK", body: healthResponseData())
     }
 
     if request.method == "GET",
@@ -199,6 +191,18 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
         message: "The requested Apple Photos bridge route does not exist."
       )
     )
+  }
+
+  private func healthResponseData() -> Data {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+
+    let payload = ApplePhotosCompanionBridge.healthResponse(
+      port: Int(port),
+      selection: stateStore.load()?.summary
+    )
+
+    return (try? encoder.encode(payload)) ?? Data("{}".utf8)
   }
 
   private func errorBody(code: String, message: String) -> Data {
@@ -272,7 +276,8 @@ struct IGPosterCompanionBridgeMain {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
       let payload = ApplePhotosCompanionBridge.healthResponse(
-        port: Int(options.port)
+        port: Int(options.port),
+        selection: ApplePhotosCompanionStateStore().load()?.summary
       )
       let data = try encoder.encode(payload)
       FileHandle.standardOutput.write(data)

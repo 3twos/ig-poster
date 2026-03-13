@@ -52,6 +52,7 @@ private struct PickedAssetSummary: Identifiable {
 }
 
 struct CompanionHomeView: View {
+  private let stateStore = ApplePhotosCompanionStateStore()
   private let health = ApplePhotosCompanionBridge.healthResponse()
   private let samplePickLaunchURL = ApplePhotosCompanionBridge.launchURL(
     action: .pick,
@@ -63,6 +64,7 @@ struct CompanionHomeView: View {
   @State private var activeLaunchRequest: ApplePhotosCompanionLaunchRequest?
   @State private var invalidLaunchURL: String?
   @State private var selectedPickerItems: [PhotosPickerItem] = []
+  @State private var persistedSelectionSnapshot: ApplePhotosCompanionSelectionSnapshot?
 
   private func handleIncomingURL(_ url: URL) {
     guard let request = ApplePhotosCompanionBridge.parseLaunchURL(url) else {
@@ -84,6 +86,37 @@ struct CompanionHomeView: View {
         localIdentifier: localIdentifier,
         supportedContentTypes: item.supportedContentTypes.map(\.identifier)
       )
+    }
+  }
+
+  private func persistSelectionSnapshot() {
+    if activeLaunchRequest == nil && pickedAssets.isEmpty {
+      try? stateStore.clear()
+      persistedSelectionSnapshot = nil
+      return
+    }
+
+    let snapshot = ApplePhotosCompanionSelectionSnapshot(
+      updatedAt: ISO8601DateFormatter().string(from: Date()),
+      action: activeLaunchRequest?.action,
+      draftId: activeLaunchRequest?.draftId,
+      profile: activeLaunchRequest?.profile,
+      returnTo: activeLaunchRequest?.returnTo,
+      bridgeOrigin: activeLaunchRequest?.bridgeOrigin ?? health.bridge.origin,
+      assets: pickedAssets.map { asset in
+        ApplePhotosCompanionSelectionAsset(
+          order: asset.order,
+          localIdentifier: asset.localIdentifier,
+          supportedContentTypes: asset.supportedContentTypes
+        )
+      }
+    )
+
+    do {
+      try stateStore.save(snapshot)
+      persistedSelectionSnapshot = snapshot
+    } catch {
+      persistedSelectionSnapshot = snapshot
     }
   }
 
@@ -129,6 +162,43 @@ struct CompanionHomeView: View {
         }
       }
       .font(.system(size: 13, weight: .regular, design: .monospaced))
+    }
+  }
+
+  private var sharedStateSection: some View {
+    CompanionSection(title: "Shared State") {
+      if let persistedSelectionSnapshot {
+        Text("The companion now persists launch-and-selection metadata to a shared local state file so the bridge can describe the active picker context even before file export is wired in.")
+          .foregroundStyle(.secondary)
+
+        Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
+          GridRow {
+            Text("Updated").foregroundStyle(.secondary)
+            Text(persistedSelectionSnapshot.updatedAt)
+              .textSelection(.enabled)
+          }
+          GridRow {
+            Text("Action").foregroundStyle(.secondary)
+            Text(persistedSelectionSnapshot.action?.rawValue ?? "None")
+          }
+          GridRow {
+            Text("Draft").foregroundStyle(.secondary)
+            Text(persistedSelectionSnapshot.draftId ?? "None")
+          }
+          GridRow {
+            Text("Profile").foregroundStyle(.secondary)
+            Text(persistedSelectionSnapshot.profile ?? "Default")
+          }
+          GridRow {
+            Text("Assets").foregroundStyle(.secondary)
+            Text("\(persistedSelectionSnapshot.assets.count)")
+          }
+        }
+        .font(.system(size: 13, weight: .regular, design: .monospaced))
+      } else {
+        Text("No shared selection snapshot has been persisted yet. Selecting Photos or loading a handoff will populate the local state store for the bridge.")
+          .foregroundStyle(.secondary)
+      }
     }
   }
 
@@ -294,6 +364,7 @@ struct CompanionHomeView: View {
       VStack(alignment: .leading, spacing: 20) {
         heroSection
         bridgeContractSection
+        sharedStateSection
         incomingHandoffSection
         nativePickerSection
         plannedOperationsSection
@@ -312,6 +383,15 @@ struct CompanionHomeView: View {
       )
     )
     .onOpenURL(perform: handleIncomingURL)
+    .task {
+      persistedSelectionSnapshot = stateStore.load()
+    }
+    .onChange(of: activeLaunchRequest?.url.absoluteString) { _, _ in
+      persistSelectionSnapshot()
+    }
+    .onChange(of: selectedPickerItems) { _, _ in
+      persistSelectionSnapshot()
+    }
   }
 }
 

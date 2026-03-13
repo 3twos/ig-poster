@@ -53,6 +53,40 @@ describe("buildApplePhotosBridgeHealthResponse", () => {
       capabilities: ["pick", "recent", "search", "import"],
     });
   });
+
+  it("includes persisted selection summary when provided", () => {
+    expect(
+      buildApplePhotosBridgeHealthResponse({
+        selection: {
+          updatedAt: "2026-03-13T15:30:00Z",
+          action: "pick",
+          draftId: "post_123",
+          profile: "default",
+          assetCount: 2,
+        },
+      }),
+    ).toEqual({
+      appName: APPLE_PHOTOS_COMPANION_APP_NAME,
+      version: "v1",
+      bridge: {
+        origin: APPLE_PHOTOS_BRIDGE_ORIGIN,
+        authTokenHeader: APPLE_PHOTOS_BRIDGE_TOKEN_HEADER,
+        healthUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/health`,
+        recentUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/recent`,
+        searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
+        pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
+        importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
+      },
+      capabilities: ["pick", "recent", "search", "import"],
+      selection: {
+        updatedAt: "2026-03-13T15:30:00Z",
+        action: "pick",
+        draftId: "post_123",
+        profile: "default",
+        assetCount: 2,
+      },
+    });
+  });
 });
 
 describe("buildApplePhotosCompanionLaunchUrl", () => {

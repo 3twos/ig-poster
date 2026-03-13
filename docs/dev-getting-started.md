@@ -300,6 +300,7 @@ Current native scaffold status:
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/BridgeContract.swift` mirrors that contract on the native side.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on, and it now reflects parsed custom-URL handoff state from the browser.
 - That same SwiftUI shell now includes a PhotosPicker-based selection preview so we can validate native macOS asset picking before export/import is wired in.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/SelectionState.swift` now persists the active handoff/selection snapshot locally so the bridge and app can share context.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes a narrow localhost bridge (`GET /v1/health`) so the web editor can probe for a running native helper before attempting handoff.
 - Validate the native scaffold locally with:
 
@@ -311,7 +312,7 @@ swift run ig-poster-companion-bridge --print-health
 swift run ig-poster-companion
 ```
 
-While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to validate ordered local image/video selection without waiting for export/import wiring.
+While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to validate ordered local image/video selection without waiting for export/import wiring. The bridge health payload now includes the persisted selection summary when that local state exists.
 
 To exercise the new web-side probe locally:
 
