@@ -1,6 +1,6 @@
 # Meta Publishing Roadmap
 
-Last updated: 2026-03-12
+Last updated: 2026-03-13
 
 This document tracks the Meta/Instagram content publishing rollout in this repo so the plan is not trapped in PR history or chat context.
 
@@ -44,11 +44,19 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
    - Exposed reel `share_to_feed` as a user-facing toggle in the publish form, queue edit flow, and runtime publish pipeline.
    - Reference: merged in PR `#80`.
 
+10. Meta account-pair and destination-aware foundation
+   - Added `meta_accounts`, `post_destinations`, destination-aware publish-job metadata, Meta publishing-pair status, and destination-aware browser/API reads.
+   - References: merged in PRs `#139`, `#142`, `#145`, `#147`, `#149`, `#152`, `#153`.
+
+11. Remote-authoritative Facebook schedule mutations and import sync
+   - Added remote Facebook cancel/reschedule handling, browser/cron reconciliation for shadow jobs, and best-effort imports of compatible scheduled Page posts created in Meta tools.
+   - References: merged in PRs `#168`, `#171`.
+
 ## In Progress
 
-1. Operational hardening
-   - First slice: fail stale `processing` jobs after a timeout so quota does not stay wedged behind abandoned work, and expose recent publish-job activity in the queue UI.
-   - Goal: make retries, deferrals, and downstream failures easier to diagnose and safer to recover.
+1. Facebook webhook-driven reconciliation
+   - Trigger the Facebook shadow-job sync path from Meta Page webhooks and project Meta-side publish/cancel drift back into local queue + planner state faster.
+   - Goal: reduce the lag between changes made in Meta tools and what the app shows for remote-authoritative Facebook schedules.
 
 ## Remaining phases
 

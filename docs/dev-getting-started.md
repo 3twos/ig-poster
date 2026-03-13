@@ -52,6 +52,7 @@ Open `http://localhost:3000`.
   - `META_APP_ID`
   - `META_APP_SECRET`
   - `META_REDIRECT_URI`
+  - Optional for Page webhook verification: `META_WEBHOOK_VERIFY_TOKEN` or `FACEBOOK_WEBHOOK_VERIFY_TOKEN`
 - Env fallback path:
   - `INSTAGRAM_ACCESS_TOKEN`
   - `INSTAGRAM_BUSINESS_ID`
