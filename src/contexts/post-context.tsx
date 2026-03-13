@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import type { PostSummary } from "@/lib/post";
+import { serializePostDraft } from "@/lib/post-draft";
 import { DuplicatePostResponseSchema } from "@/lib/post-api";
 import {
   postReducer,
@@ -20,7 +21,7 @@ import {
   type PostDraft,
   type PostRowWithDestinations,
 } from "@/hooks/use-post-reducer";
-import { serializeDraft, useAutoSave, type SaveStatus } from "@/hooks/use-auto-save";
+import { useAutoSave, type SaveStatus } from "@/hooks/use-auto-save";
 
 type PostContextValue = {
   // Sidebar
@@ -368,11 +369,10 @@ export function PostProvider({ children }: { children: ReactNode }) {
     const handler = () => {
       const d = draftRef.current;
       if (!d || d.status === "posted") return;
-      const body = serializeDraft(d);
       fetch(`/api/posts/${d.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body,
+        body: serializePostDraft(d),
         keepalive: true,
       });
     };

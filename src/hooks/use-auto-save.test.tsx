@@ -76,6 +76,47 @@ describe("useAutoSave", () => {
     unmount();
   });
 
+  it("drops incomplete publish user tags before sending the autosave payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() =>
+      useAutoSave({
+        ...baseDraft,
+        mediaComposition: {
+          orientation: "portrait",
+          items: [
+            {
+              assetId: "asset-1",
+              userTags: [
+                { username: " @friend ", x: 0.25, y: 0.75 },
+                { username: "", x: 0.5, y: 0.5 },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.saveNow();
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(requestInit.body))).toMatchObject({
+      mediaComposition: {
+        items: [
+          {
+            assetId: "asset-1",
+            userTags: [{ username: "friend", x: 0.25, y: 0.75 }],
+          },
+        ],
+      },
+    });
+
+    unmount();
+  });
+
   it("returns false when saveNow cannot persist pending changes", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false });
     vi.stubGlobal("fetch", fetchMock);
