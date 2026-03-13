@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS,
   getApplePhotosFallbackInfo,
+  importApplePhotosSelection,
   isMacOsUserAgent,
   probeApplePhotosBridge,
 } from "@/lib/apple-photos";
@@ -136,5 +137,113 @@ describe("probeApplePhotosBridge", () => {
       code: "MACOS_BRIDGE_UNAVAILABLE",
       message: "The local Apple Photos bridge advertised an unexpected origin.",
     });
+  });
+});
+
+describe("importApplePhotosSelection", () => {
+  it("downloads imported assets from the local bridge manifest", async () => {
+    const health = buildApplePhotosBridgeHealthResponse();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === health.bridge.pickUrl) {
+        return new Response(
+          JSON.stringify({
+            importedAt: "2026-03-13T17:00:00Z",
+            assets: [
+              {
+                id: "export_123",
+                filename: "hero.jpg",
+                mediaType: "image",
+                createdAt: "2026-03-13T17:00:00Z",
+                favorite: false,
+                albumNames: [],
+                exportPath: "/tmp/hero.jpg",
+                downloadUrl: `${health.bridge.origin}/v1/photos/exports/export_123`,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (url === `${health.bridge.origin}/v1/photos/exports/export_123`) {
+        return new Response(new Blob(["image-bytes"], { type: "image/jpeg" }), {
+          status: 200,
+          headers: { "Content-Type": "image/jpeg" },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      importApplePhotosSelection({ fetchImpl: fetchImpl as typeof fetch }),
+    ).resolves.toMatchObject({
+      importedAt: "2026-03-13T17:00:00Z",
+      assets: [
+        expect.objectContaining({
+          id: "export_123",
+          filename: "hero.jpg",
+        }),
+      ],
+      files: [expect.objectContaining({ name: "hero.jpg", type: "image/jpeg" })],
+    });
+  });
+
+  it("posts selected ids to the import route when requested", async () => {
+    const health = buildApplePhotosBridgeHealthResponse();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === health.bridge.importUrl) {
+        expect(init?.body).toBe(JSON.stringify({ ids: ["export_123"] }));
+        return new Response(
+          JSON.stringify({
+            importedAt: "2026-03-13T17:05:00Z",
+            assets: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      importApplePhotosSelection({
+        fetchImpl: fetchImpl as typeof fetch,
+        ids: ["export_123"],
+      }),
+    ).resolves.toMatchObject({
+      importedAt: "2026-03-13T17:05:00Z",
+      assets: [],
+      files: [],
+    });
+  });
+
+  it("rejects unexpected bridge import payloads", async () => {
+    const health = buildApplePhotosBridgeHealthResponse();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === health.bridge.pickUrl) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      importApplePhotosSelection({ fetchImpl: fetchImpl as typeof fetch }),
+    ).rejects.toThrow(
+      "The local Apple Photos bridge returned an unexpected import payload.",
+    );
   });
 });

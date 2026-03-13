@@ -27,10 +27,12 @@ import {
   X,
 } from "lucide-react";
 import {
+  useEffect,
   useId,
   useRef,
   useState,
   useSyncExternalStore,
+  useCallback,
   type ChangeEvent,
 } from "react";
 
@@ -65,6 +67,9 @@ type Props = {
   onRemove: (id: string) => void;
   onReorder: (reordered: LocalAsset[]) => void;
   onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApplePhotosImport: () => Promise<void>;
+  draftId?: string;
+  profile?: string;
 };
 
 type ApplePhotosDialogState =
@@ -76,7 +81,12 @@ type ApplePhotosDialogState =
       kind: "launch";
       bridgeOrigin: string;
       launchUrl: string;
+      selectionAssetCount: number;
     };
+
+type ApplePhotosImportSession = {
+  launchedAt: number;
+};
 
 const subscribeToClientStatus = () => () => {};
 
@@ -85,12 +95,19 @@ export function AssetManager({
   onRemove,
   onReorder,
   onAssetUpload,
+  onApplePhotosImport,
+  draftId,
+  profile,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [applePhotosDialogOpen, setApplePhotosDialogOpen] = useState(false);
   const [applePhotosDialogState, setApplePhotosDialogState] =
     useState<ApplePhotosDialogState | null>(null);
   const [applePhotosProbePending, setApplePhotosProbePending] = useState(false);
+  const [applePhotosImportPending, setApplePhotosImportPending] =
+    useState(false);
+  const [applePhotosImportSession, setApplePhotosImportSession] =
+    useState<ApplePhotosImportSession | null>(null);
   const addAssetInputId = useId();
   const addAssetInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
@@ -104,6 +121,10 @@ export function AssetManager({
   );
   const userAgent = isClient ? window.navigator.userAgent : "";
   const showApplePhotosEntry = isMacOsUserAgent(userAgent);
+  const applePhotosBusy =
+    applePhotosProbePending ||
+    applePhotosImportPending ||
+    applePhotosImportSession !== null;
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
@@ -125,21 +146,53 @@ export function AssetManager({
   };
 
   const activeAsset = activeId ? assets.find((a) => a.id === activeId) : null;
-  const handleUseRegularUpload = () => {
+  const handleUseRegularUpload = useCallback(() => {
     const input = addAssetInputRef.current;
     if (input) {
       input.click();
     }
     setApplePhotosDialogOpen(false);
     setApplePhotosDialogState(null);
-  };
+    setApplePhotosImportSession(null);
+  }, []);
+
+  const handleApplePhotosBridgeImportError = useCallback((error: unknown) => {
+    setApplePhotosDialogState({
+      kind: "fallback",
+      info: {
+        ...getApplePhotosFallbackInfo(userAgent, "MACOS_BRIDGE_UNAVAILABLE"),
+        description:
+          error instanceof Error
+            ? error.message
+            : "The local Apple Photos bridge could not hand the selected files back to this draft yet.",
+      },
+    });
+    setApplePhotosDialogOpen(true);
+  }, [userAgent]);
+
+  const handleImportCurrentSelection = useCallback(async () => {
+    setApplePhotosImportPending(true);
+
+    try {
+      await onApplePhotosImport();
+      setApplePhotosDialogOpen(false);
+      setApplePhotosDialogState(null);
+      setApplePhotosImportSession(null);
+    } catch (error) {
+      handleApplePhotosBridgeImportError(error);
+    } finally {
+      setApplePhotosImportPending(false);
+    }
+  }, [handleApplePhotosBridgeImportError, onApplePhotosImport]);
 
   const handleAddFromPhotos = async () => {
-    if (!showApplePhotosEntry || applePhotosProbePending) return;
+    if (!showApplePhotosEntry || applePhotosBusy) return;
 
     setApplePhotosProbePending(true);
     const probe = await probeApplePhotosBridge({
       returnTo: window.location.href,
+      draftId,
+      profile,
     });
     setApplePhotosProbePending(false);
 
@@ -148,6 +201,7 @@ export function AssetManager({
         kind: "launch",
         bridgeOrigin: probe.health.bridge.origin,
         launchUrl: probe.launchUrl,
+        selectionAssetCount: probe.health.selection?.assetCount ?? 0,
       });
       setApplePhotosDialogOpen(true);
       return;
@@ -163,10 +217,61 @@ export function AssetManager({
   const handleOpenCompanion = () => {
     if (applePhotosDialogState?.kind !== "launch") return;
 
+    setApplePhotosImportSession({
+      launchedAt: Date.now(),
+    });
     window.location.assign(applePhotosDialogState.launchUrl);
     setApplePhotosDialogOpen(false);
     setApplePhotosDialogState(null);
   };
+
+  useEffect(() => {
+    if (!applePhotosImportSession) return;
+
+    let active = true;
+    const timeoutId = window.setTimeout(() => {
+      if (active) {
+        setApplePhotosImportSession(null);
+      }
+    }, 120_000);
+
+    const pollForImportedSelection = async () => {
+      const probe = await probeApplePhotosBridge({
+        returnTo: window.location.href,
+        draftId,
+        profile,
+      });
+
+      if (!active || !probe.available) return;
+
+      const selection = probe.health.selection;
+      if (!selection || selection.assetCount <= 0) return;
+
+      const updatedAt = Date.parse(selection.updatedAt);
+      if (Number.isNaN(updatedAt) || updatedAt < applePhotosImportSession.launchedAt) {
+        return;
+      }
+
+      setApplePhotosImportSession(null);
+      await handleImportCurrentSelection();
+    };
+
+    void pollForImportedSelection();
+    const intervalId = window.setInterval(() => {
+      void pollForImportedSelection();
+    }, 1_500);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [
+    applePhotosImportSession,
+    draftId,
+    handleImportCurrentSelection,
+    profile,
+  ]);
 
   return (
     <>
@@ -180,12 +285,18 @@ export function AssetManager({
               {showApplePhotosEntry ? (
                 <button
                   type="button"
-                  disabled={applePhotosProbePending}
+                  disabled={applePhotosBusy}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/8 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300 hover:bg-white/12"
                   onClick={handleAddFromPhotos}
                 >
                   <ImageIcon className="h-3.5 w-3.5 text-orange-300" />
-                  {applePhotosProbePending ? "Checking Photos..." : "Add from Photos"}
+                  {applePhotosImportPending
+                    ? "Importing Photos..."
+                    : applePhotosImportSession
+                      ? "Waiting for Photos..."
+                      : applePhotosProbePending
+                        ? "Checking Photos..."
+                        : "Add from Photos"}
                 </button>
               ) : null}
               <button
@@ -212,9 +323,12 @@ export function AssetManager({
           </p>
           {showApplePhotosEntry ? (
             <p className="mt-1 text-[11px] text-slate-500">
-              On macOS, this first probes the local companion bridge. If it is
-              running, we open the native handoff. Otherwise we fall back to
-              regular upload.
+              On macOS, this probes the local companion bridge, opens the native picker when available, then pulls the selected files back into the normal upload flow automatically.
+            </p>
+          ) : null}
+          {applePhotosImportSession ? (
+            <p className="mt-1 text-[11px] text-orange-200">
+              Waiting for IG Poster Companion to finish exporting the current Photos selection...
             </p>
           ) : null}
 
@@ -271,12 +385,16 @@ export function AssetManager({
           <DialogHeader>
             <DialogTitle>
               {applePhotosDialogState?.kind === "launch"
-                ? "Open IG Poster Companion"
+                ? applePhotosDialogState.selectionAssetCount > 0
+                  ? "Import from IG Poster Companion"
+                  : "Open IG Poster Companion"
                 : applePhotosDialogState?.info.title}
             </DialogTitle>
             <DialogDescription className="text-slate-300">
               {applePhotosDialogState?.kind === "launch"
-                ? "A local Apple Photos bridge is responding on this Mac. Open the native companion to continue with Photos selection, or stay here and use regular upload instead."
+                ? applePhotosDialogState.selectionAssetCount > 0
+                  ? "The local Apple Photos bridge already has a bridge-ready selection waiting. Import it now, open the companion to change the selection, or stay here and use regular upload instead."
+                  : "A local Apple Photos bridge is responding on this Mac. Open the native companion to continue with Photos selection, or stay here and use regular upload instead."
                 : applePhotosDialogState?.info.description}
             </DialogDescription>
           </DialogHeader>
@@ -296,6 +414,14 @@ export function AssetManager({
               </code>
             </div>
           ) : null}
+          {applePhotosDialogState?.kind === "launch" ? (
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-300">
+              <span className="font-semibold text-slate-100">Ready assets:</span>{" "}
+              <code className="font-mono text-[10px] text-orange-200">
+                {applePhotosDialogState.selectionAssetCount}
+              </code>
+            </div>
+          ) : null}
           <DialogFooter>
             <Button
               variant="outline"
@@ -310,18 +436,32 @@ export function AssetManager({
               className="bg-orange-300 text-slate-950 hover:bg-orange-200"
               onClick={
                 applePhotosDialogState?.kind === "launch"
-                  ? handleOpenCompanion
+                  ? applePhotosDialogState.selectionAssetCount > 0
+                    ? () => void handleImportCurrentSelection()
+                    : handleOpenCompanion
                   : handleUseRegularUpload
               }
+              disabled={applePhotosImportPending}
             >
               {applePhotosDialogState?.kind === "launch"
-                ? "Open companion"
+                ? applePhotosDialogState.selectionAssetCount > 0
+                  ? applePhotosImportPending
+                    ? "Importing..."
+                    : "Import selection"
+                  : "Open companion"
                 : applePhotosDialogState?.info.actionLabel}
             </Button>
             {applePhotosDialogState?.kind === "launch" ? (
-              <Button variant="outline" onClick={handleUseRegularUpload}>
-                Use regular upload
-              </Button>
+              <>
+                {applePhotosDialogState.selectionAssetCount > 0 ? (
+                  <Button variant="outline" onClick={handleOpenCompanion}>
+                    Open companion
+                  </Button>
+                ) : null}
+                <Button variant="outline" onClick={handleUseRegularUpload}>
+                  Use regular upload
+                </Button>
+              </>
             ) : null}
           </DialogFooter>
         </DialogContent>

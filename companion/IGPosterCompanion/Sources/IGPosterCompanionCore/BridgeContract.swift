@@ -140,6 +140,21 @@ public struct ApplePhotosImportedAssetRecord: Codable, Equatable, Sendable {
   public let favorite: Bool
   public let albumNames: [String]
   public let exportPath: String
+  public let downloadURL: String
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case filename
+    case mediaType
+    case createdAt
+    case width
+    case height
+    case durationMs
+    case favorite
+    case albumNames
+    case exportPath
+    case downloadURL = "downloadUrl"
+  }
 }
 
 public struct ApplePhotosPickRequest: Codable, Equatable, Sendable {
@@ -248,6 +263,19 @@ public enum ApplePhotosCompanionBridge {
       capabilities: [.pick, .recent, .search, .importAssets],
       selection: selection
     )
+  }
+
+  public static func exportDownloadPath(exportID: String) -> String {
+    "\(versionPathPrefix)/photos/exports/\(exportID)"
+  }
+
+  public static func exportDownloadURL(
+    exportID: String,
+    host: String = defaultHost,
+    port: Int = defaultPort
+  ) -> URL {
+    let bridgeURLs = urls(host: host, port: port)
+    return bridgeURLs.origin.appending(path: exportDownloadPath(exportID: exportID))
   }
 
   public static func launchURL(

@@ -11,6 +11,7 @@ private struct BridgeOptions {
 private struct HTTPRequest {
   let method: String
   let path: String
+  let body: Data
 }
 
 private final class ApplePhotosBridgeServer: @unchecked Sendable {
@@ -121,8 +122,14 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
   }
 
   private func parseRequest(from data: Data) -> HTTPRequest? {
+    guard let separatorRange = data.range(of: Data("\r\n\r\n".utf8)) else {
+      return nil
+    }
+
+    let headerData = data.subdata(in: data.startIndex..<separatorRange.lowerBound)
+    let body = data.subdata(in: separatorRange.upperBound..<data.endIndex)
     guard
-      let requestText = String(data: data, encoding: .utf8),
+      let requestText = String(data: headerData, encoding: .utf8),
       let requestLine = requestText.components(separatedBy: "\r\n").first
     else {
       return nil
@@ -138,7 +145,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
         "http://\(ApplePhotosCompanionBridge.defaultHost):\(port)\(rawPath)"
     )?.path ?? rawPath
 
-    return HTTPRequest(method: method, path: path)
+    return HTTPRequest(method: method, path: path, body: body)
   }
 
   private func responseData(for request: HTTPRequest?) -> Data {
@@ -161,6 +168,11 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     }
 
     if request.method == "GET",
+       request.path.hasPrefix(ApplePhotosCompanionBridge.exportDownloadPath(exportID: "")) {
+      return exportedAssetResponse(for: request.path)
+    }
+
+    if request.method == "GET",
        [ApplePhotosCompanionBridge.paths.recent, ApplePhotosCompanionBridge.paths.search]
        .contains(request.path) {
       return httpResponse(
@@ -173,15 +185,13 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     }
 
     if request.method == "POST",
-       [ApplePhotosCompanionBridge.paths.pick, ApplePhotosCompanionBridge.paths.importPath]
-       .contains(request.path) {
-      return httpResponse(
-        status: "501 Not Implemented",
-        body: errorBody(
-          code: "NOT_IMPLEMENTED",
-          message: "The companion bridge only serves /v1/health in this slice."
-        )
-      )
+       request.path == ApplePhotosCompanionBridge.paths.pick {
+      return pickResponseData()
+    }
+
+    if request.method == "POST",
+       request.path == ApplePhotosCompanionBridge.paths.importPath {
+      return importResponseData(for: request)
     }
 
     return httpResponse(
@@ -214,6 +224,124 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       )
   }
 
+  private func pickResponseData() -> Data {
+    guard let snapshot = stateStore.load(), !snapshot.exportedAssets.isEmpty else {
+      return httpResponse(
+        status: "409 Conflict",
+        body: errorBody(
+          code: "NO_SELECTION",
+          message: "The companion does not have any exported Photos selection ready to import yet."
+        )
+      )
+    }
+
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let payload = snapshot.pickResponse(
+      host: ApplePhotosCompanionBridge.defaultHost,
+      port: Int(port)
+    )
+
+    return httpResponse(
+      status: "200 OK",
+      body: (try? encoder.encode(payload)) ?? Data("{}".utf8)
+    )
+  }
+
+  private func importResponseData(for request: HTTPRequest) -> Data {
+    guard
+      let body = try? JSONDecoder().decode(ApplePhotosImportRequest.self, from: request.body)
+    else {
+      return httpResponse(
+        status: "400 Bad Request",
+        body: errorBody(
+          code: "BAD_REQUEST",
+          message: "The bridge expected a JSON import body with one or more Photos asset ids."
+        )
+      )
+    }
+
+    guard let snapshot = stateStore.load(), !snapshot.exportedAssets.isEmpty else {
+      return httpResponse(
+        status: "409 Conflict",
+        body: errorBody(
+          code: "NO_SELECTION",
+          message: "The companion does not have any exported Photos selection ready to import yet."
+        )
+      )
+    }
+
+    let payload = snapshot.importResponse(
+      ids: body.ids,
+      host: ApplePhotosCompanionBridge.defaultHost,
+      port: Int(port)
+    )
+
+    guard !payload.assets.isEmpty else {
+      return httpResponse(
+        status: "404 Not Found",
+        body: errorBody(
+          code: "ASSETS_NOT_FOUND",
+          message: "The requested Photos ids do not match the current exported selection."
+        )
+      )
+    }
+
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    return httpResponse(
+      status: "200 OK",
+      body: (try? encoder.encode(payload)) ?? Data("{}".utf8)
+    )
+  }
+
+  private func exportedAssetResponse(for path: String) -> Data {
+    let prefix = ApplePhotosCompanionBridge.exportDownloadPath(exportID: "")
+    let exportID = String(path.dropFirst(prefix.count))
+
+    guard
+      let snapshot = stateStore.load(),
+      let asset = snapshot.exportedAssets.first(where: { $0.id == exportID })
+    else {
+      return httpResponse(
+        status: "404 Not Found",
+        body: errorBody(
+          code: "ASSET_NOT_FOUND",
+          message: "The requested exported Photos asset is no longer available."
+        )
+      )
+    }
+
+    guard FileManager.default.fileExists(atPath: asset.exportPath) else {
+      return httpResponse(
+        status: "410 Gone",
+        body: errorBody(
+          code: "ASSET_EXPIRED",
+          message: "The requested exported Photos asset is no longer present in the companion cache."
+        )
+      )
+    }
+
+    guard let body = try? Data(contentsOf: URL(fileURLWithPath: asset.exportPath)) else {
+      return httpResponse(
+        status: "500 Internal Server Error",
+        body: errorBody(
+          code: "ASSET_READ_FAILED",
+          message: "The companion could not read the exported Photos asset from disk."
+        )
+      )
+    }
+
+    return httpResponse(
+      status: "200 OK",
+      body: body,
+      contentType: asset.contentType,
+      extraHeaders: [
+        "Content-Disposition: inline; filename=\"\(asset.filename)\""
+      ]
+    )
+  }
+
   private func errorBody(code: String, message: String) -> Data {
     let payload = [
       "ok": false,
@@ -225,19 +353,26 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       ?? Data("{}".utf8)
   }
 
-  private func httpResponse(status: String, body: Data) -> Data {
-    let headers = [
+  private func httpResponse(
+    status: String,
+    body: Data,
+    contentType: String = "application/json",
+    extraHeaders: [String] = []
+  ) -> Data {
+    let headerLines: [String] = [
       "HTTP/1.1 \(status)",
-      "Content-Type: application/json",
+      "Content-Type: \(contentType)",
       "Content-Length: \(body.count)",
       "Access-Control-Allow-Origin: *",
       "Access-Control-Allow-Headers: Content-Type, \(ApplePhotosCompanionBridge.tokenHeader)",
       "Access-Control-Allow-Methods: GET, POST, OPTIONS",
       "Cache-Control: no-store",
+    ] + extraHeaders + [
       "Connection: close",
       "",
       "",
-    ].joined(separator: "\r\n")
+    ]
+    let headers = headerLines.joined(separator: "\r\n")
 
     var response = Data(headers.utf8)
     response.append(body)

@@ -12,6 +12,69 @@ public struct ApplePhotosCompanionSelectionAsset: Codable, Equatable, Sendable {
   }
 }
 
+public struct ApplePhotosCompanionExportedAsset: Codable, Equatable, Sendable {
+  public let id: String
+  public let sourceLocalIdentifier: String?
+  public let filename: String
+  public let mediaType: ApplePhotosMediaType
+  public let createdAt: String
+  public let width: Int?
+  public let height: Int?
+  public let durationMs: Int?
+  public let favorite: Bool
+  public let albumNames: [String]
+  public let exportPath: String
+  public let contentType: String
+
+  public init(
+    id: String,
+    sourceLocalIdentifier: String? = nil,
+    filename: String,
+    mediaType: ApplePhotosMediaType,
+    createdAt: String,
+    width: Int? = nil,
+    height: Int? = nil,
+    durationMs: Int? = nil,
+    favorite: Bool = false,
+    albumNames: [String] = [],
+    exportPath: String,
+    contentType: String
+  ) {
+    self.id = id
+    self.sourceLocalIdentifier = sourceLocalIdentifier
+    self.filename = filename
+    self.mediaType = mediaType
+    self.createdAt = createdAt
+    self.width = width
+    self.height = height
+    self.durationMs = durationMs
+    self.favorite = favorite
+    self.albumNames = albumNames
+    self.exportPath = exportPath
+    self.contentType = contentType
+  }
+
+  public func bridgeRecord(host: String, port: Int) -> ApplePhotosImportedAssetRecord {
+    ApplePhotosImportedAssetRecord(
+      id: id,
+      filename: filename,
+      mediaType: mediaType,
+      createdAt: createdAt,
+      width: width,
+      height: height,
+      durationMs: durationMs,
+      favorite: favorite,
+      albumNames: albumNames,
+      exportPath: exportPath,
+      downloadURL: ApplePhotosCompanionBridge.exportDownloadURL(
+        exportID: id,
+        host: host,
+        port: port
+      ).absoluteString
+    )
+  }
+}
+
 public struct ApplePhotosCompanionSelectionSnapshot: Codable, Equatable, Sendable {
   public let updatedAt: String
   public let action: ApplePhotosCompanionBridge.LaunchAction?
@@ -20,6 +83,7 @@ public struct ApplePhotosCompanionSelectionSnapshot: Codable, Equatable, Sendabl
   public let returnTo: String?
   public let bridgeOrigin: String?
   public let assets: [ApplePhotosCompanionSelectionAsset]
+  public let exportedAssets: [ApplePhotosCompanionExportedAsset]
 
   public init(
     updatedAt: String,
@@ -28,7 +92,8 @@ public struct ApplePhotosCompanionSelectionSnapshot: Codable, Equatable, Sendabl
     profile: String? = nil,
     returnTo: String? = nil,
     bridgeOrigin: String? = nil,
-    assets: [ApplePhotosCompanionSelectionAsset]
+    assets: [ApplePhotosCompanionSelectionAsset],
+    exportedAssets: [ApplePhotosCompanionExportedAsset] = []
   ) {
     self.updatedAt = updatedAt
     self.action = action
@@ -37,6 +102,7 @@ public struct ApplePhotosCompanionSelectionSnapshot: Codable, Equatable, Sendabl
     self.returnTo = returnTo
     self.bridgeOrigin = bridgeOrigin
     self.assets = assets
+    self.exportedAssets = exportedAssets
   }
 
   public var summary: ApplePhotosBridgeSelectionSummary {
@@ -45,7 +111,28 @@ public struct ApplePhotosCompanionSelectionSnapshot: Codable, Equatable, Sendabl
       action: action,
       draftId: draftId,
       profile: profile,
-      assetCount: assets.count
+      assetCount: exportedAssets.count
+    )
+  }
+
+  public func pickResponse(host: String, port: Int) -> ApplePhotosPickResponse {
+    ApplePhotosPickResponse(
+      assets: exportedAssets.map { $0.bridgeRecord(host: host, port: port) },
+      importedAt: updatedAt
+    )
+  }
+
+  public func importResponse(
+    ids: [String],
+    host: String,
+    port: Int
+  ) -> ApplePhotosImportResponse {
+    let requestedIDs = Set(ids)
+    return ApplePhotosImportResponse(
+      assets: exportedAssets
+        .filter { requestedIDs.contains($0.id) }
+        .map { $0.bridgeRecord(host: host, port: port) },
+      importedAt: updatedAt
     )
   }
 }
