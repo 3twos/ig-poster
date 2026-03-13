@@ -58,6 +58,51 @@ describe("post draft serialization", () => {
     expect(() => PostUpdateRequestSchema.parse(payload)).not.toThrow();
   });
 
+  it("includes all 17 API-accepted fields", () => {
+    const payload = buildPostUpdateRequest(baseDraft);
+    const keys = Object.keys(payload);
+    expect(keys).toContain("title");
+    expect(keys).toContain("status");
+    expect(keys).toContain("logoUrl");
+    expect(keys).toContain("activeVariantId");
+    expect(keys).toContain("renderedPosterUrl");
+    expect(keys).toContain("shareUrl");
+    expect(keys).toContain("shareProjectId");
+    expect(keys).toContain("brandKitId");
+    expect(keys).toContain("brand");
+    expect(keys).toContain("brief");
+    expect(keys).toContain("promptConfig");
+    expect(keys).toContain("overlayLayouts");
+    expect(keys).toContain("mediaComposition");
+    expect(keys).toContain("publishSettings");
+    expect(keys).toContain("assets");
+    expect(keys).toContain("result");
+    expect(keys).toContain("publishHistory");
+    expect(keys).toHaveLength(17);
+  });
+
+  it("normalizes user tag usernames (strips @, trims)", () => {
+    const draft: PostDraft = {
+      ...baseDraft,
+      mediaComposition: {
+        orientation: "portrait",
+        items: [
+          {
+            assetId: "a1",
+            userTags: [
+              { username: "@johndoe", x: 0.5, y: 0.5 },
+              { username: "  janedoe  ", x: 0.1, y: 0.2 },
+            ],
+          },
+        ],
+      },
+    };
+    const payload = buildPostUpdateRequest(draft);
+    const tags = payload.mediaComposition!.items[0].userTags!;
+    expect(tags[0].username).toBe("johndoe");
+    expect(tags[1].username).toBe("janedoe");
+  });
+
   it("omits userTags when normalization removes every placeholder row", () => {
     const payload = buildPostUpdateRequest({
       ...baseDraft,
@@ -74,6 +119,41 @@ describe("post draft serialization", () => {
 
     expect(payload.mediaComposition?.items[0]).not.toHaveProperty("userTags");
     expect(() => PostUpdateRequestSchema.parse(payload)).not.toThrow();
+  });
+
+  it("drops empty usernames after normalization", () => {
+    const draft: PostDraft = {
+      ...baseDraft,
+      mediaComposition: {
+        orientation: "portrait",
+        items: [
+          {
+            assetId: "a1",
+            userTags: [
+              { username: "@", x: 0.5, y: 0.5 },
+              { username: "   ", x: 0.1, y: 0.2 },
+              { username: "valid_user", x: 0.3, y: 0.4 },
+            ],
+          },
+        ],
+      },
+    };
+    const payload = buildPostUpdateRequest(draft);
+    const tags = payload.mediaComposition!.items[0].userTags!;
+    expect(tags).toHaveLength(1);
+    expect(tags[0].username).toBe("valid_user");
+  });
+
+  it("omits userTags key when original array is empty", () => {
+    const draft: PostDraft = {
+      ...baseDraft,
+      mediaComposition: {
+        orientation: "portrait",
+        items: [{ assetId: "a1", userTags: [] }],
+      },
+    };
+    const payload = buildPostUpdateRequest(draft);
+    expect(payload.mediaComposition!.items[0]).not.toHaveProperty("userTags");
   });
 
   it("serializes the same sanitized payload used by autosave", () => {
