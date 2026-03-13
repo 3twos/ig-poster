@@ -109,7 +109,7 @@ _ig() {
       COMPREPLY=( $(compgen -W "run refine" -- "$cur") )
       ;;
     photos)
-      COMPREPLY=( $(compgen -W "recent search import propose --since --limit --count --media --favorite --album --ids --folder --brand-kit --draft-title" -- "$cur") )
+      COMPREPLY=( $(compgen -W "pick recent search import propose --create-draft --since --limit --count --media --favorite --album --ids --folder --brand-kit --draft-title" -- "$cur") )
       ;;
     publish)
       COMPREPLY=( $(compgen -W "--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed" -- "$cur") )
@@ -185,7 +185,7 @@ case $state in
         _values 'generate command' run refine
         ;;
       photos)
-        _values 'photos command' recent search import propose --since --limit --count --media --favorite --album --ids --folder --brand-kit --draft-title
+        _values 'photos command' pick recent search import propose --create-draft --since --limit --count --media --favorite --album --ids --folder --brand-kit --draft-title
         ;;
       publish)
         _values 'publish option' --image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed
@@ -222,7 +222,7 @@ const buildFishCompletion = () => [
   "complete -c ig -n '__fish_seen_subcommand_from chat' -a 'ask --post --message --history --temperature --system-prompt'",
   "complete -c ig -n '__fish_seen_subcommand_from config' -a 'list get set'",
   "complete -c ig -n '__fish_seen_subcommand_from generate' -a 'run refine'",
-  "complete -c ig -n '__fish_seen_subcommand_from photos' -a 'recent search import propose --since --limit --count --media --favorite --album --ids --folder --brand-kit --draft-title'",
+  "complete -c ig -n '__fish_seen_subcommand_from photos' -a 'pick recent search import propose --create-draft --since --limit --count --media --favorite --album --ids --folder --brand-kit --draft-title'",
   "complete -c ig -n '__fish_seen_subcommand_from publish' -a '--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed'",
   "complete -c ig -n '__fish_seen_subcommand_from posts' -a 'list get create update duplicate archive'",
   "complete -c ig -n '__fish_seen_subcommand_from queue' -a 'list get cancel retry move-to-draft update'",
