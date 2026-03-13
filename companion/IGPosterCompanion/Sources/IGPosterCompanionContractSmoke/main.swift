@@ -40,6 +40,27 @@ struct IGPosterCompanionContractSmoke {
         == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/exports/export_123",
       "unexpected export download endpoint"
     )
+    require(
+      ApplePhotosCompanionBridgeRuntime.listeningPorts(
+        primaryPort: ApplePhotosCompanionBridge.defaultPort,
+        once: false
+      ) == [ApplePhotosCompanionBridge.defaultPort],
+      "unexpected default listening ports"
+    )
+    require(
+      ApplePhotosCompanionBridgeRuntime.listeningPorts(
+        primaryPort: 43124,
+        once: false
+      ) == [ApplePhotosCompanionBridge.defaultPort, 43124],
+      "unexpected dual-port listening configuration"
+    )
+    require(
+      ApplePhotosCompanionBridgeRuntime.listeningPorts(
+        primaryPort: 43124,
+        once: true
+      ) == [43124],
+      "unexpected serve-once listening ports"
+    )
 
     let launchURL = ApplePhotosCompanionBridge.launchURL(
       action: .pick,

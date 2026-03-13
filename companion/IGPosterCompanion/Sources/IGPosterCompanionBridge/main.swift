@@ -9,6 +9,12 @@ private struct BridgeOptions {
   let printHealth: Bool
 }
 
+private enum BridgeServerStopReason {
+  case completedOnce
+  case cancelled
+  case failed
+}
+
 private struct HTTPRequest {
   let method: String
   let path: String
@@ -16,18 +22,66 @@ private struct HTTPRequest {
   let body: Data
 }
 
+private final class BridgeRunCoordinator: @unchecked Sendable {
+  private let once: Bool
+  private let semaphore = DispatchSemaphore(value: 0)
+  private let lock = NSLock()
+  private var didFinish = false
+  private var exitCode = EXIT_FAILURE
+  private var servers: [ApplePhotosBridgeServer] = []
+
+  init(once: Bool) {
+    self.once = once
+  }
+
+  func attach(servers: [ApplePhotosBridgeServer]) {
+    lock.lock()
+    self.servers = servers
+    lock.unlock()
+  }
+
+  func handleStop(_ reason: BridgeServerStopReason) {
+    lock.lock()
+    if didFinish {
+      lock.unlock()
+      return
+    }
+
+    didFinish = true
+    exitCode = once && reason == .completedOnce ? EXIT_SUCCESS : EXIT_FAILURE
+    let attachedServers = servers
+    lock.unlock()
+
+    attachedServers.forEach { $0.stop() }
+    semaphore.signal()
+  }
+
+  func wait() -> Int32 {
+    semaphore.wait()
+
+    lock.lock()
+    let code = exitCode
+    lock.unlock()
+
+    return Int32(code)
+  }
+}
+
 private final class ApplePhotosBridgeServer: @unchecked Sendable {
   private let listener: NWListener
   private let queue = DispatchQueue(label: "IGPosterCompanionBridgeServer")
   private let port: UInt16
   private let serveOnce: Bool
-  private let stopHandler: @Sendable () -> Void
+  private let stopHandler: @Sendable (BridgeServerStopReason) -> Void
   private let stateStore = ApplePhotosCompanionStateStore()
   private let photoLibrary = ApplePhotosLibrary()
   private let completedRequestsLock = NSLock()
   private var completedRequests = 0
 
-  init(options: BridgeOptions, stopHandler: @escaping @Sendable () -> Void) throws {
+  init(
+    options: BridgeOptions,
+    stopHandler: @escaping @Sendable (BridgeServerStopReason) -> Void
+  ) throws {
     guard let nwPort = NWEndpoint.Port(rawValue: options.port) else {
       throw NSError(domain: "IGPosterCompanionBridge", code: 1)
     }
@@ -53,9 +107,9 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
         )
       case .failed(let error):
         fputs("IGPosterCompanion bridge failed: \(error)\n", stderr)
-        self.stopHandler()
+        self.stopHandler(.failed)
       case .cancelled:
-        self.stopHandler()
+        self.stopHandler(self.cancelReason())
       default:
         break
       }
@@ -66,6 +120,10 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     }
 
     listener.start(queue: queue)
+  }
+
+  func stop() {
+    listener.cancel()
   }
 
   private func handle(_ connection: NWConnection) {
@@ -124,6 +182,18 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     if shouldStop {
       listener.cancel()
     }
+  }
+
+  private func cancelReason() -> BridgeServerStopReason {
+    guard serveOnce else {
+      return .cancelled
+    }
+
+    completedRequestsLock.lock()
+    let completedRequests = self.completedRequests
+    completedRequestsLock.unlock()
+
+    return completedRequests >= 1 ? .completedOnce : .cancelled
   }
 
   private func parseRequest(from data: Data) -> HTTPRequest? {
@@ -713,18 +783,23 @@ struct IGPosterCompanionBridgeMain {
       return
     }
 
-    let semaphore = DispatchSemaphore(value: 0)
-    let server = try ApplePhotosBridgeServer(options: options) {
-      semaphore.signal()
+    let coordinator = BridgeRunCoordinator(once: options.once)
+    let servers = try ApplePhotosCompanionBridgeRuntime
+      .listeningPorts(primaryPort: Int(options.port), once: options.once)
+      .map { port in
+      try ApplePhotosBridgeServer(
+        options: BridgeOptions(
+          port: UInt16(port),
+          once: options.once,
+          printHealth: false
+        )
+      ) {
+        coordinator.handleStop($0)
+      }
     }
 
-    server.start()
-
-    if options.once {
-      semaphore.wait()
-      return
-    }
-
-    dispatchMain()
+    coordinator.attach(servers: servers)
+    servers.forEach { $0.start() }
+    exit(coordinator.wait())
   }
 }
