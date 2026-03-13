@@ -2,13 +2,15 @@
 
 ## Prerequisites
 
-- Node.js 22.x and npm.
+- Node.js 20.9+ and npm.
 - A Postgres database URL (`POSTGRES_URL` or `DATABASE_URL`) for persistent posts.
 - A Google Workspace OAuth app for login.
 - Optional but recommended for full local feature testing:
   - Vercel Blob token
   - Meta app credentials
   - OpenAI and/or Anthropic key
+
+Preferred local runtime: Node 22.x via `.nvmrc`, but the app/tooling also supports Node 20.9+.
 
 ## Install and Run
 
