@@ -5,7 +5,7 @@ import {
 } from "@/lib/chat-types";
 import { buildChatSystemPrompt } from "@/lib/chat-system-prompt";
 import { streamChatCompletion, toChatSseEvent } from "@/lib/chat-stream";
-import { GenerationResponseSchema } from "@/lib/creative";
+import { StoredGenerationResponseSchema } from "@/lib/creative";
 import { readJsonByPath } from "@/lib/blob-store";
 import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
 import { isAbortError } from "@/lib/server-utils";
@@ -45,7 +45,7 @@ const asTrimmedString = (value: unknown) =>
   typeof value === "string" && value.trim() ? value.trim() : "";
 
 const resolveActiveVariant = (post: Awaited<ReturnType<typeof getPost>>) => {
-  const parsed = GenerationResponseSchema.safeParse(post?.result ?? undefined);
+  const parsed = StoredGenerationResponseSchema.safeParse(post?.result ?? undefined);
   if (!parsed.success || parsed.data.variants.length === 0) {
     return null;
   }

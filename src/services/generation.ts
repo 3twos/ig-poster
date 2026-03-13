@@ -1,10 +1,9 @@
 import {
   BrandInputSchema,
-  CreativeVariantSchema,
   GenerationRequestSchema,
-  GenerationResponseSchema,
-  OverlayLayoutSchema,
   PostInputSchema,
+  StoredGenerationResponseSchema,
+  StoredOverlayLayoutSchema,
   type GenerationRequest,
   type CreativeVariant,
 } from "@/lib/creative";
@@ -71,7 +70,7 @@ export const buildRefineRequestFromPost = async (params: {
   brand: ReturnType<typeof BrandInputSchema.parse>;
   post?: ReturnType<typeof PostInputSchema.parse>;
   promptConfig?: Partial<GenerationRequest["promptConfig"]>;
-  overlayLayout?: ReturnType<typeof OverlayLayoutSchema.parse>;
+  overlayLayout?: ReturnType<typeof StoredOverlayLayoutSchema.parse>;
 }> => {
   const post = await getPost(params.actor, params.postId);
   if (!post) {
@@ -85,7 +84,7 @@ export const buildRefineRequestFromPost = async (params: {
     );
   }
 
-  const result = GenerationResponseSchema.safeParse(post.result ?? undefined);
+  const result = StoredGenerationResponseSchema.safeParse(post.result ?? undefined);
   if (!result.success || result.data.variants.length === 0) {
     throw conflict("Post has no generated variants to refine.");
   }
@@ -99,12 +98,12 @@ export const buildRefineRequestFromPost = async (params: {
     if (!requestedVariant) {
       throw notFound("Variant not found for this post.");
     }
-    const requestedOverlayLayout = OverlayLayoutSchema.safeParse(
+    const requestedOverlayLayout = StoredOverlayLayoutSchema.safeParse(
       post.overlayLayouts?.[requestedVariant.id] ?? undefined,
     );
 
     return {
-      variant: CreativeVariantSchema.parse(requestedVariant),
+      variant: requestedVariant as CreativeVariant,
       brand: brand.data,
       post: parsedPost.success ? parsedPost.data : undefined,
       promptConfig,
@@ -120,12 +119,12 @@ export const buildRefineRequestFromPost = async (params: {
           (candidate) => candidate.id === post.activeVariantId,
         )
       : undefined) ?? result.data.variants[0];
-  const parsedOverlayLayout = OverlayLayoutSchema.safeParse(
+  const parsedOverlayLayout = StoredOverlayLayoutSchema.safeParse(
     variant ? post.overlayLayouts?.[variant.id] ?? undefined : undefined,
   );
 
   return {
-    variant: CreativeVariantSchema.parse(variant),
+    variant: variant as CreativeVariant,
     brand: brand.data,
     post: parsedPost.success ? parsedPost.data : undefined,
     promptConfig,

@@ -161,4 +161,79 @@ describe("post draft serialization", () => {
       buildPostUpdateRequest(baseDraft),
     );
   });
+
+  it("passes validation when result has user-edited short text (below generation minimums)", () => {
+    const draft: PostDraft = {
+      ...baseDraft,
+      result: {
+        strategy: "Short",
+        variants: [
+          {
+            id: "v1",
+            name: "V1",
+            postType: "single-image",
+            hook: "Hi",
+            headline: "Hey",
+            supportingText: "Brief",
+            cta: "",
+            caption: "Short caption",
+            hashtags: ["#a"],
+            layout: "hero-quote",
+            textAlign: "left",
+            colorHexes: ["#FF0000", "#00FF00"],
+            overlayStrength: 0.5,
+            assetSequence: ["asset-1"],
+          },
+        ],
+      },
+    };
+    const payload = buildPostUpdateRequest(draft);
+    expect(() => PostUpdateRequestSchema.parse(payload)).not.toThrow();
+  });
+
+  it("passes validation when overlay blocks have small dimensions from canvas resize", () => {
+    const draft: PostDraft = {
+      ...baseDraft,
+      overlayLayouts: {
+        "v1": {
+          hook: { x: 0, y: 0, width: 2, height: 1, fontScale: 0.3, visible: true, text: "" },
+          headline: { x: 50, y: 50, width: 100, height: 100, fontScale: 2.4, visible: true, text: "" },
+          supportingText: { x: 0, y: 80, width: 60, height: 10, fontScale: 1.0, visible: false, text: "" },
+          cta: { x: 0, y: 90, width: 40, height: 8, fontScale: 1.0, visible: true, text: "" },
+          custom: [],
+        },
+      },
+    };
+    const payload = buildPostUpdateRequest(draft);
+    expect(() => PostUpdateRequestSchema.parse(payload)).not.toThrow();
+  });
+
+  it("passes validation with empty hashtags and short color codes", () => {
+    const draft: PostDraft = {
+      ...baseDraft,
+      result: {
+        strategy: "Test strategy",
+        variants: [
+          {
+            id: "v1",
+            name: "V1",
+            postType: "single-image",
+            hook: "",
+            headline: "",
+            supportingText: "",
+            cta: "",
+            caption: "",
+            hashtags: [],
+            layout: "hero-quote",
+            textAlign: "left",
+            colorHexes: ["#fff", "#000"],
+            overlayStrength: 0.0,
+            assetSequence: ["asset-1"],
+          },
+        ],
+      },
+    };
+    const payload = buildPostUpdateRequest(draft);
+    expect(() => PostUpdateRequestSchema.parse(payload)).not.toThrow();
+  });
 });
