@@ -18,11 +18,13 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { migrate } from "drizzle-orm/neon-http/migrator";
 
-async function run() {
-  const url =
-    process.env.POSTGRES_URL?.trim() || process.env.DATABASE_URL?.trim();
+import { resolveDatabaseUrl } from "./index";
 
-  if (!url) {
+async function run() {
+  let url: string;
+  try {
+    url = resolveDatabaseUrl();
+  } catch {
     console.log("⏭  No database URL set — skipping migrations.");
     return;
   }
