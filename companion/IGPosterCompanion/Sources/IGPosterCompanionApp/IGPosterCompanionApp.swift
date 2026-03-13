@@ -63,7 +63,6 @@ struct CompanionHomeView: View {
   @State private var activeLaunchRequest: ApplePhotosCompanionLaunchRequest?
   @State private var invalidLaunchURL: String?
   @State private var selectedPickerItems: [PhotosPickerItem] = []
-  @State private var pickedAssets: [PickedAssetSummary] = []
 
   private func handleIncomingURL(_ url: URL) {
     guard let request = ApplePhotosCompanionBridge.parseLaunchURL(url) else {
@@ -76,8 +75,8 @@ struct CompanionHomeView: View {
     invalidLaunchURL = nil
   }
 
-  private func updatePickedAssets(from items: [PhotosPickerItem]) {
-    pickedAssets = items.enumerated().map { index, item in
+  private var pickedAssets: [PickedAssetSummary] {
+    selectedPickerItems.enumerated().map { index, item in
       let localIdentifier = item.itemIdentifier
       return PickedAssetSummary(
         id: localIdentifier ?? "selection-\(index)",
@@ -225,7 +224,6 @@ struct CompanionHomeView: View {
         if !pickedAssets.isEmpty {
           Button("Clear selection") {
             selectedPickerItems = []
-            pickedAssets = []
           }
           .buttonStyle(.bordered)
         }
@@ -314,9 +312,6 @@ struct CompanionHomeView: View {
       )
     )
     .onOpenURL(perform: handleIncomingURL)
-    .onChange(of: selectedPickerItems) { _, newValue in
-      updatePickedAssets(from: newValue)
-    }
   }
 }
 
