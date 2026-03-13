@@ -7,6 +7,7 @@ import {
   importApplePhotosSelection,
   isMacOsUserAgent,
   listRecentApplePhotos,
+  openApplePhotosCompanion,
   probeApplePhotosBridge,
   searchApplePhotos,
 } from "@/lib/apple-photos";
@@ -248,6 +249,64 @@ describe("importApplePhotosSelection", () => {
     ).rejects.toThrow(
       "The local Apple Photos bridge returned an unexpected import payload.",
     );
+  });
+});
+
+describe("openApplePhotosCompanion", () => {
+  it("asks the local bridge to open the native companion", async () => {
+    const health = buildApplePhotosBridgeHealthResponse({
+      companionApp: {
+        installed: true,
+        bundlePath: "/Applications/IG Poster Companion.app",
+      },
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === health.bridge.openCompanionUrl) {
+        expect(init?.method).toBe("POST");
+        expect(init?.body).toBe(
+          JSON.stringify({
+            action: "pick",
+            returnTo: "https://ig-poster.example.com/drafts/post_123",
+            draftId: "post_123",
+            profile: "default",
+          }),
+        );
+
+        return new Response(
+          JSON.stringify({
+            launchedAt: "2026-03-13T19:00:00Z",
+            launchUrl:
+              "igposter-companion://photos/pick?draft_id=post_123&profile=default",
+            companionApp: {
+              installed: true,
+              bundlePath: "/Applications/IG Poster Companion.app",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      openApplePhotosCompanion({
+        fetchImpl: fetchImpl as typeof fetch,
+        returnTo: "https://ig-poster.example.com/drafts/post_123",
+        draftId: "post_123",
+        profile: "default",
+      }),
+    ).resolves.toMatchObject({
+      launchedAt: "2026-03-13T19:00:00Z",
+      companionApp: {
+        installed: true,
+        bundlePath: "/Applications/IG Poster Companion.app",
+      },
+    });
   });
 });
 

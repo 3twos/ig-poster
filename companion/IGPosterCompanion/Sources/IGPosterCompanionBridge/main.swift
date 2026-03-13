@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Network
 import IGPosterCompanionCore
@@ -205,6 +206,11 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       return importResponseData(for: request)
     }
 
+    if request.method == "POST",
+       request.path == ApplePhotosCompanionBridge.paths.openCompanion {
+      return await openCompanionResponseData(for: request)
+    }
+
     return httpResponse(
       status: "404 Not Found",
       body: errorBody(
@@ -220,6 +226,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
 
     let payload = ApplePhotosCompanionBridge.healthResponse(
       port: Int(port),
+      companionApp: ApplePhotosCompanionInstallation.appInfo(),
       selection: stateStore.load()?.summary
     )
 
@@ -342,6 +349,74 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     return encodedResponse(status: "200 OK", payload: payload, encoder: encoder)
+  }
+
+  private func openCompanionResponseData(for request: HTTPRequest) async -> Data {
+    let openRequest: ApplePhotosCompanionOpenRequest
+    if request.body.isEmpty {
+      openRequest = ApplePhotosCompanionOpenRequest()
+    } else if let decoded = try? JSONDecoder().decode(ApplePhotosCompanionOpenRequest.self, from: request.body) {
+      openRequest = decoded
+    } else {
+      return httpResponse(
+        status: "400 Bad Request",
+        body: errorBody(
+          code: "BAD_REQUEST",
+          message: "The bridge expected a JSON companion-open body."
+        )
+      )
+    }
+
+    guard
+      let companionBundleURL = ApplePhotosCompanionInstallation.appBundleURL(),
+      let bundlePath = ApplePhotosCompanionInstallation.appInfo().bundlePath
+    else {
+      return httpResponse(
+        status: "409 Conflict",
+        body: errorBody(
+          code: ApplePhotosBridgeErrorCode.macosCompanionRequired.rawValue,
+          message: "Install IG Poster Companion on this Mac before opening Apple Photos from the web editor."
+        )
+      )
+    }
+
+    let launchURL = ApplePhotosCompanionBridge.launchURL(
+      action: openRequest.action,
+      returnTo: openRequest.returnTo,
+      draftId: openRequest.draftId,
+      profile: openRequest.profile,
+      bridgeOrigin: ApplePhotosCompanionBridge.urls(
+        host: ApplePhotosCompanionBridge.defaultHost,
+        port: Int(port)
+      ).origin.absoluteString
+    )
+
+    do {
+      try await launchCompanionApp(
+        bundleURL: companionBundleURL,
+        launchURL: launchURL
+      )
+
+      return encodedResponse(
+        status: "200 OK",
+        payload: ApplePhotosCompanionOpenResponse(
+          launchedAt: timestamp(),
+          launchURL: launchURL.absoluteString,
+          companionApp: ApplePhotosCompanionAppInfo(
+            installed: true,
+            bundlePath: bundlePath
+          )
+        )
+      )
+    } catch {
+      return httpResponse(
+        status: "500 Internal Server Error",
+        body: errorBody(
+          code: ApplePhotosBridgeErrorCode.macosBridgeUnavailable.rawValue,
+          message: "The local Apple Photos bridge could not launch IG Poster Companion."
+        )
+      )
+    }
   }
 
   private func exportedAssetResponse(for path: String) -> Data {
@@ -535,6 +610,44 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     response.append(body)
     return response
   }
+
+  private func launchCompanionApp(bundleURL: URL, launchURL: URL) async throws {
+    let directOpenError = await openLaunchURL(launchURL, with: bundleURL)
+    if directOpenError == nil {
+      return
+    }
+
+    if let fallbackError = await openApplication(bundleURL, launchURL: launchURL) {
+      throw fallbackError
+    }
+  }
+
+  private func openLaunchURL(_ launchURL: URL, with bundleURL: URL) async -> Error? {
+    await withCheckedContinuation { continuation in
+      let configuration = NSWorkspace.OpenConfiguration()
+      configuration.activates = true
+
+      NSWorkspace.shared.open(
+        [launchURL],
+        withApplicationAt: bundleURL,
+        configuration: configuration
+      ) { _, error in
+        continuation.resume(returning: error)
+      }
+    }
+  }
+
+  private func openApplication(_ bundleURL: URL, launchURL: URL) async -> Error? {
+    await withCheckedContinuation { continuation in
+      let configuration = NSWorkspace.OpenConfiguration()
+      configuration.activates = true
+      configuration.arguments = [launchURL.absoluteString]
+
+      NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration) { _, error in
+        continuation.resume(returning: error)
+      }
+    }
+  }
 }
 
 private func normalizedOptionalString(_ value: String?) -> String? {
@@ -543,6 +656,12 @@ private func normalizedOptionalString(_ value: String?) -> String? {
   }
 
   return trimmed
+}
+
+private func timestamp(_ date: Date = Date()) -> String {
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime]
+  return formatter.string(from: date)
 }
 
 private func parseOptions() throws -> BridgeOptions {
@@ -586,6 +705,7 @@ struct IGPosterCompanionBridgeMain {
       encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
       let payload = ApplePhotosCompanionBridge.healthResponse(
         port: Int(options.port),
+        companionApp: ApplePhotosCompanionInstallation.appInfo(),
         selection: ApplePhotosCompanionStateStore().load()?.summary
       )
       let data = try encoder.encode(payload)

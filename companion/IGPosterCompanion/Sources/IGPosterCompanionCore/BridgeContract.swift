@@ -26,19 +26,22 @@ public struct ApplePhotosBridgePaths: Codable, Equatable, Sendable {
   public let search: String
   public let pick: String
   public let importPath: String
+  public let openCompanion: String
 
   public init(
     health: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/health",
     recent: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/recent",
     search: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/search",
     pick: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/pick",
-    importPath: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/import"
+    importPath: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/import",
+    openCompanion: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/companion/open"
   ) {
     self.health = health
     self.recent = recent
     self.search = search
     self.pick = pick
     self.importPath = importPath
+    self.openCompanion = openCompanion
   }
 
   enum CodingKeys: String, CodingKey {
@@ -47,6 +50,7 @@ public struct ApplePhotosBridgePaths: Codable, Equatable, Sendable {
     case search
     case pick
     case importPath = "import"
+    case openCompanion = "openCompanion"
   }
 }
 
@@ -57,6 +61,7 @@ public struct ApplePhotosBridgeURLs: Equatable, Sendable {
   public let search: URL
   public let pick: URL
   public let importURL: URL
+  public let openCompanionURL: URL
 }
 
 public struct ApplePhotosBridgeInfo: Codable, Equatable, Sendable {
@@ -67,6 +72,7 @@ public struct ApplePhotosBridgeInfo: Codable, Equatable, Sendable {
   public let searchURL: String
   public let pickURL: String
   public let importURL: String
+  public let openCompanionURL: String
 
   enum CodingKeys: String, CodingKey {
     case origin
@@ -76,6 +82,17 @@ public struct ApplePhotosBridgeInfo: Codable, Equatable, Sendable {
     case searchURL = "searchUrl"
     case pickURL = "pickUrl"
     case importURL = "importUrl"
+    case openCompanionURL = "openCompanionUrl"
+  }
+}
+
+public struct ApplePhotosCompanionAppInfo: Codable, Equatable, Sendable {
+  public let installed: Bool
+  public let bundlePath: String?
+
+  public init(installed: Bool, bundlePath: String? = nil) {
+    self.installed = installed
+    self.bundlePath = bundlePath
   }
 }
 
@@ -84,6 +101,7 @@ public struct ApplePhotosBridgeHealthResponse: Codable, Equatable, Sendable {
   public let version: String
   public let bridge: ApplePhotosBridgeInfo
   public let capabilities: [ApplePhotosBridgeCapability]
+  public let companionApp: ApplePhotosCompanionAppInfo
   public let selection: ApplePhotosBridgeSelectionSummary?
 }
 
@@ -244,6 +262,47 @@ public struct ApplePhotosCompanionLaunchRequest: Equatable, Sendable {
   public let bridgeOrigin: String?
 }
 
+public struct ApplePhotosCompanionOpenRequest: Codable, Equatable, Sendable {
+  public let action: ApplePhotosCompanionBridge.LaunchAction
+  public let returnTo: String?
+  public let draftId: String?
+  public let profile: String?
+
+  public init(
+    action: ApplePhotosCompanionBridge.LaunchAction = .pick,
+    returnTo: String? = nil,
+    draftId: String? = nil,
+    profile: String? = nil
+  ) {
+    self.action = action
+    self.returnTo = returnTo
+    self.draftId = draftId
+    self.profile = profile
+  }
+}
+
+public struct ApplePhotosCompanionOpenResponse: Codable, Equatable, Sendable {
+  public let launchedAt: String
+  public let launchURL: String
+  public let companionApp: ApplePhotosCompanionAppInfo
+
+  public init(
+    launchedAt: String,
+    launchURL: String,
+    companionApp: ApplePhotosCompanionAppInfo
+  ) {
+    self.launchedAt = launchedAt
+    self.launchURL = launchURL
+    self.companionApp = companionApp
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case launchedAt
+    case launchURL = "launchUrl"
+    case companionApp
+  }
+}
+
 public enum ApplePhotosCompanionBridge {
   public static let appName = "IG Poster Companion"
   public static let version = "v1"
@@ -283,13 +342,15 @@ public enum ApplePhotosCompanionBridge {
       recent: origin.appending(path: paths.recent),
       search: origin.appending(path: paths.search),
       pick: origin.appending(path: paths.pick),
-      importURL: origin.appending(path: paths.importPath)
+      importURL: origin.appending(path: paths.importPath),
+      openCompanionURL: origin.appending(path: paths.openCompanion)
     )
   }
 
   public static func healthResponse(
     host: String = defaultHost,
     port: Int = defaultPort,
+    companionApp: ApplePhotosCompanionAppInfo = ApplePhotosCompanionAppInfo(installed: false),
     selection: ApplePhotosBridgeSelectionSummary? = nil
   ) -> ApplePhotosBridgeHealthResponse {
     let bridgeURLs = urls(host: host, port: port)
@@ -304,9 +365,11 @@ public enum ApplePhotosCompanionBridge {
         recentURL: bridgeURLs.recent.absoluteString,
         searchURL: bridgeURLs.search.absoluteString,
         pickURL: bridgeURLs.pick.absoluteString,
-        importURL: bridgeURLs.importURL.absoluteString
+        importURL: bridgeURLs.importURL.absoluteString,
+        openCompanionURL: bridgeURLs.openCompanionURL.absoluteString
       ),
       capabilities: [.pick, .recent, .search, .importAssets],
+      companionApp: companionApp,
       selection: selection
     )
   }

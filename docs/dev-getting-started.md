@@ -301,12 +301,12 @@ Current native scaffold status:
 
 - `src/lib/apple-photos-bridge.ts` is now the shared TS-side contract for localhost endpoints, launch URLs, and remediation-code vocabulary.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/BridgeContract.swift` mirrors that contract on the native side.
-- `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on, and it now reflects parsed custom-URL handoff state from the browser.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on, and it now reflects parsed custom-URL handoff state from the browser whether that handoff arrives through `.onOpenURL` or as a startup argument from the local bridge.
 - That same SwiftUI shell now includes a PhotosPicker-based selection flow that exports chosen items into a managed local cache.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/SelectionState.swift` now persists the active handoff/selection snapshot plus exported-asset manifest locally so the bridge and app can share context.
-- `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes localhost bridge routes for `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, and `POST /v1/photos/import`, plus exported-file download URLs so the web editor can pull the native selection back into the draft and the CLI/MCP surfaces can enumerate local PhotoKit assets.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes localhost bridge routes for `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, `POST /v1/photos/import`, and `POST /v1/companion/open`, plus exported-file download URLs so the web editor can pull the native selection back into the draft, open the local app bundle only when it is actually installed, and let the CLI/MCP surfaces enumerate local PhotoKit assets.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/PhotosLibrary.swift` is the first PhotoKit-backed enumeration layer for the companion bridge. It handles macOS Photos authorization, recent/search filters, album matching, and asset metadata mapping.
-- `scripts/install-companion-bridge.zsh` now gives the repo a repeatable local install path for the bridge: it builds the release binary, copies it into your user Library, writes a LaunchAgent plist from the checked-in template, and can register that agent with `launchd`.
+- `scripts/install-companion-bridge.zsh` now gives the repo a repeatable local install path for both the bridge and the native app bundle: it builds the release binaries, copies the bridge into your user Library, creates `~/Applications/IG Poster Companion.app`, writes a LaunchAgent plist from the checked-in template, registers the app bundle with Launch Services by default, and can register the bridge agent with `launchd`.
 - `src/cli/photos-bridge.ts` is the CLI-side localhost client for `ig photos recent|search`; it exists under `src/cli` specifically so `npm run build:cli` can compile the standalone binary without importing the web app modules.
 - `src/cli/commands/photos.ts` now covers the first three Apple Photos CLI subcommands: `recent`, `search`, and `import`. `import` resolves exported bridge assets and uploads them through the same `/api/v1/assets` path as any other CLI upload.
 - Validate the native scaffold locally with:
@@ -319,7 +319,7 @@ swift run ig-poster-companion-bridge --print-health
 swift run ig-poster-companion
 ```
 
-While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to export ordered local image/video selections into the managed cache. The bridge health payload now includes the persisted selection summary when that local state exists, and the pick/import routes read from the same shared manifest.
+The current local install still produces an unsigned developer app bundle, but the installer now creates a real `~/Applications/IG Poster Companion.app` bundle and can register it with Launch Services. The in-app `Load sample handoff` control is still useful when you want to inspect the parsed `igposter-companion://photos/pick?...` state manually, and the native Photos picker button in that shell still exports ordered local image/video selections into the managed cache. The bridge health payload now includes both persisted selection summary and companion-app install status, and the bridge open/pick/import routes read from the same shared manifest.
 
 To install the bridge locally instead of keeping a `swift run` terminal open:
 
@@ -331,11 +331,13 @@ curl http://127.0.0.1:43123/v1/health
 The script installs:
 
 - `~/Library/Application Support/IGPosterCompanion/bin/ig-poster-companion-bridge`
+- `~/Applications/IG Poster Companion.app`
 - `~/Library/LaunchAgents/com.3twos.igposter.bridge.plist`
 
 Useful options:
 
 - `./scripts/install-companion-bridge.zsh --no-load`
+- `./scripts/install-companion-bridge.zsh --no-register-app`
 - `./scripts/install-companion-bridge.zsh --port 43124`
 - `./scripts/install-companion-bridge.zsh --uninstall`
 
@@ -361,7 +363,7 @@ To exercise the new web-side probe locally:
 ./scripts/install-companion-bridge.zsh
 ```
 
-Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health`, offer the native companion handoff when available, and import the exported native selection back into the normal upload flow once the bridge reports ready assets. Local agents can hit the same running bridge through `ig mcp` with `photos_recent` / `photos_search` / `photos_import`.
+Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health`, check whether the local `IG Poster Companion.app` bundle is installed, ask the bridge to open that bundle through `POST /v1/companion/open` when available, and import the exported native selection back into the normal upload flow once the bridge reports ready assets. Local agents can hit the same running bridge through `ig mcp` with `photos_recent` / `photos_search` / `photos_import`.
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.

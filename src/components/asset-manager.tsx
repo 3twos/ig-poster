@@ -46,8 +46,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  ApplePhotosBridgeRequestError,
   getApplePhotosFallbackInfo,
   isMacOsUserAgent,
+  openApplePhotosCompanion,
   probeApplePhotosBridge,
   type ApplePhotosFallbackInfo,
 } from "@/lib/apple-photos";
@@ -80,7 +82,6 @@ type ApplePhotosDialogState =
   | {
       kind: "launch";
       bridgeOrigin: string;
-      launchUrl: string;
       selectionAssetCount: number;
     };
 
@@ -106,6 +107,7 @@ export function AssetManager({
   const [applePhotosProbePending, setApplePhotosProbePending] = useState(false);
   const [applePhotosImportPending, setApplePhotosImportPending] =
     useState(false);
+  const [applePhotosOpenPending, setApplePhotosOpenPending] = useState(false);
   const [applePhotosImportSession, setApplePhotosImportSession] =
     useState<ApplePhotosImportSession | null>(null);
   const addAssetInputId = useId();
@@ -123,6 +125,7 @@ export function AssetManager({
   const showApplePhotosEntry = isMacOsUserAgent(userAgent);
   const applePhotosBusy =
     applePhotosProbePending ||
+    applePhotosOpenPending ||
     applePhotosImportPending ||
     applePhotosImportSession !== null;
 
@@ -157,10 +160,16 @@ export function AssetManager({
   }, []);
 
   const handleApplePhotosBridgeImportError = useCallback((error: unknown) => {
+    const fallbackCode =
+      error instanceof ApplePhotosBridgeRequestError &&
+      error.code === "MACOS_COMPANION_REQUIRED"
+        ? "MACOS_COMPANION_REQUIRED"
+        : "MACOS_BRIDGE_UNAVAILABLE";
+
     setApplePhotosDialogState({
       kind: "fallback",
       info: {
-        ...getApplePhotosFallbackInfo(userAgent, "MACOS_BRIDGE_UNAVAILABLE"),
+        ...getApplePhotosFallbackInfo(userAgent, fallbackCode),
         description:
           error instanceof Error
             ? error.message
@@ -197,11 +206,22 @@ export function AssetManager({
     setApplePhotosProbePending(false);
 
     if (probe.available) {
+      const selectionAssetCount = probe.health.selection?.assetCount ?? 0;
+      const companionInstalled = probe.health.companionApp?.installed ?? false;
+
+      if (selectionAssetCount <= 0 && !companionInstalled) {
+        setApplePhotosDialogState({
+          kind: "fallback",
+          info: getApplePhotosFallbackInfo(userAgent, "MACOS_COMPANION_REQUIRED"),
+        });
+        setApplePhotosDialogOpen(true);
+        return;
+      }
+
       setApplePhotosDialogState({
         kind: "launch",
         bridgeOrigin: probe.health.bridge.origin,
-        launchUrl: probe.launchUrl,
-        selectionAssetCount: probe.health.selection?.assetCount ?? 0,
+        selectionAssetCount,
       });
       setApplePhotosDialogOpen(true);
       return;
@@ -214,15 +234,30 @@ export function AssetManager({
     setApplePhotosDialogOpen(true);
   };
 
-  const handleOpenCompanion = () => {
+  const handleOpenCompanion = async () => {
     if (applePhotosDialogState?.kind !== "launch") return;
 
-    setApplePhotosImportSession({
-      launchedAt: Date.now(),
-    });
-    window.location.assign(applePhotosDialogState.launchUrl);
-    setApplePhotosDialogOpen(false);
-    setApplePhotosDialogState(null);
+    setApplePhotosOpenPending(true);
+
+    try {
+      const launch = await openApplePhotosCompanion({
+        bridgeOrigin: applePhotosDialogState.bridgeOrigin,
+        returnTo: window.location.href,
+        draftId,
+        profile,
+      });
+      const launchedAt = Date.parse(launch.launchedAt);
+
+      setApplePhotosImportSession({
+        launchedAt: Number.isNaN(launchedAt) ? Date.now() : launchedAt,
+      });
+      setApplePhotosDialogOpen(false);
+      setApplePhotosDialogState(null);
+    } catch (error) {
+      handleApplePhotosBridgeImportError(error);
+    } finally {
+      setApplePhotosOpenPending(false);
+    }
   };
 
   useEffect(() => {
@@ -290,7 +325,9 @@ export function AssetManager({
                   onClick={handleAddFromPhotos}
                 >
                   <ImageIcon className="h-3.5 w-3.5 text-orange-300" />
-                  {applePhotosImportPending
+                  {applePhotosOpenPending
+                    ? "Opening Photos..."
+                    : applePhotosImportPending
                     ? "Importing Photos..."
                     : applePhotosImportSession
                       ? "Waiting for Photos..."
@@ -438,24 +475,30 @@ export function AssetManager({
                 applePhotosDialogState?.kind === "launch"
                   ? applePhotosDialogState.selectionAssetCount > 0
                     ? () => void handleImportCurrentSelection()
-                    : handleOpenCompanion
+                    : () => void handleOpenCompanion()
                   : handleUseRegularUpload
               }
-              disabled={applePhotosImportPending}
+              disabled={applePhotosImportPending || applePhotosOpenPending}
             >
               {applePhotosDialogState?.kind === "launch"
                 ? applePhotosDialogState.selectionAssetCount > 0
                   ? applePhotosImportPending
                     ? "Importing..."
                     : "Import selection"
-                  : "Open companion"
+                  : applePhotosOpenPending
+                    ? "Opening..."
+                    : "Open companion"
                 : applePhotosDialogState?.info.actionLabel}
             </Button>
             {applePhotosDialogState?.kind === "launch" ? (
               <>
                 {applePhotosDialogState.selectionAssetCount > 0 ? (
-                  <Button variant="outline" onClick={handleOpenCompanion}>
-                    Open companion
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleOpenCompanion()}
+                    disabled={applePhotosOpenPending}
+                  >
+                    {applePhotosOpenPending ? "Opening..." : "Open companion"}
                   </Button>
                 ) : null}
                 <Button variant="outline" onClick={handleUseRegularUpload}>

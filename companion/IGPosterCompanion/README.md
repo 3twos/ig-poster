@@ -9,8 +9,8 @@ Current scope:
 - native PhotosPicker flow for ordered image/video selection
 - PhotoKit-backed recent/search enumeration for local CLI + MCP workflows
 - managed local export cache for selected Photos assets
-- localhost bridge executable for `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, and `POST /v1/photos/import`
-- custom-URL handoff parsing so the app can reflect the current web draft/profile context
+- localhost bridge executable for `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, `POST /v1/photos/import`, and `POST /v1/companion/open`
+- custom-URL handoff parsing so the app can reflect the current web draft/profile context, including startup-argument handoff when the bridge opens the app bundle directly
 - shared local selection-state persistence so the app and bridge can report the active picker context and exported asset manifest
 
 Local validation:
@@ -29,17 +29,18 @@ Local install helper:
 ../../scripts/install-companion-bridge.zsh
 ```
 
-That script builds the release bridge binary, installs it into
-`~/Library/Application Support/IGPosterCompanion/bin`, writes
+That script builds the release bridge binary and companion app bundle, installs
+the bridge into `~/Library/Application Support/IGPosterCompanion/bin`,
+installs `IG Poster Companion.app` into `~/Applications`, writes
 `~/Library/LaunchAgents/com.3twos.igposter.bridge.plist`, and loads the
 LaunchAgent so the web app and CLI can probe `http://127.0.0.1:43123/v1/health`
 without a separate `swift run` terminal. Use `--no-load` to install without
-starting it, or `--uninstall` to remove the LaunchAgent and installed binary.
+starting the bridge, `--no-register-app` to skip Launch Services registration,
+or `--uninstall` to remove the LaunchAgent, app bundle, and installed binary.
 
 Planned next steps:
 
-1. register and package the macOS app so browser handoff can launch it directly
-2. harden the localhost bridge and browser handoff UX for packaged installs
-3. expand the localhost bridge into richer import/propose flows for CLI + MCP
-4. hand imported exports back to the CLI/MCP surface with the same manifest contract
-5. add bridge auth and packaged-install detection for the web and CLI entry points
+1. harden the localhost bridge and browser handoff UX for signed/bottled installs
+2. expand the localhost bridge into richer import/propose flows for CLI + MCP
+3. hand imported exports back to the CLI/MCP surface with the same manifest contract
+4. add bridge auth for packaged distribution and tighter browser/CLI trust checks
