@@ -9,6 +9,7 @@ import {
   type PublishResource,
 } from "@/lib/api/v1/publish";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
+import { getMetaMetadataValidationIssues } from "@/lib/meta";
 import {
   MetaMediaPreflightError,
   preflightMetaMediaForPublish,
@@ -25,7 +26,7 @@ import {
   MetaAuthServiceError,
   resolveMetaAuthForApi,
 } from "@/services/meta-auth";
-import { executeImmediateInstagramPublish } from "@/services/publish-executor";
+import { executeImmediatePublish } from "@/services/publish-executor";
 
 class PublishRouteError extends Error {
   readonly status: number;
@@ -67,10 +68,12 @@ const assertLinkedPost = async (ownerHash: string, postId: string) => {
 };
 
 const toBaseResource = (
+  destination: PublishResource["destination"],
   mode: PublishResource["mode"],
   authSource: PublishResource["authSource"],
   connectionId?: string | null,
 ) => ({
+  destination,
   mode,
   authSource,
   connectionId: connectionId ?? null,
@@ -92,6 +95,29 @@ export async function POST(req: Request) {
       connectionId: payload.connectionId,
       ownerHash: actor.ownerHash,
     });
+    const metadataIssues = getMetaMetadataValidationIssues({
+      destination: payload.destination,
+      media: payload.media,
+      firstComment: payload.firstComment,
+      locationId: payload.locationId,
+      userTags: payload.userTags,
+    });
+    if (metadataIssues.length > 0) {
+      throw new PublishRouteError(
+        400,
+        metadataIssues[0]?.message ??
+          "Publish metadata is not valid for this destination.",
+      );
+    }
+    const destinationCapability = resolvedAuth.account.capabilities?.[payload.destination];
+    if (!destinationCapability?.publishEnabled) {
+      throw new PublishRouteError(
+        400,
+        payload.destination === "facebook"
+          ? "The connected Meta publishing pair does not include a Facebook Page."
+          : "The connected Meta publishing pair does not include an Instagram professional account.",
+      );
+    }
     const publishAt = payload.publishAt
       ? new Date(payload.publishAt).getTime()
       : undefined;
@@ -103,6 +129,7 @@ export async function POST(req: Request) {
       return apiOk({
         publish: {
           ...toBaseResource(
+            payload.destination,
             payload.media.mode,
             resolvedAuth.source,
             resolvedAuth.account.connectionId,
@@ -130,9 +157,8 @@ export async function POST(req: Request) {
       const job = await createPublishJob(db, {
         ownerHash: actor.ownerHash,
         postId: payload.postId,
-        destination: "instagram",
-        remoteAuthority:
-          resolvedAuth.account.capabilities?.instagram.syncMode ?? "app_managed",
+        destination: payload.destination,
+        remoteAuthority: destinationCapability.syncMode,
         accountKey: resolvedAuth.account.accountKey,
         pageId: resolvedAuth.account.pageId,
         instagramUserId: resolvedAuth.account.instagramUserId,
@@ -150,6 +176,7 @@ export async function POST(req: Request) {
       return apiOk({
         publish: {
           ...toBaseResource(
+            payload.destination,
             payload.media.mode,
             resolvedAuth.source,
             resolvedAuth.account.connectionId,
@@ -164,9 +191,8 @@ export async function POST(req: Request) {
     const reservedJob = await reserveImmediatePublishJob(db, {
       ownerHash: actor.ownerHash,
       postId: payload.postId,
-      destination: "instagram",
-      remoteAuthority:
-        resolvedAuth.account.capabilities?.instagram.syncMode ?? "app_managed",
+      destination: payload.destination,
+      remoteAuthority: destinationCapability.syncMode,
       accountKey: resolvedAuth.account.accountKey,
       pageId: resolvedAuth.account.pageId,
       instagramUserId: resolvedAuth.account.instagramUserId,
@@ -184,15 +210,18 @@ export async function POST(req: Request) {
     if (!reservedJob) {
       throw new PublishRouteError(
         409,
-        "Instagram publishing limit reached (50 posts in the last 24 hours). Try again once the rolling window advances.",
+        payload.destination === "instagram"
+          ? "Instagram publishing limit reached (50 posts in the last 24 hours). Try again once the rolling window advances."
+          : "Could not reserve an immediate Facebook publish slot. Try again.",
       );
     }
 
-    let publish: Awaited<ReturnType<typeof executeImmediateInstagramPublish>>["publish"];
+    let publish: Awaited<ReturnType<typeof executeImmediatePublish>>["publish"];
     let firstCommentWarning: string | undefined;
     try {
-      ({ publish, firstCommentWarning } = await executeImmediateInstagramPublish(
+      ({ publish, firstCommentWarning } = await executeImmediatePublish(
         {
+          destination: payload.destination,
           media: payload.media,
           caption: payload.caption,
           firstComment: payload.firstComment,
@@ -230,6 +259,7 @@ export async function POST(req: Request) {
           actor.ownerHash,
           payload.postId,
           publish.publishId,
+          payload.destination,
         );
       } catch {
         // Preserve successful publish response even if post snapshot update fails.
@@ -263,6 +293,7 @@ export async function POST(req: Request) {
     return apiOk({
       publish: {
         ...toBaseResource(
+          payload.destination,
           payload.media.mode,
           resolvedAuth.source,
           resolvedAuth.account.connectionId,
@@ -301,6 +332,6 @@ export async function POST(req: Request) {
     }
 
     console.error("[api/v1/publish]", error);
-    return apiError(500, "INTERNAL_ERROR", "Could not publish to Instagram");
+    return apiError(500, "INTERNAL_ERROR", "Could not publish to Meta");
   }
 }

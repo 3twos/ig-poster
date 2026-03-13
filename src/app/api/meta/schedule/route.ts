@@ -9,6 +9,7 @@ import { posts } from "@/db/schema";
 import { apiErrorResponse } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import {
+  getMetaMetadataValidationIssues,
   MetaScheduleRequestSchema,
 } from "@/lib/meta";
 import {
@@ -25,7 +26,7 @@ import {
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { resolveMetaAuthForRequest } from "@/services/meta-auth";
-import { executeImmediateInstagramPublish } from "@/services/publish-executor";
+import { executeImmediatePublish } from "@/services/publish-executor";
 
 class MetaScheduleClientError extends Error {
   constructor(message: string) {
@@ -35,6 +36,22 @@ class MetaScheduleClientError extends Error {
 }
 
 export const runtime = "nodejs";
+
+const getDestinationCapability = (
+  payload: z.infer<typeof MetaScheduleRequestSchema>,
+  resolvedAuth: Awaited<ReturnType<typeof resolveMetaAuthForRequest>>,
+) => {
+  const capability = resolvedAuth.account.capabilities?.[payload.destination];
+  if (!capability?.publishEnabled) {
+    throw new MetaScheduleClientError(
+      payload.destination === "facebook"
+        ? "The connected Meta publishing pair does not include a Facebook Page."
+        : "The connected Meta publishing pair does not include an Instagram professional account.",
+    );
+  }
+
+  return capability;
+};
 
 export async function POST(req: Request) {
   try {
@@ -63,6 +80,20 @@ export async function POST(req: Request) {
     }
 
     const resolvedAuth = await resolveMetaAuthForRequest(req, { ownerHash });
+    const metadataIssues = getMetaMetadataValidationIssues({
+      destination: payload.destination,
+      media: payload.media,
+      firstComment: payload.firstComment,
+      locationId: payload.locationId,
+      userTags: payload.userTags,
+    });
+    if (metadataIssues.length > 0) {
+      throw new MetaScheduleClientError(
+        metadataIssues[0]?.message ??
+          "Publish metadata is not valid for this destination.",
+      );
+    }
+    const destinationCapability = getDestinationCapability(payload, resolvedAuth);
     const now = Date.now();
     const publishAt = payload.publishAt ? new Date(payload.publishAt).getTime() : undefined;
 
@@ -79,9 +110,8 @@ export async function POST(req: Request) {
       const job = await createPublishJob(db, {
         ownerHash,
         postId: payload.postId,
-        destination: "instagram",
-        remoteAuthority:
-          resolvedAuth.account.capabilities?.instagram.syncMode ?? "app_managed",
+        destination: payload.destination,
+        remoteAuthority: destinationCapability.syncMode,
         accountKey: resolvedAuth.account.accountKey,
         pageId: resolvedAuth.account.pageId,
         instagramUserId: resolvedAuth.account.instagramUserId,
@@ -98,6 +128,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         status: "scheduled",
+        destination: payload.destination,
         id: job.id,
         publishAt: job.publishAt.toISOString(),
       });
@@ -106,9 +137,8 @@ export async function POST(req: Request) {
     const reservedJob = await reserveImmediatePublishJob(db, {
       ownerHash,
       postId: payload.postId,
-      destination: "instagram",
-      remoteAuthority:
-        resolvedAuth.account.capabilities?.instagram.syncMode ?? "app_managed",
+      destination: payload.destination,
+      remoteAuthority: destinationCapability.syncMode,
       accountKey: resolvedAuth.account.accountKey,
       pageId: resolvedAuth.account.pageId,
       instagramUserId: resolvedAuth.account.instagramUserId,
@@ -124,15 +154,18 @@ export async function POST(req: Request) {
     });
     if (!reservedJob) {
       throw new MetaScheduleClientError(
-        "Instagram publishing limit reached (50 posts in the last 24 hours). Try again once the rolling window advances.",
+        payload.destination === "instagram"
+          ? "Instagram publishing limit reached (50 posts in the last 24 hours). Try again once the rolling window advances."
+          : "Could not reserve an immediate Facebook publish slot. Try again.",
       );
     }
 
-    let publish: Awaited<ReturnType<typeof executeImmediateInstagramPublish>>["publish"];
+    let publish: Awaited<ReturnType<typeof executeImmediatePublish>>["publish"];
     let firstCommentWarning: string | undefined;
     try {
-      ({ publish, firstCommentWarning } = await executeImmediateInstagramPublish(
+      ({ publish, firstCommentWarning } = await executeImmediatePublish(
         {
+          destination: payload.destination,
           media: payload.media,
           caption: payload.caption,
           firstComment: payload.firstComment,
@@ -166,7 +199,13 @@ export async function POST(req: Request) {
 
     if (payload.postId) {
       try {
-        await markPostPublished(db, ownerHash, payload.postId, publish.publishId);
+        await markPostPublished(
+          db,
+          ownerHash,
+          payload.postId,
+          publish.publishId,
+          payload.destination,
+        );
       } catch {
         // Preserve successful publish response even if post snapshot update fails.
       }
@@ -196,6 +235,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       status: "published",
+      destination: payload.destination,
       mode: publish.mode,
       publishId: publish.publishId,
       creationId: publish.creationId,
@@ -212,7 +252,7 @@ export async function POST(req: Request) {
       (error instanceof MetaScheduleClientError) ||
       (error instanceof MetaMediaPreflightError);
     return apiErrorResponse(error, {
-      fallback: "Could not publish to Instagram",
+      fallback: "Could not publish to Meta",
       status: isClientError ? 400 : 502,
     });
   }

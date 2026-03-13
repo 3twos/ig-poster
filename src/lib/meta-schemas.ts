@@ -65,6 +65,7 @@ type MetaMetadataValidationIssue = {
 };
 
 export const getMetaMetadataValidationIssues = (input: {
+  destination?: z.infer<typeof MetaDestinationSchema>;
   media: {
     mode: "image";
     imageUrl: string;
@@ -77,10 +78,44 @@ export const getMetaMetadataValidationIssues = (input: {
     mode: "carousel";
     items: Array<z.infer<typeof CarouselItemSchema>>;
   };
+  firstComment?: string | null;
   locationId?: string | null;
   userTags?: MetaUserTag[] | null;
 }): MetaMetadataValidationIssue[] => {
   const issues: MetaMetadataValidationIssue[] = [];
+
+  if (input.destination === "facebook") {
+    if (input.media.mode === "carousel") {
+      issues.push({
+        path: ["media", "mode"],
+        message:
+          "Facebook publishing currently supports single image and single video posts only.",
+      });
+    }
+
+    if (input.firstComment?.trim()) {
+      issues.push({
+        path: ["firstComment"],
+        message:
+          "Facebook publishing does not support Instagram-style first comments.",
+      });
+    }
+
+    if (input.locationId?.trim()) {
+      issues.push({
+        path: ["locationId"],
+        message:
+          "Facebook publishing does not support Instagram location IDs.",
+      });
+    }
+
+    if ((input.userTags?.length ?? 0) > 0) {
+      issues.push({
+        path: ["userTags"],
+        message: "Facebook publishing does not support Instagram user tags.",
+      });
+    }
+  }
 
   if (input.media.mode === "carousel" && input.userTags !== undefined && input.userTags !== null) {
     issues.push({
@@ -106,6 +141,7 @@ export const getMetaMetadataValidationIssues = (input: {
 export const MetaScheduleRequestSchema = z
   .object({
     postId: z.string().trim().min(1).max(18).optional(),
+    destination: MetaDestinationSchema.default("instagram"),
     caption: z.string().trim().min(1).max(2200),
     firstComment: FirstCommentSchema.optional(),
     locationId: LocationIdSchema.optional(),

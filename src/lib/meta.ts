@@ -1,5 +1,7 @@
 export {
   CarouselItemSchema,
+  getMetaMetadataValidationIssues,
+  MetaDestinationSchema,
   MetaScheduleRequestSchema,
   type CarouselItem,
   type MetaLocationSearchResult,
@@ -20,6 +22,24 @@ export type MetaAuthContext = {
   pageId?: string;
   graphVersion: string;
 };
+
+export type MetaPublishResult =
+  | {
+    mode: "image";
+    creationId?: string;
+    publishId?: string;
+  }
+  | {
+    mode: "reel";
+    creationId?: string;
+    publishId?: string;
+  }
+  | {
+    mode: "carousel";
+    creationId?: string;
+    children: string[];
+    publishId?: string;
+  };
 
 export const getEnvMetaAuth = (): MetaAuthContext | null => {
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
@@ -42,12 +62,17 @@ export const getEnvMetaAuth = (): MetaAuthContext | null => {
 
 type GraphResponse = {
   id?: string;
+  post_id?: string;
+  permalink_url?: string;
   status_code?: string;
   status?: string;
   error?: {
     message?: string;
   };
 };
+
+const FACEBOOK_SCHEDULE_MIN_MS = 10 * 60 * 1000;
+const FACEBOOK_SCHEDULE_MAX_MS = 30 * 24 * 60 * 60 * 1000;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
@@ -127,6 +152,43 @@ const callGraphGet = async (
   fields?: string[],
 ) => callGraphGetWithParams(path, auth, { fields });
 
+const requirePageId = (auth: MetaAuthContext) => {
+  if (!auth.pageId?.trim()) {
+    throw new Error("Missing Facebook Page id for publishing.");
+  }
+
+  return auth.pageId.trim();
+};
+
+const applyFacebookPublishState = (
+  params: URLSearchParams,
+  publishAt?: string,
+) => {
+  if (!publishAt) {
+    params.set("published", "true");
+    return;
+  }
+
+  const publishDate = new Date(publishAt);
+  if (Number.isNaN(publishDate.getTime())) {
+    throw new Error("Facebook publishAt must be a valid ISO datetime.");
+  }
+
+  const deltaMs = publishDate.getTime() - Date.now();
+  if (deltaMs < FACEBOOK_SCHEDULE_MIN_MS || deltaMs > FACEBOOK_SCHEDULE_MAX_MS) {
+    throw new Error(
+      "Facebook scheduled publish time must be between 10 minutes and 30 days from now.",
+    );
+  }
+
+  params.set("published", "false");
+  params.set(
+    "scheduled_publish_time",
+    Math.floor(publishDate.getTime() / 1000).toString(),
+  );
+  params.set("published_content_type", "SCHEDULED");
+};
+
 const createMediaContainer = (params: URLSearchParams, auth: MetaAuthContext) =>
   callGraphPost(`${auth.instagramUserId}/media`, params, auth);
 
@@ -173,7 +235,7 @@ const publishSingleImage = async (
     userTags?: MetaUserTag[];
   },
   auth: MetaAuthContext,
-) => {
+) : Promise<MetaPublishResult> => {
   const params = new URLSearchParams({
     image_url: payload.imageUrl,
     caption: payload.caption,
@@ -213,7 +275,7 @@ const publishReel = async (
     userTags?: MetaUserTag[];
   },
   auth: MetaAuthContext,
-) => {
+) : Promise<MetaPublishResult> => {
   const params = new URLSearchParams({
     media_type: "REELS",
     video_url: payload.videoUrl,
@@ -284,7 +346,7 @@ const publishCarousel = async (
     locationId?: string;
   },
   auth: MetaAuthContext,
-) => {
+) : Promise<MetaPublishResult> => {
   const limitedItems = payload.items.slice(0, 10);
   if (limitedItems.length < 2) {
     throw new Error("Carousel posts require at least 2 media items");
@@ -332,7 +394,7 @@ export const publishInstagramContent = async (
     userTags?: MetaUserTag[];
   },
   auth?: MetaAuthContext,
-) => {
+) : Promise<MetaPublishResult> => {
   const resolvedAuth = auth ?? getEnvMetaAuth();
   if (!resolvedAuth) {
     throw new Error("Missing Instagram publishing credentials");
@@ -369,6 +431,103 @@ export const publishInstagramContent = async (
       items: payload.items,
       caption: payload.caption,
       locationId: payload.locationId,
+    },
+    resolvedAuth,
+  );
+};
+
+const publishFacebookPhoto = async (
+  payload: {
+    imageUrl: string;
+    caption: string;
+    publishAt?: string;
+  },
+  auth: MetaAuthContext,
+): Promise<MetaPublishResult> => {
+  const pageId = requirePageId(auth);
+  const params = new URLSearchParams({
+    url: payload.imageUrl,
+    caption: payload.caption,
+  });
+  applyFacebookPublishState(params, payload.publishAt);
+
+  const response = await callGraphPost(`${pageId}/photos`, params, auth);
+  const publishId = response.post_id ?? response.id;
+
+  if (!publishId) {
+    throw new Error("Meta API did not return Facebook photo id.");
+  }
+
+  return {
+    mode: "image",
+    creationId: response.id,
+    publishId,
+  };
+};
+
+const publishFacebookVideo = async (
+  payload: {
+    videoUrl: string;
+    caption: string;
+    publishAt?: string;
+  },
+  auth: MetaAuthContext,
+): Promise<MetaPublishResult> => {
+  const pageId = requirePageId(auth);
+  const params = new URLSearchParams({
+    file_url: payload.videoUrl,
+    description: payload.caption,
+  });
+  applyFacebookPublishState(params, payload.publishAt);
+
+  const response = await callGraphPost(`${pageId}/videos`, params, auth);
+  const publishId = response.post_id ?? response.id;
+
+  if (!publishId) {
+    throw new Error("Meta API did not return Facebook video id.");
+  }
+
+  return {
+    mode: "reel",
+    creationId: response.id,
+    publishId,
+  };
+};
+
+export const publishFacebookPageContent = async (
+  payload: MetaScheduleRequest["media"] & {
+    caption: string;
+    publishAt?: string;
+  },
+  auth?: MetaAuthContext,
+): Promise<MetaPublishResult> => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Facebook publishing credentials");
+  }
+
+  if (payload.mode === "carousel") {
+    throw new Error(
+      "Facebook publishing currently supports single image and single video posts only.",
+    );
+  }
+
+  if (payload.mode === "image") {
+    return publishFacebookPhoto(
+      {
+        imageUrl: payload.imageUrl,
+        caption: payload.caption,
+        publishAt: payload.publishAt,
+      },
+      resolvedAuth,
+    );
+  }
+
+  return publishFacebookVideo(
+    {
+      videoUrl: payload.videoUrl,
+      caption: payload.caption,
+      publishAt: payload.publishAt,
     },
     resolvedAuth,
   );

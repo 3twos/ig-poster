@@ -60,6 +60,7 @@ export const markPostPublished = async (
   ownerHash: string,
   postId: string,
   publishId?: string,
+  destination: PublishJobRow["destination"] = "instagram",
 ) => {
   const [existing] = await db
     .select({
@@ -71,19 +72,24 @@ export const markPostPublished = async (
 
   if (!existing) return;
 
+  const nextPublishHistory =
+    destination === "instagram"
+      ? [
+          ...(existing.publishHistory ?? []),
+          {
+            publishedAt: new Date().toISOString(),
+            igMediaId: publishId,
+          },
+        ]
+      : (existing.publishHistory ?? []);
+
   await db
     .update(posts)
     .set({
       status: "posted",
       publishedAt: new Date(),
       updatedAt: new Date(),
-      publishHistory: [
-        ...(existing.publishHistory ?? []),
-        {
-          publishedAt: new Date().toISOString(),
-          igMediaId: publishId,
-        },
-      ],
+      publishHistory: nextPublishHistory,
     })
     .where(and(eq(posts.id, postId), eq(posts.ownerHash, ownerHash)));
 };
@@ -158,6 +164,7 @@ const countPublishWindowRows = async (
   db: Pick<AppDb, "select">,
   ownerHash: string,
   windowStart: Date,
+  destination: PublishJobRow["destination"] = "instagram",
 ) => {
   const [usage] = await db
     .select({
@@ -167,6 +174,7 @@ const countPublishWindowRows = async (
     .where(
       and(
         eq(publishJobs.ownerHash, ownerHash),
+        eq(publishJobs.destination, destination),
         inArray(publishJobs.status, PUBLISH_WINDOW_STATUSES),
         gte(publishJobs.completedAt, windowStart),
       ),
@@ -199,10 +207,18 @@ export const reserveImmediatePublishJob = async (
   const now = new Date();
   const windowStart = new Date(now.getTime() - PUBLISH_WINDOW_MS);
   const maxAttempts = input.maxAttempts ?? 1;
+  const destination = input.destination ?? "instagram";
   const row = await db.transaction(async (tx) => {
-    const used = await countPublishWindowRows(tx, input.ownerHash, windowStart);
-    if (used >= PUBLISH_WINDOW_LIMIT) {
-      return null;
+    if (destination === "instagram") {
+      const used = await countPublishWindowRows(
+        tx,
+        input.ownerHash,
+        windowStart,
+        destination,
+      );
+      if (used >= PUBLISH_WINDOW_LIMIT) {
+        return null;
+      }
     }
 
     const [inserted] = await tx
@@ -211,7 +227,7 @@ export const reserveImmediatePublishJob = async (
         id: buildJobId(),
         ownerHash: input.ownerHash,
         postId: input.postId,
-        destination: input.destination ?? "instagram",
+        destination,
         remoteAuthority: input.remoteAuthority ?? "app_managed",
         accountKey: input.accountKey,
         pageId: input.pageId,
@@ -278,9 +294,10 @@ export const getPublishWindowUsage = async (
   db: AppDb,
   ownerHash: string,
   now = new Date(),
+  destination: PublishJobRow["destination"] = "instagram",
 ) => {
   const windowStart = new Date(now.getTime() - PUBLISH_WINDOW_MS);
-  const used = await countPublishWindowRows(db, ownerHash, windowStart);
+  const used = await countPublishWindowRows(db, ownerHash, windowStart, destination);
   return {
     limit: PUBLISH_WINDOW_LIMIT,
     used,
