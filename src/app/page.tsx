@@ -170,7 +170,7 @@ export default function Home() {
 
   const posterRef = useRef<HTMLDivElement>(null);
   const activityPanelRef = useRef<HTMLDivElement>(null);
-  const measuredCanonicalHeightsRef = useRef<
+  const measuredCanonicalHeightsPercentRef = useRef<
     Record<string, Partial<Record<CanonicalOverlayKey, number>>>
   >({});
   const assetCleanupRef = useRef<LocalAsset[]>([]);
@@ -1233,7 +1233,8 @@ export default function Home() {
       activeVariant.carouselSlides,
     );
 
-    const measuredHeights = measuredCanonicalHeightsRef.current[activeVariant.id];
+    const measuredHeightsPercent =
+      measuredCanonicalHeightsPercentRef.current[activeVariant.id];
 
     dispatch({
       type: "UPDATE_OVERLAY",
@@ -1253,7 +1254,7 @@ export default function Home() {
         post.aspectRatio,
         activeOverlayLayout,
         undefined,
-        measuredHeights,
+        measuredHeightsPercent,
       ),
     });
   }, [
@@ -1267,7 +1268,7 @@ export default function Home() {
   const handleMeasuredCanonicalHeightsChange = useCallback(
     (heights: Partial<Record<CanonicalOverlayKey, number>>) => {
       if (!activeVariant) return;
-      measuredCanonicalHeightsRef.current[activeVariant.id] = heights;
+      measuredCanonicalHeightsPercentRef.current[activeVariant.id] = heights;
     },
     [activeVariant],
   );

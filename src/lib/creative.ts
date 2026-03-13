@@ -753,8 +753,10 @@ const estimateTextLines = (
 
 const roundOverlayPercent = (value: number) => Math.round(value * 10) / 10;
 
+const ceilOverlayPercent = (value: number) => Math.ceil(value * 10) / 10;
+
 const clampOverlayBlockHeight = (value: number) =>
-  Math.min(100, Math.max(5, roundOverlayPercent(value)));
+  Math.min(100, Math.max(5, ceilOverlayPercent(value)));
 
 const estimateCanonicalBlockHeight = (params: {
   key: CanonicalOverlayKey;
@@ -830,7 +832,8 @@ export const fitOverlayLayoutToCopy = (
   aspectRatio: AspectRatio,
   layout?: Partial<OverlayLayout> | null,
   brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
-  measuredHeights?: Partial<Record<CanonicalOverlayKey, number>>,
+  // Percent-of-canvas heights in [0, 100] captured from live DOM rendering.
+  measuredHeightsPercent?: Partial<Record<CanonicalOverlayKey, number>>,
 ): OverlayLayout => {
   const base = layout
     ? normalizeOverlayLayout(input.layout, layout)
@@ -878,7 +881,7 @@ export const fitOverlayLayoutToCopy = (
             text: copyByKey[key],
             aspectRatio,
           }),
-          measuredHeights?.[key] ?? 0,
+          measuredHeightsPercent?.[key] ?? 0,
         ),
       ),
     ]),

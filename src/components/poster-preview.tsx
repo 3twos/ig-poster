@@ -961,18 +961,18 @@ export const PosterPreview = memo(
         }
 
         const raf = requestAnimationFrame(() => {
-          const measuredHeights = collectMeasuredCanonicalHeights({
+          const measuredHeightsPercent = collectMeasuredCanonicalHeights({
             keys: activeKeys,
             refs: canonicalBlockRefs.current,
             frameHeight: frameSize.height,
           });
 
-          onMeasuredCanonicalHeightsChange?.(measuredHeights);
+          onMeasuredCanonicalHeightsChange?.(measuredHeightsPercent);
 
           if (
             editorMode ||
             !onOverlayLayoutChange ||
-            Object.keys(measuredHeights).length === 0
+            Object.keys(measuredHeightsPercent).length === 0
           ) {
             return;
           }
@@ -985,7 +985,7 @@ export const PosterPreview = memo(
             aspectRatio,
             resolvedOverlayLayout,
             undefined,
-            measuredHeights,
+            measuredHeightsPercent,
           );
 
           if (
