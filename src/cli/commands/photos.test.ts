@@ -191,6 +191,35 @@ describe("runPhotosCommand", () => {
     });
   });
 
+  it("maps unknown bridge failures to a transport exit code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw 42;
+      }),
+    );
+
+    await expect(
+      runPhotosCommand(
+        {
+          globalOptions: {
+            json: false,
+            streamJson: false,
+            jq: undefined,
+            quiet: false,
+            noColor: false,
+            yes: false,
+            dryRun: false,
+          },
+        } as never,
+        ["recent"],
+      ),
+    ).rejects.toMatchObject({
+      message: "Apple Photos bridge request failed.",
+      exitCode: EXIT_CODES.transport,
+    });
+  });
+
   it("imports exported Photos assets and uploads them through the standard asset API", async () => {
     vi.stubGlobal(
       "fetch",

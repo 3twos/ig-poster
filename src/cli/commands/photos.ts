@@ -135,6 +135,7 @@ const IMPORT_USAGE =
   "Usage: ig photos import [--ids <id,id,...>] [--folder <assets|videos|logos|renders>]";
 const PROPOSE_USAGE =
   "Usage: ig photos propose [--album <name>] [--since <7d|ISO>] [--limit <n>] [--count <n>] [--media <image|video|live-photo>] [--favorite] [--brand-kit <id>] [--draft-title <title>] [--folder <assets|videos|logos|renders>]";
+const APPLE_PHOTOS_PICK_WAIT_TIMEOUT_MS = 300_000;
 
 export const runPhotosCommand = async (ctx: CliContext, argv: string[]) => {
   const action = argv[0];
@@ -201,7 +202,7 @@ const pickSelection = async (ctx: CliContext, argv: string[]) => {
     }
 
     const imported = await waitForCompanionSelection({
-      timeoutMs: Math.max(ctx.globalOptions.timeoutMs ?? 30_000, 300_000),
+      timeoutMs: APPLE_PHOTOS_PICK_WAIT_TIMEOUT_MS,
       minUpdatedAt,
     });
     const uploadedAssets = await uploadImportedSelection(ctx, imported, folder);
@@ -894,7 +895,10 @@ const normalizeBridgeError = (error: unknown): never => {
     throw new CliError(error.message, EXIT_CODES.transport);
   }
 
-  throw new CliError("Apple Photos bridge request failed.");
+  throw new CliError(
+    "Apple Photos bridge request failed.",
+    EXIT_CODES.transport,
+  );
 };
 
 const parseSelectionUpdatedAt = (value?: string) => {

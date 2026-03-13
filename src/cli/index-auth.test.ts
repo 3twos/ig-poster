@@ -42,4 +42,13 @@ describe("runCli auth refresh for photos commands", () => {
       { refreshAuth: true },
     );
   });
+
+  it("skips auth refresh for bare photos usage output", async () => {
+    await expect(runCli(["photos"])).resolves.toBe(0);
+
+    expect(vi.mocked(createContext)).toHaveBeenCalledWith(
+      expect.any(Object),
+      { refreshAuth: false },
+    );
+  });
 });

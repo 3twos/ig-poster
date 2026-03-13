@@ -344,30 +344,54 @@ export const getApplePhotosBridgeHealth = async ({
 
 export const openApplePhotosCompanion = async ({
   action = "pick",
+  timeoutMs = APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS,
 }: {
   action?: "open" | "pick";
+  timeoutMs?: number;
 } = {}) => {
-  const response = await fetch(buildBridgeUrl("/v1/companion/open"), {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ action }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    throw await readBridgeError(response);
+  try {
+    const response = await fetch(buildBridgeUrl("/v1/companion/open"), {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw await readBridgeError(response);
+    }
+
+    const payload: unknown = await response.json();
+    if (!isCompanionOpenResponse(payload)) {
+      throw new Error(
+        "The local Apple Photos bridge returned an unexpected companion-open payload.",
+      );
+    }
+
+    return payload;
+  } catch (error) {
+    if (error instanceof ApplePhotosBridgeRequestError) {
+      throw error;
+    }
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApplePhotosBridgeRequestError(
+        "The local Apple Photos bridge did not respond before the companion-open request timed out.",
+        408,
+        "MACOS_BRIDGE_UNAVAILABLE",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  const payload: unknown = await response.json();
-  if (!isCompanionOpenResponse(payload)) {
-    throw new Error(
-      "The local Apple Photos bridge returned an unexpected companion-open payload.",
-    );
-  }
-
-  return payload;
 };
 
 export const importApplePhotosSelection = async ({
