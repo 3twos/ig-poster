@@ -20,6 +20,11 @@ struct IGPosterCompanionContractSmoke {
       urls.pick.absoluteString == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/pick",
       "unexpected pick endpoint"
     )
+    require(
+      ApplePhotosCompanionBridge.exportDownloadURL(exportID: "export_123").absoluteString
+        == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/exports/export_123",
+      "unexpected export download endpoint"
+    )
 
     let launchURL = ApplePhotosCompanionBridge.launchURL(
       action: .pick,
@@ -82,6 +87,22 @@ struct IGPosterCompanionContractSmoke {
           localIdentifier: "A1",
           supportedContentTypes: ["public.jpeg"]
         ),
+      ],
+      exportedAssets: [
+        ApplePhotosCompanionExportedAsset(
+          id: "export_123",
+          sourceLocalIdentifier: "A1",
+          filename: "hero.jpg",
+          mediaType: .image,
+          createdAt: "2026-03-13T15:30:00Z",
+          width: 1080,
+          height: 1350,
+          durationMs: nil,
+          favorite: false,
+          albumNames: [],
+          exportPath: "/tmp/hero.jpg",
+          contentType: "image/jpeg"
+        ),
       ]
     )
     try? stateStore.save(snapshot)
@@ -92,6 +113,16 @@ struct IGPosterCompanionContractSmoke {
     )
     require(responseWithSelection.selection?.assetCount == 1, "unexpected selection count")
     require(responseWithSelection.selection?.draftId == "post_123", "unexpected selection draft")
+    let pickResponse = snapshot.pickResponse(
+      host: ApplePhotosCompanionBridge.defaultHost,
+      port: ApplePhotosCompanionBridge.defaultPort
+    )
+    require(pickResponse.assets.count == 1, "unexpected pick response count")
+    require(
+      pickResponse.assets.first?.downloadURL
+        == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/exports/export_123",
+      "unexpected exported download URL"
+    )
     try? stateStore.clear()
 
     print("IGPosterCompanion contract smoke passed")

@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+import ImageIO
+import UniformTypeIdentifiers
 import IGPosterCompanionCore
 
 struct CompanionBadge: View {
@@ -51,6 +53,119 @@ private struct PickedAssetSummary: Identifiable {
   let supportedContentTypes: [String]
 }
 
+private struct ExportedSelectionResult {
+  let assets: [ApplePhotosCompanionExportedAsset]
+  let failedCount: Int
+}
+
+private func companionTimestamp(_ date: Date = Date()) -> String {
+  let formatter = ISO8601DateFormatter()
+  formatter.formatOptions = [.withInternetDateTime]
+  return formatter.string(from: date)
+}
+
+private func sanitizeFilenameComponent(_ value: String) -> String {
+  let sanitized = value.replacingOccurrences(
+    of: #"[^A-Za-z0-9._-]+"#,
+    with: "-",
+    options: .regularExpression
+  )
+  return sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "-.")).isEmpty
+    ? "asset"
+    : sanitized
+}
+
+private func applePhotosExportCacheDirectory() -> URL {
+  FileManager.default.homeDirectoryForCurrentUser
+    .appending(path: "Library/Caches/IGPosterCompanion/PhotosExports", directoryHint: .isDirectory)
+}
+
+private func resetApplePhotosExportCache() throws -> URL {
+  let directoryURL = applePhotosExportCacheDirectory()
+  if FileManager.default.fileExists(atPath: directoryURL.path) {
+    try FileManager.default.removeItem(at: directoryURL)
+  }
+  try FileManager.default.createDirectory(
+    at: directoryURL,
+    withIntermediateDirectories: true,
+    attributes: nil
+  )
+  return directoryURL
+}
+
+private func imageDimensions(at url: URL) -> (width: Int?, height: Int?) {
+  guard
+    let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+    let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+  else {
+    return (nil, nil)
+  }
+
+  return (
+    properties[kCGImagePropertyPixelWidth] as? Int,
+    properties[kCGImagePropertyPixelHeight] as? Int
+  )
+}
+
+private func exportPickedAssets(
+  from items: [PhotosPickerItem]
+) async throws -> ExportedSelectionResult {
+  let exportDirectory = try resetApplePhotosExportCache()
+  var exportedAssets: [ApplePhotosCompanionExportedAsset] = []
+  var failedCount = 0
+
+  for (index, item) in items.enumerated() {
+    try Task.checkCancellation()
+
+    let contentType =
+      item.supportedContentTypes.first(where: { $0.conforms(to: .movie) || $0.conforms(to: .image) })
+      ?? item.supportedContentTypes.first
+      ?? .data
+    let mediaType: ApplePhotosMediaType = contentType.conforms(to: .movie) ? .video : .image
+    let fileExtension =
+      contentType.preferredFilenameExtension
+      ?? (mediaType == .video ? "mov" : "jpg")
+    let sourceIdentifier = item.itemIdentifier
+    let filename = "\(sanitizeFilenameComponent(sourceIdentifier ?? "asset-\(index + 1)")).\(fileExtension)"
+    let exportID = UUID().uuidString.lowercased()
+    let exportURL = exportDirectory.appending(path: "\(exportID)-\(filename)")
+
+    do {
+      guard let data = try await item.loadTransferable(type: Data.self), !data.isEmpty else {
+        failedCount += 1
+        continue
+      }
+
+      try data.write(to: exportURL, options: [.atomic])
+      let dimensions: (width: Int?, height: Int?) =
+        mediaType == .image ? imageDimensions(at: exportURL) : (width: nil, height: nil)
+
+      exportedAssets.append(
+        ApplePhotosCompanionExportedAsset(
+          id: exportID,
+          sourceLocalIdentifier: sourceIdentifier,
+          filename: filename,
+          mediaType: mediaType,
+          createdAt: companionTimestamp(),
+          width: dimensions.width,
+          height: dimensions.height,
+          durationMs: nil,
+          favorite: false,
+          albumNames: [],
+          exportPath: exportURL.path,
+          contentType: contentType.preferredMIMEType ?? "application/octet-stream"
+        )
+      )
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      failedCount += 1
+    }
+  }
+
+  return ExportedSelectionResult(assets: exportedAssets, failedCount: failedCount)
+}
+
 struct CompanionHomeView: View {
   private let stateStore = ApplePhotosCompanionStateStore()
   private let health = ApplePhotosCompanionBridge.healthResponse()
@@ -66,6 +181,10 @@ struct CompanionHomeView: View {
   @State private var selectedPickerItems: [PhotosPickerItem] = []
   @State private var persistedSelectionSnapshot: ApplePhotosCompanionSelectionSnapshot?
   @State private var persistedSelectionError: String?
+  @State private var exportTask: Task<Void, Never>?
+  @State private var isExportingSelection = false
+  @State private var exportStatusMessage: String?
+  @State private var exportErrorMessage: String?
 
   private func handleIncomingURL(_ url: URL) {
     guard let request = ApplePhotosCompanionBridge.parseLaunchURL(url) else {
@@ -90,8 +209,11 @@ struct CompanionHomeView: View {
     }
   }
 
-  private func persistSelectionSnapshot() {
-    if activeLaunchRequest == nil && pickedAssets.isEmpty {
+  private func persistSelectionSnapshot(
+    exportedAssets: [ApplePhotosCompanionExportedAsset],
+    updatedAt: String = companionTimestamp()
+  ) {
+    if activeLaunchRequest == nil && pickedAssets.isEmpty && exportedAssets.isEmpty {
       try? stateStore.clear()
       persistedSelectionSnapshot = nil
       persistedSelectionError = nil
@@ -99,7 +221,7 @@ struct CompanionHomeView: View {
     }
 
     let snapshot = ApplePhotosCompanionSelectionSnapshot(
-      updatedAt: ISO8601DateFormatter().string(from: Date()),
+      updatedAt: updatedAt,
       action: activeLaunchRequest?.action,
       draftId: activeLaunchRequest?.draftId,
       profile: activeLaunchRequest?.profile,
@@ -111,7 +233,8 @@ struct CompanionHomeView: View {
           localIdentifier: asset.localIdentifier,
           supportedContentTypes: asset.supportedContentTypes
         )
-      }
+      },
+      exportedAssets: exportedAssets
     )
 
     do {
@@ -121,6 +244,55 @@ struct CompanionHomeView: View {
     } catch {
       persistedSelectionSnapshot = stateStore.load()
       persistedSelectionError = "Could not write the shared state file."
+    }
+  }
+
+  private func refreshExportedSelection() {
+    exportTask?.cancel()
+
+    if selectedPickerItems.isEmpty {
+      try? FileManager.default.removeItem(at: applePhotosExportCacheDirectory())
+      isExportingSelection = false
+      exportStatusMessage = nil
+      exportErrorMessage = nil
+      persistSelectionSnapshot(exportedAssets: [])
+      return
+    }
+
+    isExportingSelection = true
+    exportStatusMessage = "Exporting selected Photos into the local companion cache..."
+    exportErrorMessage = nil
+
+    let items = selectedPickerItems
+    exportTask = Task {
+      do {
+        let result = try await exportPickedAssets(from: items)
+        try Task.checkCancellation()
+
+        await MainActor.run {
+          isExportingSelection = false
+          if result.assets.isEmpty {
+            exportStatusMessage = nil
+            exportErrorMessage = "The companion could not export the current selection yet."
+          } else if result.failedCount > 0 {
+            exportStatusMessage = "\(result.assets.count) selected assets are ready to import."
+            exportErrorMessage = "\(result.failedCount) selection item(s) could not be exported."
+          } else {
+            exportStatusMessage = "\(result.assets.count) selected assets are ready to import."
+            exportErrorMessage = nil
+          }
+          persistSelectionSnapshot(exportedAssets: result.assets)
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        await MainActor.run {
+          isExportingSelection = false
+          exportStatusMessage = nil
+          exportErrorMessage = "The companion could not export the current selection yet."
+          persistSelectionSnapshot(exportedAssets: [])
+        }
+      }
     }
   }
 
@@ -172,7 +344,7 @@ struct CompanionHomeView: View {
   private var sharedStateSection: some View {
     CompanionSection(title: "Shared State") {
       if let persistedSelectionSnapshot {
-        Text("The companion now persists launch-and-selection metadata to a shared local state file so the bridge can describe the active picker context even before file export is wired in.")
+        Text("The companion now persists launch context plus a bridge-ready export manifest so the browser, CLI, and MCP flows can discover importable Photos assets from one shared local snapshot.")
           .foregroundStyle(.secondary)
 
         if let persistedSelectionError {
@@ -200,13 +372,17 @@ struct CompanionHomeView: View {
             Text(persistedSelectionSnapshot.profile ?? "Default")
           }
           GridRow {
-            Text("Assets").foregroundStyle(.secondary)
+            Text("Selected").foregroundStyle(.secondary)
             Text("\(persistedSelectionSnapshot.assets.count)")
+          }
+          GridRow {
+            Text("Ready").foregroundStyle(.secondary)
+            Text("\(persistedSelectionSnapshot.exportedAssets.count)")
           }
         }
         .font(.system(size: 13, weight: .regular, design: .monospaced))
       } else {
-        Text("No shared selection snapshot has been persisted yet. Selecting Photos or loading a handoff will populate the local state store for the bridge.")
+        Text("No shared selection snapshot has been persisted yet. Selecting Photos or loading a handoff will populate the local state store and export manifest for the bridge.")
           .foregroundStyle(.secondary)
 
         if let persistedSelectionError {
@@ -285,10 +461,10 @@ struct CompanionHomeView: View {
 
   private var nativePickerDescription: String {
     if activeLaunchRequest?.action == .pick {
-      return "The companion is ready to collect Photos selection context for the current draft. This slice wires in Apple’s native picker and preserves the chosen order plus local asset identifiers for the next import/export step."
+      return "The companion is ready to collect Photos for the current draft. This slice wires in Apple’s native picker, exports the chosen assets into a managed cache, and persists a bridge-readable import manifest."
     }
 
-    return "This slice now wires in Apple’s native picker so we can validate the human selection UX before export/import is connected."
+    return "This slice now wires native Photos selection directly into a managed export cache so the web app can import the chosen files without asking people to manually export from Photos first."
   }
 
   private var nativePickerSection: some View {
@@ -316,13 +492,29 @@ struct CompanionHomeView: View {
       }
 
       if pickedAssets.isEmpty {
-        Text("No assets selected yet. The picker will stay native; the next slice will export/import the chosen assets back to the draft flow.")
+        Text("No assets selected yet. Choose items in the native picker to populate the local export cache and shared bridge manifest.")
           .font(.system(size: 13, weight: .medium, design: .rounded))
           .foregroundStyle(.secondary)
       } else {
         VStack(alignment: .leading, spacing: 12) {
           Text("Selected assets: \(pickedAssets.count)")
             .font(.system(size: 14, weight: .semibold, design: .rounded))
+
+          if isExportingSelection, let exportStatusMessage {
+            Text(exportStatusMessage)
+              .font(.system(size: 13, weight: .medium, design: .rounded))
+              .foregroundStyle(.secondary)
+          } else if let exportStatusMessage {
+            Text(exportStatusMessage)
+              .font(.system(size: 13, weight: .medium, design: .rounded))
+              .foregroundStyle(Color.green.opacity(0.9))
+          }
+
+          if let exportErrorMessage {
+            Text(exportErrorMessage)
+              .font(.system(size: 13, weight: .medium, design: .rounded))
+              .foregroundStyle(Color.red.opacity(0.9))
+          }
 
           ForEach(pickedAssets) { asset in
             pickedAssetCard(asset)
@@ -357,7 +549,7 @@ struct CompanionHomeView: View {
 
   private var plannedOperationsSection: some View {
     CompanionSection(title: "Planned Operations") {
-      Text("pick, recent, search, and import are defined in the shared contract now. PhotosPicker is wired into the native shell; the next slice will bind actual export/import behavior plus deeper PhotoKit-backed enumeration and bridge routes.")
+      Text("pick, recent, search, and import are defined in the shared contract now. The native picker now exports bridge-ready files into a managed cache; the next slice will consume this manifest from the browser and add deeper PhotoKit-backed enumeration.")
         .foregroundStyle(.secondary)
 
       HStack(spacing: 10) {
@@ -370,7 +562,7 @@ struct CompanionHomeView: View {
 
   private var statusSection: some View {
     CompanionSection(title: "Status") {
-      Text("This scaffold intentionally stops before reading the Photos library. The repo now has one native codepath to iterate on instead of only docs and web fallback copy.")
+      Text("This scaffold now stops after native selection and export. The companion still avoids broad PhotoKit enumeration, but it can hand bridge-readable files back to the rest of IG Poster.")
         .foregroundStyle(.secondary)
     }
   }
@@ -403,10 +595,12 @@ struct CompanionHomeView: View {
       persistedSelectionSnapshot = stateStore.load()
     }
     .onChange(of: activeLaunchRequest?.url.absoluteString) { _, _ in
-      persistSelectionSnapshot()
+      persistSelectionSnapshot(
+        exportedAssets: persistedSelectionSnapshot?.exportedAssets ?? []
+      )
     }
     .onChange(of: selectedPickerItems) { _, _ in
-      persistSelectionSnapshot()
+      refreshExportedSelection()
     }
   }
 }
