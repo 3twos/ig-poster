@@ -22,13 +22,17 @@ import {
 } from "@/components/ui/sheet";
 import type { InstagramAuthStatus } from "@/lib/types";
 
+type PublishDestination = "facebook" | "instagram";
+
 type Props = {
   activePostId?: string;
   authStatus: InstagramAuthStatus;
+  availableDestinations: PublishDestination[];
   isAuthLoading: boolean;
   isSharing: boolean;
   isPublishing: boolean;
   hasBlockingValidationError?: boolean;
+  publishDestination: PublishDestination;
   validationMessage?: string | null;
   onPublishJobsMutated?: (
     postId: string | undefined,
@@ -39,6 +43,7 @@ type Props = {
   shareCopyState: "idle" | "done";
   localTimeZone: string;
   onCreateShareLink: () => void;
+  onPublishDestinationChange: (destination: PublishDestination) => void;
   onPostNow: () => void;
   onSchedulePost: (scheduleAt: string) => void;
   onSelectPlannerPost?: (postId: string) => Promise<void> | void;
@@ -47,10 +52,12 @@ type Props = {
 export function PublishSection({
   activePostId,
   authStatus,
+  availableDestinations,
   isAuthLoading,
   isSharing,
   isPublishing,
   hasBlockingValidationError = false,
+  publishDestination,
   validationMessage,
   onPublishJobsMutated,
   publishJobsRefreshKey,
@@ -58,12 +65,15 @@ export function PublishSection({
   shareCopyState,
   localTimeZone,
   onCreateShareLink,
+  onPublishDestinationChange,
   onPostNow,
   onSchedulePost,
   onSelectPlannerPost,
 }: Props) {
   const [scheduleAt, setScheduleAt] = useState("");
   const [plannerOpen, setPlannerOpen] = useState(false);
+  const destinationLabel =
+    publishDestination === "facebook" ? "Facebook" : "Instagram";
 
   return (
     <div className="space-y-3">
@@ -91,6 +101,43 @@ export function PublishSection({
           <Link href="/settings">Manage in Settings</Link>
         </Button>
       </div>
+
+      {availableDestinations.length > 1 ? (
+        <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
+          <Label className="text-[11px] text-slate-300">Destination</Label>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {availableDestinations.map((destination) => {
+              const label =
+                destination === "facebook" ? "Facebook" : "Instagram";
+
+              return (
+                <Button
+                  key={destination}
+                  type="button"
+                  size="sm"
+                  disabled={isPublishing}
+                  variant={
+                    publishDestination === destination ? "default" : "outline"
+                  }
+                  onClick={() => onPublishDestinationChange(destination)}
+                  className={
+                    publishDestination === destination
+                      ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+                      : undefined
+                  }
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            {publishDestination === "facebook"
+              ? "Facebook publishing currently supports single-image and single-video posts."
+              : "Instagram supports single-image, carousel, and reel publishing."}
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -146,11 +193,13 @@ export function PublishSection({
           ) : (
             <Send className="h-3.5 w-3.5" />
           )}
-          Post now
+          Post to {destinationLabel}
         </Button>
 
         <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
-          <Label className="text-[11px] text-slate-300">Post at</Label>
+          <Label className="text-[11px] text-slate-300">
+            Post {destinationLabel} at
+          </Label>
           <div className="mt-1 flex flex-col gap-2 sm:flex-row">
             <Input
               type="datetime-local"
@@ -166,7 +215,7 @@ export function PublishSection({
               className="sm:min-w-[135px]"
             >
               <CalendarClock className="h-3.5 w-3.5" />
-              Schedule
+              Schedule {destinationLabel}
             </Button>
           </div>
           <p className="text-[11px] text-slate-400">

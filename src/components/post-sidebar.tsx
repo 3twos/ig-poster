@@ -32,6 +32,7 @@ const FILTERS: Array<{ label: string; value: SidebarFilter }> = [
 ];
 
 type SidebarContentProps = {
+  publishDestinationLabel?: string;
   onPostSelect?: () => void;
   onGenerate?: (postId: string) => void;
   onPostNow?: (postId: string) => void;
@@ -39,6 +40,7 @@ type SidebarContentProps = {
 };
 
 export function SidebarContent({
+  publishDestinationLabel,
   onPostSelect,
   onGenerate,
   onPostNow,
@@ -163,6 +165,7 @@ export function SidebarContent({
                 key={post.id}
                 post={post}
                 isActive={post.id === activePost?.id}
+                publishDestinationLabel={publishDestinationLabel}
                 // Dirty state is client-side/transient for the currently loaded draft.
                 isDirty={
                   post.id === activePost?.id &&
@@ -224,11 +227,15 @@ export function SidebarContent({
 }
 
 /** Desktop sidebar — hidden below lg */
-export function PostSidebar() {
+export function PostSidebar({
+  publishDestinationLabel,
+}: {
+  publishDestinationLabel?: string;
+}) {
   return (
     <aside aria-label="Post list" className="hidden w-[280px] shrink-0 lg:block">
       <div className="sticky top-6 flex max-h-[calc(100vh-120px)] flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl">
-        <SidebarContent />
+        <SidebarContent publishDestinationLabel={publishDestinationLabel} />
       </div>
     </aside>
   );
@@ -236,10 +243,12 @@ export function PostSidebar() {
 
 /** Mobile slide-over drawer using shadcn Sheet */
 export function MobileSidebarDrawer({
+  publishDestinationLabel,
   onGenerate,
   onPostNow,
   onSchedulePost,
 }: {
+  publishDestinationLabel?: string;
   onGenerate?: (postId: string) => void;
   onPostNow?: (postId: string) => void;
   onSchedulePost?: (postId: string, scheduleAt: string) => void;
@@ -259,6 +268,7 @@ export function MobileSidebarDrawer({
         </SheetHeader>
         <div className="flex h-[calc(100%-3.5rem)] flex-col">
           <SidebarContent
+            publishDestinationLabel={publishDestinationLabel}
             onPostSelect={closeSidebar}
             onGenerate={onGenerate}
             onPostNow={onPostNow}
