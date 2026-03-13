@@ -73,6 +73,9 @@ detect_speaker_cmd() {
     SPEAKER_CMD="say"
   elif command -v spd-say >/dev/null 2>&1; then
     SPEAKER_CMD="spd-say"
+    # spd-say is async by default; add --wait so the speech lock is held
+    # until audio finishes, preventing overlap across processes.
+    SPEAKER_ARGS=("--wait" "${SPEAKER_ARGS[@]+"${SPEAKER_ARGS[@]}"}")
   elif command -v espeak >/dev/null 2>&1; then
     SPEAKER_CMD="espeak"
   else
@@ -97,14 +100,22 @@ detect_speaker_cmd() {
 _acquire_speech_lock() {
   case "$SPEECH_LOCK_METHOD" in
     shlock)
-      # shlock -f <file> -p <pid>: creates lockfile, blocks if held by another live process.
-      # Loop with short sleep since shlock returns immediately on failure.
-      local attempts=0
+      # shlock -f <file> -p <pid>: creates lockfile containing the PID.
+      # shlock succeeds immediately if the lockfile doesn't exist or the PID inside is dead.
+      # Loop with short sleep since shlock returns immediately on contention.
+      local attempts=0 lock_pid
       while ! shlock -f "$SPEECH_LOCK_FILE" -p $$; do
         attempts=$(( attempts + 1 ))
         if (( attempts > 100 )); then
-          # Give up after ~10s to avoid deadlock from stale lock.
-          rm -f "$SPEECH_LOCK_FILE" 2>/dev/null || true
+          # After ~10s, only force-remove if the holding PID is no longer alive.
+          lock_pid=""
+          if [[ -f "$SPEECH_LOCK_FILE" ]]; then
+            lock_pid="$(cat "$SPEECH_LOCK_FILE" 2>/dev/null)" || true
+          fi
+          if [[ -n "$lock_pid" ]] && ! kill -0 "$lock_pid" 2>/dev/null; then
+            rm -f "$SPEECH_LOCK_FILE" 2>/dev/null || true
+          fi
+          # Try once more, then give up to avoid blocking the poll loop.
           shlock -f "$SPEECH_LOCK_FILE" -p $$ || true
           break
         fi

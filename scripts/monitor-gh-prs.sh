@@ -24,6 +24,8 @@ Options:
   --max-prs <count>          Max PRs to track (default: 10)
   -i, --interval <seconds>   Poll interval in seconds (default: 30)
   --timeout <seconds>        Optional script timeout (default: 0, disabled)
+  --auto-update              Auto-update PRs that are behind base branch
+  --voice <name>             macOS voice name (default: Karen). Try: Moira, Daniel, Tessa
   --no-speak                 Disable spoken alerts
   --plain                    Print line-by-line logs instead of the dashboard view
   -h, --help                 Show help
@@ -32,8 +34,11 @@ Examples:
   # Monitor all open PRs on the current repo
   ./scripts/monitor-gh-prs.sh
 
-  # Monitor your own PRs with 15s polling
-  ./scripts/monitor-gh-prs.sh --author @me --interval 15
+  # Monitor your own PRs with 15s polling, auto-update behind branches
+  ./scripts/monitor-gh-prs.sh --author @me --interval 15 --auto-update
+
+  # Use a different voice
+  ./scripts/monitor-gh-prs.sh --voice Moira
 
   # Monitor PRs for a specific branch, no voice
   ./scripts/monitor-gh-prs.sh --branch feature/my-branch --no-speak --plain
@@ -99,7 +104,7 @@ PR_MERGEABLE=()        # "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
 PR_MERGE_STATE=()      # "CLEAN" | "BEHIND" | "BLOCKED" | "DIRTY" | ...
 PR_CI_STATUS=()        # "passing" | "failing" | "pending" | "none"
 PR_REVIEW_DECISION=()  # "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | ""
-PR_REVIEW_COUNT=()     # number of review comments
+PR_REVIEW_COUNT=()     # number of reviews (includes approvals, change requests, and comments)
 PR_LATEST_REVIEWERS=() # comma-separated reviewer logins
 PR_IS_READY=()         # 0 | 1
 
@@ -245,7 +250,7 @@ console.log([mergeable, mergeState, ciStatus, reviewDecision, reviewCount, revie
 }
 
 reconcile_pr_list() {
-  local i j found existing_numbers=() new_prs_added=0
+  local i j found idx existing_numbers=() new_prs_added=0
 
   for (( i = 0; i < ${#PR_NUMBERS[@]}; i++ )); do
     existing_numbers+=("${PR_NUMBERS[i]}")
@@ -256,7 +261,6 @@ reconcile_pr_list() {
     for (( i = 0; i < ${#existing_numbers[@]}; i++ )); do
       if [[ "${existing_numbers[i]}" == "${FETCHED_PR_NUMBERS[j]}" ]]; then
         found=1
-        local idx
         idx="$(pr_index_by_number "${FETCHED_PR_NUMBERS[j]}")"
         if (( idx >= 0 )); then
           PR_TITLES[idx]="${FETCHED_PR_TITLES[j]}"
@@ -445,9 +449,9 @@ process_pr_transitions_and_alerts() {
       if (( PR_REVIEW_COUNT[i] > PR_PREV_REVIEW_COUNT[i] )); then
         local reviewers_str="${PR_LATEST_REVIEWERS[i]}"
         if [[ -n "$reviewers_str" ]]; then
-          msg="PR ${num} has review comments from ${reviewers_str}"
+          msg="PR ${num} has new reviews from ${reviewers_str}"
         else
-          msg="PR ${num} has new review comments"
+          msg="PR ${num} has new reviews"
         fi
         log_line "$msg"
         LAST_ALERT_MESSAGE="$msg"
@@ -483,12 +487,36 @@ process_pr_transitions_and_alerts() {
 
     # Needs update (BEHIND)
     if [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]] && [[ "${PR_PREV_MERGE_STATE[i]}" != "BEHIND" ]]; then
-      msg="PR ${num} needs update branch"
-      log_line "$msg"
-      LAST_ALERT_MESSAGE="$msg"
-      LAST_ALERT_LEVEL="warning"
-      LAST_ALERT_EPOCH="$(date +%s)"
-      speak_alert "$msg"
+      if (( AUTO_UPDATE == 1 )); then
+        msg="PR ${num} is behind, updating branch"
+        log_line "$msg"
+        LAST_ALERT_MESSAGE="$msg"
+        LAST_ALERT_LEVEL="info"
+        LAST_ALERT_EPOCH="$(date +%s)"
+        speak_alert "$msg"
+        if gh pr update-branch "$num" -R "$REPO_SLUG" 2>/dev/null; then
+          msg="PR ${num} branch updated"
+          log_line "$msg"
+          LAST_ALERT_MESSAGE="$msg"
+          LAST_ALERT_LEVEL="success"
+          LAST_ALERT_EPOCH="$(date +%s)"
+          speak_alert "$msg"
+        else
+          msg="PR ${num} branch update failed"
+          warn_line "$msg"
+          LAST_ALERT_MESSAGE="$msg"
+          LAST_ALERT_LEVEL="error"
+          LAST_ALERT_EPOCH="$(date +%s)"
+          speak_alert "$msg"
+        fi
+      else
+        msg="PR ${num} needs update branch"
+        log_line "$msg"
+        LAST_ALERT_MESSAGE="$msg"
+        LAST_ALERT_LEVEL="warning"
+        LAST_ALERT_EPOCH="$(date +%s)"
+        speak_alert "$msg"
+      fi
     fi
 
     # CI issues
@@ -736,6 +764,8 @@ INTERVAL_SECONDS=30
 TIMEOUT_SECONDS=0
 ENABLE_SPEAK=1
 FORCE_PLAIN=0
+AUTO_UPDATE=0
+VOICE_NAME="Karen"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -746,6 +776,8 @@ while [[ $# -gt 0 ]]; do
     --max-prs)       [[ $# -lt 2 ]] && { print_error "$1 requires a value."; exit 1; }; MAX_PRS="$2"; shift 2 ;;
     -i|--interval)   [[ $# -lt 2 ]] && { print_error "$1 requires a value."; exit 1; }; INTERVAL_SECONDS="$2"; shift 2 ;;
     --timeout)       [[ $# -lt 2 ]] && { print_error "$1 requires a value."; exit 1; }; TIMEOUT_SECONDS="$2"; shift 2 ;;
+    --auto-update)   AUTO_UPDATE=1; shift ;;
+    --voice)         [[ $# -lt 2 ]] && { print_error "$1 requires a value."; exit 1; }; VOICE_NAME="$2"; shift 2 ;;
     --no-speak)      ENABLE_SPEAK=0; shift ;;
     --plain)         FORCE_PLAIN=1; shift ;;
     --)              shift; break ;;
@@ -778,9 +810,8 @@ fi
 if (( ENABLE_SPEAK == 1 )); then
   detect_speaker_cmd
   # Use a distinct voice on macOS to distinguish PR alerts from deployment alerts.
-  # Karen (Australian female) sounds more natural than Samantha.
-  if [[ "$SPEAKER_CMD" == "say" ]]; then
-    SPEAKER_ARGS=(-v Karen)
+  if [[ "$SPEAKER_CMD" == "say" && -n "$VOICE_NAME" ]]; then
+    SPEAKER_ARGS=(-v "$VOICE_NAME")
   fi
 fi
 
@@ -794,7 +825,8 @@ start_audio_queue_worker
 log_line "Monitoring PRs for '${REPO_SLUG}' every ${INTERVAL_SECONDS}s (Ctrl+C to stop)..."
 [[ -n "$AUTHOR_FILTER" ]] && log_line "Filtering by author: ${AUTHOR_FILTER}"
 [[ -n "$BRANCH_FILTER" ]] && log_line "Filtering by branch: ${BRANCH_FILTER}"
-[[ -n "$SPEAKER_CMD" ]] && log_line "Spoken alerts enabled via '${SPEAKER_CMD}'."
+(( AUTO_UPDATE == 1 )) && log_line "Auto-update enabled: PRs behind base branch will be updated automatically."
+[[ -n "$SPEAKER_CMD" ]] && log_line "Spoken alerts enabled via '${SPEAKER_CMD}' (voice: ${VOICE_NAME})."
 
 render_dashboard
 
