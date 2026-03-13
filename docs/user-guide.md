@@ -100,13 +100,14 @@
 
 11. Publish or schedule to Meta
    - Connect a Meta publishing pair in Settings (if not already connected).
-   - Use the destination selector in the publish section to choose Instagram or Facebook when both are available.
+   - Use the destination selector in the publish section to choose Instagram, Facebook, or Both when both destinations are available on the connected Meta pair.
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - Use the dedicated `Post Caption` field as the source of truth for publish/schedule; the generated caption stays available as a suggestion.
-   - Optionally add a `First comment` in the publish section for Instagram; it is posted right after media publish.
+   - Optionally add a `First comment` in the publish section for Instagram; it is posted right after media publish. When you choose `Both`, that first comment still posts only on Instagram.
    - For Instagram reel posts, choose whether `Share reel to main feed` stays on or off before posting or scheduling.
-   - For Instagram single-image posts and reels, optionally search Meta places to fill `Location ID` (or paste the ID manually) and add structured `User tags`.
+   - For Instagram single-image posts and reels, optionally search Meta places to fill `Location ID` (or paste the ID manually) and add structured `User tags`. When you choose `Both`, those metadata fields stay Instagram-only and are omitted from the Facebook payload.
    - For Instagram carousel posts, tag each included image individually from the publish metadata editor. Carousel video items remain schedulable, but Meta does not accept user tags on carousel videos.
+   - Facebook still supports only single-image and single-video publishing, so `Both` is unavailable for carousel payloads.
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar, and they follow the currently selected publish destination.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
    - Open `Planner` from the publish section to review scheduled posts on a calendar, reschedule them, open the linked post, or move them back to draft.
