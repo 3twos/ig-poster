@@ -1272,7 +1272,7 @@ export default function Home() {
     finally { setSharingForPostId((current) => current === postId ? null : current); }
   };
 
-  const publishToInstagram = async (scheduleAt?: string) => {
+  const publishToMeta = async (scheduleAt?: string) => {
     const postId = activePostIdRef.current;
     const destination = publishDestination;
     const destinationLabel = publishDestinationLabel(destination);
@@ -1412,10 +1412,10 @@ export default function Home() {
     } finally { setPublishingForPostId((current) => current === postId ? null : current); }
   };
 
-  const publishToInstagramRef = useRef<(
+  const publishToMetaRef = useRef<(
     scheduleAt?: string,
   ) => Promise<void>>(async () => {});
-  publishToInstagramRef.current = publishToInstagram;
+  publishToMetaRef.current = publishToMeta;
 
   const runGenerateFromQuickAction = useCallback(
     async (options?: { notifyOnMissingAssets?: boolean }): Promise<"started" | "busy" | "missing-assets"> => {
@@ -1491,7 +1491,7 @@ export default function Home() {
       await selectPost(postId);
       return;
     }
-    await publishToInstagramRef.current(scheduleAt);
+    await publishToMetaRef.current(scheduleAt);
   }, [activePost?.id, generation, getKnownPostStatus, selectPost]);
 
   const handlePublishJobsMutated = useCallback(async (
@@ -1765,7 +1765,7 @@ export default function Home() {
 
     const scheduleAt = pendingPublishRequest.scheduleAt;
     setPendingPublishRequest(null);
-    void publishToInstagramRef.current(scheduleAt);
+    void publishToMetaRef.current(scheduleAt);
   }, [activePost?.id, activePost?.result?.variants?.length, activeVariant, pendingPublishRequest]);
 
   // Empty state
@@ -1871,7 +1871,7 @@ export default function Home() {
                       <section className="pb-6">
                         <div className="space-y-4">
                           <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
-                          <PublishSection activePostId={activePost?.id} authStatus={authStatus} availableDestinations={availablePublishDestinations} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasBlockingPublishValidationError} publishDestination={publishDestination} validationMessage={publishValidationMessage} onPublishDestinationChange={setPublishDestination} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+                          <PublishSection activePostId={activePost?.id} authStatus={authStatus} availableDestinations={availablePublishDestinations} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasBlockingPublishValidationError} publishDestination={publishDestination} validationMessage={publishValidationMessage} onPublishDestinationChange={setPublishDestination} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToMeta()} onSchedulePost={(scheduleAt) => void publishToMeta(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
                         </div>
                       </section>
                     ) : null}
@@ -1942,7 +1942,7 @@ export default function Home() {
             {activeVariant && !isPostedPost ? (
               <div className="space-y-4">
                 <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
-                <PublishSection activePostId={activePost?.id} authStatus={authStatus} availableDestinations={availablePublishDestinations} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasBlockingPublishValidationError} publishDestination={publishDestination} validationMessage={publishValidationMessage} onPublishDestinationChange={setPublishDestination} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+                <PublishSection activePostId={activePost?.id} authStatus={authStatus} availableDestinations={availablePublishDestinations} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasBlockingPublishValidationError} publishDestination={publishDestination} validationMessage={publishValidationMessage} onPublishDestinationChange={setPublishDestination} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToMeta()} onSchedulePost={(scheduleAt) => void publishToMeta(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
               </div>
             ) : null}
             <div className="flex gap-2">

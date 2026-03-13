@@ -120,7 +120,14 @@ describe("PublishSection", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Facebook" }));
+    expect(
+      screen.getByRole("radiogroup", { name: "Destination" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("radio", { name: "Instagram" }),
+    ).toHaveProperty("ariaChecked", "true");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Facebook" }));
     expect(onPublishDestinationChange).toHaveBeenCalledWith("facebook");
   });
 });

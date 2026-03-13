@@ -74,6 +74,7 @@ export function PublishSection({
   const [plannerOpen, setPlannerOpen] = useState(false);
   const destinationLabel =
     publishDestination === "facebook" ? "Facebook" : "Instagram";
+  const destinationGroupLabelId = "publish-destination-label";
 
   return (
     <div className="space-y-3">
@@ -104,8 +105,17 @@ export function PublishSection({
 
       {availableDestinations.length > 1 ? (
         <div className="space-y-1 rounded-xl border border-white/15 bg-white/5 p-3">
-          <Label className="text-[11px] text-slate-300">Destination</Label>
-          <div className="mt-1 flex flex-wrap gap-2">
+          <Label
+            id={destinationGroupLabelId}
+            className="text-[11px] text-slate-300"
+          >
+            Destination
+          </Label>
+          <div
+            role="radiogroup"
+            aria-labelledby={destinationGroupLabelId}
+            className="mt-1 flex flex-wrap gap-2"
+          >
             {availableDestinations.map((destination) => {
               const label =
                 destination === "facebook" ? "Facebook" : "Instagram";
@@ -115,6 +125,8 @@ export function PublishSection({
                   key={destination}
                   type="button"
                   size="sm"
+                  role="radio"
+                  aria-checked={publishDestination === destination}
                   disabled={isPublishing}
                   variant={
                     publishDestination === destination ? "default" : "outline"
