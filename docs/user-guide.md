@@ -168,6 +168,9 @@
 - `ig watch` ingests supported local image/video files into the remote service by uploading each file and creating a draft post around it. In human mode or `--stream-json`, it keeps polling the directory for new files; in `--json` mode it performs a single scan pass and emits one summary envelope.
 - `ig mcp` runs a stdio MCP adapter over the CLI so local agents can call tools like `status`, `posts_list`, `generate_run`, `chat_ask`, `publish`, and `queue_list` through the same authenticated CLI surface.
 - On macOS, the editor asset panel now shows `Add from Photos`. For now this is a safe fallback entry point: it explains that the native companion is not available yet and routes you back to the normal upload picker so your draft flow keeps moving.
+- The repository now contains the first native companion scaffold under `companion/IGPosterCompanion`, but that scaffold is not packaged or installed for end users yet, so the web fallback behavior remains the current user-facing path.
+- If a local Apple Photos bridge is running on `127.0.0.1:43123`, the editor now probes it before falling back. When that probe succeeds, the draft offers to open the native companion handoff instead of immediately showing the fallback-only state.
+- The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and will surface the incoming draft ID, profile, bridge origin, and return URL in-app once the browser handoff lands there. Packaging and URL-scheme registration are still pending, so this is a developer-facing scaffold step rather than an end-user flow yet.
 
 ### Planned macOS Apple Photos workflow
 
@@ -191,11 +194,14 @@ Expected behavior:
 - human users should be able to click `Add from Photos` in the web editor, browse and select from the Photos library in native macOS UI, and see those assets flow back into the current draft without manually switching products
 - agents should be able to enumerate recent/search results and import/export assets through CLI/MCP without touching Apple Photos internals directly
 - uploaded files should still go through the existing IG Poster service APIs after local export
+- the checked-in native scaffold should stay in sync with the web/CLI bridge contract so future web, CLI, and MCP flows all target the same localhost interface
 
 If the macOS companion app is not installed or not reachable:
 
 - the web app should offer an install prompt plus a fallback to the normal file-upload flow
 - CLI/MCP should return a structured error with remediation instead of hanging or failing opaquely
+- for internal development, you can run `swift run ig-poster-companion-bridge` from `companion/IGPosterCompanion` to satisfy the web probe and exercise the handoff path
+- for internal development, `swift run ig-poster-companion` now includes a `Load sample handoff` action so you can inspect the native handoff state even before the app is packaged and registered with Launch Services
 
 ## Working with Saved Posts
 

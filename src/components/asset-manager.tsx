@@ -46,6 +46,8 @@ import {
 import {
   getApplePhotosFallbackInfo,
   isMacOsUserAgent,
+  probeApplePhotosBridge,
+  type ApplePhotosFallbackInfo,
 } from "@/lib/apple-photos";
 import type { LocalAsset } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -65,6 +67,17 @@ type Props = {
   onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
+type ApplePhotosDialogState =
+  | {
+      kind: "fallback";
+      info: ApplePhotosFallbackInfo;
+    }
+  | {
+      kind: "launch";
+      bridgeOrigin: string;
+      launchUrl: string;
+    };
+
 const subscribeToClientStatus = () => () => {};
 
 export function AssetManager({
@@ -75,6 +88,9 @@ export function AssetManager({
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [applePhotosDialogOpen, setApplePhotosDialogOpen] = useState(false);
+  const [applePhotosDialogState, setApplePhotosDialogState] =
+    useState<ApplePhotosDialogState | null>(null);
+  const [applePhotosProbePending, setApplePhotosProbePending] = useState(false);
   const addAssetInputId = useId();
   const addAssetInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
@@ -88,7 +104,6 @@ export function AssetManager({
   );
   const userAgent = isClient ? window.navigator.userAgent : "";
   const showApplePhotosEntry = isMacOsUserAgent(userAgent);
-  const applePhotosFallback = getApplePhotosFallbackInfo(userAgent);
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
@@ -116,6 +131,41 @@ export function AssetManager({
       input.click();
     }
     setApplePhotosDialogOpen(false);
+    setApplePhotosDialogState(null);
+  };
+
+  const handleAddFromPhotos = async () => {
+    if (!showApplePhotosEntry || applePhotosProbePending) return;
+
+    setApplePhotosProbePending(true);
+    const probe = await probeApplePhotosBridge({
+      returnTo: window.location.href,
+    });
+    setApplePhotosProbePending(false);
+
+    if (probe.available) {
+      setApplePhotosDialogState({
+        kind: "launch",
+        bridgeOrigin: probe.health.bridge.origin,
+        launchUrl: probe.launchUrl,
+      });
+      setApplePhotosDialogOpen(true);
+      return;
+    }
+
+    setApplePhotosDialogState({
+      kind: "fallback",
+      info: getApplePhotosFallbackInfo(userAgent, probe.code),
+    });
+    setApplePhotosDialogOpen(true);
+  };
+
+  const handleOpenCompanion = () => {
+    if (applePhotosDialogState?.kind !== "launch") return;
+
+    window.location.assign(applePhotosDialogState.launchUrl);
+    setApplePhotosDialogOpen(false);
+    setApplePhotosDialogState(null);
   };
 
   return (
@@ -130,11 +180,12 @@ export function AssetManager({
               {showApplePhotosEntry ? (
                 <button
                   type="button"
+                  disabled={applePhotosProbePending}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/8 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-orange-300 hover:bg-white/12"
-                  onClick={() => setApplePhotosDialogOpen(true)}
+                  onClick={handleAddFromPhotos}
                 >
                   <ImageIcon className="h-3.5 w-3.5 text-orange-300" />
-                  Add from Photos
+                  {applePhotosProbePending ? "Checking Photos..." : "Add from Photos"}
                 </button>
               ) : null}
               <button
@@ -161,8 +212,9 @@ export function AssetManager({
           </p>
           {showApplePhotosEntry ? (
             <p className="mt-1 text-[11px] text-slate-500">
-              On macOS, you can start Photos import from here. Until the
-              companion app ships, this falls back to regular upload.
+              On macOS, this first probes the local companion bridge. If it is
+              running, we open the native handoff. Otherwise we fall back to
+              regular upload.
             </p>
           ) : null}
 
@@ -208,34 +260,69 @@ export function AssetManager({
 
       <Dialog
         open={applePhotosDialogOpen}
-        onOpenChange={setApplePhotosDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setApplePhotosDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setApplePhotosDialogState(null);
+          }
+        }}
       >
         <DialogContent className="border-white/10 bg-slate-950 text-slate-100 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{applePhotosFallback.title}</DialogTitle>
+            <DialogTitle>
+              {applePhotosDialogState?.kind === "launch"
+                ? "Open IG Poster Companion"
+                : applePhotosDialogState?.info.title}
+            </DialogTitle>
             <DialogDescription className="text-slate-300">
-              {applePhotosFallback.description}
+              {applePhotosDialogState?.kind === "launch"
+                ? "A local Apple Photos bridge is responding on this Mac. Open the native companion to continue with Photos selection, or stay here and use regular upload instead."
+                : applePhotosDialogState?.info.description}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-300">
             <span className="font-semibold text-slate-100">Status:</span>{" "}
             <code className="font-mono text-[10px] text-orange-200">
-              {applePhotosFallback.code}
+              {applePhotosDialogState?.kind === "launch"
+                ? "MACOS_BRIDGE_AVAILABLE"
+                : applePhotosDialogState?.info.code}
             </code>
           </div>
+          {applePhotosDialogState?.kind === "launch" ? (
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-300">
+              <span className="font-semibold text-slate-100">Bridge:</span>{" "}
+              <code className="font-mono text-[10px] text-orange-200">
+                {applePhotosDialogState.bridgeOrigin}
+              </code>
+            </div>
+          ) : null}
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setApplePhotosDialogOpen(false)}
+              onClick={() => {
+                setApplePhotosDialogOpen(false);
+                setApplePhotosDialogState(null);
+              }}
             >
               Not now
             </Button>
             <Button
               className="bg-orange-300 text-slate-950 hover:bg-orange-200"
-              onClick={handleUseRegularUpload}
+              onClick={
+                applePhotosDialogState?.kind === "launch"
+                  ? handleOpenCompanion
+                  : handleUseRegularUpload
+              }
             >
-              {applePhotosFallback.actionLabel}
+              {applePhotosDialogState?.kind === "launch"
+                ? "Open companion"
+                : applePhotosDialogState?.info.actionLabel}
             </Button>
+            {applePhotosDialogState?.kind === "launch" ? (
+              <Button variant="outline" onClick={handleUseRegularUpload}>
+                Use regular upload
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
