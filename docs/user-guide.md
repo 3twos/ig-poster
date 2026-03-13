@@ -70,13 +70,14 @@
    - For carousel variants, use the **Carousel Composer** under the preview to add/remove included items, reorder them, and switch the feed orientation between square, portrait, and landscape.
    - Carousel composer changes are part of the same autosaved draft state as the brief and overlay edits, so preview, share snapshots, and publish all use the same order.
    - Enable editor mode to drag/resize text overlay blocks.
+   - Normal preview mode now performs a rendered-height restack pass for the canonical hook/headline/body/CTA blocks, so generated or refined copy can settle into a safer stack before you start editing.
    - The canvas auto-saves after edits; use `Save now` beside the editor controls when you want an immediate write.
    - Use the Canvas Editor inspector to:
      - change hook/headline/body/CTA text without regenerating
      - hide a generated text block and add it back later
      - add or remove custom text boxes
      - adjust text scale per box
-   - Use `Auto-fit Layout` in editor mode to restack the generated text boxes using the current copy so overlapping blocks settle back into a safer layout without a full regenerate.
+   - Use `Auto-fit Layout` in editor mode to restack the generated text boxes using the current copy so overlapping blocks settle back into a safer layout without a full regenerate. The preview's automatic measured pass is conservative and only expands/restacks when the live DOM proves a block is taller than the saved layout.
    - Turning editor mode off keeps the edited layout visible in the normal preview and in shared snapshots.
    - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
    - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.

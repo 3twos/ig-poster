@@ -16,7 +16,7 @@
 - Supports multiple brand kits per user, with a kit selector in both the brand page and post brief form. Posts link to a specific brand kit.
 - New posts default to the first available brand kit for that user (when one exists), so brand/prompt context and the kit's primary logo are prefilled consistently.
 - Supports autosaved poster-canvas editing with drag/resize, direct text overrides, hide/show controls, custom text boxes, and PNG export.
-- New generated layouts are now fit against the current overlay copy using deterministic safe-zone stacking, and the editor exposes an `Auto-fit Layout` recovery action for existing drafts.
+- New generated layouts are now fit against the current overlay copy using deterministic safe-zone stacking, and the preview can now re-measure rendered canonical blocks outside editor mode to push a safer restack upstream when the live DOM proves the copy is taller than estimated. The editor still exposes an `Auto-fit Layout` recovery action for existing drafts.
 - Generation prompt assembly and variant ranking now prioritize the saved brief over website cues, reference examples, and generic engagement formulas, including the saved CTA policy.
 - Streams LLM reasoning tokens in real time during generation, visible in the agent activity panel, exposes the exact assembled generation prompt used for each run, and now shows the exact last refine prompt plus its parsed refinement plan in the strategy panel after each refinement.
 - Refine now combines richer prompt context with deterministic post-processing for common instructions like shorter component copy, shorter captions, and removing CTA text, keeps CTA behavior aligned to the saved CTA policy unless you explicitly override it, and successful refine updates now also re-fit the canonical overlay stack to reduce overlap.
@@ -25,7 +25,6 @@
 - Keeps the post lifecycle intentionally narrow: `draft`, `scheduled`, and `posted`, with posted posts locked from further edits or deletion and archivable instead.
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
-<<<<<<< HEAD
 - Publishes directly to Meta destinations via Graph API, or schedules publishing through either app-managed jobs or Meta-synced Facebook Page schedules.
 - Backend publish flows are now destination-aware for Meta: Instagram remains app-managed, while Facebook single-image and single-video posts can publish immediately or create a remote-authoritative scheduled Page post that is shadowed locally for planner/queue visibility.
 - The browser composer now exposes an Instagram/Facebook destination selector when the connected Meta publishing pair supports both destinations, while preserving Instagram as the fallback when Facebook capability is unavailable.
@@ -68,7 +67,7 @@
    - Select a brand kit (or use the default), choose one of that kit's named logos in the post brief, use the Asset Manager controls to attach assets, fill post inputs, choose the CTA policy for the brief, generate variants, pick one, and export.
 
 2. Build reusable campaign options
-   - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, fine-tune the canvas layout or copy without regenerating, and inspect the last refine prompt directly from the strategy panel when a refine result feels off.
+   - Compare 3 variant angles (single image / carousel / reel), edit the persisted post caption, duplicate a finished post into a new draft, reorder carousel media in the composer, fine-tune the canvas layout or copy without regenerating, and inspect the last refine prompt directly from the strategy panel when a refine result feels off. Normal preview mode now also performs a rendered-height restack pass for canonical text blocks, so obvious overlap can self-correct even before you enter editor mode.
    - Use `Refine` to revise copy while preserving the current editor layout/look unless you explicitly ask for visual changes. Refine now parses your instruction into a structured plan first, exposes that plan in the Strategy panel, uses deterministic follow-through for common asks like "shorter components," "shorter caption," and "avoid CTA," keeps the saved CTA policy as a hard preference unless you explicitly override it, and re-fits the refined overlay stack before it lands back in the editor. `Generate` now also prioritizes the saved brief more aggressively when drafting and ranking variants, so parameter drift is less likely to win the final selection. Use `Generate` when you want a full fresh result from the saved brief and assets, even if that means discarding prior manual/refine component edits.
 
 3. Collaborate asynchronously

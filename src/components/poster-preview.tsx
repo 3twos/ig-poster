@@ -14,6 +14,7 @@ import { Rnd } from "react-rnd";
 
 import {
   DEFAULT_LOGO_POSITION,
+  fitOverlayLayoutToCopy,
   normalizeOverlayLayout,
   type AspectRatio,
   type CanonicalOverlayKey,
@@ -66,6 +67,48 @@ const ASPECT_MAP: Record<AspectRatio, string> = {
   "1.91:1": "1.91 / 1",
   "9:16": "9 / 16",
 };
+
+const CANONICAL_OVERLAY_KEYS: CanonicalOverlayKey[] = [
+  "hook",
+  "headline",
+  "supportingText",
+  "cta",
+];
+
+const resolveDisplayedOverlayCopy = (
+  variant: CreativeVariant,
+  overlayLayout: OverlayLayout,
+  carouselSlides: CarouselSlide[] | undefined,
+  activeSlideIndex: number,
+) => {
+  const resolvedCopy = resolveVariantOverlayCopy(
+    variant,
+    activeSlideIndex,
+    carouselSlides,
+  );
+
+  return {
+    hook: overlayLayout.hook.text.trim() || resolvedCopy.hook,
+    headline: overlayLayout.headline.text.trim() || resolvedCopy.headline,
+    supportingText:
+      overlayLayout.supportingText.text.trim() || resolvedCopy.supportingText,
+    cta: overlayLayout.cta.text.trim() || resolvedCopy.cta,
+  };
+};
+
+const hasCanonicalLayoutDelta = (
+  currentLayout: OverlayLayout,
+  nextLayout: OverlayLayout,
+  keys: CanonicalOverlayKey[],
+) =>
+  keys.some((key) => {
+    const current = currentLayout[key];
+    const next = nextLayout[key];
+    return (
+      Math.abs(current.y - next.y) > 0.1 ||
+      Math.abs(current.height - next.height) > 0.1
+    );
+  });
 
 const buildOverlayBlocks = (
   variant: CreativeVariant,
@@ -286,9 +329,11 @@ const OverlayBlockBody = ({
 const OverlayBlock = ({
   block,
   editable,
+  measureRef,
 }: {
   block: OverlayCanvasBlock;
   editable: boolean;
+  measureRef?: (node: HTMLDivElement | null) => void;
 }) => (
   <div
     className="pointer-events-none absolute z-20"
@@ -300,6 +345,7 @@ const OverlayBlock = ({
     }}
   >
     <div
+      ref={measureRef}
       className={cn("min-h-full w-full", editable && "border border-white/10")}
       style={{ borderRadius: block.borderRadius }}
     >
@@ -736,6 +782,8 @@ export const PosterPreview = memo(
       )} 100%)`;
 
       const frameRef = useRef<HTMLDivElement>(null);
+      const canonicalBlockRefs =
+        useRef<Partial<Record<CanonicalOverlayKey, HTMLDivElement | null>>>({});
       const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
       const [logoTone, setLogoTone] = useState<"light" | "dark">("light");
 
@@ -807,11 +855,29 @@ export const PosterPreview = memo(
         [carouselSlides, clampedSlideIndex, resolvedOverlayLayout, variant],
       );
 
+      const displayedOverlayCopy = useMemo(
+        () =>
+          resolveDisplayedOverlayCopy(
+            variant,
+            resolvedOverlayLayout,
+            carouselSlides,
+            clampedSlideIndex,
+          ),
+        [carouselSlides, clampedSlideIndex, resolvedOverlayLayout, variant],
+      );
+
       const canEdit =
         Boolean(editorMode) &&
         Boolean(onOverlayLayoutChange) &&
         frameSize.width > 0 &&
         frameSize.height > 0;
+
+      const registerCanonicalBlockRef = useCallback(
+        (key: CanonicalOverlayKey) => (node: HTMLDivElement | null) => {
+          canonicalBlockRefs.current[key] = node;
+        },
+        [],
+      );
 
       const handleLogoPositionChange = useCallback(
         (pos: LogoPosition) => {
@@ -834,6 +900,81 @@ export const PosterPreview = memo(
           },
         });
       }, [onOverlayLayoutChange, resolvedOverlayLayout]);
+
+      useEffect(() => {
+        if (!onOverlayLayoutChange || frameSize.height <= 0 || editorMode) {
+          return;
+        }
+
+        const activeKeys = CANONICAL_OVERLAY_KEYS.filter((key) => {
+          const block = resolvedOverlayLayout[key];
+          return (
+            (block.visible ?? true) &&
+            displayedOverlayCopy[key].trim().length > 0
+          );
+        });
+
+        if (activeKeys.length === 0) {
+          return;
+        }
+
+        const raf = requestAnimationFrame(() => {
+          const measuredHeights = Object.fromEntries(
+            activeKeys
+              .map((key) => {
+                const node = canonicalBlockRefs.current[key];
+                const measuredHeightPx = node?.offsetHeight || node?.scrollHeight || 0;
+                if (measuredHeightPx <= 0) {
+                  return null;
+                }
+
+                return [key, (measuredHeightPx / frameSize.height) * 100];
+              })
+              .filter(
+                (
+                  entry,
+                ): entry is [CanonicalOverlayKey, number] => entry != null,
+              ),
+          ) as Partial<Record<CanonicalOverlayKey, number>>;
+
+          if (Object.keys(measuredHeights).length === 0) {
+            return;
+          }
+
+          const nextLayout = fitOverlayLayoutToCopy(
+            {
+              layout: variant.layout,
+              ...displayedOverlayCopy,
+            },
+            aspectRatio,
+            resolvedOverlayLayout,
+            undefined,
+            measuredHeights,
+          );
+
+          if (
+            !hasCanonicalLayoutDelta(
+              resolvedOverlayLayout,
+              nextLayout,
+              activeKeys,
+            )
+          ) {
+            return;
+          }
+
+          onOverlayLayoutChange(nextLayout);
+        });
+
+        return () => cancelAnimationFrame(raf);
+      }, [
+        aspectRatio,
+        displayedOverlayCopy,
+        editorMode,
+        frameSize.height,
+        onOverlayLayoutChange,
+        resolvedOverlayLayout,
+        variant.layout,
+      ]);
 
       return (
         <div
@@ -871,7 +1012,16 @@ export const PosterPreview = memo(
 
           {!canEdit
             ? visibleBlocks.map((block) => (
-                <OverlayBlock key={block.id} block={block} editable={false} />
+                <OverlayBlock
+                  key={block.id}
+                  block={block}
+                  editable={false}
+                  measureRef={
+                    block.type === "canonical" && block.key
+                      ? registerCanonicalBlockRef(block.key)
+                      : undefined
+                  }
+                />
               ))
             : null}
 
