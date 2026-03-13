@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev          # Start dev server on localhost:3000
-npm run build        # Production build (also used as CI quality gate)
+npm run build        # Production build (runs db:migrate, then next build)
 npm run lint         # ESLint check
 npm run test         # Run Vitest tests
 npm run test:watch   # Run Vitest in watch mode
@@ -82,12 +82,13 @@ Schema is defined in `src/db/schema.ts` using Drizzle ORM. Migrations live in `d
 
 ```bash
 npm run db:generate  # Generate migration after changing schema.ts
-npm run db:push      # Push schema directly to DB (dev shortcut)
+npm run db:migrate   # Apply pending migrations to the database
+npm run db:push      # Push schema directly to DB (dev shortcut, avoid in prod)
 npm run db:check     # CI check: fails if schema.ts changed without a committed migration
 npm run db:studio    # Open Drizzle Studio
 ```
 
-**When changing the schema**: edit `src/db/schema.ts`, run `npm run db:generate`, commit the new migration file, then apply it to the DB with `npm run db:push`. CI runs `db:check` to catch uncommitted migrations.
+**When changing the schema**: edit `src/db/schema.ts`, run `npm run db:generate`, commit the new migration file. Migrations are applied automatically during `npm run build` (and therefore on every Vercel deploy). For local development, run `npm run db:migrate` to apply pending migrations. CI runs `db:check` to catch uncommitted migrations.
 
 ### Environment
 
