@@ -265,7 +265,7 @@ Why this shape:
 - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), destination/account scope metadata, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), remote publish identifiers, and event timeline.
   - `meta_accounts` table as the foundation for Meta Page + Instagram account-pair state, graph version tracking, token expiry metadata, and capability snapshots.
   - `post_destinations` table as the foundation for per-post Facebook/Instagram delivery state, remote identifiers, sync mode, and reconciliation metadata.
-- Instagram immediate publishes still enforce the rolling 24-hour quota reservation in `src/lib/publish-jobs.ts`; Facebook jobs bypass that Instagram-specific guard while keeping the same destination-aware queue metadata. Remote-authoritative Facebook schedules are stored locally as read-only shadow jobs so planner/queue views can stay aligned with Meta.
+- Instagram immediate publishes still enforce the rolling 24-hour quota reservation in `src/lib/publish-jobs.ts`; Facebook jobs bypass that Instagram-specific guard while keeping the same destination-aware queue metadata. Remote-authoritative Facebook schedules are stored locally as shadow jobs so planner/queue views can stay aligned with Meta, and supported remote mutations now flow back through the shared publish-job service.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `scheduled`, `posted`).
 - `posts.archivedAt` is the soft-archive flag; archived posts keep their publish status instead of switching to a separate archived enum value.
