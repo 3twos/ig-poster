@@ -72,23 +72,24 @@ export const markPostPublished = async (
 
   if (!existing) return;
 
+  const nextPublishHistory =
+    destination === "instagram"
+      ? [
+          ...(existing.publishHistory ?? []),
+          {
+            publishedAt: new Date().toISOString(),
+            igMediaId: publishId,
+          },
+        ]
+      : (existing.publishHistory ?? []);
+
   await db
     .update(posts)
     .set({
       status: "posted",
       publishedAt: new Date(),
       updatedAt: new Date(),
-      publishHistory: [
-        ...(existing.publishHistory ?? []),
-        destination === "instagram"
-          ? {
-            publishedAt: new Date().toISOString(),
-            igMediaId: publishId,
-          }
-          : {
-            publishedAt: new Date().toISOString(),
-          },
-      ],
+      publishHistory: nextPublishHistory,
     })
     .where(and(eq(posts.id, postId), eq(posts.ownerHash, ownerHash)));
 };

@@ -7,6 +7,7 @@ import {
   completePublishJobSuccess,
   deferProcessingPublishJob,
   getPublishWindowUsage,
+  markPostPublished,
   recoverStaleProcessingJobs,
   reserveImmediatePublishJob,
   STALE_PROCESSING_TIMEOUT_MS,
@@ -42,6 +43,29 @@ const makeSelectDb = <T>(rows: T[]) => {
   } as unknown as AppDb;
 
   return { db, selectChain, fromChain };
+};
+
+const makeMarkPostPublishedDb = (
+  publishHistory: Array<{
+    publishedAt: string;
+    igMediaId?: string;
+    igPermalink?: string;
+  }> | null,
+) => {
+  const limit = vi.fn().mockResolvedValue([{ publishHistory }]);
+  const selectWhere = vi.fn().mockReturnValue({ limit });
+  const selectFrom = vi.fn().mockReturnValue({ where: selectWhere });
+  const select = vi.fn().mockReturnValue({ from: selectFrom });
+  const updateChain = {
+    set: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValue(undefined),
+  };
+  const db = {
+    select,
+    update: vi.fn().mockReturnValue(updateChain),
+  } as unknown as AppDb;
+
+  return { db, updateChain };
 };
 
 const makeReservationDb = (usageCount: number, rows: PublishJobRow[]) => {
@@ -142,6 +166,38 @@ describe("getPublishWindowUsage", () => {
       remaining: 38,
       windowStart: new Date("2026-03-06T21:00:00.000Z"),
     });
+  });
+});
+
+describe("markPostPublished", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("does not append Facebook publishes to legacy Instagram history", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-13T16:00:00.000Z"));
+    const existingPublishHistory = [
+      {
+        publishedAt: "2026-03-12T16:00:00.000Z",
+        igMediaId: "ig_media_1",
+      },
+    ];
+    const { db, updateChain } = makeMarkPostPublishedDb(existingPublishHistory);
+
+    await markPostPublished(
+      db,
+      "owner_hash",
+      "post_1",
+      "page_post_1",
+      "facebook",
+    );
+
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publishHistory: existingPublishHistory,
+      }),
+    );
   });
 });
 
