@@ -40,7 +40,7 @@ Usage:
   ig chat <ask>
   ig config <list|get|set>
   ig generate <run|refine>
-  ig photos <recent|search|import|propose>
+  ig photos <pick|recent|search|import|propose>
   ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]
   ig unlink
   ig completion <bash|zsh|fish>
@@ -208,6 +208,7 @@ const shouldSkipAuthRefresh = (command: string, commandArgs: string[]) =>
   command === "config" ||
   command === "link" ||
   command === "unlink" ||
-  command === "photos" ||
+  (command === "photos" &&
+    (commandArgs[0] === "recent" || commandArgs[0] === "search")) ||
   (command === "auth" &&
     (commandArgs[0] === "login" || commandArgs[0] === "logout"));

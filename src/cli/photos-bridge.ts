@@ -37,6 +37,43 @@ export type ApplePhotosImportResponse = {
   importedAt: string;
 };
 
+export type ApplePhotosBridgeSelectionSummary = {
+  updatedAt: string;
+  action?: "open" | "pick";
+  draftId?: string;
+  profile?: string;
+  assetCount: number;
+};
+
+export type ApplePhotosBridgeHealthResponse = {
+  appName: string;
+  version: string;
+  bridge: {
+    origin: string;
+    healthUrl: string;
+    recentUrl: string;
+    searchUrl: string;
+    pickUrl: string;
+    importUrl: string;
+    openCompanionUrl?: string;
+  };
+  capabilities: string[];
+  companionApp?: {
+    installed: boolean;
+    bundlePath?: string;
+  };
+  selection?: ApplePhotosBridgeSelectionSummary;
+};
+
+export type ApplePhotosCompanionOpenResponse = {
+  launchedAt: string;
+  launchUrl: string;
+  companionApp: {
+    installed: boolean;
+    bundlePath?: string;
+  };
+};
+
 export type ApplePhotosBridgeImportResult = {
   importedAt: string;
   assets: ApplePhotosImportedAsset[];
@@ -56,6 +93,7 @@ export class ApplePhotosBridgeRequestError extends Error {
 }
 
 const APPLE_PHOTOS_BRIDGE_ORIGIN = "http://127.0.0.1:43123";
+const APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS = 1_500;
 
 const buildBridgeUrl = (path: string) =>
   new URL(`${APPLE_PHOTOS_BRIDGE_ORIGIN}${path}`);
@@ -143,6 +181,43 @@ const isImportResponse = (
   );
 };
 
+const isHealthResponse = (
+  value: unknown,
+): value is ApplePhotosBridgeHealthResponse => {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as ApplePhotosBridgeHealthResponse;
+  return (
+    typeof candidate.appName === "string" &&
+    typeof candidate.version === "string" &&
+    typeof candidate.bridge?.origin === "string" &&
+    typeof candidate.bridge?.healthUrl === "string" &&
+    Array.isArray(candidate.capabilities) &&
+    (!candidate.companionApp ||
+      (typeof candidate.companionApp.installed === "boolean" &&
+        (typeof candidate.companionApp.bundlePath === "undefined" ||
+          typeof candidate.companionApp.bundlePath === "string"))) &&
+    (!candidate.selection ||
+      (typeof candidate.selection.updatedAt === "string" &&
+        typeof candidate.selection.assetCount === "number"))
+  );
+};
+
+const isCompanionOpenResponse = (
+  value: unknown,
+): value is ApplePhotosCompanionOpenResponse => {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as ApplePhotosCompanionOpenResponse;
+  return (
+    typeof candidate.launchedAt === "string" &&
+    typeof candidate.launchUrl === "string" &&
+    typeof candidate.companionApp?.installed === "boolean" &&
+    (typeof candidate.companionApp.bundlePath === "undefined" ||
+      typeof candidate.companionApp.bundlePath === "string")
+  );
+};
+
 const readBridgeError = async (response: Response) => {
   const raw = await response.text();
   if (!raw) {
@@ -221,6 +296,79 @@ export const searchApplePhotos = async (
     path: "/v1/photos/search",
     query,
   });
+
+export const getApplePhotosBridgeHealth = async ({
+  timeoutMs = APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS,
+}: {
+  timeoutMs?: number;
+} = {}) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(buildBridgeUrl("/v1/health"), {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw await readBridgeError(response);
+    }
+
+    const payload: unknown = await response.json();
+    if (!isHealthResponse(payload)) {
+      throw new Error(
+        "The local Apple Photos bridge returned an unexpected health payload.",
+      );
+    }
+
+    return payload;
+  } catch (error) {
+    if (error instanceof ApplePhotosBridgeRequestError) {
+      throw error;
+    }
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApplePhotosBridgeRequestError(
+        "The local Apple Photos bridge did not respond before the probe timed out.",
+        408,
+        "MACOS_BRIDGE_UNAVAILABLE",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+export const openApplePhotosCompanion = async ({
+  action = "pick",
+}: {
+  action?: "open" | "pick";
+} = {}) => {
+  const response = await fetch(buildBridgeUrl("/v1/companion/open"), {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action }),
+  });
+
+  if (!response.ok) {
+    throw await readBridgeError(response);
+  }
+
+  const payload: unknown = await response.json();
+  if (!isCompanionOpenResponse(payload)) {
+    throw new Error(
+      "The local Apple Photos bridge returned an unexpected companion-open payload.",
+    );
+  }
+
+  return payload;
+};
 
 export const importApplePhotosSelection = async ({
   ids,

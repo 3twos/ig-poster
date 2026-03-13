@@ -1,13 +1,16 @@
 import { parseCommandOptions } from "../args";
 import { IgPosterClient } from "../client";
 import type { CliContext } from "../context";
-import { CliError, exitCodeFromStatus } from "../errors";
+import { CliError, EXIT_CODES, exitCodeFromStatus } from "../errors";
 import {
   ApplePhotosBridgeRequestError,
+  getApplePhotosBridgeHealth,
   importApplePhotosSelection,
   listRecentApplePhotos,
+  openApplePhotosCompanion,
   searchApplePhotos,
   type ApplePhotosAssetListResponse,
+  type ApplePhotosBridgeImportResult,
   type ApplePhotosMediaType,
 } from "../photos-bridge";
 import {
@@ -38,6 +41,13 @@ type SearchPhotoOptions = SharedPhotoOptions & {
 
 type ImportPhotoOptions = {
   ids?: string;
+  folder?: string;
+};
+
+type PickPhotoOptions = {
+  createDraft?: boolean;
+  brandKit?: string;
+  draftTitle?: string;
   folder?: string;
 };
 
@@ -102,11 +112,21 @@ type PhotosProposeResponse = {
   };
 };
 
+type PhotosPickResponse = {
+  importedAt: string;
+  importedAssets: ImportedBridgeAsset[];
+  uploadedAssets: UploadedAsset[];
+  post?: PostRecord;
+  draftUrl?: string;
+};
+
 type ImportedBridgeAsset = Awaited<
   ReturnType<typeof importApplePhotosSelection>
 >["assets"][number];
 
-const PHOTO_USAGE = "Usage: ig photos <recent|search|import|propose>";
+const PHOTO_USAGE = "Usage: ig photos <pick|recent|search|import|propose>";
+const PICK_USAGE =
+  "Usage: ig photos pick [--create-draft] [--brand-kit <id>] [--draft-title <title>] [--folder <assets|videos|logos|renders>]";
 const RECENT_USAGE =
   "Usage: ig photos recent [--since <7d|ISO>] [--limit <n>] [--media <image|video|live-photo>] [--favorite]";
 const SEARCH_USAGE =
@@ -120,6 +140,8 @@ export const runPhotosCommand = async (ctx: CliContext, argv: string[]) => {
   const action = argv[0];
 
   switch (action) {
+    case "pick":
+      return pickSelection(ctx, argv.slice(1));
     case "recent":
       return listRecent(ctx, argv.slice(1));
     case "search":
@@ -130,6 +152,94 @@ export const runPhotosCommand = async (ctx: CliContext, argv: string[]) => {
       return proposeSelection(ctx, argv.slice(1));
     default:
       throw new CliError(PHOTO_USAGE);
+  }
+};
+
+const pickSelection = async (ctx: CliContext, argv: string[]) => {
+  const { options, positionals } = parseCommandOptions<PickPhotoOptions>(argv, {
+    "create-draft": "boolean",
+    "brand-kit": "string",
+    "draft-title": "string",
+    folder: "string",
+  });
+
+  if (positionals.length > 0) {
+    throw new CliError(PICK_USAGE);
+  }
+
+  if (!options.createDraft && (options.brandKit || options.draftTitle)) {
+    throw new CliError(
+      "--brand-kit and --draft-title require --create-draft for `ig photos pick`.",
+    );
+  }
+
+  const folder = parseUploadFolder(options.folder);
+
+  if (ctx.globalOptions.dryRun) {
+    return printPickDryRun(ctx, {
+      createDraft: options.createDraft === true,
+      brandKitId: options.brandKit,
+      draftTitle: options.draftTitle,
+      folder,
+    });
+  }
+
+  try {
+    if (!ctx.globalOptions.quiet) {
+      process.stderr.write("Opening IG Poster Companion for Apple Photos selection...\n");
+    }
+
+    const initialHealth = await getApplePhotosBridgeHealth();
+    const launched = await openApplePhotosCompanion({ action: "pick" });
+    const minUpdatedAt = Math.max(
+      parseSelectionUpdatedAt(initialHealth.selection?.updatedAt),
+      parseSelectionUpdatedAt(launched.launchedAt),
+    );
+
+    if (!ctx.globalOptions.quiet) {
+      process.stderr.write("Waiting for IG Poster Companion to export the selected photos...\n");
+    }
+
+    const imported = await waitForCompanionSelection({
+      timeoutMs: Math.max(ctx.globalOptions.timeoutMs ?? 30_000, 300_000),
+      minUpdatedAt,
+    });
+    const uploadedAssets = await uploadImportedSelection(ctx, imported, folder);
+    const result: PhotosPickResponse = {
+      importedAt: imported.importedAt,
+      importedAssets: imported.assets,
+      uploadedAssets,
+    };
+
+    if (options.createDraft) {
+      const post = await createDraftPost(ctx, {
+        title: options.draftTitle,
+        brandKitId: options.brandKit,
+        uploadedAssets,
+        importedAssets: imported.assets,
+      });
+      result.post = post;
+      result.draftUrl = buildDraftUrl(ctx.host, post.id);
+    }
+
+    if (ctx.globalOptions.json) {
+      printJsonEnvelope(result, ctx.globalOptions.jq);
+      return;
+    }
+
+    printKeyValue([
+      ["importedAt", result.importedAt],
+      ["selectedCount", String(result.importedAssets.length)],
+      ["uploadedCount", String(result.uploadedAssets.length)],
+      ["postId", result.post?.id],
+      ["title", result.post?.title],
+      ["status", result.post?.status],
+      ["draftUrl", result.draftUrl],
+    ]);
+    process.stdout.write("\n");
+    printAssetsTable(result.uploadedAssets);
+  } catch (error) {
+    normalizeBridgeError(error);
   }
 };
 
@@ -454,6 +564,16 @@ const importAndUploadSelection = async (
   folder: UploadFolder | undefined,
 ) => {
   const imported = await importApplePhotosSelection({ ids });
+  const uploadedAssets = await uploadImportedSelection(ctx, imported, folder);
+
+  return { imported, uploadedAssets };
+};
+
+const uploadImportedSelection = async (
+  ctx: CliContext,
+  imported: ApplePhotosBridgeImportResult,
+  folder: UploadFolder | undefined,
+) => {
   const uploadedAssets: UploadedAsset[] = [];
 
   for (const file of imported.files) {
@@ -469,7 +589,7 @@ const importAndUploadSelection = async (
     uploadedAssets.push(response.data.asset);
   }
 
-  return { imported, uploadedAssets };
+  return uploadedAssets;
 };
 
 const toStoredAsset = (asset: UploadedAsset, importedAsset?: ImportedBridgeAsset) => ({
@@ -677,6 +797,39 @@ const buildDraftUrl = (host: string | undefined, postId: string) => {
   return url.toString();
 };
 
+const printPickDryRun = (
+  ctx: CliContext,
+  input: {
+    createDraft: boolean;
+    brandKitId?: string;
+    draftTitle?: string;
+    folder?: UploadFolder;
+  },
+) => {
+  const payload = {
+    action: "pick",
+    createDraft: input.createDraft,
+    brandKitId: input.brandKitId,
+    draftTitle: input.draftTitle,
+    folder: input.folder,
+    dryRun: true,
+  };
+
+  if (ctx.globalOptions.json) {
+    printJsonEnvelope(payload, ctx.globalOptions.jq);
+    return;
+  }
+
+  printKeyValue([
+    ["action", "pick"],
+    ["createDraft", String(input.createDraft)],
+    ["brandKitId", input.brandKitId],
+    ["draftTitle", input.draftTitle],
+    ["folder", input.folder],
+    ["dryRun", "true"],
+  ]);
+};
+
 const printProposeDryRun = (
   ctx: CliContext,
   listed: ApplePhotosAssetListResponse,
@@ -738,8 +891,47 @@ const normalizeBridgeError = (error: unknown): never => {
   }
 
   if (error instanceof Error) {
-    throw new CliError(error.message);
+    throw new CliError(error.message, EXIT_CODES.transport);
   }
 
   throw new CliError("Apple Photos bridge request failed.");
+};
+
+const parseSelectionUpdatedAt = (value?: string) => {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const waitForCompanionSelection = async ({
+  timeoutMs,
+  minUpdatedAt,
+}: {
+  timeoutMs: number;
+  minUpdatedAt: number;
+}) => {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const health = await getApplePhotosBridgeHealth();
+    const selection = health.selection;
+
+    if (
+      selection &&
+      selection.assetCount > 0 &&
+      parseSelectionUpdatedAt(selection.updatedAt) >= minUpdatedAt
+    ) {
+      return importApplePhotosSelection();
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+  }
+
+  throw new CliError(
+    "Timed out waiting for IG Poster Companion to export a Photos selection.",
+    EXIT_CODES.transport,
+  );
 };

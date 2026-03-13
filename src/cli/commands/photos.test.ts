@@ -283,6 +283,241 @@ describe("runPhotosCommand", () => {
     );
   });
 
+  it("launches the companion picker, waits for a fresh selection, uploads it, and can create a draft", async () => {
+    let healthChecks = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/v1/health") {
+          healthChecks += 1;
+
+          return new Response(
+            JSON.stringify({
+              appName: "IG Poster Companion",
+              version: "v1",
+              bridge: {
+                origin: "http://127.0.0.1:43123",
+                healthUrl: "http://127.0.0.1:43123/v1/health",
+                recentUrl: "http://127.0.0.1:43123/v1/photos/recent",
+                searchUrl: "http://127.0.0.1:43123/v1/photos/search",
+                pickUrl: "http://127.0.0.1:43123/v1/photos/pick",
+                importUrl: "http://127.0.0.1:43123/v1/photos/import",
+                openCompanionUrl: "http://127.0.0.1:43123/v1/companion/open",
+              },
+              capabilities: ["pick", "recent", "search", "import"],
+              companionApp: {
+                installed: true,
+                bundlePath: "/Applications/IG Poster Companion.app",
+              },
+              selection:
+                healthChecks === 1
+                  ? {
+                      updatedAt: "2026-03-13T18:59:00Z",
+                      assetCount: 1,
+                    }
+                  : {
+                      updatedAt: "2026-03-13T19:00:03Z",
+                      assetCount: 2,
+                    },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/companion/open") {
+          expect(init?.method).toBe("POST");
+          expect(init?.body).toBe(JSON.stringify({ action: "pick" }));
+
+          return new Response(
+            JSON.stringify({
+              launchedAt: "2026-03-13T19:00:00Z",
+              launchUrl: "igposter-companion://photos/pick",
+              companionApp: {
+                installed: true,
+                bundlePath: "/Applications/IG Poster Companion.app",
+              },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/photos/pick") {
+          return new Response(
+            JSON.stringify({
+              importedAt: "2026-03-13T19:00:05Z",
+              assets: [
+                {
+                  id: "asset-1",
+                  filename: "IMG_2001.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-13T18:58:00Z",
+                  favorite: false,
+                  albumNames: ["Camera Roll"],
+                  exportPath: "/tmp/IMG_2001.JPG",
+                  downloadUrl: "http://127.0.0.1:43123/v1/photos/exports/asset-1",
+                },
+                {
+                  id: "asset-2",
+                  filename: "IMG_2002.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-13T18:58:30Z",
+                  favorite: true,
+                  albumNames: ["Favorites"],
+                  exportPath: "/tmp/IMG_2002.JPG",
+                  downloadUrl: "http://127.0.0.1:43123/v1/photos/exports/asset-2",
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/photos/exports/asset-1") {
+          return new Response(new Blob(["asset-1"], { type: "image/jpeg" }), {
+            status: 200,
+            headers: { "Content-Type": "image/jpeg" },
+          });
+        }
+
+        if (url.pathname === "/v1/photos/exports/asset-2") {
+          return new Response(new Blob(["asset-2"], { type: "image/jpeg" }), {
+            status: 200,
+            headers: { "Content-Type": "image/jpeg" },
+          });
+        }
+
+        throw new Error(`Unexpected URL: ${url.toString()}`);
+      }),
+    );
+
+    let uploadCall = 0;
+    const requestJson = vi.fn(async (request: { path: string; body?: unknown }) => {
+      if (request.path === "/api/v1/assets") {
+        uploadCall += 1;
+        const fileName = uploadCall === 1 ? "IMG_2001.JPG" : "IMG_2002.JPG";
+        return {
+          ok: true,
+          data: {
+            asset: {
+              id: `assets/${uploadCall}`,
+              name: fileName,
+              url: `https://blob.example.com/${fileName}`,
+              pathname: `assets/${uploadCall}-${fileName}`,
+              size: 7,
+              folder: "assets",
+              contentType: "image/jpeg",
+            },
+          },
+        };
+      }
+
+      if (request.path === "/api/v1/posts") {
+        expect(request.body).toMatchObject({
+          title: "Picked photos",
+          brandKitId: "kit-1",
+          assets: [
+            expect.objectContaining({ id: "assets/1", name: "IMG_2001.JPG" }),
+            expect.objectContaining({ id: "assets/2", name: "IMG_2002.JPG" }),
+          ],
+        });
+
+        return {
+          ok: true,
+          data: {
+            post: {
+              id: "post-pick-1",
+              title: "Picked photos",
+              status: "draft",
+            },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected request path: ${request.path}`);
+    });
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    await runPhotosCommand(
+      {
+        client: { requestJson },
+        host: "https://ig-poster.example.com",
+        globalOptions: {
+          json: true,
+          streamJson: false,
+          jq: undefined,
+          quiet: false,
+          noColor: false,
+          yes: false,
+          dryRun: false,
+          timeoutMs: 1_000,
+        },
+      } as never,
+      [
+        "pick",
+        "--create-draft",
+        "--brand-kit",
+        "kit-1",
+        "--draft-title",
+        "Picked photos",
+      ],
+    );
+
+    expect(stderr).toHaveBeenCalledWith(
+      "Opening IG Poster Companion for Apple Photos selection...\n",
+    );
+    expect(stderr).toHaveBeenCalledWith(
+      "Waiting for IG Poster Companion to export the selected photos...\n",
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"draftUrl": "https://ig-poster.example.com/?post=post-pick-1"'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"importedAssets"'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"uploadedAssets"'),
+    );
+  });
+
+  it("rejects draft-only flags on photos pick without --create-draft", async () => {
+    await expect(
+      runPhotosCommand(
+        {
+          globalOptions: {
+            json: false,
+            streamJson: false,
+            jq: undefined,
+            quiet: false,
+            noColor: false,
+            yes: false,
+            dryRun: false,
+          },
+        } as never,
+        ["pick", "--brand-kit", "kit-1"],
+      ),
+    ).rejects.toMatchObject({
+      message:
+        "--brand-kit and --draft-title require --create-draft for `ig photos pick`.",
+      exitCode: EXIT_CODES.usage,
+    });
+  });
+
   it("proposes a draft from scored Apple Photos assets and runs generation", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-03-13T18:00:00Z"));
     const requestStream = vi
