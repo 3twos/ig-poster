@@ -41,7 +41,7 @@ Planned split of responsibilities:
 - `ig` CLI: automation surface for humans and agents
 - `IG Poster Companion.app`: native Apple Photos picker/search UI, PhotoKit access, managed export cache, and local bridge
 - `companion/IGPosterCompanion`: checked-in Swift package scaffold that mirrors the bridge contract currently defined in `src/lib/apple-photos-bridge.ts`
-- `src/cli/photos-bridge.ts`: CLI-local bridge client for `ig photos recent|search|import|propose`, kept under `src/cli` so the standalone CLI build can enumerate/import Apple Photos assets without pulling in the web app bundle graph
+- `src/cli/photos-bridge.ts`: CLI-local bridge client for `ig photos recent|search|import|pick|propose`, kept under `src/cli` so the standalone CLI build can enumerate/import Apple Photos assets, launch the native picker, and poll bridge health without pulling in the web app bundle graph
 
 Planned flow:
 

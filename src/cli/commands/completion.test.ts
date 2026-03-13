@@ -23,6 +23,7 @@ describe("runCompletionCommand", () => {
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("publish"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("chat"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("photos"));
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("pick"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("propose"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("watch"));
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining("mcp"));

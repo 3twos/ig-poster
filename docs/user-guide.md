@@ -211,14 +211,11 @@ Still planned:
 
 Available now:
 
+- `ig photos pick --create-draft --brand-kit <id>`
 - `ig photos recent --since 7d --limit 20`
 - `ig photos search --album Favorites --media image`
 - `ig photos import --ids <asset-id,...>`
 - `ig photos propose --since 7d --limit 20 --count 4 --brand-kit <id> --draft-title "Weekly picks"`
-
-Still planned:
-
-- `ig photos pick --create-draft --brand-kit <id>`
 
 Expected behavior:
 
@@ -237,6 +234,7 @@ If the macOS companion app is not installed or not reachable:
 - for internal development, that same shell now includes a native Photos picker button that exports chosen items into the local companion cache
 - for internal development, `swift run ig-poster-companion-bridge --print-health` now also reflects the persisted selection summary when the companion app has an active draft/selection context
 - for internal development, `ig photos recent` / `ig photos search` and the MCP `photos_recent` / `photos_search` tools now hit that same bridge directly, so you can validate the local PhotoKit path without packaging the app first
+- for internal development, `ig photos pick` now uses that same bridge launch + polling path, so the CLI can open the native picker, wait for a fresh export, upload the resulting files, and optionally create a draft post without going through the web editor
 
 ## Working with Saved Posts
 
