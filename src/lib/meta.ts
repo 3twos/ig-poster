@@ -23,23 +23,24 @@ export type MetaAuthContext = {
   graphVersion: string;
 };
 
+type MetaPublishMetadata = {
+  creationId?: string;
+  publishId?: string;
+  remotePermalink?: string;
+  publishedAt?: string;
+};
+
 export type MetaPublishResult =
-  | {
+  | ({
     mode: "image";
-    creationId?: string;
-    publishId?: string;
-  }
-  | {
+  } & MetaPublishMetadata)
+  | ({
     mode: "reel";
-    creationId?: string;
-    publishId?: string;
-  }
-  | {
+  } & MetaPublishMetadata)
+  | ({
     mode: "carousel";
-    creationId?: string;
     children: string[];
-    publishId?: string;
-  };
+  } & MetaPublishMetadata);
 
 export const getEnvMetaAuth = (): MetaAuthContext | null => {
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
@@ -63,7 +64,9 @@ export const getEnvMetaAuth = (): MetaAuthContext | null => {
 type GraphResponse = {
   id?: string;
   post_id?: string;
+  permalink?: string;
   permalink_url?: string;
+  timestamp?: string;
   published?: boolean;
   is_published?: boolean;
   scheduled_publish_time?: string | number;
@@ -108,6 +111,13 @@ export type FacebookPagePublishState = {
   isPublished: boolean;
   scheduledPublishTime?: string;
   remotePermalink?: string;
+};
+
+type InstagramMediaPublishStateResponse = GraphResponse;
+export type InstagramMediaPublishState = {
+  remoteObjectId: string;
+  remotePermalink?: string;
+  publishedAt?: string;
 };
 
 export type FacebookScheduledPost = {
@@ -574,6 +584,55 @@ const publishCarousel = async (
   };
 };
 
+const normalizeInstagramTimestamp = (
+  value?: string,
+): string | undefined => {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const timestamp = new Date(normalized);
+  if (Number.isNaN(timestamp.getTime())) {
+    return undefined;
+  }
+
+  return timestamp.toISOString();
+};
+
+export const getInstagramMediaPublishState = async (
+  mediaId: string,
+  auth?: MetaAuthContext,
+): Promise<InstagramMediaPublishState> => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Instagram publishing credentials");
+  }
+
+  const response = await callGraphGetWithParams<InstagramMediaPublishStateResponse>(
+    mediaId,
+    resolvedAuth,
+    {
+      fields: [
+        "id",
+        "permalink",
+        "timestamp",
+      ],
+    },
+  );
+
+  const remoteObjectId = response.id?.trim();
+  if (!remoteObjectId) {
+    throw new Error("Meta API did not return Instagram media id.");
+  }
+
+  return {
+    remoteObjectId,
+    remotePermalink: response.permalink?.trim() || undefined,
+    publishedAt: normalizeInstagramTimestamp(response.timestamp),
+  };
+};
+
 export const publishInstagramContent = async (
   payload: MetaScheduleRequest["media"] & {
     caption: string;
@@ -587,8 +646,9 @@ export const publishInstagramContent = async (
     throw new Error("Missing Instagram publishing credentials");
   }
 
+  let publish: MetaPublishResult;
   if (payload.mode === "image") {
-    return publishSingleImage(
+    publish = await publishSingleImage(
       {
         imageUrl: payload.imageUrl,
         caption: payload.caption,
@@ -597,10 +657,8 @@ export const publishInstagramContent = async (
       },
       resolvedAuth,
     );
-  }
-
-  if (payload.mode === "reel") {
-    return publishReel(
+  } else if (payload.mode === "reel") {
+    publish = await publishReel(
       {
         videoUrl: payload.videoUrl,
         caption: payload.caption,
@@ -611,16 +669,35 @@ export const publishInstagramContent = async (
       },
       resolvedAuth,
     );
+  } else {
+    publish = await publishCarousel(
+      {
+        items: payload.items,
+        caption: payload.caption,
+        locationId: payload.locationId,
+      },
+      resolvedAuth,
+    );
   }
 
-  return publishCarousel(
-    {
-      items: payload.items,
-      caption: payload.caption,
-      locationId: payload.locationId,
-    },
-    resolvedAuth,
-  );
+  if (!publish.publishId) {
+    return publish;
+  }
+
+  try {
+    const publishState = await getInstagramMediaPublishState(
+      publish.publishId,
+      resolvedAuth,
+    );
+    return {
+      ...publish,
+      publishId: publishState.remoteObjectId,
+      remotePermalink: publishState.remotePermalink,
+      publishedAt: publishState.publishedAt,
+    };
+  } catch {
+    return publish;
+  }
 };
 
 const publishFacebookPhoto = async (

@@ -176,6 +176,37 @@ describe("markPostPublished", () => {
     vi.useRealTimers();
   });
 
+  it("stores Instagram permalink metadata when provided", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-13T16:00:00.000Z"));
+    const { db, updateChain } = makeMarkPostPublishedDb([]);
+
+    await markPostPublished(
+      db,
+      "owner_hash",
+      "post_1",
+      "ig_media_2",
+      "instagram",
+      {
+        remotePermalink: "https://instagram.com/p/ig_media_2",
+        publishedAt: "2026-03-13T15:55:00.000Z",
+      },
+    );
+
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publishedAt: new Date("2026-03-13T15:55:00.000Z"),
+        publishHistory: [
+          {
+            publishedAt: "2026-03-13T15:55:00.000Z",
+            igMediaId: "ig_media_2",
+            igPermalink: "https://instagram.com/p/ig_media_2",
+          },
+        ],
+      }),
+    );
+  });
+
   it("does not append Facebook publishes to legacy Instagram history", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-13T16:00:00.000Z"));

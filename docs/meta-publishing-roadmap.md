@@ -55,16 +55,21 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
 12. Facebook webhook-driven reconciliation
    - Added Meta Page webhook ingestion so remote Facebook publish/cancel drift can trigger shadow-job reconciliation without waiting for planner load or cron polling.
    - Reference: merged in PR `#180`.
+13. Browser dual-destination fanout
+   - Added a `Both` publish target in the browser composer so one action can publish or schedule to Facebook and Instagram together while preserving destination-specific queue state, sync state, and partial-failure reporting.
+   - Reference: merged in PR `#184`.
+14. Instagram publish-state reconciliation
+   - Successful Instagram publishes now do a best-effort Graph read for published permalink/timestamp metadata, then project that data back into `posts.publishHistory` and `post_destinations`.
 
 ## In Progress
 
-1. Browser dual-destination fanout
-   - Add a `Both` publish target in the browser composer so one action can publish or schedule to Facebook and Instagram together while preserving destination-specific queue state, sync state, and partial-failure reporting.
-   - Goal: close the main product gap for linked Meta accounts that routinely post to both destinations from one creative.
+1. Instagram webhook and backfill reconciliation
+   - Extend Instagram sync past the immediate publish response so webhook deliveries or targeted backfills can detect drift and refresh published destination state even when the original publish happened outside the app-managed request path.
+   - Goal: close the remaining gap between "publish succeeded" tracking and broader Meta-side state changes for Instagram posts.
 
 ## Remaining phases
 
-- Instagram reconciliation and operational hardening are the next likely areas after the browser `Both` target is complete. Extend this roadmap when the next concrete Meta publishing slice is selected.
+- Operational hardening remains after the current Instagram reconciliation work. Extend this roadmap when the next concrete Meta publishing slice is selected.
 
 ## Notes
 

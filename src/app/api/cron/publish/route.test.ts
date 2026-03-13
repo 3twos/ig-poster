@@ -40,6 +40,7 @@ vi.mock("@/lib/secure", () => ({
 }));
 
 vi.mock("@/services/post-destinations", () => ({
+  syncPublishedInstagramDestination: vi.fn(),
   upsertPostDestinationRemoteState: vi.fn(),
 }));
 
@@ -62,7 +63,10 @@ import {
   markPostPublished,
   recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
-import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
+import {
+  syncPublishedInstagramDestination,
+  upsertPostDestinationRemoteState,
+} from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
@@ -80,6 +84,9 @@ const mockedMarkPostPublished = vi.mocked(markPostPublished);
 const mockedRecoverStaleProcessingJobs = vi.mocked(recoverStaleProcessingJobs);
 const mockedUpsertPostDestinationRemoteState = vi.mocked(
   upsertPostDestinationRemoteState,
+);
+const mockedSyncPublishedInstagramDestination = vi.mocked(
+  syncPublishedInstagramDestination,
 );
 
 const baseJob = {
@@ -131,6 +138,7 @@ describe("GET /api/cron/publish", () => {
       windowStart: new Date("2026-03-06T00:00:00.000Z"),
     });
     mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
+    mockedSyncPublishedInstagramDestination.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -158,6 +166,8 @@ describe("GET /api/cron/publish", () => {
       mode: "image",
       creationId: "create_1",
       publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
     });
     mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
 
@@ -184,6 +194,20 @@ describe("GET /api/cron/publish", () => {
       baseJob.postId,
       "publish_1",
       "instagram",
+      {
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      },
+    );
+    expect(mockedSyncPublishedInstagramDestination).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: baseJob.postId,
+        remoteObjectId: "publish_1",
+        remoteContainerId: "create_1",
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      }),
     );
   });
 
@@ -291,6 +315,10 @@ describe("GET /api/cron/publish", () => {
       baseJob.postId,
       "page_1_1",
       "facebook",
+      {
+        remotePermalink: undefined,
+        publishedAt: undefined,
+      },
     );
   });
 
