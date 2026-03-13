@@ -174,6 +174,7 @@
 - On macOS, the editor asset panel now shows `Add from Photos`. The browser first probes the local companion bridge on `127.0.0.1:43123`. If the bridge is unavailable, the dialog falls back to the normal upload flow so your draft keeps moving.
 - If the bridge is available, the draft offers to open the native companion handoff. Once the companion exports a Photos selection into its managed cache, the web editor can import those files back into the current draft and run them through the normal upload pipeline automatically.
 - The repository contains the native companion scaffold under `companion/IGPosterCompanion`, but it is still a developer-facing build target rather than a packaged end-user install.
+- For local development on macOS, the repo now includes `./scripts/install-companion-bridge.zsh`, which builds the release bridge binary, installs it into your user Library, and writes a LaunchAgent so the browser and CLI can reach the bridge without keeping a separate `swift run` terminal open.
 - The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and will surface the incoming draft ID, profile, bridge origin, and return URL in-app once the browser handoff lands there. Packaging and URL-scheme registration are still pending, so this is a developer-facing scaffold step rather than an end-user flow yet.
 - The native companion shell now includes a real PhotosPicker button for ordered image/video selection, exports those selections into a managed local cache, and persists a shared manifest that the localhost bridge can serve back to the browser.
 - The companion now persists the active handoff, selection summary, and exported asset manifest into a local shared state file, and the localhost bridge surfaces that shared state for browser/CLI/MCP coordination.
@@ -223,6 +224,7 @@ If the macOS companion app is not installed or not reachable:
 - the web app should offer an install prompt plus a fallback to the normal file-upload flow
 - CLI/MCP should return a structured error with remediation instead of hanging or failing opaquely
 - for internal development, you can run `swift run ig-poster-companion-bridge` from `companion/IGPosterCompanion` to satisfy the web probe and exercise the handoff path
+- for internal development, you can also run `./scripts/install-companion-bridge.zsh` once to install the bridge as `~/Library/Application Support/IGPosterCompanion/bin/ig-poster-companion-bridge` and load `~/Library/LaunchAgents/com.3twos.igposter.bridge.plist`
 - for internal development, `swift run ig-poster-companion` now includes a `Load sample handoff` action so you can inspect the native handoff state even before the app is packaged and registered with Launch Services
 - for internal development, that same shell now includes a native Photos picker button that exports chosen items into the local companion cache
 - for internal development, `swift run ig-poster-companion-bridge --print-health` now also reflects the persisted selection summary when the companion app has an active draft/selection context
