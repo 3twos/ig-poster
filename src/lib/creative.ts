@@ -184,7 +184,7 @@ const StoredCreativeVariantSchema = z.object({
   supportingText: z.string().trim().max(260),
   cta: z.string().trim().max(80).optional().default(""),
   caption: z.string().trim().max(700),
-  hashtags: z.array(z.string().trim().max(32)).max(12),
+  hashtags: z.array(z.string().trim().min(1).max(32)).max(12),
   layout: LayoutSchema,
   textAlign: z.enum(["left", "center"]),
   colorHexes: z.array(z.string().trim().max(9)).min(2).max(4),
