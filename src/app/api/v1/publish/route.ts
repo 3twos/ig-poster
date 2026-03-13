@@ -9,7 +9,10 @@ import {
   type PublishResource,
 } from "@/lib/api/v1/publish";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
-import { getMetaMetadataValidationIssues } from "@/lib/meta";
+import {
+  getMetaMetadataValidationIssues,
+  publishFacebookPageContent,
+} from "@/lib/meta";
 import {
   MetaMediaPreflightError,
   preflightMetaMediaForPublish,
@@ -18,14 +21,18 @@ import {
   completePublishJobFailure,
   completePublishJobSuccess,
   createPublishJob,
+  failQueuedPublishJob,
   markPostPublished,
+  markPostScheduled,
   reserveImmediatePublishJob,
+  syncQueuedPublishJobRemoteState,
 } from "@/lib/publish-jobs";
 import { resolveActorFromRequest } from "@/services/actors";
 import {
   MetaAuthServiceError,
   resolveMetaAuthForApi,
 } from "@/services/meta-auth";
+import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
 import { executeImmediatePublish } from "@/services/publish-executor";
 
 class PublishRouteError extends Error {
@@ -152,6 +159,115 @@ export async function POST(req: Request) {
           400,
           "OAuth scheduling requires private persistent credential storage. Configure POSTGRES_URL or DATABASE_URL and reconnect Meta OAuth.",
         );
+      }
+
+      if (
+        payload.destination === "facebook" &&
+        destinationCapability.syncMode === "remote_authoritative"
+      ) {
+        const job = await createPublishJob(db, {
+          ownerHash: actor.ownerHash,
+          postId: payload.postId,
+          destination: payload.destination,
+          remoteAuthority: destinationCapability.syncMode,
+          accountKey: resolvedAuth.account.accountKey,
+          pageId: resolvedAuth.account.pageId,
+          instagramUserId: resolvedAuth.account.instagramUserId,
+          caption: payload.caption,
+          firstComment: payload.firstComment,
+          locationId: payload.locationId,
+          userTags: payload.userTags,
+          media: payload.media,
+          publishAt: new Date(publishAt).toISOString(),
+          authSource: resolvedAuth.source,
+          connectionId: resolvedAuth.account.connectionId,
+          outcomeContext: payload.outcomeContext,
+          markPostScheduled: false,
+        });
+
+        let publish: Awaited<ReturnType<typeof publishFacebookPageContent>>;
+        try {
+          publish = await publishFacebookPageContent(
+            {
+              ...payload.media,
+              caption: payload.caption,
+              publishAt: new Date(publishAt).toISOString(),
+            },
+            resolvedAuth.auth,
+          );
+        } catch (error) {
+          const detail = error instanceof Error
+            ? error.message
+            : "Unknown Facebook scheduling failure";
+          await failQueuedPublishJob(db, job, detail).catch(() => undefined);
+          if (payload.postId) {
+            await upsertPostDestinationRemoteState(db, {
+              postId: payload.postId,
+              destination: "facebook",
+              enabled: true,
+              syncMode: destinationCapability.syncMode,
+              desiredState: "scheduled",
+              remoteState: "failed",
+              caption: payload.caption,
+              publishAt: job.publishAt,
+              remoteStatePayload: {
+                scheduledPublishTime: job.publishAt.toISOString(),
+              },
+              lastSyncedAt: new Date(),
+              lastError: detail,
+            }).catch(() => undefined);
+          }
+          throw error;
+        }
+
+        const syncedJob = await syncQueuedPublishJobRemoteState(db, job, {
+          publishId: publish.publishId,
+          creationId: publish.creationId,
+          children: "children" in publish ? publish.children : undefined,
+        });
+        if (!syncedJob) {
+          throw new PublishRouteError(
+            500,
+            `Facebook schedule was created in Meta as ${publish.publishId ?? publish.creationId ?? "an unknown object"}, but the local shadow job could not be updated.`,
+          );
+        }
+
+        if (payload.postId) {
+          await markPostScheduled(db, actor.ownerHash, payload.postId).catch(() => undefined);
+          await upsertPostDestinationRemoteState(db, {
+            postId: payload.postId,
+            destination: "facebook",
+            enabled: true,
+            syncMode: destinationCapability.syncMode,
+            desiredState: "scheduled",
+            remoteState: "scheduled",
+            caption: payload.caption,
+            publishAt: syncedJob.publishAt,
+            remoteObjectId: publish.publishId ?? publish.creationId ?? null,
+            remoteContainerId: publish.creationId ?? null,
+            remoteStatePayload: {
+              scheduledPublishTime: syncedJob.publishAt.toISOString(),
+            },
+            lastSyncedAt: new Date(),
+            lastError: null,
+          }).catch(() => undefined);
+        }
+
+        return apiOk({
+          publish: {
+            ...toBaseResource(
+              payload.destination,
+              payload.media.mode,
+              resolvedAuth.source,
+              resolvedAuth.account.connectionId,
+            ),
+            status: "scheduled",
+            id: syncedJob.id,
+            publishId: publish.publishId,
+            creationId: publish.creationId,
+            publishAt: syncedJob.publishAt.toISOString(),
+          } satisfies PublishResource,
+        });
       }
 
       const job = await createPublishJob(db, {

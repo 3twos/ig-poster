@@ -104,6 +104,38 @@ describe("PATCH /api/publish-jobs/:id", () => {
     expect(res.status).toBe(404);
   });
 
+  it("returns 409 for Meta-synced Facebook jobs that are managed remotely", async () => {
+    mockedReadWorkspace.mockResolvedValue(session);
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([
+        {
+          ...baseJob,
+          destination: "facebook" as const,
+          remoteAuthority: "remote_authoritative" as const,
+          status: "queued" as const,
+        },
+      ]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+    } as unknown as ReturnType<typeof getDb>);
+
+    const req = new Request("https://app.example.com/api/publish-jobs/job_1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "cancel" }),
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: "job_1" }) });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error:
+        "Meta-synced Facebook jobs must be managed in Meta tools until remote edit and cancel support is implemented in-app.",
+    });
+  });
+
   it("returns 409 when cancel update loses race", async () => {
     mockedReadWorkspace.mockResolvedValue(session);
     const selectChain = {

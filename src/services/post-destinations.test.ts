@@ -12,6 +12,7 @@ import {
   getStoredPostDestinations,
   listStoredPostDestinationsByPostId,
   syncPostDestinationsFromPublishSettings,
+  upsertPostDestinationRemoteState,
 } from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
@@ -311,6 +312,94 @@ describe("post-destinations", () => {
         updatedAt: expect.any(Date),
       }),
     );
+  });
+
+  it("updates stored remote Facebook schedule state", async () => {
+    const scheduledAt = new Date("2026-03-13T18:00:00.000Z");
+    const syncedAt = new Date("2026-03-13T17:45:00.000Z");
+    const existing = [
+      {
+        id: "dest_1",
+        postId: "post_1",
+        destination: "facebook" as const,
+        enabled: false,
+        syncMode: "remote_authoritative" as const,
+        desiredState: "draft" as const,
+        remoteState: "draft" as const,
+        caption: "Old caption",
+        firstComment: null,
+        locationId: null,
+        userTags: null,
+        publishAt: null,
+        remoteObjectId: null,
+        remoteContainerId: null,
+        remotePermalink: null,
+        remoteStatePayload: {},
+        lastSyncedAt: null,
+        lastError: "old",
+        createdAt: new Date("2026-03-13T17:00:00.000Z"),
+        updatedAt: new Date("2026-03-13T17:00:00.000Z"),
+      },
+    ];
+    const selectWhere = vi.fn().mockResolvedValue(existing);
+    const updateWhere = vi.fn().mockResolvedValue(undefined);
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    const tx = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where: selectWhere })),
+      })),
+      update: vi.fn(() => ({ set: updateSet })),
+      insert: vi.fn(),
+    };
+    const transaction = vi.fn(
+      async (
+        callback: (db: typeof tx) => Promise<void>,
+        config?: { isolationLevel?: string },
+      ) => {
+        expect(config).toEqual(
+          expect.objectContaining({ isolationLevel: "serializable" }),
+        );
+        await callback(tx);
+      },
+    );
+    const db = {
+      transaction,
+    };
+
+    await upsertPostDestinationRemoteState(db as never, {
+      postId: "post_1",
+      destination: "facebook",
+      enabled: true,
+      syncMode: "remote_authoritative",
+      desiredState: "scheduled",
+      remoteState: "scheduled",
+      caption: "Queued on Facebook",
+      publishAt: scheduledAt,
+      remoteObjectId: "page_1_1",
+      remoteContainerId: "photo_1",
+      remoteStatePayload: {
+        scheduledPublishTime: scheduledAt.toISOString(),
+      },
+      lastSyncedAt: syncedAt,
+      lastError: null,
+    });
+
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        syncMode: "remote_authoritative",
+        desiredState: "scheduled",
+        remoteState: "scheduled",
+        caption: "Queued on Facebook",
+        publishAt: scheduledAt,
+        remoteObjectId: "page_1_1",
+        remoteContainerId: "photo_1",
+        lastSyncedAt: syncedAt,
+        lastError: null,
+        updatedAt: expect.any(Date),
+      }),
+    );
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 
   it("loads stored destination rows for a single post", async () => {
