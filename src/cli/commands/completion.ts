@@ -8,6 +8,7 @@ const COMMANDS = [
   "chat",
   "config",
   "generate",
+  "photos",
   "mcp",
   "api",
   "posts",
@@ -107,6 +108,9 @@ _ig() {
     generate)
       COMPREPLY=( $(compgen -W "run refine" -- "$cur") )
       ;;
+    photos)
+      COMPREPLY=( $(compgen -W "recent search --since --limit --media --favorite --album" -- "$cur") )
+      ;;
     publish)
       COMPREPLY=( $(compgen -W "--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed" -- "$cur") )
       ;;
@@ -180,6 +184,9 @@ case $state in
       generate)
         _values 'generate command' run refine
         ;;
+      photos)
+        _values 'photos command' recent search --since --limit --media --favorite --album
+        ;;
       publish)
         _values 'publish option' --image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed
         ;;
@@ -215,6 +222,7 @@ const buildFishCompletion = () => [
   "complete -c ig -n '__fish_seen_subcommand_from chat' -a 'ask --post --message --history --temperature --system-prompt'",
   "complete -c ig -n '__fish_seen_subcommand_from config' -a 'list get set'",
   "complete -c ig -n '__fish_seen_subcommand_from generate' -a 'run refine'",
+  "complete -c ig -n '__fish_seen_subcommand_from photos' -a 'recent search --since --limit --media --favorite --album'",
   "complete -c ig -n '__fish_seen_subcommand_from publish' -a '--image --video --carousel --cover --caption --caption-file --first-comment --schedule --location --location-id --connection --share-to-feed --no-share-to-feed'",
   "complete -c ig -n '__fish_seen_subcommand_from posts' -a 'list get create update duplicate archive'",
   "complete -c ig -n '__fish_seen_subcommand_from queue' -a 'list get cancel retry move-to-draft update'",

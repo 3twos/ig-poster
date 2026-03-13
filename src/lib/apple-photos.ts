@@ -1,5 +1,8 @@
 import {
   APPLE_PHOTOS_COMPANION_APP_NAME,
+  type ApplePhotosAssetListResponse,
+  type ApplePhotosAssetQuery,
+  type ApplePhotosBridgeErrorCode,
   buildApplePhotosCompanionLaunchUrl,
   getApplePhotosBridgeUrls,
   type ApplePhotosImportedAsset,
@@ -35,6 +38,18 @@ export type ApplePhotosBridgeImportResult = {
   assets: ApplePhotosImportedAsset[];
   files: File[];
 };
+
+export class ApplePhotosBridgeRequestError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApplePhotosBridgeRequestError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 export const APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS = 1_500;
 
@@ -109,6 +124,38 @@ const isApplePhotosImportedAsset = (
   );
 };
 
+const isApplePhotosBridgePhotoAsset = (
+  value: unknown,
+): value is ApplePhotosAssetListResponse["assets"][number] => {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as ApplePhotosAssetListResponse["assets"][number];
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.filename === "string" &&
+    typeof candidate.mediaType === "string" &&
+    typeof candidate.createdAt === "string" &&
+    typeof candidate.favorite === "boolean" &&
+    Array.isArray(candidate.albumNames)
+  );
+};
+
+const isApplePhotosAssetListResponse = (
+  value: unknown,
+): value is ApplePhotosAssetListResponse => {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as ApplePhotosAssetListResponse;
+  return (
+    Array.isArray(candidate.assets) &&
+    candidate.assets.every(isApplePhotosBridgePhotoAsset) &&
+    typeof candidate.fetchedAt === "string" &&
+    Boolean(candidate.query) &&
+    typeof candidate.query.mode === "string" &&
+    typeof candidate.query.limit === "number"
+  );
+};
+
 const isApplePhotosPickResponse = (
   value: unknown,
 ): value is ApplePhotosPickResponse | ApplePhotosImportResponse => {
@@ -128,6 +175,96 @@ const defaultMimeTypeForAsset = (asset: ApplePhotosImportedAsset) => {
   }
 
   return "image/jpeg";
+};
+
+const buildQueryString = (
+  query: Partial<Omit<ApplePhotosAssetQuery, "mode">>,
+) => {
+  const search = new URLSearchParams();
+
+  if (query.since) {
+    search.set("since", query.since);
+  }
+  if (typeof query.limit === "number") {
+    search.set("limit", String(query.limit));
+  }
+  if (query.album) {
+    search.set("album", query.album);
+  }
+  if (query.mediaType) {
+    search.set("media", query.mediaType);
+  }
+  if (typeof query.favorite === "boolean") {
+    search.set("favorite", String(query.favorite));
+  }
+
+  return search;
+};
+
+const readBridgeError = async (response: Response) => {
+  const raw = await response.text();
+
+  if (!raw) {
+    return new ApplePhotosBridgeRequestError(
+      "The local Apple Photos bridge returned an empty error response.",
+      response.status,
+    );
+  }
+
+  try {
+    const payload = JSON.parse(raw) as {
+      error?: string;
+      message?: string;
+      ok?: boolean;
+    };
+
+    return new ApplePhotosBridgeRequestError(
+      payload.message || "The local Apple Photos bridge request failed.",
+      response.status,
+      typeof payload.error === "string"
+        ? (payload.error as ApplePhotosBridgeErrorCode | string)
+        : undefined,
+    );
+  } catch {
+    return new ApplePhotosBridgeRequestError(raw, response.status);
+  }
+};
+
+const requestApplePhotosAssetList = async ({
+  fetchImpl = fetch,
+  bridgeOrigin,
+  endpoint,
+  query,
+}: {
+  fetchImpl?: typeof fetch;
+  bridgeOrigin?: string;
+  endpoint: "recentUrl" | "searchUrl";
+  query: Partial<Omit<ApplePhotosAssetQuery, "mode">>;
+}) => {
+  const bridgeUrls = getApplePhotosBridgeUrls(bridgeOrigin);
+  const url = new URL(bridgeUrls[endpoint]);
+  const search = buildQueryString(query);
+
+  if ([...search.keys()].length > 0) {
+    url.search = search.toString();
+  }
+
+  const response = await fetchImpl(url, {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw await readBridgeError(response);
+  }
+
+  const payload: unknown = await response.json();
+  if (!isApplePhotosAssetListResponse(payload)) {
+    throw new Error(
+      "The local Apple Photos bridge returned an unexpected asset-list payload.",
+    );
+  }
+
+  return payload;
 };
 
 export const probeApplePhotosBridge = async ({
@@ -262,3 +399,60 @@ export const importApplePhotosSelection = async ({
     files,
   };
 };
+
+export const listRecentApplePhotos = async ({
+  fetchImpl = fetch,
+  bridgeOrigin,
+  since,
+  limit,
+  mediaType,
+  favorite,
+}: {
+  fetchImpl?: typeof fetch;
+  bridgeOrigin?: string;
+  since?: string;
+  limit?: number;
+  mediaType?: ApplePhotosAssetQuery["mediaType"];
+  favorite?: boolean;
+} = {}) =>
+  requestApplePhotosAssetList({
+    fetchImpl,
+    bridgeOrigin,
+    endpoint: "recentUrl",
+    query: {
+      since,
+      limit,
+      mediaType,
+      favorite,
+    },
+  });
+
+export const searchApplePhotos = async ({
+  fetchImpl = fetch,
+  bridgeOrigin,
+  since,
+  limit,
+  album,
+  mediaType,
+  favorite,
+}: {
+  fetchImpl?: typeof fetch;
+  bridgeOrigin?: string;
+  since?: string;
+  limit?: number;
+  album?: string;
+  mediaType?: ApplePhotosAssetQuery["mediaType"];
+  favorite?: boolean;
+} = {}) =>
+  requestApplePhotosAssetList({
+    fetchImpl,
+    bridgeOrigin,
+    endpoint: "searchUrl",
+    query: {
+      since,
+      limit,
+      album,
+      mediaType,
+      favorite,
+    },
+  });

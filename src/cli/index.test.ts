@@ -72,7 +72,7 @@ describe("runCli", () => {
     expect(stderr).not.toHaveBeenCalled();
   });
 
-  it("prints help text with the watch, mcp, chat, publish, and completion commands", async () => {
+  it("prints help text with the watch, mcp, chat, photos, publish, and completion commands", async () => {
     const stdout = vi
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
@@ -92,6 +92,9 @@ describe("runCli", () => {
     );
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("ig chat <ask>"),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining("ig photos <recent|search>"),
     );
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("ig watch <dir>"),

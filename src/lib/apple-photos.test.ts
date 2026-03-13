@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS,
+  ApplePhotosBridgeRequestError,
   getApplePhotosFallbackInfo,
   importApplePhotosSelection,
   isMacOsUserAgent,
+  listRecentApplePhotos,
   probeApplePhotosBridge,
+  searchApplePhotos,
 } from "@/lib/apple-photos";
 import { buildApplePhotosBridgeHealthResponse } from "@/lib/apple-photos-bridge";
 
@@ -245,5 +248,121 @@ describe("importApplePhotosSelection", () => {
     ).rejects.toThrow(
       "The local Apple Photos bridge returned an unexpected import payload.",
     );
+  });
+});
+
+describe("listRecentApplePhotos", () => {
+  it("queries the local recent endpoint with typed filters", async () => {
+    const health = buildApplePhotosBridgeHealthResponse();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof URL ? input : new URL(String(input));
+      expect(url.toString()).toContain(health.bridge.recentUrl);
+      expect(url.searchParams.get("since")).toBe("7d");
+      expect(url.searchParams.get("limit")).toBe("5");
+      expect(url.searchParams.get("media")).toBe("image");
+      expect(url.searchParams.get("favorite")).toBe("true");
+
+      return new Response(
+        JSON.stringify({
+          assets: [],
+          fetchedAt: "2026-03-13T18:20:00Z",
+          query: {
+            mode: "recent",
+            since: "7d",
+            limit: 5,
+            mediaType: "image",
+            favorite: true,
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    });
+
+    await expect(
+      listRecentApplePhotos({
+        fetchImpl: fetchImpl as typeof fetch,
+        since: "7d",
+        limit: 5,
+        mediaType: "image",
+        favorite: true,
+      }),
+    ).resolves.toMatchObject({
+      query: {
+        mode: "recent",
+        limit: 5,
+      },
+    });
+  });
+});
+
+describe("searchApplePhotos", () => {
+  it("queries the local search endpoint with album filters", async () => {
+    const health = buildApplePhotosBridgeHealthResponse();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof URL ? input : new URL(String(input));
+      expect(url.toString()).toContain(health.bridge.searchUrl);
+      expect(url.searchParams.get("album")).toBe("Favorites");
+      expect(url.searchParams.get("media")).toBe("video");
+
+      return new Response(
+        JSON.stringify({
+          assets: [],
+          fetchedAt: "2026-03-13T18:25:00Z",
+          query: {
+            mode: "search",
+            album: "Favorites",
+            limit: 20,
+            mediaType: "video",
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    });
+
+    await expect(
+      searchApplePhotos({
+        fetchImpl: fetchImpl as typeof fetch,
+        album: "Favorites",
+        mediaType: "video",
+      }),
+    ).resolves.toMatchObject({
+      query: {
+        mode: "search",
+        album: "Favorites",
+      },
+    });
+  });
+
+  it("throws a typed bridge error for permission failures", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          error: "PHOTOS_PERMISSION_REQUIRED",
+          message: "Photos access is required.",
+        }),
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(
+      searchApplePhotos({
+        fetchImpl: fetchImpl as typeof fetch,
+        album: "Favorites",
+      }),
+    ).rejects.toMatchObject({
+      name: ApplePhotosBridgeRequestError.name,
+      status: 403,
+      code: "PHOTOS_PERMISSION_REQUIRED",
+      message: "Photos access is required.",
+    });
   });
 });
