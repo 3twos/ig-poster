@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import {
   AspectRatioSchema,
-  GenerationResponseSchema,
-  OverlayLayoutSchema,
+  StoredGenerationResponseSchema,
+  StoredOverlayLayoutSchema,
 } from "@/lib/creative";
 import { MediaCompositionSchema } from "@/lib/media-composer";
 import { PublishSettingsSchema } from "@/lib/publish-settings";
@@ -82,11 +82,11 @@ export const PostUpdateRequestSchema = z
     brand: DraftBrandSchema.nullish(),
     brief: DraftBriefSchema.nullish(),
     promptConfig: PromptConfigSchema.nullish(),
-    overlayLayouts: z.record(z.string(), OverlayLayoutSchema).nullish(),
+    overlayLayouts: z.record(z.string(), StoredOverlayLayoutSchema).nullish(),
     mediaComposition: MediaCompositionSchema.nullish(),
     publishSettings: PublishSettingsSchema.nullish(),
     assets: z.array(StoredAssetSchema).max(20).optional(),
-    result: GenerationResponseSchema.nullish(),
+    result: StoredGenerationResponseSchema.nullish(),
     publishHistory: z.array(PublishHistoryEntrySchema).max(200).optional(),
   })
   .strip();
