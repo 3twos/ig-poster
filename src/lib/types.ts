@@ -1,4 +1,4 @@
-import type { AspectRatio } from "@/lib/creative";
+import type { AspectRatio, CtaPolicy } from "@/lib/creative";
 import type { LlmProvider, MultiModelMode } from "@/lib/llm-constants";
 import type { MetaDestinationCapabilities } from "@/lib/meta-accounts";
 import {
@@ -54,6 +54,7 @@ export type PostState = {
   objective: string;
   audience: string;
   mood: string;
+  ctaPolicy: CtaPolicy;
   aspectRatio: AspectRatio;
 };
 
@@ -147,8 +148,15 @@ export const INITIAL_POST: PostState = {
   objective: "Drive profile visits and inbound strategy calls",
   audience: "Startup founders and growth leads",
   mood: "High-energy and premium",
+  ctaPolicy: "support-objective",
   aspectRatio: "4:5",
 };
+
+export const CTA_POLICY_OPTIONS: Array<{ value: CtaPolicy; label: string }> = [
+  { value: "support-objective", label: "Only if it helps" },
+  { value: "avoid", label: "Avoid CTA" },
+  { value: "require", label: "Require CTA" },
+];
 
 export const INITIAL_PUBLISH_SETTINGS: PublishSettingsState =
   DEFAULT_PUBLISH_SETTINGS;
