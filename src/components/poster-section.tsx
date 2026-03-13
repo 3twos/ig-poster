@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Eye, Plus, Type } from "lucide-react";
+import { AlertTriangle, Eye, Plus, Type } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 
 import { PosterPreview } from "@/components/poster-preview";
@@ -9,11 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { SaveStatus } from "@/hooks/use-auto-save";
 import {
+  analyzeCanonicalOverlayLayout,
   DEFAULT_LOGO_POSITION,
   type AspectRatio,
   type CanonicalOverlayKey,
   type CreativeVariant,
   type OverlayLayout,
+  resolveVariantOverlayCopy,
 } from "@/lib/creative";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +113,39 @@ export function PosterSection({
     return items;
   }, [overlayLayout]);
 
+  const layoutIssues = useMemo(() => {
+    if (!activeVariant) return [];
+
+    const resolvedCopy = resolveVariantOverlayCopy(
+      activeVariant,
+      activeSlideIndex,
+      activeVariant.carouselSlides,
+    );
+
+    return analyzeCanonicalOverlayLayout({
+      layout: activeVariant.layout,
+      overlayLayout,
+      copy: {
+        hook: overlayLayout?.hook.text.trim() || resolvedCopy.hook,
+        headline: overlayLayout?.headline.text.trim() || resolvedCopy.headline,
+        supportingText:
+          overlayLayout?.supportingText.text.trim() || resolvedCopy.supportingText,
+        cta: overlayLayout?.cta.text.trim() || resolvedCopy.cta,
+      },
+    });
+  }, [activeSlideIndex, activeVariant, overlayLayout]);
+
+  const layoutIssueSummary = useMemo(() => {
+    if (layoutIssues.length === 0) {
+      return null;
+    }
+
+    const [firstIssue] = layoutIssues;
+    return layoutIssues.length === 1
+      ? firstIssue.message
+      : `${firstIssue.message} (+${layoutIssues.length - 1} more)`;
+  }, [layoutIssues]);
+
   const handleAddTextBox = useCallback(() => {
     if (!overlayLayout || !activeVariant) return;
     const currentCount = overlayLayout.custom?.length ?? 0;
@@ -203,6 +238,21 @@ export function PosterSection({
           dispatch({ type: "SET_ACTIVE_SLIDE", index })
         }
       />
+
+      {layoutIssueSummary ? (
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p>
+            <span className="font-semibold uppercase tracking-[0.18em] text-amber-200">
+              Layout warning
+            </span>{" "}
+            {layoutIssueSummary}.{" "}
+            {editorMode
+              ? "Use Auto-fit Layout or reposition the blocks."
+              : "Open editor mode to auto-fit or reposition the blocks."}
+          </p>
+        </div>
+      ) : null}
 
       {/* Editor controls — visible only in edit mode */}
       {editorMode ? (
