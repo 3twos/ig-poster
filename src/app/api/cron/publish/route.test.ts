@@ -11,6 +11,7 @@ vi.mock("@/lib/blob-store", () => ({
 
 vi.mock("@/lib/meta", () => ({
   getEnvMetaAuth: vi.fn(),
+  publishFacebookPageContent: vi.fn(),
   publishInstagramContent: vi.fn(),
   publishInstagramFirstComment: vi.fn(),
 }));
@@ -42,6 +43,7 @@ import { getDb } from "@/db";
 import { isBlobEnabled } from "@/lib/blob-store";
 import {
   getEnvMetaAuth,
+  publishFacebookPageContent,
   publishInstagramContent,
   publishInstagramFirstComment,
 } from "@/lib/meta";
@@ -58,6 +60,7 @@ import {
 const mockedGetDb = vi.mocked(getDb);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
 const mockedGetEnvMetaAuth = vi.mocked(getEnvMetaAuth);
+const mockedPublishFacebookPageContent = vi.mocked(publishFacebookPageContent);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedPublishInstagramFirstComment = vi.mocked(publishInstagramFirstComment);
 const mockedClaimDuePublishJobs = vi.mocked(claimDuePublishJobs);
@@ -136,6 +139,7 @@ describe("GET /api/cron/publish", () => {
     mockedGetEnvMetaAuth.mockReturnValue({
       accessToken: "token",
       instagramUserId: "ig-id",
+      pageId: "page_1",
       graphVersion: "v22.0",
     });
     mockedPublishInstagramContent.mockResolvedValue({
@@ -167,6 +171,7 @@ describe("GET /api/cron/publish", () => {
       baseJob.ownerHash,
       baseJob.postId,
       "publish_1",
+      "instagram",
     );
   });
 
@@ -199,6 +204,7 @@ describe("GET /api/cron/publish", () => {
     mockedGetEnvMetaAuth.mockReturnValue({
       accessToken: "token",
       instagramUserId: "ig-id",
+      pageId: "page_1",
       graphVersion: "v22.0",
     });
     mockedPublishInstagramContent.mockResolvedValue({
@@ -224,19 +230,25 @@ describe("GET /api/cron/publish", () => {
     );
   });
 
-  it("fails Facebook jobs with an explicit unsupported-destination error", async () => {
+  it("publishes Facebook jobs without applying the Instagram rolling limit", async () => {
     mockedClaimDuePublishJobs.mockResolvedValue([
       { ...baseJob, destination: "facebook" as const },
     ]);
     mockedGetEnvMetaAuth.mockReturnValue({
       accessToken: "token",
       instagramUserId: "ig-id",
+      pageId: "page_1",
       graphVersion: "v22.0",
     });
-    mockedCompletePublishJobFailure.mockResolvedValue({
+    mockedPublishFacebookPageContent.mockResolvedValue({
+      mode: "image",
+      creationId: "photo_1",
+      publishId: "page_1_1",
+    });
+    mockedCompletePublishJobSuccess.mockResolvedValue({
       ...baseJob,
       destination: "facebook" as const,
-      status: "failed",
+      status: "published",
     } as never);
 
     const req = new Request("https://app.example.com/api/cron/publish", {
@@ -247,21 +259,26 @@ describe("GET /api/cron/publish", () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({
       claimed: 1,
-      published: 0,
-      failed: 1,
-      errorCount: 1,
-      errors: [
-        {
-          id: "job_1",
-          detail: "Facebook publish execution is not implemented yet.",
-        },
-      ],
+      published: 1,
+      failed: 0,
+      errorCount: 0,
     });
+    expect(mockedPublishFacebookPageContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        imageUrl: "https://cdn.example.com/image.jpg",
+        caption: "Caption",
+      }),
+      expect.objectContaining({ pageId: "page_1" }),
+    );
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
-    expect(mockedCompletePublishJobFailure).toHaveBeenCalledWith(
+    expect(mockedGetPublishWindowUsage).not.toHaveBeenCalled();
+    expect(mockedMarkPostPublished).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ id: "job_1", destination: "facebook" }),
-      "Facebook publish execution is not implemented yet.",
+      baseJob.ownerHash,
+      baseJob.postId,
+      "page_1_1",
+      "facebook",
     );
   });
 

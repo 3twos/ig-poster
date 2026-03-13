@@ -58,11 +58,16 @@ export async function GET(req: Request) {
 
     for (const job of claimed) {
       try {
-        const usage = ownerUsage.get(job.ownerHash) ??
-          await getPublishWindowUsage(db, job.ownerHash);
-        ownerUsage.set(job.ownerHash, usage);
+        const usageKey = `${job.ownerHash}:${job.destination}`;
+        const usage = job.destination === "instagram"
+          ? ownerUsage.get(usageKey) ??
+            await getPublishWindowUsage(db, job.ownerHash, new Date(), job.destination)
+          : null;
+        if (usage) {
+          ownerUsage.set(usageKey, usage);
+        }
 
-        if (usage.remaining <= 0) {
+        if (usage && usage.remaining <= 0) {
           const detail =
             `Deferred by publish window limit (${usage.used}/${usage.limit} in last 24h).`;
           const deferTo = new Date(Date.now() + QUOTA_DEFER_MINUTES * 60 * 1000);
@@ -121,10 +126,18 @@ export async function GET(req: Request) {
           children: "children" in publish ? publish.children : undefined,
           warningDetail: firstCommentWarning,
         });
-        usage.used += 1;
-        usage.remaining = Math.max(usage.limit - usage.used, 0);
+        if (usage) {
+          usage.used += 1;
+          usage.remaining = Math.max(usage.limit - usage.used, 0);
+        }
         if (job.postId) {
-          await markPostPublished(db, job.ownerHash, job.postId, publish.publishId);
+          await markPostPublished(
+            db,
+            job.ownerHash,
+            job.postId,
+            publish.publishId,
+            job.destination,
+          );
         }
         if (isBlobEnabled() && job.outcomeContext && publish.publishId) {
           try {

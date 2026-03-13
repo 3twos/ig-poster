@@ -237,6 +237,9 @@ export const updatePublishJob = async (
   }
 
   const nextMedia = payload.media ?? existing.media;
+  const nextFirstComment = payload.firstComment !== undefined
+    ? payload.firstComment
+    : existing.firstComment;
   const nextLocationId = payload.locationId !== undefined
     ? payload.locationId
     : existing.locationId;
@@ -244,7 +247,9 @@ export const updatePublishJob = async (
     ? payload.userTags
     : existing.userTags;
   const metadataIssues = getMetaMetadataValidationIssues({
+    destination: existing.destination,
     media: nextMedia,
+    firstComment: nextFirstComment,
     locationId: nextLocationId,
     userTags: nextUserTags,
   });
@@ -265,10 +270,7 @@ export const updatePublishJob = async (
     .set({
       status: "queued",
       caption: payload.caption ?? existing.caption,
-      firstComment:
-        payload.firstComment !== undefined
-          ? payload.firstComment
-          : existing.firstComment,
+      firstComment: nextFirstComment,
       locationId: nextLocationId,
       userTags: nextUserTags,
       media: nextMedia,

@@ -1,9 +1,12 @@
 import type { PublishJobRow } from "@/db/schema";
 import {
+  publishFacebookPageContent,
   publishInstagramContent,
   publishInstagramFirstComment,
+  type MetaPublishResult,
   type MetaAuthContext,
 } from "@/lib/meta";
+import { getMetaMetadataValidationIssues } from "@/lib/meta-schemas";
 import type { MetaScheduleRequest } from "@/lib/meta-schemas";
 
 type PublishablePayload = {
@@ -14,9 +17,7 @@ type PublishablePayload = {
   userTags?: MetaScheduleRequest["userTags"] | null;
 };
 
-export type PublishExecutionResult = Awaited<
-  ReturnType<typeof publishInstagramContent>
->;
+export type PublishExecutionResult = MetaPublishResult;
 
 export type PublishExecutionOutcome = {
   publish: PublishExecutionResult;
@@ -27,15 +28,22 @@ export class UnsupportedPublishDestinationError extends Error {
   readonly destination: PublishJobRow["destination"];
 
   constructor(destination: PublishJobRow["destination"]) {
-    super(
-      destination === "facebook"
-        ? "Facebook publish execution is not implemented yet."
-        : `Unsupported publish destination: ${destination}.`,
-    );
+    super(`Unsupported publish destination: ${destination}.`);
     this.name = "UnsupportedPublishDestinationError";
     this.destination = destination;
   }
 }
+
+const getDestinationValidationError = (
+  destination: PublishJobRow["destination"],
+  payload: PublishablePayload,
+) => getMetaMetadataValidationIssues({
+  destination,
+  media: payload.media,
+  firstComment: payload.firstComment,
+  locationId: payload.locationId,
+  userTags: payload.userTags,
+})[0]?.message;
 
 const publishInstagramPayload = async (
   payload: PublishablePayload,
@@ -81,6 +89,21 @@ const publishInstagramPayload = async (
   }
 };
 
+const publishFacebookPayload = async (
+  payload: PublishablePayload,
+  auth: MetaAuthContext,
+): Promise<PublishExecutionOutcome> => {
+  const publish = await publishFacebookPageContent(
+    {
+      ...payload.media,
+      caption: payload.caption,
+    },
+    auth,
+  );
+
+  return { publish };
+};
+
 export const executePublishJob = async (
   job: Pick<
     PublishJobRow,
@@ -93,15 +116,36 @@ export const executePublishJob = async (
   >,
   auth: MetaAuthContext,
 ): Promise<PublishExecutionOutcome> => {
+  const validationError = getDestinationValidationError(job.destination, job);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
   if (job.destination === "instagram") {
     return publishInstagramPayload(job, auth);
+  }
+
+  if (job.destination === "facebook") {
+    return publishFacebookPayload(job, auth);
   }
 
   throw new UnsupportedPublishDestinationError(job.destination);
 };
 
-export const executeImmediateInstagramPublish = async (
-  payload: PublishablePayload,
+export const executeImmediatePublish = async (
+  payload: PublishablePayload & {
+    destination?: PublishJobRow["destination"];
+  },
   auth: MetaAuthContext,
 ): Promise<PublishExecutionOutcome> =>
-  publishInstagramPayload(payload, auth);
+  executePublishJob(
+    {
+      destination: payload.destination ?? "instagram",
+      media: payload.media,
+      caption: payload.caption,
+      firstComment: payload.firstComment ?? null,
+      locationId: payload.locationId ?? null,
+      userTags: payload.userTags ?? null,
+    },
+    auth,
+  );
