@@ -20,7 +20,7 @@ import {
   type PostDraft,
   type PostRowWithDestinations,
 } from "@/hooks/use-post-reducer";
-import { useAutoSave, type SaveStatus } from "@/hooks/use-auto-save";
+import { serializeDraft, useAutoSave, type SaveStatus } from "@/hooks/use-auto-save";
 
 type PostContextValue = {
   // Sidebar
@@ -368,10 +368,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
     const handler = () => {
       const d = draftRef.current;
       if (!d || d.status === "posted") return;
-      const rest = { ...d };
-      delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
-      delete (rest as { destinations?: unknown }).destinations;
-      const body = JSON.stringify(rest);
+      const body = serializeDraft(d);
       fetch(`/api/posts/${d.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

@@ -6,10 +6,9 @@ import type { PostDraft } from "./use-post-reducer";
 export type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 
 /** Strips transient fields before comparing / sending to API */
-function serializeDraft(draft: PostDraft): string {
-  const rest = { ...draft };
-  delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
-  delete (rest as { destinations?: unknown }).destinations;
+export function serializeDraft(draft: PostDraft): string {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { activeSlideIndex, destinations, ...rest } = draft;
   return JSON.stringify(rest);
 }
 
