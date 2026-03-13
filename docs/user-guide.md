@@ -78,6 +78,7 @@
      - add or remove custom text boxes
      - adjust text scale per box
    - Use `Auto-fit Layout` in editor mode to restack the generated text boxes using the current copy so overlapping blocks settle back into a safer layout without a full regenerate. When the current canvas has live measurements available, auto-fit now prefers those measured heights over the heuristic estimate. The preview's automatic measured pass is conservative and only expands/restacks when the live DOM proves a block is taller than the saved layout.
+   - If canonical hook/headline/body/CTA boxes still overlap or extend outside the frame, the canvas now shows a `Layout warning` summary so you know when to auto-fit or manually reposition blocks.
    - Turning editor mode off keeps the edited layout visible in the normal preview and in shared snapshots.
    - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
    - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.

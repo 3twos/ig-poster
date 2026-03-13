@@ -78,6 +78,7 @@ Why this shape:
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, adaptive logo-chip contrast, feed landscape ratio support, and a non-editor measured-height restack pass for canonical blocks when the live DOM is taller than the saved layout.
+  - `src/components/poster-section.tsx` now also derives and surfaces canonical layout warnings when blocks overlap or extend beyond the frame, so the editor has a deterministic signal alongside the `Auto-fit Layout` control.
   - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, refine/caption controls, and the last refine prompt preview including the parsed refinement plan.
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
@@ -103,6 +104,7 @@ Why this shape:
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions, plus measured-height overrides when the browser preview/editor can prove a taller rendered result
+  - canonical overlay geometry diagnostics that detect overlap/out-of-bounds issues for the hook/headline/body/CTA stack and feed that signal into the editor UI
   - structured refinement-plan parsing plus deterministic enforcement for common post-generation instructions like shortening copy or removing CTA text, plus CTA-policy-aware fallback/refine cleanup
   - brief-aware variant ranking heuristics that prefer saved theme/subject/thought/audience alignment over generic engagement tropes when selecting finalists
   - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses

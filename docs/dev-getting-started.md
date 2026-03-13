@@ -160,7 +160,6 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
 - `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time (optionally hidden on pages that render their own fixed status controls).
 - `src/app/settings/page.tsx`: dedicated settings page with sidebar tabs (General, LLM Provider, Brand Kits). Section components live in `src/components/settings/`.
-- `src/components/poster-section.tsx`: poster preview wrapper with empty state.
 - `src/components/strategy-section.tsx`: strategy text, variant tiles, persisted post-caption editing, refine controls, the last refine prompt + parsed-plan preview, and the canvas editor inspector (save state, text overrides, custom boxes).
 - `src/components/publish-metadata-editor.tsx`: persisted publish metadata editor for first comment, location, reel feed-sharing, and per-asset user tags.
 - `src/components/publish-section.tsx`: share link, Meta publishing-pair status, planner entry point, schedule/post controls, and the queued/failed publish queue.
@@ -168,6 +167,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/publish-job-queue.tsx`: queue viewer/editor with destination/sync-mode badges and recent publish-job activity entries for diagnostics around retries, deferrals, and failures.
 - `src/components/meta-location-search.tsx`: shared Meta place-search assist used by both the main publish form and queue editor.
 - `src/components/poster-preview.tsx`: poster renderer, persisted overlay layout playback, carousel slide preview, adaptive logo chip, editable overlay blocks, the non-editor measured-height restack pass for canonical overlay copy, and canonical height reporting that editor auto-fit can consume.
+- `src/components/poster-section.tsx`: preview wrapper, editor controls, hidden-block recovery, and canonical layout warning summaries for overlap / out-of-bounds issues.
 - `src/components/chat/`: chat module — `chat-panel.tsx` (embeddable for right panel), `chat-container.tsx` (standalone with sidebar), `chat-messages.tsx`, `chat-message.tsx`, `chat-input.tsx`, `chat-markdown.tsx`, `chat-code-block.tsx`, `chat-thinking.tsx`, `chat-empty.tsx`, `chat-header.tsx`, `chat-sidebar.tsx`.
 - `src/hooks/use-generation.ts`: SSE-based generation orchestration, agent run state, thinking token handling.
 - `src/hooks/use-chat.ts`: chat message state, SSE streaming, send/stop/regenerate/edit.
@@ -194,7 +194,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `companion/IGPosterCompanion/`: macOS companion scaffold with a shared Apple Photos bridge contract and a SwiftUI app shell
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
-- `src/lib/creative.ts`: generation schemas, prompt builders, CTA-policy-aware fallback/refine helpers, structured refine-plan parsing/enforcement helpers, deterministic overlay fitting with optional measured-height inputs, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
+- `src/lib/creative.ts`: generation schemas, prompt builders, CTA-policy-aware fallback/refine helpers, structured refine-plan parsing/enforcement helpers, deterministic overlay fitting with optional measured-height inputs, canonical geometry diagnostics, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
