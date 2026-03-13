@@ -42,6 +42,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
 
     let parameters = NWParameters.tcp
     parameters.allowLocalEndpointReuse = true
+    parameters.requiredInterfaceType = .loopback
     listener = try NWListener(using: parameters, on: nwPort)
   }
 

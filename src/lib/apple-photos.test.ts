@@ -107,4 +107,34 @@ describe("probeApplePhotosBridge", () => {
       code: "MACOS_BRIDGE_UNAVAILABLE",
     });
   });
+
+  it("rejects health payloads that advertise a different origin", async () => {
+    const health = buildApplePhotosBridgeHealthResponse();
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          ...health,
+          bridge: {
+            ...health.bridge,
+            origin: "http://127.0.0.1:9999",
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(
+      probeApplePhotosBridge({
+        fetchImpl: fetchImpl as typeof fetch,
+        timeoutMs: APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS,
+      }),
+    ).resolves.toMatchObject({
+      available: false,
+      code: "MACOS_BRIDGE_UNAVAILABLE",
+      message: "The local Apple Photos bridge advertised an unexpected origin.",
+    });
+  });
 });

@@ -95,11 +95,12 @@ export const probeApplePhotosBridge = async ({
   draftId?: string;
   profile?: string;
 } = {}): Promise<ApplePhotosBridgeProbeResult> => {
+  const bridgeUrls = getApplePhotosBridgeUrls();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetchImpl(getApplePhotosBridgeUrls().healthUrl, {
+    const response = await fetchImpl(bridgeUrls.healthUrl, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
@@ -123,6 +124,15 @@ export const probeApplePhotosBridge = async ({
       };
     }
 
+    if (payload.bridge.origin !== bridgeUrls.origin) {
+      return {
+        available: false,
+        code: "MACOS_BRIDGE_UNAVAILABLE",
+        message:
+          "The local Apple Photos bridge advertised an unexpected origin.",
+      };
+    }
+
     return {
       available: true,
       health: payload,
@@ -130,7 +140,7 @@ export const probeApplePhotosBridge = async ({
         returnTo,
         draftId,
         profile,
-        bridgeOrigin: payload.bridge.origin,
+        bridgeOrigin: bridgeUrls.origin,
       }),
     };
   } catch {
