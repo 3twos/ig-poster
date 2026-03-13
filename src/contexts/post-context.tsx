@@ -370,7 +370,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       if (!d || d.status === "posted") return;
       const rest = { ...d };
       delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
-      delete (rest as { destinations?: unknown }).destinations;
+      delete (rest as { destinations?: PostDraft["destinations"] }).destinations;
       const body = JSON.stringify(rest);
       fetch(`/api/posts/${d.id}`, {
         method: "PUT",
