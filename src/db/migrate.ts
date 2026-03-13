@@ -14,15 +14,21 @@
  * NOTE: Neon HTTP driver does not support transactions — if a migration
  * fails partway through, you must fix the DB manually before retrying.
  */
+import path from "node:path";
+import { loadEnvConfig } from "@next/env";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { migrate } from "drizzle-orm/neon-http/migrator";
 
-async function run() {
-  const url =
-    process.env.POSTGRES_URL?.trim() || process.env.DATABASE_URL?.trim();
+// Load .env.local / .env so DB URLs are available outside of Next.js runtime
+loadEnvConfig(process.cwd());
 
-  if (!url) {
+async function run() {
+  let url: string | undefined;
+  try {
+    const { resolveDatabaseUrl } = await import("./index");
+    url = resolveDatabaseUrl();
+  } catch {
     console.log("⏭  No database URL set — skipping migrations.");
     return;
   }
@@ -30,7 +36,8 @@ async function run() {
   console.log("🔄 Running Drizzle migrations…");
 
   const db = drizzle(neon(url));
-  await migrate(db, { migrationsFolder: "./drizzle" });
+  const migrationsFolder = path.resolve(process.cwd(), "drizzle");
+  await migrate(db, { migrationsFolder });
 
   console.log("✅ Migrations up to date.");
 }
