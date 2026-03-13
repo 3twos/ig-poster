@@ -7,6 +7,8 @@ import { PublishJobStatusSchema } from "@/lib/meta-schemas";
 import { listPublishJobsForOwner } from "@/lib/publish-jobs";
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
+import { syncFacebookScheduledPublishJobs } from "@/services/facebook-sync";
 
 export const runtime = "nodejs";
 
@@ -20,6 +22,7 @@ const ListQuerySchema = z.object({
       const parsed = Number.parseInt(value, 10);
       return Number.isFinite(parsed) ? parsed : undefined;
     }),
+  syncMeta: z.enum(["facebook"]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -41,6 +44,28 @@ export async function GET(req: Request) {
             .filter(Boolean),
         )
       : undefined;
+
+    if (query.syncMeta === "facebook") {
+      try {
+        const resolvedAuth = await resolveMetaAuthForRequest(req, { ownerHash });
+        await syncFacebookScheduledPublishJobs(
+          {
+            type: "workspace-user",
+            subjectId: session.sub,
+            email: session.email,
+            domain: session.domain,
+            ownerHash,
+            authSource: "cookie",
+            scopes: [],
+            issuedAt: session.issuedAt,
+            expiresAt: session.expiresAt,
+          },
+          resolvedAuth,
+        );
+      } catch (error) {
+        console.warn("[api/publish-jobs] skipped Facebook sync", error);
+      }
+    }
 
     const jobs = await listPublishJobsForOwner(getDb(), ownerHash, {
       statuses,

@@ -37,7 +37,7 @@ type Props = {
   onSelectPost?: (postId: string) => Promise<void> | void;
 };
 
-const PLANNER_QUERY = "status=queued,processing&limit=50";
+const PLANNER_QUERY = "status=queued,processing&limit=50&syncMeta=facebook";
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const fetchScheduledJobs = async () => {
