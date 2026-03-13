@@ -46,7 +46,7 @@ Open `http://localhost:3000`.
 
 - `BLOB_READ_WRITE_TOKEN`
 
-### Required for Instagram publish flow
+### Required for Meta publish flow
 
 - OAuth path:
   - `META_APP_ID`
@@ -55,6 +55,7 @@ Open `http://localhost:3000`.
 - Env fallback path:
   - `INSTAGRAM_ACCESS_TOKEN`
   - `INSTAGRAM_BUSINESS_ID`
+  - `META_PAGE_ID` or `FACEBOOK_PAGE_ID` when testing Facebook Page publish execution locally
 
 ### Required for scheduled publish execution
 
@@ -193,7 +194,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
-- `src/lib/meta.ts`: Meta Graph publishing primitives plus place-search helper for location assist and reel `share_to_feed` handling.
+- `src/lib/meta.ts`: Meta Graph publishing primitives for Instagram media containers, Facebook Page photo/video publishing, and Instagram location assist.
 - `src/lib/publish-jobs.ts`: publish-job persistence helpers, retry/defer logic, and stale-processing recovery used by cron hardening.
 - `src/lib/meta-media-preflight.ts`: publish-time media URL compliance checks (public HTTPS validation + content-type probing).
 - `src/lib/meta-auth.ts`: Meta OAuth flow and credential resolution.

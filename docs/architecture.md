@@ -19,7 +19,7 @@ flowchart LR
   APIV1 --> POSTSVC["App Services (`src/services/*`)"]
   API --> POSTSVC
   POSTSVC --> LLM["LLM Adapter (`src/lib/llm.ts`)"]
-  POSTSVC --> META["Meta Publisher (`src/lib/meta.ts`)"]
+  POSTSVC --> META["Meta Publisher (`src/lib/meta.ts`)\nIG media + FB Page photo/video"]
   POSTSVC --> CHAT["Chat Streaming (`src/lib/chat-stream.ts`)"]
   POSTSVC --> PG["Postgres (posts, brand_kits, credentials)"]
   POSTSVC --> BLOB["Vercel Blob Storage"]
@@ -87,6 +87,7 @@ Why this shape:
   - `src/services/brand-kits.ts` owns extracted brand-kit read workflows (`list`, `get`).
   - `src/services/meta-auth.ts` resolves CLI-safe Meta auth for bearer-auth `/api/v1/*` publish and location-search requests, preferring stored OAuth connections when available and falling back to env credentials.
   - `src/services/publish-jobs.ts` owns extracted publish-job queue reads and mutation rules (`list`, `get`, `update`) for the CLI-facing API surface.
+  - `src/services/publish-executor.ts` dispatches destination-aware publish execution so Instagram jobs use the IG media-container flow while Facebook jobs use Page photo/video endpoints.
   - `src/services/status.ts` aggregates CLI-safe bearer-auth status data for `/api/v1/status`, combining actor info, Meta readiness, LLM provider availability, and publish-window usage.
   - `src/cli/commands/watch.ts` orchestrates local-directory polling and ingest for agent workflows by reusing the normal assets + posts API surface.
   - `src/cli/commands/mcp.ts` exposes a focused MCP stdio tool surface by invoking the existing CLI commands in structured-output mode.
@@ -101,7 +102,7 @@ Why this shape:
   - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses
   - LLM provider abstraction
   - auth/session/token helpers
-  - Meta Graph publish/schedule orchestration + publish job lifecycle utilities
+  - Meta Graph publish/schedule orchestration + publish job lifecycle utilities, including Facebook Page single-image/single-video execution
   - carousel/media-composition utilities
   - Blob storage wrappers
 
@@ -220,6 +221,7 @@ Why this shape:
 - Fallback path: env credentials (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ID`).
 - Runtime resolver returns a uniform `MetaAuthContext` to publishing code.
 - CLI-facing `/api/v1/*` publish flows use the same stored Meta OAuth records when present, but resolve them server-side without relying on the browser's `ig_connection` cookie.
+- Facebook Page execution also reads `META_PAGE_ID` or `FACEBOOK_PAGE_ID` when env credentials are used instead of OAuth.
 
 ### LLM Auth (Multi-Model)
 
@@ -250,6 +252,7 @@ Why this shape:
   - `publish_jobs` table with job status (`queued`, `processing`, `published`, `failed`, `canceled`), destination/account scope metadata, scheduling timestamp, optional first-comment text, optional image metadata (`location_id`, `user_tags`), and event timeline.
   - `meta_accounts` table as the foundation for Meta Page + Instagram account-pair state, graph version tracking, token expiry metadata, and capability snapshots.
   - `post_destinations` table as the foundation for per-post Facebook/Instagram delivery state, remote identifiers, sync mode, and reconciliation metadata.
+- Instagram immediate publishes still enforce the rolling 24-hour quota reservation in `src/lib/publish-jobs.ts`; Facebook jobs bypass that Instagram-specific guard while keeping the same destination-aware queue metadata.
 - Cookies store lightweight identifiers/tokens, not raw long-lived secrets.
 - `posts.status` is constrained to PostgreSQL enum `post_status` (`draft`, `scheduled`, `posted`).
 - `posts.archivedAt` is the soft-archive flag; archived posts keep their publish status instead of switching to a separate archived enum value.

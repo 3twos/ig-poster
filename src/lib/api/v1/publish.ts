@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MetaScheduleRequestSchema } from "@/lib/meta";
+import { MetaDestinationSchema, MetaScheduleRequestSchema } from "@/lib/meta";
 
 const ConnectionIdSchema = z.string().trim().min(1).max(64);
 
@@ -20,6 +20,7 @@ const PublishAuthSourceSchema = z.enum(["oauth", "env"]);
 
 export const PublishResourceSchema = z.object({
   status: PublishStatusSchema,
+  destination: MetaDestinationSchema,
   mode: PublishModeSchema,
   authSource: PublishAuthSourceSchema,
   connectionId: z.string().nullable().optional(),

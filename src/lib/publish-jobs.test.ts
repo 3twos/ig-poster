@@ -181,6 +181,26 @@ describe("reserveImmediatePublishJob", () => {
     expect(reserved).toBeNull();
     expect(tx.insert).not.toHaveBeenCalled();
   });
+
+  it("does not apply the Instagram rolling limit to Facebook reservations", async () => {
+    const job = {
+      ...baseJob(),
+      destination: "facebook" as const,
+    };
+    const { db, tx } = makeReservationDb(50, [job]);
+
+    const reserved = await reserveImmediatePublishJob(db, {
+      ownerHash: "owner_hash",
+      destination: "facebook",
+      caption: "Now",
+      media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      authSource: "oauth",
+      connectionId: "conn_1",
+    });
+
+    expect(reserved?.destination).toBe("facebook");
+    expect(tx.insert).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("completePublishJobFailure", () => {
