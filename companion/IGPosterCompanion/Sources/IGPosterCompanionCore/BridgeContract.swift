@@ -165,6 +165,15 @@ public struct ApplePhotosImportResponse: Codable, Equatable, Sendable {
   public let importedAt: String
 }
 
+public struct ApplePhotosCompanionLaunchRequest: Equatable, Sendable {
+  public let url: URL
+  public let action: ApplePhotosCompanionBridge.LaunchAction
+  public let returnTo: String?
+  public let draftId: String?
+  public let profile: String?
+  public let bridgeOrigin: String?
+}
+
 public enum ApplePhotosCompanionBridge {
   public static let appName = "IG Poster Companion"
   public static let version = "v1"
@@ -266,5 +275,41 @@ public enum ApplePhotosCompanionBridge {
 
     return components.url
       ?? URL(string: "\(urlScheme)://photos/\(action.rawValue)")!
+  }
+
+  public static func parseLaunchURL(_ url: URL) -> ApplePhotosCompanionLaunchRequest? {
+    guard
+      let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+      components.scheme == urlScheme,
+      components.host == "photos"
+    else {
+      return nil
+    }
+
+    let normalizedPath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    guard let action = LaunchAction(rawValue: normalizedPath) else {
+      return nil
+    }
+
+    func queryValue(_ name: String) -> String? {
+      let value = components.queryItems?.first(where: { $0.name == name })?.value
+      guard let value, !value.isEmpty else {
+        return nil
+      }
+      return value
+    }
+
+    let bridgeOrigin = queryValue("bridge_origin").map { origin in
+      origin.hasSuffix("/") ? String(origin.dropLast()) : origin
+    }
+
+    return ApplePhotosCompanionLaunchRequest(
+      url: url,
+      action: action,
+      returnTo: queryValue("return_to"),
+      draftId: queryValue("draft_id"),
+      profile: queryValue("profile"),
+      bridgeOrigin: bridgeOrigin
+    )
   }
 }

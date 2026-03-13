@@ -20,6 +20,10 @@ let package = Package(
       name: "ig-poster-companion-contract-smoke",
       targets: ["IGPosterCompanionContractSmoke"],
     ),
+    .executable(
+      name: "ig-poster-companion-bridge",
+      targets: ["IGPosterCompanionBridge"],
+    ),
   ],
   targets: [
     .target(
@@ -31,6 +35,10 @@ let package = Package(
     ),
     .executableTarget(
       name: "IGPosterCompanionContractSmoke",
+      dependencies: ["IGPosterCompanionCore"],
+    ),
+    .executableTarget(
+      name: "IGPosterCompanionBridge",
       dependencies: ["IGPosterCompanionCore"],
     ),
   ],
