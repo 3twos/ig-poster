@@ -189,6 +189,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
 - `src/services/status.ts`: aggregated CLI status summaries for actor auth, Meta readiness, LLM providers, and publish-window usage.
 - `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
+- `companion/IGPosterCompanion/`: macOS companion scaffold with a shared Apple Photos bridge contract and a SwiftUI app shell
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output, deterministic overlay fitting, refine-directive enforcement helpers, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -292,6 +293,34 @@ Planned next CLI/macOS work:
 - Agent-first flow: `ig photos recent|search|import|propose` and future MCP tools call the same local bridge for PhotoKit-backed enumeration/export, then continue through the normal CLI/service pipeline.
 - Keep Apple-specific behavior isolated to the companion app and bridge; do not introduce Apple-specific logic into the server routes or core domain services.
 - Missing-helper behavior must be explicit: if the companion app or bridge is unavailable, the web app should fall back to install guidance plus normal file upload, and CLI/MCP should return machine-readable remediation codes.
+
+Current native scaffold status:
+
+- `src/lib/apple-photos-bridge.ts` is now the shared TS-side contract for localhost endpoints, launch URLs, and remediation-code vocabulary.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/BridgeContract.swift` mirrors that contract on the native side.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on, and it now reflects parsed custom-URL handoff state from the browser.
+- That same SwiftUI shell now includes a PhotosPicker-based selection preview so we can validate native macOS asset picking before export/import is wired in.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes a narrow localhost bridge (`GET /v1/health`) so the web editor can probe for a running native helper before attempting handoff.
+- Validate the native scaffold locally with:
+
+```bash
+cd companion/IGPosterCompanion
+swift build
+swift run ig-poster-companion-contract-smoke
+swift run ig-poster-companion-bridge --print-health
+swift run ig-poster-companion
+```
+
+While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to validate ordered local image/video selection without waiting for export/import wiring.
+
+To exercise the new web-side probe locally:
+
+```bash
+cd companion/IGPosterCompanion
+swift run ig-poster-companion-bridge
+```
+
+Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health` before deciding whether to offer the native companion handoff or the regular-upload fallback.
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.
