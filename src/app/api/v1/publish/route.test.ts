@@ -20,6 +20,10 @@ vi.mock("@/services/meta-auth", () => ({
   },
 }));
 
+vi.mock("@/services/post-destinations", () => ({
+  upsertPostDestinationRemoteState: vi.fn(),
+}));
+
 vi.mock("@/lib/meta-media-preflight", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/meta-media-preflight")
@@ -67,6 +71,7 @@ import {
 } from "@/lib/publish-jobs";
 import { resolveActorFromRequest } from "@/services/actors";
 import { resolveMetaAuthForApi } from "@/services/meta-auth";
+import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
 
 const mockedResolveActorFromRequest = vi.mocked(resolveActorFromRequest);
 const mockedResolveMetaAuthForApi = vi.mocked(resolveMetaAuthForApi);
@@ -78,6 +83,9 @@ const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
 const mockedGetDb = vi.mocked(getDb);
+const mockedUpsertPostDestinationRemoteState = vi.mocked(
+  upsertPostDestinationRemoteState,
+);
 
 const actor = {
   ownerHash: "owner_hash",
@@ -163,6 +171,7 @@ describe("POST /api/v1/publish", () => {
     });
     mockedCompletePublishJobSuccess.mockResolvedValue({} as never);
     mockedIsBlobEnabled.mockReturnValue(false);
+    mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
   });
 
   it("requires an authenticated actor", async () => {
@@ -378,6 +387,87 @@ describe("POST /api/v1/publish", () => {
       }),
       expect.anything(),
     );
+  });
+
+  it("creates remote-authoritative Facebook scheduled posts and shadows them locally", async () => {
+    const publishAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ id: "post_1" }]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+    } as unknown as ReturnType<typeof getDb>);
+    mockedPublishFacebookPageContent.mockResolvedValue({
+      mode: "image",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+    });
+    mockedCreatePublishJob.mockResolvedValueOnce({
+      id: "job_fb_1",
+      publishAt: new Date(publishAt),
+    } as never);
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/publish", {
+        method: "POST",
+        body: JSON.stringify({
+          postId: "post_1",
+          destination: "facebook",
+          caption: "Facebook scheduled",
+          publishAt,
+          media: {
+            mode: "image",
+            imageUrl: "https://cdn.example.com/image.jpg",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        publish: {
+          status: "scheduled",
+          destination: "facebook",
+          mode: "image",
+          id: "job_fb_1",
+          publishId: "page_1_1",
+          creationId: "photo_1",
+          publishAt,
+        },
+      },
+    });
+    expect(mockedPublishFacebookPageContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        imageUrl: "https://cdn.example.com/image.jpg",
+        caption: "Facebook scheduled",
+        publishAt,
+      }),
+      expect.anything(),
+    );
+    expect(mockedCreatePublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        destination: "facebook",
+        remoteAuthority: "remote_authoritative",
+        publishId: "page_1_1",
+        creationId: "photo_1",
+      }),
+    );
+    expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        destination: "facebook",
+        desiredState: "scheduled",
+        remoteState: "scheduled",
+      }),
+    );
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
   });
 
   it("rejects Instagram-only metadata on Facebook publishes", async () => {

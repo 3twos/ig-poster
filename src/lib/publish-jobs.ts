@@ -113,6 +113,9 @@ export const createPublishJob = async (
     authSource: "oauth" | "env";
     connectionId?: string;
     outcomeContext?: MetaScheduleRequest["outcomeContext"];
+    publishId?: string;
+    creationId?: string;
+    children?: string[];
     maxAttempts?: number;
   },
 ) => {
@@ -140,6 +143,9 @@ export const createPublishJob = async (
       authSource: input.authSource,
       connectionId: input.connectionId,
       outcomeContext: input.outcomeContext,
+      publishId: input.publishId,
+      creationId: input.creationId,
+      children: input.children,
       events: appendPublishJobEvent([], {
         type: "created",
         detail: `Queued for ${new Date(input.publishAt).toISOString()}.`,

@@ -112,6 +112,8 @@
    - Use the queue controls to cancel a scheduled publish, retry a failed job immediately, or edit a queued/failed job (caption + first comment + publish time + media URLs + image metadata, including visual tag placement and location search assist, plus reel feed-sharing and per-item carousel tags) without leaving the editor.
    - Each queue card now shows recent activity entries so you can see retries, deferrals, failures, and manual edits without checking the database.
    - After a post is successfully published, IG Poster marks it `Posted` and switches it to a read-only snapshot view. Posted posts cannot be edited or deleted; archive them to hide them from the main list, or duplicate them to create a new draft.
+   - Facebook schedules are now created remotely on the connected Page as soon as you schedule them. The app stores a Meta-synced shadow job so the planner and queue still show the item while cron reconciles the final published state.
+   - Those Meta-synced Facebook shadow jobs are read-only in IG Poster for now; manage schedule edits/cancelation in Meta tools until remote mutation support lands here.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -227,6 +229,7 @@ If the macOS companion app is not installed or not reachable:
 - Location ID is supported for single-image posts, reels, and carousel parents.
 - User tags are supported for single-image posts, reels, and carousel image items. Carousel videos cannot carry user tags.
 - Facebook Page publishes currently do not support carousels, Instagram first comments, Instagram location IDs, or Instagram user tags.
+- Facebook scheduled publishes are remote-authoritative: the Page schedule is created in Meta immediately, a local shadow job mirrors it for planner/queue visibility, and cron later marks the shadow job published after Meta publishes the Page post.
 - Location search suggestions populate the same `locationId` field sent to Meta; if search fails, you can still paste the raw ID manually.
 - User-tag placement uses the rendered poster preview in the main composer and the stored published image URL in queue edits when an image preview exists, while x/y inputs remain available for precision edits.
 - Instagram API throughput is capped at 50 published posts per rolling 24-hour window per account.
@@ -252,6 +255,7 @@ If the macOS companion app is not installed or not reachable:
   - Connect/disconnect in Settings under the Meta publishing pair section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in the private credential store (DB) when available, with encrypted cookie fallback.
   - A connected Page + Instagram professional account pair enables Instagram publishing in the browser app today and Facebook destination execution through the API/queue backend.
+  - Facebook scheduled posts now round-trip through the connected Page first and then sync back into the app via a local shadow job + cron reconciliation path.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.
 

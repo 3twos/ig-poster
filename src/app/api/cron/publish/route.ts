@@ -8,6 +8,7 @@ import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import { requireAppEncryptionSecret } from "@/lib/app-encryption";
 import { getMetaConnection } from "@/lib/meta-auth";
 import {
+  getFacebookPagePublishState,
   getEnvMetaAuth,
 } from "@/lib/meta";
 import {
@@ -20,6 +21,7 @@ import {
   recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
 import { decryptString } from "@/lib/secure";
+import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
 import { executePublishJob } from "@/services/publish-executor";
 
 export const runtime = "nodejs";
@@ -113,6 +115,167 @@ export async function GET(req: Request) {
           throw new Error(
             "No publishing credentials available. Configure OAuth or env credentials.",
           );
+        }
+
+        if (
+          job.destination === "facebook" &&
+          job.remoteAuthority === "remote_authoritative"
+        ) {
+          const remoteState = await getFacebookPagePublishState(
+            {
+              publishId: job.publishId ?? undefined,
+              creationId: job.creationId ?? undefined,
+            },
+            auth,
+          );
+
+          if (!remoteState.isPublished) {
+            const scheduledPublishAt = remoteState.scheduledPublishTime
+              ? new Date(remoteState.scheduledPublishTime)
+              : null;
+            const nextSyncAt = new Date(
+              Math.max(
+                Date.now() + QUOTA_DEFER_MINUTES * 60 * 1000,
+                scheduledPublishAt
+                  ? scheduledPublishAt.getTime() + 60 * 1000
+                  : 0,
+              ),
+            );
+            const detail = remoteState.scheduledPublishTime
+              ? `Waiting for Meta to publish scheduled Facebook post ${remoteState.remoteObjectId} (scheduled for ${remoteState.scheduledPublishTime}).`
+              : `Waiting for Meta to publish scheduled Facebook post ${remoteState.remoteObjectId}.`;
+            const updated = await deferProcessingPublishJob(
+              db,
+              job,
+              nextSyncAt,
+              detail,
+            );
+            if (job.postId) {
+              try {
+                await upsertPostDestinationRemoteState(db, {
+                  postId: job.postId,
+                  destination: "facebook",
+                  enabled: true,
+                  syncMode: job.remoteAuthority,
+                  desiredState: "scheduled",
+                  remoteState: "scheduled",
+                  caption: job.caption,
+                  publishAt: scheduledPublishAt ?? job.publishAt,
+                  remoteObjectId:
+                    remoteState.publishId ??
+                    remoteState.remoteObjectId ??
+                    job.publishId ??
+                    job.creationId ??
+                    null,
+                  remoteContainerId:
+                    remoteState.creationId ?? job.creationId ?? null,
+                  remotePermalink: remoteState.remotePermalink ?? null,
+                  remoteStatePayload: {
+                    scheduledPublishTime:
+                      remoteState.scheduledPublishTime ??
+                      job.publishAt.toISOString(),
+                  },
+                  lastSyncedAt: new Date(),
+                  lastError: null,
+                });
+              } catch {
+                // Remote schedule already exists; preserve cron reconciliation result.
+              }
+            }
+            if (updated) {
+              retried += 1;
+              deferred += 1;
+              continue;
+            }
+            errors.push({
+              id: job.id,
+              detail:
+                "Could not defer remote-authoritative Facebook sync job (state changed concurrently).",
+            });
+            continue;
+          }
+
+          await completePublishJobSuccess(db, job, {
+            publishId:
+              remoteState.publishId ??
+              job.publishId ??
+              remoteState.remoteObjectId,
+            creationId: remoteState.creationId ?? job.creationId ?? undefined,
+            children: job.children ?? undefined,
+          });
+          if (job.postId) {
+            await markPostPublished(
+              db,
+              job.ownerHash,
+              job.postId,
+              remoteState.publishId ??
+                job.publishId ??
+                remoteState.remoteObjectId,
+              job.destination,
+            );
+            try {
+              await upsertPostDestinationRemoteState(db, {
+                postId: job.postId,
+                destination: "facebook",
+                enabled: true,
+                syncMode: job.remoteAuthority,
+                desiredState: "published",
+                remoteState: "published",
+                caption: job.caption,
+                publishAt: job.publishAt,
+                remoteObjectId:
+                  remoteState.publishId ??
+                  remoteState.remoteObjectId ??
+                  job.publishId ??
+                  job.creationId ??
+                  null,
+                remoteContainerId:
+                  remoteState.creationId ?? job.creationId ?? null,
+                remotePermalink: remoteState.remotePermalink ?? null,
+                remoteStatePayload: {
+                  scheduledPublishTime:
+                    remoteState.scheduledPublishTime ??
+                    job.publishAt.toISOString(),
+                },
+                lastSyncedAt: new Date(),
+                lastError: null,
+              });
+            } catch {
+              // Remote publish already succeeded; preserve successful cron outcome.
+            }
+          }
+          if (
+            isBlobEnabled() &&
+            job.outcomeContext &&
+            (remoteState.publishId ?? job.publishId ?? remoteState.remoteObjectId)
+          ) {
+            try {
+              const outcomeId = randomUUID().replace(/-/g, "").slice(0, 18);
+              const publishedAt = new Date().toISOString();
+              await putJson(
+                `outcomes/${job.ownerHash}/${Date.now()}-${outcomeId}.json`,
+                {
+                  id: outcomeId,
+                  publishedAt,
+                  publishId:
+                    remoteState.publishId ??
+                    job.publishId ??
+                    remoteState.remoteObjectId,
+                  postType: job.outcomeContext.postType,
+                  caption: job.outcomeContext.caption,
+                  hook: job.outcomeContext.hook,
+                  hashtags: job.outcomeContext.hashtags,
+                  variantName: job.outcomeContext.variantName,
+                  brandName: job.outcomeContext.brandName,
+                  score: job.outcomeContext.score,
+                },
+              );
+            } catch {
+              // Outcome recording is non-critical.
+            }
+          }
+          published += 1;
+          continue;
         }
 
         const { publish, firstCommentWarning } = await executePublishJob(

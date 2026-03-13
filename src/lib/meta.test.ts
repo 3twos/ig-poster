@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getFacebookPagePublishState,
   getEnvMetaAuth,
   getMediaInsights,
   publishFacebookPageContent,
@@ -354,6 +355,91 @@ describe("publishFacebookPageContent", () => {
     ).rejects.toThrow(
       "Facebook scheduled publish time must be between 10 minutes and 30 days from now.",
     );
+  });
+});
+
+describe("getFacebookPagePublishState", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reads published Facebook Page post state from the Graph API", async () => {
+    const scheduledPublishTime = Math.floor(
+      new Date("2026-03-13T18:00:00.000Z").getTime() / 1000,
+    );
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "photo_1",
+        post_id: "page_1_1",
+        is_published: true,
+        permalink_url: "https://facebook.com/page/posts/1",
+        scheduled_publish_time: scheduledPublishTime,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFacebookPagePublishState(
+        {
+          publishId: "page_1_1",
+          creationId: "photo_1",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toEqual({
+      remoteObjectId: "page_1_1",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+      isPublished: true,
+      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      remotePermalink: "https://facebook.com/page/posts/1",
+    });
+  });
+
+  it("falls back to creationId lookup when publishId lookup fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: { message: "not found" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: "video_1",
+          published: false,
+          scheduled_publish_time: "2026-03-13T18:00:00.000Z",
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFacebookPagePublishState(
+        {
+          publishId: "page_1_1",
+          creationId: "video_1",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toEqual({
+      remoteObjectId: "video_1",
+      publishId: "page_1_1",
+      creationId: "video_1",
+      isPublished: false,
+      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      remotePermalink: undefined,
+    });
   });
 });
 

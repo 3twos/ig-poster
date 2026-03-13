@@ -12,6 +12,10 @@ vi.mock("@/services/meta-auth", () => ({
   resolveMetaAuthForRequest: vi.fn(),
 }));
 
+vi.mock("@/services/post-destinations", () => ({
+  upsertPostDestinationRemoteState: vi.fn(),
+}));
+
 vi.mock("@/lib/meta-media-preflight", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/meta-media-preflight")
@@ -65,6 +69,7 @@ import {
 } from "@/lib/publish-jobs";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { resolveMetaAuthForRequest } from "@/services/meta-auth";
+import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
@@ -78,6 +83,9 @@ const mockedPublishInstagramFirstComment = vi.mocked(publishInstagramFirstCommen
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
 const mockedCompletePublishJobFailure = vi.mocked(completePublishJobFailure);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
+const mockedUpsertPostDestinationRemoteState = vi.mocked(
+  upsertPostDestinationRemoteState,
+);
 
 const session = {
   sub: "user-1",
@@ -169,6 +177,7 @@ describe("POST /api/meta/schedule", () => {
         ReturnType<typeof completePublishJobFailure>
       >,
     );
+    mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
   });
 
   it("returns 401 when workspace auth is missing", async () => {
@@ -315,6 +324,84 @@ describe("POST /api/meta/schedule", () => {
         },
       }),
     );
+  });
+
+  it("creates remote-authoritative Facebook scheduled posts and shadows them locally", async () => {
+    const publishAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ id: "post_1" }]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+    } as unknown as ReturnType<typeof getDb>);
+    mockedPublishFacebookPageContent.mockResolvedValue({
+      mode: "image",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+    });
+    mockedCreatePublishJob.mockResolvedValue({
+      id: "job_fb_1",
+      publishAt: new Date(publishAt),
+    } as Awaited<ReturnType<typeof createPublishJob>>);
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        postId: "post_1",
+        destination: "facebook",
+        caption: "Facebook scheduled",
+        publishAt,
+        media: {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+        },
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      status: "scheduled",
+      destination: "facebook",
+      id: "job_fb_1",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+      publishAt,
+    });
+    expect(mockedPublishFacebookPageContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        imageUrl: "https://cdn.example.com/image.jpg",
+        caption: "Facebook scheduled",
+        publishAt,
+      }),
+      expect.objectContaining({ pageId: "page_1" }),
+    );
+    expect(mockedCreatePublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        destination: "facebook",
+        remoteAuthority: "remote_authoritative",
+        publishId: "page_1_1",
+        creationId: "photo_1",
+      }),
+    );
+    expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        destination: "facebook",
+        desiredState: "scheduled",
+        remoteState: "scheduled",
+        remoteObjectId: "page_1_1",
+        remoteContainerId: "photo_1",
+      }),
+    );
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
   });
 
   it("passes location and user tags for immediate image publish", async () => {

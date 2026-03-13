@@ -64,11 +64,25 @@ type GraphResponse = {
   id?: string;
   post_id?: string;
   permalink_url?: string;
+  published?: boolean;
+  is_published?: boolean;
+  scheduled_publish_time?: string | number;
   status_code?: string;
   status?: string;
   error?: {
     message?: string;
   };
+};
+
+type FacebookPagePublishStateResponse = GraphResponse;
+
+export type FacebookPagePublishState = {
+  remoteObjectId: string;
+  publishId?: string;
+  creationId?: string;
+  isPublished: boolean;
+  scheduledPublishTime?: string;
+  remotePermalink?: string;
 };
 
 const FACEBOOK_SCHEDULE_MIN_MS = 10 * 60 * 1000;
@@ -158,6 +172,19 @@ const requirePageId = (auth: MetaAuthContext) => {
   }
 
   return auth.pageId.trim();
+};
+
+const normalizeFacebookScheduledPublishTime = (
+  value?: string | number,
+) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const date = new Date(
+    typeof value === "number" ? value * 1000 : value,
+  );
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
 const applyFacebookPublishState = (
@@ -531,6 +558,70 @@ export const publishFacebookPageContent = async (
     },
     resolvedAuth,
   );
+};
+
+export const getFacebookPagePublishState = async (
+  input: {
+    publishId?: string;
+    creationId?: string;
+  },
+  auth?: MetaAuthContext,
+): Promise<FacebookPagePublishState> => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Facebook publishing credentials");
+  }
+
+  const candidateIds = [
+    input.publishId?.trim(),
+    input.creationId?.trim(),
+  ].filter((value): value is string => Boolean(value));
+
+  if (candidateIds.length === 0) {
+    throw new Error("Missing Facebook publish identifiers for remote state lookup.");
+  }
+
+  let lastError: unknown;
+  for (const candidateId of [...new Set(candidateIds)]) {
+    try {
+      const response = await callGraphGetWithParams<FacebookPagePublishStateResponse>(
+        candidateId,
+        resolvedAuth,
+        {
+          fields: [
+            "id",
+            "post_id",
+            "permalink_url",
+            "scheduled_publish_time",
+            "is_published",
+            "published",
+          ],
+        },
+      );
+
+      const responseId = response.id?.trim();
+      const postId = response.post_id?.trim();
+
+      return {
+        remoteObjectId: postId || responseId || candidateId,
+        publishId: postId || input.publishId?.trim() || responseId,
+        creationId: input.creationId?.trim() || responseId,
+        isPublished: Boolean(response.is_published ?? response.published),
+        scheduledPublishTime: normalizeFacebookScheduledPublishTime(
+          response.scheduled_publish_time,
+        ),
+        remotePermalink: response.permalink_url?.trim() || undefined,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error("Could not load Facebook publish state.");
 };
 
 export const publishInstagramFirstComment = async (

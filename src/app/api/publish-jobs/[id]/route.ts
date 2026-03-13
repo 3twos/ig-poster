@@ -51,6 +51,19 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Publish job not found" }, { status: 404 });
     }
 
+    if (
+      existing.destination === "facebook" &&
+      existing.remoteAuthority === "remote_authoritative"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Meta-synced Facebook jobs must be managed in Meta tools until remote edit and cancel support is implemented in-app.",
+        },
+        { status: 409 },
+      );
+    }
+
     if (payload.action === "cancel" || payload.action === "move-to-draft") {
       if (existing.status === "published" || existing.status === "canceled") {
         return NextResponse.json(

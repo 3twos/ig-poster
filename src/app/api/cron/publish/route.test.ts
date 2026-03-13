@@ -10,6 +10,7 @@ vi.mock("@/lib/blob-store", () => ({
 }));
 
 vi.mock("@/lib/meta", () => ({
+  getFacebookPagePublishState: vi.fn(),
   getEnvMetaAuth: vi.fn(),
   publishFacebookPageContent: vi.fn(),
   publishInstagramContent: vi.fn(),
@@ -38,10 +39,15 @@ vi.mock("@/lib/secure", () => ({
   decryptString: vi.fn(),
 }));
 
+vi.mock("@/services/post-destinations", () => ({
+  upsertPostDestinationRemoteState: vi.fn(),
+}));
+
 import { GET } from "@/app/api/cron/publish/route";
 import { getDb } from "@/db";
 import { isBlobEnabled } from "@/lib/blob-store";
 import {
+  getFacebookPagePublishState,
   getEnvMetaAuth,
   publishFacebookPageContent,
   publishInstagramContent,
@@ -56,9 +62,11 @@ import {
   markPostPublished,
   recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
+import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
+const mockedGetFacebookPagePublishState = vi.mocked(getFacebookPagePublishState);
 const mockedGetEnvMetaAuth = vi.mocked(getEnvMetaAuth);
 const mockedPublishFacebookPageContent = vi.mocked(publishFacebookPageContent);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
@@ -70,6 +78,9 @@ const mockedDeferProcessingPublishJob = vi.mocked(deferProcessingPublishJob);
 const mockedGetPublishWindowUsage = vi.mocked(getPublishWindowUsage);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
 const mockedRecoverStaleProcessingJobs = vi.mocked(recoverStaleProcessingJobs);
+const mockedUpsertPostDestinationRemoteState = vi.mocked(
+  upsertPostDestinationRemoteState,
+);
 
 const baseJob = {
   id: "job_1",
@@ -119,6 +130,7 @@ describe("GET /api/cron/publish", () => {
       remaining: 50,
       windowStart: new Date("2026-03-06T00:00:00.000Z"),
     });
+    mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -279,6 +291,141 @@ describe("GET /api/cron/publish", () => {
       baseJob.postId,
       "page_1_1",
       "facebook",
+    );
+  });
+
+  it("defers remote-authoritative Facebook jobs until Meta marks them published", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([
+      {
+        ...baseJob,
+        destination: "facebook" as const,
+        remoteAuthority: "remote_authoritative" as const,
+        publishId: "page_1_1",
+        creationId: "photo_1",
+      },
+    ]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      pageId: "page_1",
+      graphVersion: "v22.0",
+    });
+    mockedGetFacebookPagePublishState.mockResolvedValue({
+      remoteObjectId: "page_1_1",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+      isPublished: false,
+      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+    });
+    mockedDeferProcessingPublishJob.mockResolvedValue({
+      ...baseJob,
+      destination: "facebook" as const,
+      remoteAuthority: "remote_authoritative" as const,
+      status: "queued",
+    } as never);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 0,
+      retried: 1,
+      deferred: 1,
+      failed: 0,
+      errorCount: 0,
+    });
+    expect(mockedGetFacebookPagePublishState).toHaveBeenCalledWith(
+      {
+        publishId: "page_1_1",
+        creationId: "photo_1",
+      },
+      expect.objectContaining({ pageId: "page_1" }),
+    );
+    expect(mockedPublishFacebookPageContent).not.toHaveBeenCalled();
+    expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        destination: "facebook",
+        desiredState: "scheduled",
+        remoteState: "scheduled",
+      }),
+    );
+    expect(mockedMarkPostPublished).not.toHaveBeenCalled();
+  });
+
+  it("marks remote-authoritative Facebook jobs published after Meta publishes them", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([
+      {
+        ...baseJob,
+        destination: "facebook" as const,
+        remoteAuthority: "remote_authoritative" as const,
+        publishId: "page_1_1",
+        creationId: "photo_1",
+      },
+    ]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      pageId: "page_1",
+      graphVersion: "v22.0",
+    });
+    mockedGetFacebookPagePublishState.mockResolvedValue({
+      remoteObjectId: "page_1_1",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+      isPublished: true,
+      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      remotePermalink: "https://facebook.com/page/posts/1",
+    });
+    mockedCompletePublishJobSuccess.mockResolvedValue({
+      ...baseJob,
+      destination: "facebook" as const,
+      remoteAuthority: "remote_authoritative" as const,
+      status: "published",
+    } as never);
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 1,
+      failed: 0,
+      errorCount: 0,
+    });
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_1" }),
+      expect.objectContaining({
+        publishId: "page_1_1",
+        creationId: "photo_1",
+      }),
+    );
+    expect(mockedPublishFacebookPageContent).not.toHaveBeenCalled();
+    expect(mockedMarkPostPublished).toHaveBeenCalledWith(
+      expect.anything(),
+      baseJob.ownerHash,
+      baseJob.postId,
+      "page_1_1",
+      "facebook",
+    );
+    expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        destination: "facebook",
+        desiredState: "published",
+        remoteState: "published",
+        remotePermalink: "https://facebook.com/page/posts/1",
+      }),
     );
   });
 

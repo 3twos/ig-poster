@@ -11,6 +11,7 @@ import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import {
   getMetaMetadataValidationIssues,
   MetaScheduleRequestSchema,
+  publishFacebookPageContent,
 } from "@/lib/meta";
 import {
   MetaMediaPreflightError,
@@ -26,6 +27,7 @@ import {
 import { hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { resolveMetaAuthForRequest } from "@/services/meta-auth";
+import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
 import { executeImmediatePublish } from "@/services/publish-executor";
 
 class MetaScheduleClientError extends Error {
@@ -105,6 +107,71 @@ export async function POST(req: Request) {
         throw new MetaScheduleClientError(
           "OAuth scheduling requires private persistent credential storage. Configure POSTGRES_URL or DATABASE_URL and reconnect Meta OAuth.",
         );
+      }
+
+      if (
+        payload.destination === "facebook" &&
+        destinationCapability.syncMode === "remote_authoritative"
+      ) {
+        const publish = await publishFacebookPageContent(
+          {
+            ...payload.media,
+            caption: payload.caption,
+            publishAt: new Date(publishAt).toISOString(),
+          },
+          resolvedAuth.auth,
+        );
+
+        const job = await createPublishJob(db, {
+          ownerHash,
+          postId: payload.postId,
+          destination: payload.destination,
+          remoteAuthority: destinationCapability.syncMode,
+          accountKey: resolvedAuth.account.accountKey,
+          pageId: resolvedAuth.account.pageId,
+          instagramUserId: resolvedAuth.account.instagramUserId,
+          caption: payload.caption,
+          firstComment: payload.firstComment,
+          locationId: payload.locationId,
+          userTags: payload.userTags,
+          media: payload.media,
+          publishAt: new Date(publishAt).toISOString(),
+          authSource: resolvedAuth.source,
+          connectionId: resolvedAuth.account.connectionId,
+          outcomeContext: payload.outcomeContext,
+          publishId: publish.publishId,
+          creationId: publish.creationId,
+          children: "children" in publish ? publish.children : undefined,
+        });
+
+        if (payload.postId) {
+          await upsertPostDestinationRemoteState(db, {
+            postId: payload.postId,
+            destination: "facebook",
+            enabled: true,
+            syncMode: destinationCapability.syncMode,
+            desiredState: "scheduled",
+            remoteState: "scheduled",
+            caption: payload.caption,
+            publishAt: job.publishAt,
+            remoteObjectId: publish.publishId ?? publish.creationId ?? null,
+            remoteContainerId: publish.creationId ?? null,
+            remoteStatePayload: {
+              scheduledPublishTime: job.publishAt.toISOString(),
+            },
+            lastSyncedAt: new Date(),
+            lastError: null,
+          });
+        }
+
+        return NextResponse.json({
+          status: "scheduled",
+          destination: payload.destination,
+          id: job.id,
+          publishId: publish.publishId,
+          creationId: publish.creationId,
+          publishAt: job.publishAt.toISOString(),
+        });
       }
 
       const job = await createPublishJob(db, {
