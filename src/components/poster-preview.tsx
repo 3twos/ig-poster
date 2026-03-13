@@ -816,9 +816,13 @@ export const PosterPreview = memo(
       ref,
     ) => {
       const [colorA, colorB] = variant.colorHexes;
-      const overlay = `linear-gradient(135deg, ${hexToRgba(colorA, variant.overlayStrength)} 0%, ${hexToRgba(
+      const effectiveStrength =
+        overlayLayout?.overlayStrength != null
+          ? overlayLayout.overlayStrength / 100
+          : variant.overlayStrength;
+      const overlay = `linear-gradient(135deg, ${hexToRgba(colorA, effectiveStrength)} 0%, ${hexToRgba(
         colorB || "#0F172A",
-        Math.max(variant.overlayStrength - 0.12, 0.16),
+        Math.max(effectiveStrength - 0.12, 0.16),
       )} 100%)`;
 
       const frameRef = useRef<HTMLDivElement>(null);

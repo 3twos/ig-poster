@@ -376,6 +376,30 @@ export function PosterSection({
                 title={`Background opacity: ${overlayLayout?.hook?.bgOpacity ?? 28}%`}
               />
             </label>
+            <label className="flex items-center gap-1.5 text-[10px] text-slate-300 uppercase">
+              Overlay{" "}
+              <span className="min-w-[2ch] text-right tabular-nums">{overlayLayout?.overlayStrength ?? 0}</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={overlayLayout?.overlayStrength ?? 0}
+                onChange={(e) => {
+                  if (!overlayLayout) return;
+                  const s = parseInt(e.target.value);
+                  dispatch({
+                    type: "UPDATE_OVERLAY",
+                    variantId: activeVariant.id,
+                    layout: {
+                      ...overlayLayout,
+                      overlayStrength: s,
+                    },
+                  });
+                }}
+                className="h-3 w-16 accent-orange-300"
+                title={`Overlay strength: ${overlayLayout?.overlayStrength ?? 0}%`}
+              />
+            </label>
           </div>
           <Badge variant="outline" className="text-[10px] uppercase">
             {saveStatusLabel(saveStatus)}
