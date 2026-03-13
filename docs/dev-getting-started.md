@@ -188,6 +188,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
 - `src/services/status.ts`: aggregated CLI status summaries for actor auth, Meta readiness, LLM providers, and publish-window usage.
 - `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
+- `companion/IGPosterCompanion/`: macOS companion scaffold with a shared Apple Photos bridge contract and a SwiftUI app shell
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
 - `src/lib/creative.ts`: generation schemas, prompt builders, fallback output, deterministic overlay fitting, refine-directive enforcement helpers, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
@@ -291,6 +292,20 @@ Planned next CLI/macOS work:
 - Agent-first flow: `ig photos recent|search|import|propose` and future MCP tools call the same local bridge for PhotoKit-backed enumeration/export, then continue through the normal CLI/service pipeline.
 - Keep Apple-specific behavior isolated to the companion app and bridge; do not introduce Apple-specific logic into the server routes or core domain services.
 - Missing-helper behavior must be explicit: if the companion app or bridge is unavailable, the web app should fall back to install guidance plus normal file upload, and CLI/MCP should return machine-readable remediation codes.
+
+Current native scaffold status:
+
+- `src/lib/apple-photos-bridge.ts` is now the shared TS-side contract for localhost endpoints, launch URLs, and remediation-code vocabulary.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/BridgeContract.swift` mirrors that contract on the native side.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on.
+- Validate the native scaffold locally with:
+
+```bash
+cd companion/IGPosterCompanion
+swift build
+swift run ig-poster-companion-contract-smoke
+swift run ig-poster-companion
+```
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.

@@ -20,6 +20,8 @@
 
 # production
 /build
+.build/
+.swiftpm/
 
 # misc
 .DS_Store
