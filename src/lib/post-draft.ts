@@ -33,10 +33,18 @@ export const buildPostUpdateRequest = (
   overlayLayouts: draft.overlayLayouts,
   mediaComposition: {
     ...draft.mediaComposition,
-    items: draft.mediaComposition.items.map((item) => ({
-      ...item,
-      userTags: normalizeUserTags(item.userTags),
-    })),
+    items: draft.mediaComposition.items.map((item) => {
+      const userTags = normalizeUserTags(item.userTags);
+      const rest = { ...item };
+      delete (rest as { userTags?: MetaUserTag[] }).userTags;
+
+      return userTags
+        ? {
+            ...rest,
+            userTags,
+          }
+        : rest;
+    }),
   },
   publishSettings: draft.publishSettings,
   assets: draft.assets,

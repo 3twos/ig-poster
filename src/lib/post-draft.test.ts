@@ -58,6 +58,24 @@ describe("post draft serialization", () => {
     expect(() => PostUpdateRequestSchema.parse(payload)).not.toThrow();
   });
 
+  it("omits userTags when normalization removes every placeholder row", () => {
+    const payload = buildPostUpdateRequest({
+      ...baseDraft,
+      mediaComposition: {
+        orientation: "portrait",
+        items: [
+          {
+            assetId: "asset-1",
+            userTags: [{ username: "   ", x: 0.5, y: 0.5 }],
+          },
+        ],
+      },
+    });
+
+    expect(payload.mediaComposition?.items[0]).not.toHaveProperty("userTags");
+    expect(() => PostUpdateRequestSchema.parse(payload)).not.toThrow();
+  });
+
   it("serializes the same sanitized payload used by autosave", () => {
     expect(JSON.parse(serializePostDraft(baseDraft))).toEqual(
       buildPostUpdateRequest(baseDraft),
