@@ -7,7 +7,8 @@ set -euo pipefail
 
 # Dependency check: jq is required to parse hook input
 if ! command -v jq &>/dev/null; then
-  exit 0  # Skip enforcement when jq is unavailable
+  echo "BLOCKED: jq is required for worktree-guard but was not found in PATH. Install jq to proceed." >&2
+  exit 2  # Deny-by-default when dependencies are missing
 fi
 
 INPUT=$(cat)
