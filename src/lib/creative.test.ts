@@ -9,6 +9,7 @@ import {
   createFittedOverlayLayout,
   buildPerformanceContext,
   coerceInternalGenerationResponse,
+  createFallbackResponse,
   createDefaultOverlayLayout,
   fitOverlayLayoutToCopy,
   normalizeOverlayLayout,
@@ -62,6 +63,7 @@ const generationRequest = GenerationRequestSchema.parse({
     objective: "Drive profile visits",
     audience: "Founders",
     mood: "Premium",
+    ctaPolicy: "support-objective",
     aspectRatio: "4:5",
   },
   assets: [
@@ -235,6 +237,59 @@ describe("creative helpers", () => {
     expect(picked[0]?.id).toBe("whole-word");
   });
 
+  it("prefers CTA-free variants when the saved brief says to avoid CTA", () => {
+    const withCta = {
+      ...makeVariant("with-cta", "single-image"),
+      hook: "Trust by design starts with visible proof",
+      headline: "Designing trust for founders",
+      supportingText:
+        "Trust is built through repeated proof moments users can feel. Founders need proof before they believe the promise.",
+      cta: "Visit profile",
+      caption:
+        "Trust by design is not a slogan. It comes from repeated proof moments users can feel.",
+    };
+    const noCta = {
+      ...withCta,
+      id: "no-cta",
+      cta: "",
+    };
+
+    const picked = selectTopVariants([withCta, noCta], 1, {
+      brand: generationRequest.brand,
+      post: {
+        ...generationRequest.post,
+        ctaPolicy: "avoid",
+      },
+    });
+
+    expect(picked[0]?.id).toBe("no-cta");
+  });
+
+  it("fills fallback CTAs when the saved brief requires one", () => {
+    const fallback = createFallbackResponse({
+      ...generationRequest,
+      post: {
+        ...generationRequest.post,
+        ctaPolicy: "require",
+        objective: "Drive demo bookings",
+      },
+    });
+
+    expect(fallback.variants.every((variant) => variant.cta.trim().length > 0)).toBe(true);
+  });
+
+  it("removes fallback CTAs when the saved brief avoids them", () => {
+    const fallback = createFallbackResponse({
+      ...generationRequest,
+      post: {
+        ...generationRequest.post,
+        ctaPolicy: "avoid",
+      },
+    });
+
+    expect(fallback.variants.every((variant) => variant.cta === "")).toBe(true);
+  });
+
   it("builds a ranked performance context string from insights", () => {
     const context = buildPerformanceContext([
       {
@@ -376,10 +431,11 @@ describe("creative helpers", () => {
     expect(prompt).toContain("Parsed refinement constraints:");
     expect(prompt).toContain("Remove CTA text.");
     expect(prompt).toContain('set "cta" to an empty string');
+    expect(prompt).toContain("CTA policy:");
     expect(prompt).toContain("Layout-fit priorities");
   });
 
-  it("builds generation prompts with explicit brief precedence", () => {
+  it("builds generation prompts with explicit brief precedence and CTA policy", () => {
     const prompt = buildGenerationUserPrompt(generationRequest, {
       websiteStyleContext: "Confident editorial layouts with motion-heavy cutaways.",
       websiteBodyText:
@@ -396,9 +452,47 @@ describe("creative helpers", () => {
     expect(prompt).toContain(
       "Supporting website-derived style cues (use only if they reinforce the saved brief):",
     );
+    expect(prompt).toContain("CTA policy:");
+    expect(prompt).toContain("CTA policy for this brief:");
     expect(prompt.match(/Supporting website-derived style cues/g)).toHaveLength(1);
     expect(prompt.match(/Supporting website body content/g)).toHaveLength(1);
     expect(prompt.match(/Supporting performance context/g)).toHaveLength(1);
+  });
+
+  it("applies the saved CTA policy during refine when the instruction does not override it", () => {
+    const currentVariant: CreativeVariant = {
+      ...makeVariant("cta-policy-refine", "single-image"),
+      cta: "Visit profile",
+    };
+
+    const avoidCta = applyRefinementDirectives({
+      currentVariant,
+      refinedVariant: currentVariant,
+      instruction: "Make the supporting text more editorial.",
+      post: {
+        ctaPolicy: "avoid",
+        objective: generationRequest.post.objective,
+      },
+    });
+
+    const requireCta = applyRefinementDirectives({
+      currentVariant: {
+        ...currentVariant,
+        cta: "",
+      },
+      refinedVariant: {
+        ...currentVariant,
+        cta: "",
+      },
+      instruction: "Tighten the hook and body.",
+      post: {
+        ctaPolicy: "require",
+        objective: "Drive demo bookings",
+      },
+    });
+
+    expect(avoidCta.cta).toBe("");
+    expect(requireCta.cta).toBe("Book a call");
   });
 
   it("enforces refine directives for shorter copy, shorter caption, and no CTA", () => {

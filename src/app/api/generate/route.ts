@@ -467,6 +467,7 @@ export async function POST(req: Request) {
                 audience: request.post.audience,
                 objective: request.post.objective,
                 mood: request.post.mood,
+                ctaPolicy: request.post.ctaPolicy,
               },
               request.promptConfig?.customInstructions,
               generationAbortController.signal,
