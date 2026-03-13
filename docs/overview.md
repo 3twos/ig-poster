@@ -26,7 +26,7 @@
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Meta destinations via Graph API, or schedules publishing through either app-managed jobs or Meta-synced Facebook Page schedules.
-- Backend publish flows are now destination-aware for Meta: Instagram remains app-managed, while Facebook single-image and single-video posts can publish immediately or create a remote-authoritative scheduled Page post that is shadowed locally for planner/queue visibility.
+- Backend publish flows are now destination-aware for Meta: Instagram remains app-managed, while Facebook single-image and single-video posts can publish immediately or create a remote-authoritative scheduled Page post that is shadowed locally for planner/queue visibility. Compatible scheduled Facebook Page posts created in Meta tools can also be imported back into that shadow queue on load.
 - The browser composer now exposes an Instagram/Facebook destination selector when the connected Meta publishing pair supports both destinations, while preserving Instagram as the fallback when Facebook capability is unavailable.
 - Promotes caption editing into a persisted post-composer field, while keeping the generated caption bundle available as a one-click suggestion.
 - Adds explicit lifecycle controls for `Move to draft`, `Duplicate post`, `Archive`, and a planner sheet for scheduled posts.
@@ -96,7 +96,7 @@
 - Without `POSTGRES_URL` or `DATABASE_URL`, private post creation/loading is unavailable.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Meta publishing is unavailable.
-- Facebook publishing is currently limited to single-image and single-video payloads; carousel publishing plus Instagram-only metadata fields (`firstComment`, `locationId`, `userTags`) remain unsupported on the Facebook destination.
+- Facebook publishing is currently limited to single-image and single-video payloads; carousel publishing plus Instagram-only metadata fields (`firstComment`, `locationId`, `userTags`) remain unsupported on the Facebook destination. The same single-image/single-video constraint applies to inbound Facebook schedule import.
 - Meta-synced Facebook schedules can now be canceled or rescheduled in IG Poster. Media swaps and other unsupported remote Facebook edits still need to be recreated or changed in Meta tools.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).
 - The CLI preview now supports browser-based login with refreshable CLI sessions, including automatic on-demand login bootstrap for auth-required commands in interactive terminals, plus explicit device-code login for headless environments. On macOS, refresh tokens are stored in the user Keychain by default; other environments still fall back to `~/.config/ig-poster/config.json` with restrictive local file permissions.

@@ -45,7 +45,7 @@ type Props = {
   refreshKey: number;
 };
 
-const ACTIVE_JOBS_QUERY = "status=queued,processing&limit=8";
+const ACTIVE_JOBS_QUERY = "status=queued,processing&limit=8&syncMeta=facebook";
 const FAILED_JOBS_QUERY = "status=failed&limit=4";
 
 const fetchPublishJobs = async (query: string) => {
