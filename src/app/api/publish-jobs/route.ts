@@ -49,17 +49,7 @@ export async function GET(req: Request) {
       try {
         const resolvedAuth = await resolveMetaAuthForRequest(req, { ownerHash });
         await syncFacebookScheduledPublishJobs(
-          {
-            type: "workspace-user",
-            subjectId: session.sub,
-            email: session.email,
-            domain: session.domain,
-            ownerHash,
-            authSource: "cookie",
-            scopes: [],
-            issuedAt: session.issuedAt,
-            expiresAt: session.expiresAt,
-          },
+          { ownerHash },
           resolvedAuth,
         );
       } catch (error) {
