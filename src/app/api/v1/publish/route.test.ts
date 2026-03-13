@@ -21,6 +21,7 @@ vi.mock("@/services/meta-auth", () => ({
 }));
 
 vi.mock("@/services/post-destinations", () => ({
+  syncPublishedInstagramDestination: vi.fn(),
   upsertPostDestinationRemoteState: vi.fn(),
 }));
 
@@ -77,7 +78,10 @@ import {
 } from "@/lib/publish-jobs";
 import { resolveActorFromRequest } from "@/services/actors";
 import { resolveMetaAuthForApi } from "@/services/meta-auth";
-import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
+import {
+  syncPublishedInstagramDestination,
+  upsertPostDestinationRemoteState,
+} from "@/services/post-destinations";
 
 const mockedResolveActorFromRequest = vi.mocked(resolveActorFromRequest);
 const mockedResolveMetaAuthForApi = vi.mocked(resolveMetaAuthForApi);
@@ -94,6 +98,9 @@ const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
 const mockedGetDb = vi.mocked(getDb);
 const mockedUpsertPostDestinationRemoteState = vi.mocked(
   upsertPostDestinationRemoteState,
+);
+const mockedSyncPublishedInstagramDestination = vi.mocked(
+  syncPublishedInstagramDestination,
 );
 
 const actor = {
@@ -187,6 +194,7 @@ describe("POST /api/v1/publish", () => {
       publishAt: new Date("2026-03-10T18:30:00.000Z"),
     } as never);
     mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
+    mockedSyncPublishedInstagramDestination.mockResolvedValue(undefined);
   });
 
   it("requires an authenticated actor", async () => {

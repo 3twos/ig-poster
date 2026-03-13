@@ -120,6 +120,7 @@
 - Those Meta-synced Facebook shadow jobs can now be canceled or rescheduled directly from the planner/queue. Media swaps and other unsupported remote Facebook edits still require recreating the schedule or using Meta tools.
 - When the planner or active queue loads, IG Poster now does a best-effort import of compatible scheduled Facebook Page posts that already exist in Meta tools, so single-image and single-video Page schedules can show up in-app even when they were created outside IG Poster.
 - If you configure the Meta Page webhook, remote Facebook publish/cancel changes can trigger that same reconciliation path immediately instead of waiting for the next planner load or cron pass.
+- Successful Instagram publishes now also capture the remote Meta permalink and publish timestamp in the post record, which keeps destination sync state and downstream history closer to what actually published.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).

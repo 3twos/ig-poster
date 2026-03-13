@@ -32,7 +32,10 @@ import {
   MetaAuthServiceError,
   resolveMetaAuthForApi,
 } from "@/services/meta-auth";
-import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
+import {
+  syncPublishedInstagramDestination,
+  upsertPostDestinationRemoteState,
+} from "@/services/post-destinations";
 import { executeImmediatePublish } from "@/services/publish-executor";
 
 class PublishRouteError extends Error {
@@ -376,9 +379,31 @@ export async function POST(req: Request) {
           payload.postId,
           publish.publishId,
           payload.destination,
+          {
+            remotePermalink: publish.remotePermalink,
+            publishedAt: publish.publishedAt,
+          },
         );
       } catch {
         // Preserve successful publish response even if post snapshot update fails.
+      }
+
+      if (payload.destination === "instagram") {
+        try {
+          await syncPublishedInstagramDestination(db, {
+            postId: payload.postId,
+            caption: payload.caption,
+            firstComment: payload.firstComment,
+            locationId: payload.locationId,
+            userTags: payload.userTags,
+            remoteObjectId: publish.publishId ?? null,
+            remoteContainerId: publish.creationId ?? null,
+            remotePermalink: publish.remotePermalink ?? null,
+            publishedAt: publish.publishedAt,
+          });
+        } catch {
+          // Preserve successful publish response even if destination sync fails.
+        }
       }
     }
 

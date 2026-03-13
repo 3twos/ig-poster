@@ -13,6 +13,7 @@ vi.mock("@/services/meta-auth", () => ({
 }));
 
 vi.mock("@/services/post-destinations", () => ({
+  syncPublishedInstagramDestination: vi.fn(),
   upsertPostDestinationRemoteState: vi.fn(),
 }));
 
@@ -75,7 +76,10 @@ import {
 } from "@/lib/publish-jobs";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { resolveMetaAuthForRequest } from "@/services/meta-auth";
-import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
+import {
+  syncPublishedInstagramDestination,
+  upsertPostDestinationRemoteState,
+} from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
@@ -94,6 +98,9 @@ const mockedMarkPostPublished = vi.mocked(markPostPublished);
 const mockedMarkPostScheduled = vi.mocked(markPostScheduled);
 const mockedUpsertPostDestinationRemoteState = vi.mocked(
   upsertPostDestinationRemoteState,
+);
+const mockedSyncPublishedInstagramDestination = vi.mocked(
+  syncPublishedInstagramDestination,
 );
 
 const session = {
@@ -202,6 +209,7 @@ describe("POST /api/meta/schedule", () => {
     );
     mockedMarkPostScheduled.mockResolvedValue(undefined);
     mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
+    mockedSyncPublishedInstagramDestination.mockResolvedValue(undefined);
   });
 
   it("returns 401 when workspace auth is missing", async () => {
@@ -529,6 +537,8 @@ describe("POST /api/meta/schedule", () => {
       mode: "image",
       creationId: "create_1",
       publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
     });
 
     const req = new Request("https://app.example.com/api/meta/schedule", {
@@ -794,6 +804,8 @@ describe("POST /api/meta/schedule", () => {
       mode: "image",
       creationId: "create_1",
       publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
     });
 
     const req = new Request("https://app.example.com/api/meta/schedule", {
@@ -825,6 +837,20 @@ describe("POST /api/meta/schedule", () => {
       "post_1",
       "publish_1",
       "instagram",
+      {
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      },
+    );
+    expect(mockedSyncPublishedInstagramDestination).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        remoteObjectId: "publish_1",
+        remoteContainerId: "create_1",
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      }),
     );
   });
 

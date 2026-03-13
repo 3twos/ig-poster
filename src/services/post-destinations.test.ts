@@ -11,6 +11,7 @@ import {
   deletePostDestinations,
   getStoredPostDestinations,
   listStoredPostDestinationsByPostId,
+  syncPublishedInstagramDestination,
   syncPostDestinationsFromPublishSettings,
   upsertPostDestinationRemoteState,
 } from "@/services/post-destinations";
@@ -184,6 +185,71 @@ describe("post-destinations", () => {
     await deletePostDestinations(db as never, "post_1");
 
     expect(where).toHaveBeenCalledTimes(1);
+  });
+
+  it("syncs published Instagram remote state", async () => {
+    const updateWhere = vi.fn().mockResolvedValue(undefined);
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    const db = {
+      transaction: vi.fn(async (callback: (tx: unknown) => Promise<void>) => {
+        await callback({
+          select: vi.fn(() => ({
+            from: vi.fn(() => ({
+              where: vi.fn().mockResolvedValue([
+                {
+                  id: "dest_1",
+                  postId: "post_1",
+                  destination: "instagram",
+                  enabled: true,
+                  syncMode: "app_managed",
+                  desiredState: "draft",
+                  remoteState: "draft",
+                  caption: "Old caption",
+                  firstComment: "Old comment",
+                  locationId: "123",
+                  userTags: [{ username: "old", x: 0.2, y: 0.3 }],
+                  publishAt: null,
+                  remoteObjectId: null,
+                  remoteContainerId: null,
+                  remotePermalink: null,
+                  remoteStatePayload: {},
+                  lastSyncedAt: null,
+                  lastError: null,
+                },
+              ]),
+            })),
+          })),
+          update: vi.fn(() => ({ set: updateSet })),
+          insert: vi.fn(),
+        });
+      }),
+    };
+
+    await syncPublishedInstagramDestination(db as never, {
+      postId: "post_1",
+      caption: "Caption",
+      firstComment: "First comment",
+      locationId: "place_1",
+      userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+      remoteObjectId: "ig_media_1",
+      remoteContainerId: "container_1",
+      remotePermalink: "https://instagram.com/p/ig_media_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
+    });
+
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        desiredState: "published",
+        remoteState: "published",
+        caption: "Caption",
+        firstComment: "First comment",
+        locationId: "place_1",
+        userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+        remoteObjectId: "ig_media_1",
+        remoteContainerId: "container_1",
+        remotePermalink: "https://instagram.com/p/ig_media_1",
+      }),
+    );
   });
 
   it("syncs legacy publish settings into stored destination rows", async () => {
