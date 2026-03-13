@@ -59,6 +59,7 @@ Why this shape:
 - the native scaffold should share one explicit bridge contract with the web and CLI layers so launch URLs, localhost paths, and remediation codes do not drift
 - the first live bridge slice can stay narrow: a localhost health endpoint plus CORS-safe probing is enough to validate the handoff loop before PhotoKit is wired in
 - before PhotoKit exists, the native shell should still parse and display the incoming custom-URL launch context so the web-to-native handoff can be validated end to end
+- before export/import exists, the native shell can still validate the human picker UX with PhotosPicker and ordered local selection state
 
 ## Runtime and Layers
 
@@ -214,6 +215,7 @@ Why this shape:
 - The first native-side implementation step now exists in `companion/IGPosterCompanion`: a buildable SwiftUI shell plus shared bridge models/constants that mirror `src/lib/apple-photos-bridge.ts`.
 - The next Apple Photos bridge slice now exists too: `ig-poster-companion-bridge` exposes `GET /v1/health` with permissive localhost CORS so the browser can probe for a running native helper before attempting a custom-URL handoff.
 - The current native shell also parses that shared handoff URL and surfaces the incoming draft/profile/return context, giving the browser a meaningful native landing state while PhotosPicker and PhotoKit are still pending.
+- The native shell now goes one step further on the human path: it embeds a PhotosPicker-based selection surface and retains ordered local selection metadata, while export/import wiring still remains for the next slice.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`
