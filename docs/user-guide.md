@@ -283,8 +283,10 @@ If the macOS companion app is not installed or not reachable:
 - Meta publishing:
   - Connect/disconnect in Settings under the Meta publishing pair section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in the private credential store (DB) when available, with encrypted cookie fallback.
-  - The default Meta OAuth connect flow enables Instagram publishing in the browser app today.
-  - Facebook destination selection and execution require a connection that also granted Facebook Page posting permissions; Facebook remains limited to single-image and single-video publishing.
+  - The default Meta OAuth connect flow now requests Instagram publishing plus Facebook Page posting permissions together, so a fresh browser connection is immediately eligible for `Both` when your Meta app is configured for those scopes.
+  - If an older OAuth connection is missing Facebook Page posting permissions, reconnect from Settings to upgrade the grant.
+  - If the Meta user can access multiple Facebook Pages with linked Instagram professional accounts, the OAuth callback now stops with a clear error instead of silently selecting the first Page. Narrow the Meta grant to the intended Page and reconnect.
+  - Facebook remains limited to single-image and single-video publishing.
   - Facebook scheduled posts round-trip through the connected Page first and then sync back into the app via a local shadow job plus cron reconciliation.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.

@@ -40,7 +40,7 @@
 - Provides an AI chat assistant panel for real-time conversation about content strategy, captions, and creative direction, with SSE-streamed responses and persistent conversation history.
 - Enforces stricter API payload contracts for persisted post drafts/updates.
 - Supports LLM BYOK (OpenAI or Anthropic) with encrypted credential storage and environment-variable fallback.
-- Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback.
+- Supports Meta OAuth account connection with encrypted token-at-rest handling and environment-variable fallback. The default browser connect flow now requests both Instagram publishing and Facebook Page posting scopes up front so a newly connected Meta publishing pair is ready for `Both` posting immediately.
 - Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, automatic browser auth bootstrap for interactive auth-required commands, explicit device-code login for headless environments, stable JSON envelopes with non-TTY auto-defaulting, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, macOS Keychain-backed refresh-token storage, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, directory watch ingestion, an MCP stdio adapter, and publish-job queue controls backed by `/api/v1/*`.
 - Starts the Apple Photos ingestion path with a macOS-only `Add from Photos` entry point in the asset panel. The web app now probes the local companion bridge, checks whether a local `IG Poster Companion.app` bundle is installed, asks the bridge to open that native app when it is available, and falls back to normal upload with clear remediation when it is not.
 - The repo now includes a buildable `companion/IGPosterCompanion` macOS scaffold with a shared bridge contract, SwiftUI shell, direct startup handoff parsing, a managed local export cache, and localhost bridge routes for `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, `POST /v1/photos/import`, and `POST /v1/companion/open`.
@@ -76,6 +76,7 @@
 
 4. Publish immediately
    - Connect a Meta publishing pair via OAuth (or env credentials), choose Instagram, Facebook, or Both in the publish section, then publish the selected concept directly.
+   - If the Meta login can access multiple Facebook Pages that each have a linked Instagram professional account, narrow the app's Page access to the intended Page before reconnecting. The app now fails the OAuth callback instead of silently picking the first eligible Page.
    - For carousel variants, use the carousel composer to control which items are included, their order, and the feed orientation before publishing.
    - Optional metadata for Instagram image posts: search Meta places to fill `locationId`, or paste one manually, and place user tags visually on the rendered poster with x/y fallback fields.
 

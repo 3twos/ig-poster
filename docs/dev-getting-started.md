@@ -54,6 +54,7 @@ Open `http://localhost:3000`.
   - `META_APP_ID`
   - `META_APP_SECRET`
   - `META_REDIRECT_URI`
+  - The browser OAuth flow now defaults to the combined Facebook Page + Instagram publishing scope set. Make sure your Meta app is configured for `pages_manage_posts`, `pages_manage_metadata`, `instagram_basic`, and `instagram_content_publish`.
   - Optional for Page webhook verification: `META_WEBHOOK_VERIFY_TOKEN` or `FACEBOOK_WEBHOOK_VERIFY_TOKEN`
 - Env fallback path:
   - `INSTAGRAM_ACCESS_TOKEN`
@@ -203,6 +204,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/lib/publish-jobs.ts`: publish-job persistence helpers, retry/defer logic, and stale-processing recovery used by cron hardening.
 - `src/lib/meta-media-preflight.ts`: publish-time media URL compliance checks (public HTTPS validation + content-type probing).
 - `src/lib/meta-auth.ts`: Meta OAuth flow and credential resolution.
+- Browser OAuth now fails closed when Meta returns multiple eligible Page + Instagram pairs. For local testing, grant the app access to only the Page you want to connect before clicking `Connect with Meta OAuth`.
 - `src/lib/workspace-auth.ts`: Google Workspace OAuth + session tokens.
 - `src/proxy.ts`: Next.js 16 Proxy entrypoint for auth gate and canonical host redirect logic.
 

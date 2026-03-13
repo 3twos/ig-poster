@@ -237,6 +237,8 @@ Why this shape:
 ### Instagram Auth
 
 - Preferred path: Meta OAuth (`/api/auth/meta/*`), storing encrypted access token in the private credential store (DB) with encrypted cookie fallback.
+- Browser-initiated Meta OAuth now defaults to the combined Facebook Page publishing + Instagram publishing scope profile so a newly connected browser session can publish to `Facebook`, `Instagram`, or `Both` without a second reconnect.
+- OAuth callback selection is intentionally strict: if Meta returns more than one eligible Facebook Page with a linked Instagram professional account, the callback fails and asks the user to narrow the Meta grant rather than silently binding the wrong Page/IG pair.
 - Fallback path: env credentials (`INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ID`).
 - Runtime resolver returns a uniform `MetaAuthContext` to publishing code.
 - CLI-facing `/api/v1/*` publish flows use the same stored Meta OAuth records when present, but resolve them server-side without relying on the browser's `ig_connection` cookie.
