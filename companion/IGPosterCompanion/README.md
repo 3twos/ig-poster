@@ -23,6 +23,19 @@ swift run ig-poster-companion-bridge --print-health
 swift run ig-poster-companion
 ```
 
+Local install helper:
+
+```bash
+../../scripts/install-companion-bridge.zsh
+```
+
+That script builds the release bridge binary, installs it into
+`~/Library/Application Support/IGPosterCompanion/bin`, writes
+`~/Library/LaunchAgents/com.3twos.igposter.bridge.plist`, and loads the
+LaunchAgent so the web app and CLI can probe `http://127.0.0.1:43123/v1/health`
+without a separate `swift run` terminal. Use `--no-load` to install without
+starting it, or `--uninstall` to remove the LaunchAgent and installed binary.
+
 Planned next steps:
 
 1. register and package the macOS app so browser handoff can launch it directly
