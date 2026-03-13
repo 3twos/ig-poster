@@ -12,6 +12,23 @@ import { readCookieFromRequest } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 
+const parseGrantedScopes = (value: string | null) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const scopes = Array.from(
+    new Set(
+      value
+        .split(/[,\s]+/)
+        .map((scope) => scope.trim())
+        .filter((scope) => scope.length > 0),
+    ),
+  ).sort();
+
+  return scopes.length > 0 ? scopes : undefined;
+};
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const origin = url.origin;
@@ -27,6 +44,9 @@ export async function GET(req: Request) {
 
     const state = url.searchParams.get("state") ?? "";
     const code = url.searchParams.get("code") ?? "";
+    const grantedScopes = parseGrantedScopes(
+      url.searchParams.get("granted_scopes"),
+    );
 
     if (!state || !code) {
       return NextResponse.redirect(
@@ -45,7 +65,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const connection = await completeMetaOAuth(req, code);
+    const connection = await completeMetaOAuth(req, code, grantedScopes);
 
     const response = NextResponse.redirect(`${origin}/?auth=connected`);
 
