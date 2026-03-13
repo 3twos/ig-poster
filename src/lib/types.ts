@@ -39,6 +39,7 @@ export type BrandState = {
   logoNotes: string;
   defaultCornerRadius: number;
   defaultBgOpacity: number;
+  defaultOverlayStrength: number;
 };
 
 export type BrandKitLogo = {
@@ -138,6 +139,7 @@ export const INITIAL_BRAND: BrandState = {
   logoNotes: "Keep logo visible but subtle, preferably top-left chip",
   defaultCornerRadius: 16,
   defaultBgOpacity: 34,
+  defaultOverlayStrength: 0,
 };
 
 export const INITIAL_POST: PostState = {
