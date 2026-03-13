@@ -117,6 +117,7 @@ export const createPublishJob = async (
     creationId?: string;
     children?: string[];
     maxAttempts?: number;
+    markPostScheduled?: boolean;
   },
 ) => {
   const now = new Date();
@@ -159,11 +160,70 @@ export const createPublishJob = async (
     throw new Error("Failed to create publish job");
   }
 
-  if (input.postId) {
+  if (input.postId && input.markPostScheduled !== false) {
     await markPostScheduled(db, input.ownerHash, input.postId);
   }
 
   return row;
+};
+
+export const syncQueuedPublishJobRemoteState = async (
+  db: AppDb,
+  job: PublishJobRow,
+  publish: {
+    publishId?: string;
+    creationId?: string;
+    children?: string[];
+    detail?: string;
+  },
+): Promise<PublishJobRow | null> => {
+  const now = new Date();
+  const detail =
+    publish.detail ??
+    (publish.publishId
+      ? `Remote schedule synced as ${publish.publishId}.`
+      : "Remote schedule synced.");
+  const [updated] = await db
+    .update(publishJobs)
+    .set({
+      publishId: publish.publishId,
+      creationId: publish.creationId,
+      children: publish.children,
+      lastError: null,
+      updatedAt: now,
+      events: appendPublishJobEvent(job.events, {
+        type: "updated",
+        detail,
+      }),
+    })
+    .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "queued")))
+    .returning();
+
+  return updated ?? null;
+};
+
+export const failQueuedPublishJob = async (
+  db: AppDb,
+  job: PublishJobRow,
+  errorMessage: string,
+): Promise<PublishJobRow | null> => {
+  const now = new Date();
+  const [updated] = await db
+    .update(publishJobs)
+    .set({
+      status: "failed",
+      lastError: errorMessage,
+      completedAt: now,
+      updatedAt: now,
+      events: appendPublishJobEvent(job.events, {
+        type: "failed",
+        detail: `Remote schedule setup failed: ${errorMessage}`,
+      }),
+    })
+    .where(and(eq(publishJobs.id, job.id), eq(publishJobs.status, "queued")))
+    .returning();
+
+  return updated ?? null;
 };
 
 const countPublishWindowRows = async (

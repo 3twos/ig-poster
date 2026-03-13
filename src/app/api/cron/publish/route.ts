@@ -26,6 +26,8 @@ import { executePublishJob } from "@/services/publish-executor";
 
 export const runtime = "nodejs";
 const QUOTA_DEFER_MINUTES = 15;
+const toErrorDetail = (error: unknown) =>
+  error instanceof Error ? error.message : "Unknown error";
 
 export async function GET(req: Request) {
   try {
@@ -178,8 +180,12 @@ export async function GET(req: Request) {
                   lastSyncedAt: new Date(),
                   lastError: null,
                 });
-              } catch {
-                // Remote schedule already exists; preserve cron reconciliation result.
+              } catch (error) {
+                errors.push({
+                  id: job.id,
+                  detail:
+                    `Could not sync scheduled Facebook destination state: ${toErrorDetail(error)}`,
+                });
               }
             }
             if (updated) {
@@ -195,7 +201,7 @@ export async function GET(req: Request) {
             continue;
           }
 
-          await completePublishJobSuccess(db, job, {
+          const completedJob = await completePublishJobSuccess(db, job, {
             publishId:
               remoteState.publishId ??
               job.publishId ??
@@ -203,16 +209,32 @@ export async function GET(req: Request) {
             creationId: remoteState.creationId ?? job.creationId ?? undefined,
             children: job.children ?? undefined,
           });
+          if (!completedJob) {
+            errors.push({
+              id: job.id,
+              detail:
+                "Could not mark remote-authoritative Facebook sync job published (state changed concurrently).",
+            });
+            continue;
+          }
           if (job.postId) {
-            await markPostPublished(
-              db,
-              job.ownerHash,
-              job.postId,
-              remoteState.publishId ??
-                job.publishId ??
-                remoteState.remoteObjectId,
-              job.destination,
-            );
+            try {
+              await markPostPublished(
+                db,
+                job.ownerHash,
+                job.postId,
+                remoteState.publishId ??
+                  job.publishId ??
+                  remoteState.remoteObjectId,
+                job.destination,
+              );
+            } catch (error) {
+              errors.push({
+                id: job.id,
+                detail:
+                  `Remote Facebook publish succeeded, but the post snapshot could not be updated: ${toErrorDetail(error)}`,
+              });
+            }
             try {
               await upsertPostDestinationRemoteState(db, {
                 postId: job.postId,
@@ -240,8 +262,12 @@ export async function GET(req: Request) {
                 lastSyncedAt: new Date(),
                 lastError: null,
               });
-            } catch {
-              // Remote publish already succeeded; preserve successful cron outcome.
+            } catch (error) {
+              errors.push({
+                id: job.id,
+                detail:
+                  `Remote Facebook publish succeeded, but destination sync state could not be updated: ${toErrorDetail(error)}`,
+              });
             }
           }
           if (

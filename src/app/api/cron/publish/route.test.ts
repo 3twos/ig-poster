@@ -429,6 +429,56 @@ describe("GET /api/cron/publish", () => {
     );
   });
 
+  it("keeps remote-authoritative Facebook jobs published when post snapshot updates fail", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([
+      {
+        ...baseJob,
+        destination: "facebook" as const,
+        remoteAuthority: "remote_authoritative" as const,
+        publishId: "page_1_1",
+        creationId: "photo_1",
+      },
+    ]);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      pageId: "page_1",
+      graphVersion: "v22.0",
+    });
+    mockedGetFacebookPagePublishState.mockResolvedValue({
+      remoteObjectId: "page_1_1",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+      isPublished: true,
+      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      remotePermalink: "https://facebook.com/page/posts/1",
+    });
+    mockedCompletePublishJobSuccess.mockResolvedValue({
+      ...baseJob,
+      destination: "facebook" as const,
+      remoteAuthority: "remote_authoritative" as const,
+      status: "published",
+    } as never);
+    mockedMarkPostPublished.mockRejectedValue(
+      new Error("snapshot write failed"),
+    );
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 1,
+      failed: 0,
+      errorCount: 1,
+    });
+    expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
+    expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalled();
+  });
+
   it("posts first comment for jobs that include one", async () => {
     mockedClaimDuePublishJobs.mockResolvedValue([
       { ...baseJob, firstComment: "First comment" },

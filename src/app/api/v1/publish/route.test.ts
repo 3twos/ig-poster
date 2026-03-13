@@ -38,8 +38,11 @@ vi.mock("@/lib/publish-jobs", () => ({
   completePublishJobFailure: vi.fn(),
   completePublishJobSuccess: vi.fn(),
   createPublishJob: vi.fn(),
+  failQueuedPublishJob: vi.fn(),
   markPostPublished: vi.fn(),
+  markPostScheduled: vi.fn(),
   reserveImmediatePublishJob: vi.fn(),
+  syncQueuedPublishJobRemoteState: vi.fn(),
 }));
 
 vi.mock("@/lib/blob-store", () => ({
@@ -67,7 +70,10 @@ import { preflightMetaMediaForPublish } from "@/lib/meta-media-preflight";
 import {
   createPublishJob,
   completePublishJobSuccess,
+  failQueuedPublishJob,
+  markPostScheduled,
   reserveImmediatePublishJob,
+  syncQueuedPublishJobRemoteState,
 } from "@/lib/publish-jobs";
 import { resolveActorFromRequest } from "@/services/actors";
 import { resolveMetaAuthForApi } from "@/services/meta-auth";
@@ -77,7 +83,10 @@ const mockedResolveActorFromRequest = vi.mocked(resolveActorFromRequest);
 const mockedResolveMetaAuthForApi = vi.mocked(resolveMetaAuthForApi);
 const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
+const mockedFailQueuedPublishJob = vi.mocked(failQueuedPublishJob);
+const mockedMarkPostScheduled = vi.mocked(markPostScheduled);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
+const mockedSyncQueuedPublishJobRemoteState = vi.mocked(syncQueuedPublishJobRemoteState);
 const mockedPublishFacebookPageContent = vi.mocked(publishFacebookPageContent);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
@@ -171,6 +180,12 @@ describe("POST /api/v1/publish", () => {
     });
     mockedCompletePublishJobSuccess.mockResolvedValue({} as never);
     mockedIsBlobEnabled.mockReturnValue(false);
+    mockedFailQueuedPublishJob.mockResolvedValue({} as never);
+    mockedMarkPostScheduled.mockResolvedValue(undefined);
+    mockedSyncQueuedPublishJobRemoteState.mockResolvedValue({
+      id: "job_1",
+      publishAt: new Date("2026-03-10T18:30:00.000Z"),
+    } as never);
     mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
   });
 
@@ -408,6 +423,10 @@ describe("POST /api/v1/publish", () => {
       id: "job_fb_1",
       publishAt: new Date(publishAt),
     } as never);
+    mockedSyncQueuedPublishJobRemoteState.mockResolvedValueOnce({
+      id: "job_fb_1",
+      publishAt: new Date(publishAt),
+    } as never);
 
     const response = await POST(
       new Request("https://app.example.com/api/v1/publish", {
@@ -454,9 +473,21 @@ describe("POST /api/v1/publish", () => {
       expect.objectContaining({
         destination: "facebook",
         remoteAuthority: "remote_authoritative",
+        markPostScheduled: false,
+      }),
+    );
+    expect(mockedSyncQueuedPublishJobRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_fb_1" }),
+      expect.objectContaining({
         publishId: "page_1_1",
         creationId: "photo_1",
       }),
+    );
+    expect(mockedMarkPostScheduled).toHaveBeenCalledWith(
+      expect.anything(),
+      "owner_hash",
+      "post_1",
     );
     expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
       expect.anything(),
@@ -468,6 +499,60 @@ describe("POST /api/v1/publish", () => {
       }),
     );
     expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
+  });
+
+  it("records a failed local shadow job when remote Facebook scheduling fails", async () => {
+    const publishAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ id: "post_1" }]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+    } as unknown as ReturnType<typeof getDb>);
+    mockedCreatePublishJob.mockResolvedValueOnce({
+      id: "job_fb_1",
+      publishAt: new Date(publishAt),
+    } as never);
+    mockedPublishFacebookPageContent.mockRejectedValueOnce(
+      new Error("Meta schedule failed"),
+    );
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/publish", {
+        method: "POST",
+        body: JSON.stringify({
+          postId: "post_1",
+          destination: "facebook",
+          caption: "Facebook scheduled",
+          publishAt,
+          media: {
+            mode: "image",
+            imageUrl: "https://cdn.example.com/image.jpg",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(mockedCreatePublishJob.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedPublishFacebookPageContent.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
+    expect(mockedFailQueuedPublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_fb_1" }),
+      "Meta schedule failed",
+    );
+    expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        destination: "facebook",
+        remoteState: "failed",
+        lastError: "Meta schedule failed",
+      }),
+    );
   });
 
   it("rejects Instagram-only metadata on Facebook publishes", async () => {

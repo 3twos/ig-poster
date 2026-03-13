@@ -30,8 +30,11 @@ vi.mock("@/lib/publish-jobs", () => ({
   completePublishJobFailure: vi.fn(),
   completePublishJobSuccess: vi.fn(),
   createPublishJob: vi.fn(),
+  failQueuedPublishJob: vi.fn(),
   markPostPublished: vi.fn(),
+  markPostScheduled: vi.fn(),
   reserveImmediatePublishJob: vi.fn(),
+  syncQueuedPublishJobRemoteState: vi.fn(),
 }));
 
 vi.mock("@/lib/blob-store", () => ({
@@ -64,8 +67,11 @@ import {
   completePublishJobFailure,
   completePublishJobSuccess,
   createPublishJob,
+  failQueuedPublishJob,
   markPostPublished,
+  markPostScheduled,
   reserveImmediatePublishJob,
+  syncQueuedPublishJobRemoteState,
 } from "@/lib/publish-jobs";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { resolveMetaAuthForRequest } from "@/services/meta-auth";
@@ -76,13 +82,16 @@ const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
 const mockedResolveMetaAuth = vi.mocked(resolveMetaAuthForRequest);
 const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
+const mockedFailQueuedPublishJob = vi.mocked(failQueuedPublishJob);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
+const mockedSyncQueuedPublishJobRemoteState = vi.mocked(syncQueuedPublishJobRemoteState);
 const mockedPublishFacebookPageContent = vi.mocked(publishFacebookPageContent);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedPublishInstagramFirstComment = vi.mocked(publishInstagramFirstComment);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
 const mockedCompletePublishJobFailure = vi.mocked(completePublishJobFailure);
 const mockedMarkPostPublished = vi.mocked(markPostPublished);
+const mockedMarkPostScheduled = vi.mocked(markPostScheduled);
 const mockedUpsertPostDestinationRemoteState = vi.mocked(
   upsertPostDestinationRemoteState,
 );
@@ -177,6 +186,21 @@ describe("POST /api/meta/schedule", () => {
         ReturnType<typeof completePublishJobFailure>
       >,
     );
+    mockedFailQueuedPublishJob.mockResolvedValue(
+      { ...reservedJob, status: "failed" } as Awaited<
+        ReturnType<typeof failQueuedPublishJob>
+      >,
+    );
+    mockedSyncQueuedPublishJobRemoteState.mockResolvedValue(
+      {
+        ...reservedJob,
+        id: "job_fb_1",
+        destination: "facebook",
+        remoteAuthority: "remote_authoritative",
+        publishAt: new Date("2026-03-10T18:30:00.000Z"),
+      } as Awaited<ReturnType<typeof syncQueuedPublishJobRemoteState>>,
+    );
+    mockedMarkPostScheduled.mockResolvedValue(undefined);
     mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
   });
 
@@ -345,6 +369,10 @@ describe("POST /api/meta/schedule", () => {
       id: "job_fb_1",
       publishAt: new Date(publishAt),
     } as Awaited<ReturnType<typeof createPublishJob>>);
+    mockedSyncQueuedPublishJobRemoteState.mockResolvedValueOnce({
+      id: "job_fb_1",
+      publishAt: new Date(publishAt),
+    } as Awaited<ReturnType<typeof syncQueuedPublishJobRemoteState>>);
 
     const req = new Request("https://app.example.com/api/meta/schedule", {
       method: "POST",
@@ -386,9 +414,21 @@ describe("POST /api/meta/schedule", () => {
       expect.objectContaining({
         destination: "facebook",
         remoteAuthority: "remote_authoritative",
+        markPostScheduled: false,
+      }),
+    );
+    expect(mockedSyncQueuedPublishJobRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_fb_1" }),
+      expect.objectContaining({
         publishId: "page_1_1",
         creationId: "photo_1",
       }),
+    );
+    expect(mockedMarkPostScheduled).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      "post_1",
     );
     expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
       expect.anything(),
@@ -402,6 +442,61 @@ describe("POST /api/meta/schedule", () => {
       }),
     );
     expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
+  });
+
+  it("records a failed local shadow job when remote Facebook scheduling fails", async () => {
+    const publishAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ id: "post_1" }]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+    } as unknown as ReturnType<typeof getDb>);
+    mockedCreatePublishJob.mockResolvedValue({
+      id: "job_fb_1",
+      publishAt: new Date(publishAt),
+    } as Awaited<ReturnType<typeof createPublishJob>>);
+    mockedPublishFacebookPageContent.mockRejectedValue(
+      new Error("Meta schedule failed"),
+    );
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        postId: "post_1",
+        destination: "facebook",
+        caption: "Facebook scheduled",
+        publishAt,
+        media: {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+        },
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(502);
+    expect(mockedCreatePublishJob.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedPublishFacebookPageContent.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
+    expect(mockedFailQueuedPublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_fb_1" }),
+      "Meta schedule failed",
+    );
+    expect(mockedUpsertPostDestinationRemoteState).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        destination: "facebook",
+        remoteState: "failed",
+        lastError: "Meta schedule failed",
+      }),
+    );
   });
 
   it("passes location and user tags for immediate image publish", async () => {

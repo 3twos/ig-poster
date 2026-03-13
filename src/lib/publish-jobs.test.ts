@@ -6,10 +6,12 @@ import {
   completePublishJobFailure,
   completePublishJobSuccess,
   deferProcessingPublishJob,
+  failQueuedPublishJob,
   getPublishWindowUsage,
   markPostPublished,
   recoverStaleProcessingJobs,
   reserveImmediatePublishJob,
+  syncQueuedPublishJobRemoteState,
   STALE_PROCESSING_TIMEOUT_MS,
   type AppDb,
 } from "@/lib/publish-jobs";
@@ -360,6 +362,73 @@ describe("completePublishJobSuccess", () => {
     };
     expect(setPayload.events.at(-1)?.detail).toContain(
       "Warning: Could not post first comment.",
+    );
+  });
+});
+
+describe("syncQueuedPublishJobRemoteState", () => {
+  it("stores remote identifiers on a queued job", async () => {
+    const job = {
+      ...baseJob(),
+      status: "queued" as const,
+      attempts: 0,
+      lastAttemptAt: null,
+    };
+    const { db, chain } = makeUpdateDb([{ ...job, publishId: "page_1_1" }]);
+
+    await syncQueuedPublishJobRemoteState(db, job, {
+      publishId: "page_1_1",
+      creationId: "photo_1",
+    });
+
+    expect(chain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publishId: "page_1_1",
+        creationId: "photo_1",
+        lastError: null,
+        updatedAt: expect.any(Date),
+        events: expect.arrayContaining([
+          expect.objectContaining({
+            type: "updated",
+            detail: "Remote schedule synced as page_1_1.",
+          }),
+        ]),
+      }),
+    );
+  });
+});
+
+describe("failQueuedPublishJob", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("marks a queued job failed when remote schedule setup fails", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-13T16:00:00.000Z"));
+    const job = {
+      ...baseJob(),
+      status: "queued" as const,
+      attempts: 0,
+      lastAttemptAt: null,
+    };
+    const { db, chain } = makeUpdateDb([{ ...job, status: "failed" as const }]);
+
+    await failQueuedPublishJob(db, job, "Meta schedule failed");
+
+    expect(chain.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        lastError: "Meta schedule failed",
+        completedAt: new Date("2026-03-13T16:00:00.000Z"),
+        updatedAt: new Date("2026-03-13T16:00:00.000Z"),
+        events: expect.arrayContaining([
+          expect.objectContaining({
+            type: "failed",
+            detail: "Remote schedule setup failed: Meta schedule failed",
+          }),
+        ]),
+      }),
     );
   });
 });

@@ -16,6 +16,8 @@ type DbExecutor = Pick<
   ReturnType<typeof getDb>,
   "delete" | "insert" | "select" | "update"
 >;
+type TransactionCapableDbExecutor = DbExecutor &
+  Pick<ReturnType<typeof getDb>, "transaction">;
 type PostInsertLike = {
   id: string;
   publishSettings?: PublishSettings | null;
@@ -164,98 +166,100 @@ type UpsertPostDestinationRemoteStateInput = {
 };
 
 export const upsertPostDestinationRemoteState = async (
-  db: DbExecutor,
+  db: TransactionCapableDbExecutor,
   input: UpsertPostDestinationRemoteStateInput,
 ) => {
-  const [existing] = await db
-    .select()
-    .from(postDestinations)
-    .where(
-      and(
-        eq(postDestinations.postId, input.postId),
-        eq(postDestinations.destination, input.destination),
-      ),
-    );
+  await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(postDestinations)
+      .where(
+        and(
+          eq(postDestinations.postId, input.postId),
+          eq(postDestinations.destination, input.destination),
+        ),
+      );
 
-  const patch = {
-    enabled: input.enabled ?? existing?.enabled ?? true,
-    syncMode:
-      input.syncMode ??
-      existing?.syncMode ??
-      DEFAULT_DESTINATION_BEHAVIOR[input.destination].syncMode,
-    desiredState: input.desiredState,
-    remoteState: input.remoteState,
-    caption:
-      input.caption !== undefined
-        ? input.caption
-        : (existing?.caption ?? null),
-    firstComment:
-      input.destination === "instagram"
-        ? (
-            input.firstComment !== undefined
-              ? input.firstComment
-              : (existing?.firstComment ?? null)
-          )
-        : null,
-    locationId:
-      input.destination === "instagram"
-        ? (
-            input.locationId !== undefined
-              ? input.locationId
-              : (existing?.locationId ?? null)
-          )
-        : null,
-    userTags:
-      input.destination === "instagram"
-        ? (
-            input.userTags !== undefined
-              ? input.userTags
-              : (existing?.userTags ?? null)
-          )
-        : null,
-    publishAt:
-      input.publishAt !== undefined
-        ? input.publishAt
-        : (existing?.publishAt ?? null),
-    remoteObjectId:
-      input.remoteObjectId !== undefined
-        ? input.remoteObjectId
-        : (existing?.remoteObjectId ?? null),
-    remoteContainerId:
-      input.remoteContainerId !== undefined
-        ? input.remoteContainerId
-        : (existing?.remoteContainerId ?? null),
-    remotePermalink:
-      input.remotePermalink !== undefined
-        ? input.remotePermalink
-        : (existing?.remotePermalink ?? null),
-    remoteStatePayload:
-      input.remoteStatePayload !== undefined
-        ? input.remoteStatePayload
-        : (existing?.remoteStatePayload ?? {}),
-    lastSyncedAt:
-      input.lastSyncedAt !== undefined
-        ? input.lastSyncedAt
-        : (existing?.lastSyncedAt ?? null),
-    lastError:
-      input.lastError !== undefined
-        ? input.lastError
-        : (existing?.lastError ?? null),
-    updatedAt: new Date(),
-  };
+    const patch = {
+      enabled: input.enabled ?? existing?.enabled ?? true,
+      syncMode:
+        input.syncMode ??
+        existing?.syncMode ??
+        DEFAULT_DESTINATION_BEHAVIOR[input.destination].syncMode,
+      desiredState: input.desiredState,
+      remoteState: input.remoteState,
+      caption:
+        input.caption !== undefined
+          ? input.caption
+          : (existing?.caption ?? null),
+      firstComment:
+        input.destination === "instagram"
+          ? (
+              input.firstComment !== undefined
+                ? input.firstComment
+                : (existing?.firstComment ?? null)
+            )
+          : null,
+      locationId:
+        input.destination === "instagram"
+          ? (
+              input.locationId !== undefined
+                ? input.locationId
+                : (existing?.locationId ?? null)
+            )
+          : null,
+      userTags:
+        input.destination === "instagram"
+          ? (
+              input.userTags !== undefined
+                ? input.userTags
+                : (existing?.userTags ?? null)
+            )
+          : null,
+      publishAt:
+        input.publishAt !== undefined
+          ? input.publishAt
+          : (existing?.publishAt ?? null),
+      remoteObjectId:
+        input.remoteObjectId !== undefined
+          ? input.remoteObjectId
+          : (existing?.remoteObjectId ?? null),
+      remoteContainerId:
+        input.remoteContainerId !== undefined
+          ? input.remoteContainerId
+          : (existing?.remoteContainerId ?? null),
+      remotePermalink:
+        input.remotePermalink !== undefined
+          ? input.remotePermalink
+          : (existing?.remotePermalink ?? null),
+      remoteStatePayload:
+        input.remoteStatePayload !== undefined
+          ? input.remoteStatePayload
+          : (existing?.remoteStatePayload ?? {}),
+      lastSyncedAt:
+        input.lastSyncedAt !== undefined
+          ? input.lastSyncedAt
+          : (existing?.lastSyncedAt ?? null),
+      lastError:
+        input.lastError !== undefined
+          ? input.lastError
+          : (existing?.lastError ?? null),
+      updatedAt: new Date(),
+    };
 
-  if (existing) {
-    await db
-      .update(postDestinations)
-      .set(patch)
-      .where(eq(postDestinations.id, existing.id));
-    return;
-  }
+    if (existing) {
+      await tx
+        .update(postDestinations)
+        .set(patch)
+        .where(eq(postDestinations.id, existing.id));
+      return;
+    }
 
-  await db.insert(postDestinations).values({
-    ...seedDestination(input.postId, input.destination),
-    ...patch,
-  });
+    await tx.insert(postDestinations).values({
+      ...seedDestination(input.postId, input.destination),
+      ...patch,
+    });
+  }, { isolationLevel: "serializable" });
 };
 
 export const syncPostDestinationsFromPublishSettings = async (

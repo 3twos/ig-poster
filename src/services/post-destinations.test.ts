@@ -344,12 +344,26 @@ describe("post-destinations", () => {
     const selectWhere = vi.fn().mockResolvedValue(existing);
     const updateWhere = vi.fn().mockResolvedValue(undefined);
     const updateSet = vi.fn(() => ({ where: updateWhere }));
-    const db = {
+    const tx = {
       select: vi.fn(() => ({
         from: vi.fn(() => ({ where: selectWhere })),
       })),
-      insert: vi.fn(),
       update: vi.fn(() => ({ set: updateSet })),
+      insert: vi.fn(),
+    };
+    const transaction = vi.fn(
+      async (
+        callback: (db: typeof tx) => Promise<void>,
+        config?: { isolationLevel?: string },
+      ) => {
+        expect(config).toEqual(
+          expect.objectContaining({ isolationLevel: "serializable" }),
+        );
+        await callback(tx);
+      },
+    );
+    const db = {
+      transaction,
     };
 
     await upsertPostDestinationRemoteState(db as never, {
@@ -385,6 +399,7 @@ describe("post-destinations", () => {
         updatedAt: expect.any(Date),
       }),
     );
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 
   it("loads stored destination rows for a single post", async () => {
