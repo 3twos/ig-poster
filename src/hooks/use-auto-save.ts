@@ -9,6 +9,7 @@ export type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 function serializeDraft(draft: PostDraft): string {
   const rest = { ...draft };
   delete (rest as { activeSlideIndex?: number }).activeSlideIndex;
+  delete (rest as { destinations?: unknown }).destinations;
   return JSON.stringify(rest);
 }
 
