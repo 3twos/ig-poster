@@ -19,9 +19,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { inferLogoNameFromUrl } from "@/lib/brand-kit";
-import type { AspectRatio } from "@/lib/creative";
+import type { AspectRatio, CtaPolicy } from "@/lib/creative";
 import type { BrandKitLogo, LlmAuthStatus, PostState } from "@/lib/types";
-import { RATIO_OPTIONS } from "@/lib/types";
+import { CTA_POLICY_OPTIONS, RATIO_OPTIONS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type BrandKitOption = {
@@ -358,6 +358,30 @@ export function PostBriefForm({
               dispatch({ type: "UPDATE_BRIEF", brief: { mood: event.target.value } })
             }
           />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-slate-200">CTA Policy</Label>
+          <Select
+            value={post.ctaPolicy}
+            disabled={isGenerating}
+            onValueChange={(value) =>
+              dispatch({
+                type: "UPDATE_BRIEF",
+                brief: { ctaPolicy: value as CtaPolicy },
+              })
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CTA_POLICY_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {showAspectRatio ? aspectRatioField : null}
       </div>

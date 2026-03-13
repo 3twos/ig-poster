@@ -50,7 +50,11 @@ export async function POST(req: Request) {
     }
 
     try {
-      const instructionPlan = deriveRefinementPlan(instruction, variant);
+      const instructionPlan = deriveRefinementPlan(
+        instruction,
+        variant,
+        post?.ctaPolicy,
+      );
       const systemPrompt = buildRefineSystemPrompt(promptConfig);
       const userPrompt = buildRefineUserPrompt({
         variant,

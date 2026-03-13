@@ -7,6 +7,11 @@ import {
 import { generateStructuredJson, type ResolvedLlmAuth } from "@/lib/llm";
 
 export const AspectRatioSchema = z.enum(["1:1", "4:5", "1.91:1", "9:16"]);
+export const CtaPolicySchema = z.enum([
+  "support-objective",
+  "avoid",
+  "require",
+]);
 
 export const BrandInputSchema = z.object({
   brandName: z.string().trim().min(2).max(80),
@@ -27,6 +32,7 @@ export const PostInputSchema = z.object({
   objective: z.string().trim().min(6).max(220),
   audience: z.string().trim().min(3).max(220),
   mood: z.string().trim().min(3).max(120),
+  ctaPolicy: CtaPolicySchema.optional().default("support-objective"),
   aspectRatio: AspectRatioSchema,
 });
 
@@ -195,6 +201,7 @@ export const PublishOutcomeSchema = z.object({
 });
 
 export type AspectRatio = z.infer<typeof AspectRatioSchema>;
+export type CtaPolicy = z.infer<typeof CtaPolicySchema>;
 export type GenerationRequest = z.infer<typeof GenerationRequestSchema>;
 export type PromptConfig = NonNullable<GenerationRequest["promptConfig"]>;
 export type CarouselSlide = z.infer<typeof CarouselSlideSchema>;
@@ -449,7 +456,7 @@ export type RefinementPlan = {
 const CTA_REMOVE_PATTERN =
   /\b(?:avoid|remove|drop|skip|omit|without|no)\s+(?:the\s+)?(?:cta|call[\s-]?to[\s-]?action)s?\b/;
 const CTA_ADD_PATTERN =
-  /\b(?:add|include|write|create)\s+(?:an?\s+)?(?:cta|call[\s-]?to[\s-]?action)\b/;
+  /\b(?:add|include|write|create)\s+(?:an?\s+)?(?:(?:short|brief|clear|specific|simple|direct|strong)\s+){0,2}(?:cta|call[\s-]?to[\s-]?action)\b/;
 const SHORTEN_PATTERN =
   /\b(?:shorter|shorten|concise|punchier|tighter|trim|reduce|leaner)\b|(?:less|fewer)\s+(?:text|copy|words)/;
 const AGGRESSIVE_SHORTEN_PATTERN =
@@ -517,6 +524,7 @@ const normalizeAudienceHint = (value: string | undefined) => {
 export const deriveRefinementPlan = (
   instruction: string,
   variant: Pick<CreativeVariant, "cta">,
+  ctaPolicy?: CtaPolicy,
 ): RefinementPlan => {
   const normalized = instruction.trim().toLowerCase();
   const shortenRequested = SHORTEN_PATTERN.test(normalized);
@@ -554,13 +562,14 @@ export const deriveRefinementPlan = (
         ? "aggressive"
         : "standard",
     },
-    ctaAction: CTA_REMOVE_PATTERN.test(normalized) || EDITORIAL_ONLY_PATTERN.test(normalized)
-      ? "remove"
-      : CTA_ADD_PATTERN.test(normalized)
-        ? "add"
-        : variant.cta.trim().length === 0
-          ? "keep-empty"
-          : "preserve",
+    ctaAction:
+      CTA_REMOVE_PATTERN.test(normalized) || EDITORIAL_ONLY_PATTERN.test(normalized)
+        ? "remove"
+        : CTA_ADD_PATTERN.test(normalized)
+          ? "add"
+          : ctaPolicy !== "require" && variant.cta.trim().length === 0
+            ? "keep-empty"
+            : "preserve",
     toneDirection: EDITORIAL_ONLY_PATTERN.test(normalized)
       ? "editorial"
       : PREMIUM_TONE_PATTERN.test(normalized)
@@ -583,12 +592,16 @@ export const applyRefinementPlan = (input: {
   currentVariant: CreativeVariant;
   refinedVariant: CreativeVariant;
   instruction: string;
-  post?: Pick<GenerationRequest["post"], "objective">;
+  post?: Pick<GenerationRequest["post"], "ctaPolicy" | "objective">;
   instructionPlan?: RefinementPlan;
 }): CreativeVariant => {
   const plan =
     input.instructionPlan ??
-    deriveRefinementPlan(input.instruction, input.currentVariant);
+    deriveRefinementPlan(
+      input.instruction,
+      input.currentVariant,
+      input.post?.ctaPolicy,
+    );
   const factor = REFINE_SHORTEN_FACTORS[plan.shorten.intensity];
   const budget = LAYOUT_COPY_BUDGETS[input.currentVariant.layout];
 
@@ -686,12 +699,26 @@ export const applyRefinementPlan = (input: {
     });
   }
 
-  if (plan.ctaAction === "remove" || plan.ctaAction === "keep-empty") {
+  if (
+    plan.ctaAction === "remove" ||
+    (plan.ctaAction === "keep-empty" && input.post?.ctaPolicy !== "require")
+  ) {
     nextVariant.cta = "";
   } else if (plan.ctaAction === "add" && !nextVariant.cta.trim()) {
-    nextVariant.cta =
-      input.currentVariant.cta.trim() ||
-      (input.post ? deriveObjectiveCta(input.post.objective) : "");
+    nextVariant.cta = resolveRequiredCta(
+      input.post?.objective ?? "",
+      input.currentVariant.cta,
+    );
+  } else if (
+    input.post?.ctaPolicy === "avoid" &&
+    plan.ctaAction !== "add"
+  ) {
+    nextVariant.cta = "";
+  } else if (input.post?.ctaPolicy === "require" && !nextVariant.cta.trim()) {
+    nextVariant.cta = resolveRequiredCta(
+      input.post.objective,
+      input.currentVariant.cta,
+    );
   }
 
   return applyLayoutCopyBudget(nextVariant);
@@ -1053,6 +1080,44 @@ const deriveObjectiveCta = (objective: string) => {
   return "";
 };
 
+const describeCtaPolicy = (ctaPolicy: CtaPolicy) => {
+  switch (ctaPolicy) {
+    case "avoid":
+      return "Avoid CTA. Keep the on-canvas CTA empty unless an explicit instruction asks to add one.";
+    case "require":
+      return "Require CTA. Keep a short, specific CTA that directly supports the objective.";
+    default:
+      return "Support objective. Use a CTA only when it directly supports the objective; editorial concepts may omit it.";
+  }
+};
+
+const resolveRequiredCta = (
+  objective: string,
+  fallback = "",
+) => {
+  const candidate = fallback.trim() || deriveObjectiveCta(objective);
+  return candidate || "Learn more";
+};
+
+const applyCtaPolicyToVariant = (
+  variant: CreativeVariant,
+  post: Pick<GenerationRequest["post"], "ctaPolicy" | "objective">,
+  currentVariant?: Pick<CreativeVariant, "cta">,
+): CreativeVariant => {
+  if (post.ctaPolicy === "avoid") {
+    return { ...variant, cta: "" };
+  }
+
+  if (post.ctaPolicy === "require" && !variant.cta.trim()) {
+    return {
+      ...variant,
+      cta: resolveRequiredCta(post.objective, currentVariant?.cta),
+    };
+  }
+
+  return variant;
+};
+
 export const createFallbackResponse = (
   request: GenerationRequest,
 ): GenerationResponse => {
@@ -1072,7 +1137,12 @@ export const createFallbackResponse = (
   ];
 
   const hashtags = Array.from(new Set(tagPool.map(toTag))).slice(0, 10);
-  const derivedCta = deriveObjectiveCta(request.post.objective);
+  const derivedCta =
+    request.post.ctaPolicy === "avoid"
+      ? ""
+      : request.post.ctaPolicy === "require"
+        ? resolveRequiredCta(request.post.objective)
+        : deriveObjectiveCta(request.post.objective);
 
   const base = {
     supportingText: `${request.post.thought} Built for ${request.post.audience.toLowerCase()} with ${request.brand.brandName}'s core voice.`,
@@ -1105,7 +1175,7 @@ export const createFallbackResponse = (
       postType: imageAssets.length >= 3 ? "carousel" : "single-image",
       hook: "From concept to result in clear steps",
       headline: `${request.post.theme} built on real principles`,
-      cta: "",
+      cta: request.post.ctaPolicy === "require" ? derivedCta : "",
       layout: "split-story",
       textAlign: "left",
       overlayStrength: 0.5,
@@ -1191,7 +1261,9 @@ export const createFallbackResponse = (
   return {
     strategy:
       "These concepts balance discovery and conversion: one bold single image for thumb-stop impact, one educational carousel for depth, and one reel-style narrative for watch-through when video is available.",
-    variants: variants.map(applyLayoutCopyBudget),
+    variants: variants.map((variant) =>
+      applyLayoutCopyBudget(applyCtaPolicyToVariant(variant, request.post)),
+    ),
   };
 };
 
@@ -1238,7 +1310,9 @@ export const coerceInternalGenerationResponse = (
     return {
       response: {
         ...strict.data,
-        variants: strict.data.variants.map(applyLayoutCopyBudget),
+        variants: strict.data.variants.map((variant) =>
+          applyLayoutCopyBudget(applyCtaPolicyToVariant(variant, request.post)),
+        ),
       },
       recovery: {
         droppedInvalidVariants: 0,
@@ -1257,7 +1331,9 @@ export const coerceInternalGenerationResponse = (
 
   const validVariants = rawVariants.flatMap((variant) => {
     const parsed = CreativeVariantSchema.safeParse(variant);
-    return parsed.success ? [applyLayoutCopyBudget(parsed.data)] : [];
+    return parsed.success
+      ? [applyLayoutCopyBudget(applyCtaPolicyToVariant(parsed.data, request.post))]
+      : [];
   });
 
   const droppedInvalidVariants = rawVariants.length - validVariants.length;
@@ -1309,7 +1385,13 @@ type VariantSelectionContext = {
   >;
   post?: Pick<
     GenerationRequest["post"],
-    "theme" | "subject" | "thought" | "objective" | "audience" | "mood"
+    | "theme"
+    | "subject"
+    | "thought"
+    | "objective"
+    | "audience"
+    | "mood"
+    | "ctaPolicy"
   >;
 };
 
@@ -1506,6 +1588,12 @@ const scoreVariantSelectionHeuristic = (
   );
   score += scoreBriefFieldAlignment(variantText, variantTokens, context.post.mood, 2);
 
+  if (context.post.ctaPolicy === "avoid") {
+    score += variant.cta.trim() ? -4 : 3;
+  } else if (context.post.ctaPolicy === "require") {
+    score += variant.cta.trim() ? 3 : -4;
+  }
+
   if (
     GENERIC_ENGAGEMENT_CTA_PATTERN.test(`${variant.cta} ${variant.caption}`) &&
     !OBJECTIVE_ENGAGEMENT_PATTERN.test(context.post.objective)
@@ -1588,6 +1676,7 @@ export const scoreVariantsWithLlm = async (
     audience: string;
     objective: string;
     mood: string;
+    ctaPolicy: CtaPolicy;
   },
   customInstructions?: string,
   signal?: AbortSignal,
@@ -1621,6 +1710,7 @@ Saved post brief:
 - Audience: ${post.audience}
 - Objective: ${post.objective}
 - Mood: ${post.mood}
+- CTA policy: ${describeCtaPolicy(post.ctaPolicy)}
 ${customInstructions?.trim() ? `\nSaved campaign instructions:\n${customInstructions.trim()}\n` : ""}
 Judge a variant strongest when it clearly expresses the saved subject and core thought for the stated audience, even if it avoids generic engagement formulas.
 
@@ -1773,6 +1863,7 @@ Interpret the saved brief this way:
 - Audience = who the copy should feel written for: ${request.post.audience}
 - Objective = the desired next step or outcome: ${request.post.objective}
 - Mood = the tonal/aesthetic direction to preserve: ${request.post.mood}
+- CTA policy = ${describeCtaPolicy(request.post.ctaPolicy)}
 
 Do not let website cues, best-practice tips, or reference examples override the saved brief. Avoid generic growth-marketing language unless the brief itself calls for it.
 `;
@@ -1798,6 +1889,7 @@ Post brief:
 - Objective: ${request.post.objective}
 - Audience: ${request.post.audience}
 - Mood: ${request.post.mood}
+- CTA policy: ${describeCtaPolicy(request.post.ctaPolicy)}
 - Preferred canvas: ${request.post.aspectRatio}
 
 ${customInstructionBlock}${briefPriorityBlock}${websiteStyleBlock}${websiteBodyBlock}${performanceBlock}Available assets (${request.assets.length}; images=${imageCount}, videos=${videoCount}):
@@ -1828,7 +1920,7 @@ Output constraints:
 - If videoCount > 0, at least one variant must be postType=reel.
 - If imageCount >= 3, at least one variant must be postType=carousel.
 - For wine/alcohol brands: avoid unsafe or non-compliant alcohol messaging.
-- Use a CTA only when it directly supports the objective. Editorial or authority-driven concepts may omit it.
+- CTA policy for this brief: ${describeCtaPolicy(request.post.ctaPolicy)}
 - Avoid generic language and avoid emojis.
 - Output JSON only.`;
 };
@@ -1864,6 +1956,7 @@ export const buildRefineUserPrompt = (input: {
 - Objective: ${input.post.objective}
 - Audience: ${input.post.audience}
 - Mood: ${input.post.mood}
+- CTA policy: ${describeCtaPolicy(input.post.ctaPolicy)}
 - Preferred canvas: ${input.post.aspectRatio}
 `
     : "";
@@ -1880,7 +1973,11 @@ ${JSON.stringify(input.overlayLayout, null, 2)}
   const budget = LAYOUT_COPY_BUDGETS[input.variant.layout];
   const instructionPlan =
     input.instructionPlan ??
-    deriveRefinementPlan(input.instruction, input.variant);
+    deriveRefinementPlan(
+      input.instruction,
+      input.variant,
+      input.post?.ctaPolicy,
+    );
   const directiveBlock = buildRefinementPlanBlock(instructionPlan);
 
   return `Refine this Instagram creative variant according to the instruction below.
@@ -1908,6 +2005,7 @@ Refinement rules:
 - Keep the variant tightly aligned to the original brief when that context is provided.
 - If the instruction asks for shorter text, prioritize shortening hook, headline, supportingText, and cta before changing the concept.
 - If the instruction says to avoid CTA, remove CTA, or keep the post purely editorial, set "cta" to an empty string.
+- Saved CTA policy: ${input.post ? describeCtaPolicy(input.post.ctaPolicy) : "Use CTA only when it directly supports the objective."}
 - Only change fields that need to change to satisfy the instruction or keep the variant coherent.
 
 Return the refined variant as a single JSON object with the exact same schema. Output JSON only.`;
