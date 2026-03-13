@@ -928,6 +928,7 @@ const CANONICAL_OVERLAY_LABELS: Record<CanonicalOverlayKey, string> = {
   supportingText: "Body",
   cta: "CTA",
 };
+const OVERLAY_GEOMETRY_EPSILON = 0.1;
 
 export const analyzeCanonicalOverlayLayout = (input: {
   layout: CreativeLayout;
@@ -939,7 +940,7 @@ export const analyzeCanonicalOverlayLayout = (input: {
   };
   overlayLayout?: Partial<OverlayLayout> | null;
 }): OverlayGeometryIssue[] => {
-  const layout = normalizeOverlayLayout(input.layout, input.overlayLayout);
+  const normalizedLayout = normalizeOverlayLayout(input.layout, input.overlayLayout);
   const orderedKeys: CanonicalOverlayKey[] = [
     "hook",
     "headline",
@@ -953,18 +954,18 @@ export const analyzeCanonicalOverlayLayout = (input: {
     cta: input.copy.cta ?? "",
   };
   const activeKeys = orderedKeys.filter((key) => {
-    const block = layout[key];
+    const block = normalizedLayout[key];
     return (block.visible ?? true) && copyByKey[key].trim().length > 0;
   });
 
   const issues: OverlayGeometryIssue[] = [];
 
   for (const key of activeKeys) {
-    const block = layout[key];
+    const block = normalizedLayout[key];
     const rightEdge = block.x + block.width;
     const bottomEdge = block.y + block.height;
 
-    if (rightEdge > 100.1) {
+    if (rightEdge > 100 + OVERLAY_GEOMETRY_EPSILON) {
       issues.push({
         type: "out-of-bounds",
         key,
@@ -972,7 +973,7 @@ export const analyzeCanonicalOverlayLayout = (input: {
       });
     }
 
-    if (bottomEdge > 100.1) {
+    if (bottomEdge > 100 + OVERLAY_GEOMETRY_EPSILON) {
       issues.push({
         type: "out-of-bounds",
         key,
@@ -985,13 +986,13 @@ export const analyzeCanonicalOverlayLayout = (input: {
     firstKey: CanonicalOverlayKey,
     secondKey: CanonicalOverlayKey,
   ) => {
-    const first = layout[firstKey];
-    const second = layout[secondKey];
+    const first = normalizedLayout[firstKey];
+    const second = normalizedLayout[secondKey];
     const horizontalOverlap =
-      Math.max(first.x, second.x) + 0.1 <
+      Math.max(first.x, second.x) + OVERLAY_GEOMETRY_EPSILON <
       Math.min(first.x + first.width, second.x + second.width);
     const verticalOverlap =
-      Math.max(first.y, second.y) + 0.1 <
+      Math.max(first.y, second.y) + OVERLAY_GEOMETRY_EPSILON <
       Math.min(first.y + first.height, second.y + second.height);
 
     return horizontalOverlap && verticalOverlap;
@@ -1006,11 +1007,11 @@ export const analyzeCanonicalOverlayLayout = (input: {
         continue;
       }
 
-      const firstBlock = layout[firstCandidate];
-      const secondBlock = layout[secondCandidate];
+      const firstBlock = normalizedLayout[firstCandidate];
+      const secondBlock = normalizedLayout[secondCandidate];
       const firstKey =
         firstBlock.y < secondBlock.y ||
-        (Math.abs(firstBlock.y - secondBlock.y) <= 0.1 &&
+        (Math.abs(firstBlock.y - secondBlock.y) <= OVERLAY_GEOMETRY_EPSILON &&
           firstBlock.x <= secondBlock.x)
           ? firstCandidate
           : secondCandidate;
