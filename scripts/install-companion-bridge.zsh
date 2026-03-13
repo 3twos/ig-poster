@@ -40,7 +40,7 @@ user Library/Application folders, and optionally register the LaunchAgent and
 native app launch metadata.
 
 Options:
-  --port <n>          Bridge port to install into the LaunchAgent (default: $DEFAULT_PORT)
+  --port <n>          Primary bridge port to install into the LaunchAgent (default: $DEFAULT_PORT)
   --no-load           Install files but do not load/restart the LaunchAgent
   --no-register-app   Install the companion app bundle without Launch Services registration
   --uninstall         Remove the installed bridge binary, app bundle, and LaunchAgent
@@ -200,6 +200,10 @@ install_bridge() {
     print "Bridge is registered with launchd."
     print "Health check:"
     print "  curl http://127.0.0.1:$PORT/v1/health"
+    if [[ "$PORT" != "$DEFAULT_PORT" ]]; then
+      print "Browser-compatible default port alias:"
+      print "  curl http://127.0.0.1:$DEFAULT_PORT/v1/health"
+    fi
   else
     print "LaunchAgent not loaded (--no-load)."
     print "To load it later:"

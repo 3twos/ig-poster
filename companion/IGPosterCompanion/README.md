@@ -34,9 +34,11 @@ the bridge into `~/Library/Application Support/IGPosterCompanion/bin`,
 installs `IG Poster Companion.app` into `~/Applications`, writes
 `~/Library/LaunchAgents/com.3twos.igposter.bridge.plist`, and loads the
 LaunchAgent so the web app and CLI can probe `http://127.0.0.1:43123/v1/health`
-without a separate `swift run` terminal. Use `--no-load` to install without
-starting the bridge, `--no-register-app` to skip Launch Services registration,
-or `--uninstall` to remove the LaunchAgent, app bundle, and installed binary.
+without a separate `swift run` terminal. If you install with `--port <n>`, the
+bridge keeps serving the default browser-compatible port `43123` as well as the
+requested custom port. Use `--no-load` to install without starting the bridge,
+`--no-register-app` to skip Launch Services registration, or `--uninstall` to
+remove the LaunchAgent, app bundle, and installed binary.
 
 Planned next steps:
 

@@ -714,17 +714,21 @@ struct IGPosterCompanionBridgeMain {
     }
 
     let semaphore = DispatchSemaphore(value: 0)
-    let server = try ApplePhotosBridgeServer(options: options) {
-      semaphore.signal()
+    let servers = try ApplePhotosCompanionBridgeRuntime
+      .listeningPorts(primaryPort: Int(options.port), once: options.once)
+      .map { port in
+      try ApplePhotosBridgeServer(
+        options: BridgeOptions(
+          port: UInt16(port),
+          once: options.once,
+          printHealth: false
+        )
+      ) {
+        semaphore.signal()
+      }
     }
 
-    server.start()
-
-    if options.once {
-      semaphore.wait()
-      return
-    }
-
-    dispatchMain()
+    servers.forEach { $0.start() }
+    semaphore.wait()
   }
 }
