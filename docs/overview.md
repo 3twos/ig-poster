@@ -26,8 +26,8 @@
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
 - Publishes directly to Meta destinations via Graph API, or schedules publishing through either app-managed jobs or Meta-synced Facebook Page schedules.
-- Backend publish flows are now destination-aware for Meta: Instagram remains app-managed, while Facebook single-image and single-video posts can publish immediately or create a remote-authoritative scheduled Page post that is shadowed locally for planner/queue visibility. Compatible scheduled Facebook Page posts created in Meta tools can also be imported back into that shadow queue on load, and Meta Page webhook deliveries now trigger the same reconciliation path so remote publish/cancel changes can project back into IG Poster faster.
-- The browser composer now exposes an Instagram/Facebook destination selector when the connected Meta publishing pair supports both destinations, while preserving Instagram as the fallback when Facebook capability is unavailable.
+- Backend publish flows are now destination-aware for Meta: Instagram remains app-managed, while Facebook single-image and single-video posts can publish immediately or create a remote-authoritative scheduled Page post that is shadowed locally for planner/queue visibility. Compatible scheduled Facebook Page posts created in Meta tools can also be imported back into that shadow queue on load, and Meta Page webhook deliveries now trigger the same reconciliation path so remote publish/cancel changes can project back into IG Poster faster. The browser flow can now fan one publish action out to Facebook and Instagram together while still storing separate destination results and errors underneath.
+- The browser composer now exposes an Instagram/Facebook/Both destination selector when the connected Meta publishing pair supports both destinations, while preserving Instagram as the fallback when Facebook capability is unavailable.
 - Promotes caption editing into a persisted post-composer field, while keeping the generated caption bundle available as a one-click suggestion.
 - Adds explicit lifecycle controls for `Move to draft`, `Duplicate post`, `Archive`, and a planner sheet for scheduled posts.
 - Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, see each job's Meta destination/sync mode, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor. Meta-synced Facebook schedules can now be canceled or rescheduled in-app, while Meta-side publish/cancel drift is also reconciled back into the queue/planner. Unsupported remote media edits still fail with explicit guidance.
@@ -75,13 +75,13 @@
    - Save a project snapshot and send a share link so teammates can review the selected concept.
 
 4. Publish immediately
-   - Connect a Meta publishing pair via OAuth (or env credentials), choose Instagram or Facebook in the publish section, then publish the selected concept directly.
+   - Connect a Meta publishing pair via OAuth (or env credentials), choose Instagram, Facebook, or Both in the publish section, then publish the selected concept directly.
    - For carousel variants, use the carousel composer to control which items are included, their order, and the feed orientation before publishing.
    - Optional metadata for Instagram image posts: search Meta places to fill `locationId`, or paste one manually, and place user tags visually on the rendered poster with x/y fallback fields.
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.
-   - Instagram schedules stay app-managed; Facebook schedules create the remote Page schedule immediately, then appear in the planner/queue as Meta-synced shadow jobs that cron reconciles.
+   - Instagram schedules stay app-managed; Facebook schedules create the remote Page schedule immediately, then appear in the planner/queue as Meta-synced shadow jobs that cron reconciles. Choosing `Both` creates one of each destination-specific schedule path from the same action.
    - Review scheduled posts from the planner, move app-managed jobs back to draft when needed, and use the queue for lower-level retry/edit diagnostics.
    - Once a post is posted, archive it to remove it from the main list or duplicate it to start a new editable version.
 
@@ -96,7 +96,7 @@
 - Without `POSTGRES_URL` or `DATABASE_URL`, private post creation/loading is unavailable.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Meta publishing is unavailable.
-- Facebook publishing is currently limited to single-image and single-video payloads; carousel publishing plus Instagram-only metadata fields (`firstComment`, `locationId`, `userTags`) remain unsupported on the Facebook destination. The same single-image/single-video constraint applies to inbound Facebook schedule import.
+- Facebook publishing is currently limited to single-image and single-video payloads; carousel publishing remains unsupported on the Facebook destination and therefore also blocks the browser's `Both` publish target. Instagram-only metadata fields (`firstComment`, `locationId`, `userTags`) still apply only to Instagram when `Both` is selected. The same single-image/single-video constraint applies to inbound Facebook schedule import.
 - Meta-synced Facebook schedules can now be canceled or rescheduled in IG Poster. Media swaps and other unsupported remote Facebook edits still need to be recreated or changed in Meta tools.
 - Without LLM credentials, generation still works via deterministic local fallback output. With multiple models configured, failures cascade through the priority list (Fallback mode) or are compensated by other models (Parallel mode).
 - The CLI preview now supports browser-based login with refreshable CLI sessions, including automatic on-demand login bootstrap for auth-required commands in interactive terminals, plus explicit device-code login for headless environments. On macOS, refresh tokens are stored in the user Keychain by default; other environments still fall back to `~/.config/ig-poster/config.json` with restrictive local file permissions.

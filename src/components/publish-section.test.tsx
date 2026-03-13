@@ -124,10 +124,42 @@ describe("PublishSection", () => {
       screen.getByRole("radiogroup", { name: "Destination" }),
     ).not.toBeNull();
     expect(
+      screen.getByRole("radio", { name: "Facebook + Instagram" }),
+    ).not.toBeNull();
+    expect(
       screen.getByRole("radio", { name: "Instagram" }),
     ).toHaveProperty("ariaChecked", "true");
 
     fireEvent.click(screen.getByRole("radio", { name: "Facebook" }));
     expect(onPublishDestinationChange).toHaveBeenCalledWith("facebook");
+  });
+
+  it("uses the combined destination label when both is selected", () => {
+    render(
+      <PublishSection
+        activePostId="post-1"
+        authStatus={{ connected: true, source: "oauth" }}
+        availableDestinations={["instagram", "facebook"]}
+        isAuthLoading={false}
+        isSharing={false}
+        isPublishing={false}
+        publishJobsRefreshKey={0}
+        publishDestination="both"
+        shareUrl={null}
+        shareCopyState="idle"
+        localTimeZone="America/Los_Angeles"
+        onCreateShareLink={vi.fn()}
+        onPublishDestinationChange={vi.fn()}
+        onPostNow={vi.fn()}
+        onSchedulePost={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /post to facebook \+ instagram/i }),
+    ).not.toBeNull();
+    expect(
+      screen.getByText(/instagram-only metadata stays on instagram/i),
+    ).not.toBeNull();
   });
 });
