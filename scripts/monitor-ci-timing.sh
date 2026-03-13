@@ -40,19 +40,19 @@ status_icon() {
   local conclusion="$2"
 
   if [[ "$status" == "queued" ]]; then
-    printf '%s' "⏳"
+    printf '%s' "${C_BLUE}⏳${C_RESET}"
     return
   fi
   if [[ "$status" == "in_progress" ]]; then
-    printf '%s' "⟳"
+    printf '%s' "${C_YELLOW}⟳${C_RESET}"
     return
   fi
   if [[ "$status" == "completed" ]]; then
     case "$conclusion" in
-      success) printf '%s' "✓" ;;
-      cancelled) printf '%s' "■" ;;
-      failure|timed_out|action_required|stale) printf '%s' "✖" ;;
-      skipped|neutral) printf '%s' "•" ;;
+      success) printf '%s' "${C_GREEN}✓${C_RESET}" ;;
+      cancelled) printf '%s' "${C_DIM}■${C_RESET}" ;;
+      failure|timed_out|action_required|stale) printf '%s' "${C_RED}✖${C_RESET}" ;;
+      skipped|neutral) printf '%s' "${C_DIM}•${C_RESET}" ;;
       *) printf '%s' "?" ;;
     esac
     return
@@ -66,15 +66,15 @@ state_label() {
   local conclusion="$2"
 
   case "$status" in
-    queued) printf '%s' "Queued" ;;
-    in_progress) printf '%s' "Running" ;;
+    queued) printf '%s' "${C_BLUE}Queued${C_RESET}" ;;
+    in_progress) printf '%s' "${C_YELLOW}Running${C_RESET}" ;;
     completed)
       case "$conclusion" in
-        success) printf '%s' "Success" ;;
-        cancelled) printf '%s' "Canceled" ;;
-        failure) printf '%s' "Failed" ;;
-        timed_out) printf '%s' "Timed out" ;;
-        skipped) printf '%s' "Skipped" ;;
+        success) printf '%s' "${C_GREEN}Success${C_RESET}" ;;
+        cancelled) printf '%s' "${C_DIM}Canceled${C_RESET}" ;;
+        failure) printf '%s' "${C_RED}Failed${C_RESET}" ;;
+        timed_out) printf '%s' "${C_RED}Timed out${C_RESET}" ;;
+        skipped) printf '%s' "${C_DIM}Skipped${C_RESET}" ;;
         *) printf '%s' "${conclusion:-Completed}" ;;
       esac
       ;;
@@ -790,7 +790,7 @@ render_dashboard() {
   alert_time_display="$(format_epoch_with_relative "$LAST_ALERT_EPOCH")"
 
   printf '\033[H\033[2J'
-  printf 'CI Timing Monitor\n'
+  printf '%sCI Timing Monitor%s\n' "${C_BOLD_CYAN}" "${C_RESET}"
   printf '=================\n'
   printf 'Repo         : %s\n' "$REPO_SLUG"
   printf 'Workflow     : %s\n' "${WORKFLOW_INPUT:-all}"
@@ -822,11 +822,11 @@ render_dashboard() {
     "$(format_duration "$BASE_P95_QUEUE")" "$(format_duration "$BASE_P95_EXEC")" "$(format_duration "$BASE_P95_TOTAL")"
 
   if [[ "$REGRESSION_STATE" == "regressed" ]]; then
-    printf 'Regression  : ⚠ +%s%% vs baseline p50 (threshold %s%%)\n' "$REGRESSION_DELTA_PERCENT" "$REGRESSION_THRESHOLD"
+    printf 'Regression  : %s⚠ +%s%% vs baseline p50 (threshold %s%%)%s\n' "${C_BOLD_YELLOW}" "$REGRESSION_DELTA_PERCENT" "$REGRESSION_THRESHOLD" "${C_RESET}"
   elif [[ "$REGRESSION_STATE" == "improved" ]]; then
-    printf 'Regression  : ✓ -%s%% vs baseline p50\n' "${REGRESSION_DELTA_PERCENT#-}"
+    printf 'Regression  : %s✓ -%s%% vs baseline p50%s\n' "${C_BOLD_GREEN}" "${REGRESSION_DELTA_PERCENT#-}" "${C_RESET}"
   else
-    printf 'Regression  : ✓ within threshold (%s%%)\n' "$REGRESSION_THRESHOLD"
+    printf 'Regression  : %s✓ within threshold (%s%%)%s\n' "${C_GREEN}" "$REGRESSION_THRESHOLD" "${C_RESET}"
   fi
 
   printf '\nTop Slow Jobs (Latest Run)\n'
@@ -849,8 +849,8 @@ render_dashboard() {
     for row in "${top_rows[@]}"; do
       IFS=$'\x1f' read -r row_total row_state row_conclusion row_name <<<"$row"
       row_icon="$(status_icon "$row_state" "$row_conclusion")"
-      printf '%2d. %s %-10s %8s  %s\n' \
-        "$idx" "$row_icon" "$(state_label "$row_state" "$row_conclusion")" "$(format_duration "$row_total")" "$(truncate_text "$row_name" 70)"
+      printf '%2d. %s %s %8s  %s\n' \
+        "$idx" "$(color_pad "$row_icon" 1)" "$(color_pad "$(state_label "$row_state" "$row_conclusion")" 10)" "$(format_duration "$row_total")" "$(truncate_text "$row_name" 70)"
       idx=$(( idx + 1 ))
     done
   fi
@@ -862,8 +862,8 @@ render_dashboard() {
     printf 'No runs found for branch %s.\n' "$BRANCH"
   else
     for (( i = 0; i < ${#RUN_IDS[@]} && i < 6; i++ )); do
-      row_icon="$(status_icon "${RUN_STATUS[i]}" "${RUN_CONCLUSION[i]}")"
-      row_state="$(state_label "${RUN_STATUS[i]}" "${RUN_CONCLUSION[i]}")"
+      row_icon="$(color_pad "$(status_icon "${RUN_STATUS[i]}" "${RUN_CONCLUSION[i]}")" 1)"
+      row_state="$(color_pad "$(state_label "${RUN_STATUS[i]}" "${RUN_CONCLUSION[i]}")" 10)"
       row_total="$(format_duration "${RUN_TOTAL_SEC[i]:-0}")"
       row_queue="$(format_duration "${RUN_QUEUE_SEC[i]:-0}")"
       row_exec="$(format_duration "${RUN_EXEC_SEC[i]:-0}")"

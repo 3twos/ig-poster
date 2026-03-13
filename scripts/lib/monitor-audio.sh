@@ -277,6 +277,36 @@ speak_alert() {
 }
 
 # ---------------------------------------------------------------------------
+# Desktop notifications (macOS Notification Center)
+# ---------------------------------------------------------------------------
+
+DESKTOP_NOTIFICATIONS="${DESKTOP_NOTIFICATIONS:-0}"
+
+notify_desktop() {
+  local title="$1"
+  local message="$2"
+  local level="${3:-info}"
+
+  if (( DESKTOP_NOTIFICATIONS == 0 )); then
+    return
+  fi
+
+  if ! command -v osascript >/dev/null 2>&1; then
+    return
+  fi
+
+  local sound_name
+  case "$level" in
+    success) sound_name="Glass" ;;
+    error)   sound_name="Sosumi" ;;
+    warning) sound_name="Basso" ;;
+    *)       sound_name="Pop" ;;
+  esac
+
+  osascript -e "display notification \"${message//\"/\\\"}\" with title \"${title//\"/\\\"}\" sound name \"${sound_name}\"" >/dev/null 2>&1 &
+}
+
+# ---------------------------------------------------------------------------
 # Cleanup helper
 # ---------------------------------------------------------------------------
 
