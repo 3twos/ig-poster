@@ -151,7 +151,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 ## Project Map
 
 - `src/app/page.tsx`: main editor page — composes a 3-column resizable layout from focused section components.
-- `src/components/post-brief-form.tsx`: post brief fields, brand kit + logo selectors, generate/export buttons.
+- `src/components/post-brief-form.tsx`: post brief fields (including CTA policy), brand kit + logo selectors, generate/export buttons.
 - `src/components/asset-manager.tsx`: drag-and-drop reorderable asset list for post media (uses `@dnd-kit/sortable`).
 - `src/components/carousel-composer.tsx`: authoritative carousel composer for included media order, add/remove controls, and feed orientation selection.
 - `src/components/agent-activity-panel.tsx`: agent run progress, step cards, LLM reasoning stream display.
@@ -191,7 +191,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `companion/IGPosterCompanion/`: macOS companion scaffold with a shared Apple Photos bridge contract and a SwiftUI app shell
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
-- `src/lib/creative.ts`: generation schemas, prompt builders, fallback output, deterministic overlay fitting, refine-directive enforcement helpers, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
+- `src/lib/creative.ts`: generation schemas, prompt builders, CTA-policy-aware fallback/refine helpers, deterministic overlay fitting, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
@@ -300,6 +300,7 @@ Current native scaffold status:
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/BridgeContract.swift` mirrors that contract on the native side.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on, and it now reflects parsed custom-URL handoff state from the browser.
 - That same SwiftUI shell now includes a PhotosPicker-based selection preview so we can validate native macOS asset picking before export/import is wired in.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/SelectionState.swift` now persists the active handoff/selection snapshot locally so the bridge and app can share context.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes a narrow localhost bridge (`GET /v1/health`) so the web editor can probe for a running native helper before attempting handoff.
 - Validate the native scaffold locally with:
 
@@ -311,7 +312,7 @@ swift run ig-poster-companion-bridge --print-health
 swift run ig-poster-companion
 ```
 
-While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to validate ordered local image/video selection without waiting for export/import wiring.
+While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to validate ordered local image/video selection without waiting for export/import wiring. The bridge health payload now includes the persisted selection summary when that local state exists.
 
 To exercise the new web-side probe locally:
 

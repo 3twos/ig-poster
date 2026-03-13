@@ -74,6 +74,7 @@ export async function POST(req: Request) {
           currentVariant: variant,
           refinedVariant: CreativeVariantSchema.parse(generated),
           instruction,
+          post,
         }),
       );
       return NextResponse.json({

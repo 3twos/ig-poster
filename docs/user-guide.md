@@ -38,7 +38,7 @@
 
 4. Fill brand and post details
    - Brand fields: name, values, principles, story, voice, visual direction, palette (color picker swatches), fonts, logo notes.
-   - Post fields: theme, subject, thought, objective, audience, mood, aspect ratio (including feed landscape `1.91:1`).
+   - Post fields: theme, subject, thought, objective, audience, mood, CTA policy, and aspect ratio (including feed landscape `1.91:1`).
    - Brand kits can store multiple named logos. Upload them in Brand Kits, edit the display names, then select both the brand kit and logo from the post brief form.
    - New posts default to the first available brand kit in the database when one exists.
    - The post subject field is used as the post title in the sidebar list, falling back to theme or the first generated variant headline.
@@ -60,7 +60,8 @@
      - post type and media sequencing
    - `Generate` keeps the post in `Draft`. Running it again uses the current brief, assets, brand kit, and logo selection to create a fresh result.
    - A fresh `Generate` pass intentionally ignores prior `Refine` instructions and manual editor component changes. Use it when you want a reset, not an incremental tweak.
-   - Generation now treats the saved brief as the highest-priority input. Theme, subject, core thought, audience, objective, and mood outrank website cues, best-practice tips, and reference examples.
+   - Generation now treats the saved brief as the highest-priority input. Theme, subject, core thought, audience, objective, mood, and CTA policy outrank website cues, best-practice tips, and reference examples.
+   - CTA policy lets you choose whether the post should avoid CTA text, require a short CTA, or only use one when it directly supports the objective.
    - During generation, the right panel streams LLM reasoning tokens in real time. Expand "Show reasoning" to see the model's thought process.
    - The Agent Activity panel also exposes the exact generation prompt used for each run so you can inspect the system prompt and assembled user prompt directly.
 
@@ -80,9 +81,9 @@
    - Carousel previews now show one slide at a time instead of compositing multiple uploaded assets into a single frame.
    - The `Post Caption` card is now a persisted composer field. Edit it directly, or use `Use generated` to pull the latest AI caption suggestion into the saved draft.
    - `Refine` is the incremental path: it updates the selected variant while preserving the current editor placement and visual treatment unless you explicitly ask the AI to change them.
-   - Refine requests include the saved brief, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have the right context.
+   - Refine requests include the saved brief, CTA policy, campaign instructions, and current overlay layout so prompts like "shorter text" or "avoid CTA" have the right context.
    - The Refine card now shows the exact last refine prompt used, including the system prompt and assembled user prompt, so you can inspect how your instruction was translated.
-   - Refine now also applies a deterministic instruction-enforcement pass after the model response for common requests such as shorter on-canvas copy, shorter captions, and removing CTA text.
+   - Refine now also applies a deterministic instruction-enforcement pass after the model response for common requests such as shorter on-canvas copy, shorter captions, and removing CTA text, while still honoring the saved CTA policy when your instruction does not override it.
    - Successful refine updates also re-fit the canonical hook/headline/body/CTA stack against the current copy to reduce overlap while preserving widths, x positions, custom boxes, and visible/hidden state.
    - Carousel slide copy follows the same refine policy, and blank CTA variants no longer force a mid-slide `Swipe for more` label.
    - When multiple generated candidates come back, IG Poster now ranks them with brief-aware selection heuristics so generic save/share-style copy is less likely to beat a variant that actually matches your saved angle and audience.
@@ -171,6 +172,7 @@
 - If a local Apple Photos bridge is running on `127.0.0.1:43123`, the editor now probes it before falling back. When that probe succeeds, the draft offers to open the native companion handoff instead of immediately showing the fallback-only state.
 - The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and will surface the incoming draft ID, profile, bridge origin, and return URL in-app once the browser handoff lands there. Packaging and URL-scheme registration are still pending, so this is a developer-facing scaffold step rather than an end-user flow yet.
 - The native companion shell now also includes a real PhotosPicker button for ordered image/video selection. In this slice it stops at showing the selected local identifiers and content types; importing those selections back into the draft is still pending.
+- The companion now persists the active handoff and picker-selection summary into a local shared state file, and the localhost bridge health response surfaces that summary back out for future web/CLI coordination.
 
 ### Planned macOS Apple Photos workflow
 
@@ -203,6 +205,7 @@ If the macOS companion app is not installed or not reachable:
 - for internal development, you can run `swift run ig-poster-companion-bridge` from `companion/IGPosterCompanion` to satisfy the web probe and exercise the handoff path
 - for internal development, `swift run ig-poster-companion` now includes a `Load sample handoff` action so you can inspect the native handoff state even before the app is packaged and registered with Launch Services
 - for internal development, that same shell now includes a native Photos picker button so you can validate the basic macOS selection UX before export/import is implemented
+- for internal development, `swift run ig-poster-companion-bridge --print-health` now also reflects the persisted selection summary when the companion app has an active draft/selection context
 
 ## Working with Saved Posts
 

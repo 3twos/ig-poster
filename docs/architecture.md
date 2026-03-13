@@ -60,6 +60,7 @@ Why this shape:
 - the first live bridge slice can stay narrow: a localhost health endpoint plus CORS-safe probing is enough to validate the handoff loop before PhotoKit is wired in
 - before PhotoKit exists, the native shell should still parse and display the incoming custom-URL launch context so the web-to-native handoff can be validated end to end
 - before export/import exists, the native shell can still validate the human picker UX with PhotosPicker and ordered local selection state
+- a shared local state file between the native app and bridge is a useful intermediate step, because it lets the bridge report active draft/selection context without embedding UI logic
 
 ## Runtime and Layers
 
@@ -102,7 +103,7 @@ Why this shape:
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
-  - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text
+  - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text, plus CTA-policy-aware fallback/refine cleanup
   - brief-aware variant ranking heuristics that prefer saved theme/subject/thought/audience alignment over generic engagement tropes when selecting finalists
   - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses
   - LLM provider abstraction
@@ -149,7 +150,7 @@ Why this shape:
 - Returns the assembled refine system/user prompts with successful refine responses so the UI can expose the exact last refine prompt used for debugging.
 - Runs a deterministic refine-enforcement pass after model output for recurring instruction families (for example shorter copy and no-CTA requests), so the UX does not rely entirely on prompt obedience.
 - Re-fits the canonical overlay stack after successful refine responses so updated copy is less likely to overlap, while preserving existing widths, x positions, custom boxes, and visibility choices from the current layout.
-- Builds generation prompts with an explicit priority order where the saved brief outranks supporting website/performance context and house best-practice examples, then uses the same brief signals again during finalist selection as a deterministic backstop.
+- Builds generation prompts with an explicit priority order where the saved brief outranks supporting website/performance context and house best-practice examples, threads CTA policy through prompt/ranking/fallback logic, and then uses the same brief signals again during finalist selection as a deterministic backstop.
 
 ### 3) Share Project
 
@@ -217,6 +218,7 @@ Why this shape:
 - The next Apple Photos bridge slice now exists too: `ig-poster-companion-bridge` exposes `GET /v1/health` with permissive localhost CORS so the browser can probe for a running native helper before attempting a custom-URL handoff.
 - The current native shell also parses that shared handoff URL and surfaces the incoming draft/profile/return context, giving the browser a meaningful native landing state while PhotosPicker and PhotoKit are still pending.
 - The native shell now goes one step further on the human path: it embeds a PhotosPicker-based selection surface and retains ordered local selection metadata, while export/import wiring still remains for the next slice.
+- The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge includes as an optional health summary. That gives future web/CLI flows one place to discover the active native draft/selection context.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`
