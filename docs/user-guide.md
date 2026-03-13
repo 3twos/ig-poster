@@ -186,7 +186,7 @@
 - The companion now persists the active handoff, selection summary, and exported asset manifest into a local shared state file, and the localhost bridge surfaces that shared state for browser/CLI/MCP coordination.
 - On macOS, the localhost bridge now also exposes PhotoKit-backed `GET /v1/photos/recent` and `GET /v1/photos/search`, and the CLI preview exposes those as `ig photos recent` and `ig photos search`.
 - `ig mcp` now mirrors that local enumeration path for agents with `photos_recent` and `photos_search` tools, so local automation can inspect the Photos library without going through the remote service first.
-- The CLI preview now also exposes `ig photos import [--ids <id,id,...>]`, which resolves exported local bridge assets and uploads them into the normal remote `/api/v1/assets` flow. `ig mcp` mirrors that with a `photos_import` tool.
+- The CLI preview now also exposes `ig photos import [--ids <id,id,...>]`, which resolves exported local bridge assets and uploads them into the normal remote `/api/v1/assets` flow, plus `ig photos propose`, which scores local Photos assets, creates a draft, and runs generation. `ig mcp` mirrors those with `photos_import` and `photos_propose` tools.
 - The first recent/search request may prompt macOS for Photos access. If access is denied or unavailable, the bridge returns `PHOTOS_PERMISSION_REQUIRED` and the CLI exits with a clear error instead of hanging.
 - `./scripts/install-companion-bridge.zsh` now installs both the localhost bridge and a local `~/Applications/IG Poster Companion.app` bundle, then registers that app with Launch Services by default so the web editor can ask the bridge to open the native picker flow directly.
 
@@ -199,7 +199,8 @@ The direction is partially shipped now. Today you can:
 - import that exported selection back into the current draft
 - enumerate local Photos assets with `ig photos recent` / `ig photos search`
 - import selected exported assets into IG Poster with `ig photos import`
-- call the same enumeration/import path from `ig mcp` with `photos_recent` / `photos_search` / `photos_import`
+- create a draft proposal directly from local Photos with `ig photos propose`
+- call the same enumeration/import/propose path from `ig mcp` with `photos_recent` / `photos_search` / `photos_import` / `photos_propose`
 
 Still planned:
 
@@ -213,11 +214,11 @@ Available now:
 - `ig photos recent --since 7d --limit 20`
 - `ig photos search --album Favorites --media image`
 - `ig photos import --ids <asset-id,...>`
+- `ig photos propose --since 7d --limit 20 --count 4 --brand-kit <id> --draft-title "Weekly picks"`
 
-Planned next commands:
+Still planned:
 
 - `ig photos pick --create-draft --brand-kit <id>`
-- `ig photos propose --since 7d --limit 20 --brand-kit <id>`
 
 Expected behavior:
 

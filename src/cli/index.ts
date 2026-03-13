@@ -40,7 +40,7 @@ Usage:
   ig chat <ask>
   ig config <list|get|set>
   ig generate <run|refine>
-  ig photos <recent|search|import>
+  ig photos <recent|search|import|propose>
   ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]
   ig unlink
   ig completion <bash|zsh|fish>
