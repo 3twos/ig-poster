@@ -1,7 +1,14 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { and, eq } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import { posts, publishJobs } from "@/db/schema";
+import { posts, publishJobs, type PublishJobRow } from "@/db/schema";
+import {
+  deleteFacebookPagePost,
+  getEnvMetaAuth,
+  updateFacebookPagePost,
+} from "@/lib/meta";
 import {
   MetaMediaPreflightError,
   preflightMetaMediaForPublish,
@@ -17,6 +24,8 @@ import {
   listPublishJobsForOwner,
   markPostScheduled,
 } from "@/lib/publish-jobs";
+import { resolveMetaAuthForApi } from "@/services/meta-auth";
+import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
 import type { Actor } from "@/services/actors";
 
 const RACE_CONFLICT_MESSAGE =
@@ -98,6 +107,20 @@ const buildJobWriteWhere = (
     eq(publishJobs.updatedAt, existing.updatedAt),
   );
 
+const buildRemoteAuthoritativeWriteWhere = (
+  actor: Actor,
+  existing: Pick<
+    typeof publishJobs.$inferSelect,
+    "id" | "ownerHash" | "status" | "updatedAt"
+  >,
+) =>
+  and(
+    eq(publishJobs.id, existing.id),
+    eq(publishJobs.ownerHash, actor.ownerHash),
+    eq(publishJobs.status, existing.status),
+    eq(publishJobs.updatedAt, existing.updatedAt),
+  );
+
 const assertMutableJob = (status: (typeof publishJobs.$inferSelect)["status"]) => {
   if (status === "published" || status === "canceled") {
     throw conflict(`Cannot modify a ${status} job.`);
@@ -105,6 +128,359 @@ const assertMutableJob = (status: (typeof publishJobs.$inferSelect)["status"]) =
   if (status === "processing") {
     throw conflict("Cannot modify a job that is currently processing.");
   }
+};
+
+const isRemoteAuthoritativeFacebookJob = (
+  row: Pick<PublishJobRow, "destination" | "remoteAuthority">,
+) =>
+  row.destination === "facebook" &&
+  row.remoteAuthority === "remote_authoritative";
+
+const resolveRemoteAuthoritativeFacebookAuth = async (
+  actor: Actor,
+  job: Pick<PublishJobRow, "authSource" | "connectionId">,
+) => {
+  if (job.connectionId) {
+    const resolved = await resolveMetaAuthForApi({
+      connectionId: job.connectionId,
+      ownerHash: actor.ownerHash,
+    });
+    return resolved.auth;
+  }
+
+  if (job.authSource === "env") {
+    const auth = getEnvMetaAuth();
+    if (auth) {
+      return auth;
+    }
+  }
+
+  throw conflict(
+    "Publishing credentials for this Meta-synced Facebook schedule are no longer available.",
+  );
+};
+
+const syncCanceledFacebookDestination = async (
+  db: ReturnType<typeof getDb>,
+  job: Pick<
+    PublishJobRow,
+    "postId" | "remoteAuthority" | "caption"
+  >,
+  action: "cancel" | "move-to-draft",
+) => {
+  if (!job.postId) {
+    return;
+  }
+
+  await upsertPostDestinationRemoteState(db, {
+    postId: job.postId,
+    destination: "facebook",
+    enabled: true,
+    syncMode: job.remoteAuthority,
+    desiredState: action === "move-to-draft" ? "draft" : "canceled",
+    remoteState: "canceled",
+    caption: job.caption,
+    publishAt: null,
+    remoteObjectId: null,
+    remoteContainerId: null,
+    remotePermalink: null,
+    remoteStatePayload: {},
+    lastSyncedAt: new Date(),
+    lastError: null,
+  });
+};
+
+const syncScheduledFacebookDestination = async (
+  db: ReturnType<typeof getDb>,
+  job: Pick<
+    PublishJobRow,
+    "postId" | "remoteAuthority" | "caption" | "publishAt" | "publishId" | "creationId"
+  >,
+  remoteState: {
+    isPublished: boolean;
+    scheduledPublishTime?: string;
+    remoteObjectId: string;
+    publishId?: string;
+    creationId?: string;
+    remotePermalink?: string;
+  },
+  nextCaption: string,
+) => {
+  if (!job.postId) {
+    return;
+  }
+
+  await upsertPostDestinationRemoteState(db, {
+    postId: job.postId,
+    destination: "facebook",
+    enabled: true,
+    syncMode: job.remoteAuthority,
+    desiredState: "scheduled",
+    remoteState: remoteState.isPublished ? "published" : "scheduled",
+    caption: nextCaption,
+    publishAt: remoteState.scheduledPublishTime
+      ? new Date(remoteState.scheduledPublishTime)
+      : job.publishAt,
+    remoteObjectId:
+      remoteState.publishId ??
+      remoteState.remoteObjectId ??
+      job.publishId ??
+      job.creationId ??
+      null,
+    remoteContainerId:
+      remoteState.creationId ??
+      job.creationId ??
+      null,
+    remotePermalink: remoteState.remotePermalink ?? null,
+    remoteStatePayload: {
+      scheduledPublishTime:
+        remoteState.scheduledPublishTime ??
+        job.publishAt.toISOString(),
+      isPublished: remoteState.isPublished,
+    },
+    lastSyncedAt: new Date(),
+    lastError: null,
+  });
+};
+
+const claimRemoteAuthoritativeFacebookMutation = async (
+  db: ReturnType<typeof getDb>,
+  actor: Actor,
+  existing: PublishJobRow,
+) => {
+  const [claimed] = await db
+    .update(publishJobs)
+    .set({
+      status: "processing",
+      updatedAt: new Date(),
+    })
+    .where(buildJobWriteWhere(actor, existing))
+    .returning();
+
+  if (!claimed) {
+    throw conflict(RACE_CONFLICT_MESSAGE);
+  }
+
+  return claimed;
+};
+
+const restoreClaimedRemoteAuthoritativeFacebookMutation = async (
+  db: ReturnType<typeof getDb>,
+  actor: Actor,
+  claimed: PublishJobRow,
+  status: PublishJobRow["status"],
+) => {
+  await db
+    .update(publishJobs)
+    .set({
+      status,
+      updatedAt: new Date(),
+    })
+    .where(buildRemoteAuthoritativeWriteWhere(actor, claimed));
+};
+
+const cancelRemoteAuthoritativeFacebookJob = async (
+  db: ReturnType<typeof getDb>,
+  actor: Actor,
+  existing: PublishJobRow,
+  action: "cancel" | "move-to-draft",
+) => {
+  const claimed = await claimRemoteAuthoritativeFacebookMutation(db, actor, existing);
+
+  try {
+    const auth = await resolveRemoteAuthoritativeFacebookAuth(actor, claimed);
+    await deleteFacebookPagePost(
+      {
+        publishId: claimed.publishId ?? undefined,
+        creationId: claimed.creationId ?? undefined,
+      },
+      auth,
+    );
+  } catch (error) {
+    await restoreClaimedRemoteAuthoritativeFacebookMutation(
+      db,
+      actor,
+      claimed,
+      existing.status,
+    );
+    throw error;
+  }
+
+  const [updated] = await db
+    .update(publishJobs)
+    .set({
+      status: "canceled",
+      canceledAt: new Date(),
+      lastError: null,
+      updatedAt: new Date(),
+      events: appendPublishJobEvent(claimed.events, {
+        type: "canceled",
+        detail:
+          action === "move-to-draft"
+            ? "Moved back to draft by user."
+            : "Canceled by user.",
+      }),
+    })
+    .where(buildRemoteAuthoritativeWriteWhere(actor, claimed))
+    .returning();
+
+  if (!updated) {
+    throw conflict(RACE_CONFLICT_MESSAGE);
+  }
+
+  if (existing.postId) {
+    await updateLinkedPostAfterCancel(db, actor, existing.postId, action);
+  }
+
+  await syncCanceledFacebookDestination(db, existing, action);
+
+  return updated;
+};
+
+const validateRemoteAuthoritativeFacebookEdit = (
+  existing: PublishJobRow,
+  payload: Extract<PublishJobUpdateRequest, { action: "edit" }>,
+) => {
+  if (payload.media && !isDeepStrictEqual(payload.media, existing.media)) {
+    throw conflict(
+      "Media changes are not supported for Meta-synced Facebook schedules yet.",
+    );
+  }
+};
+
+const updateRemoteAuthoritativeFacebookJob = async (
+  db: ReturnType<typeof getDb>,
+  actor: Actor,
+  existing: PublishJobRow,
+  payload:
+    | Extract<PublishJobUpdateRequest, { action: "reschedule" }>
+    | Extract<PublishJobUpdateRequest, { action: "edit" }>,
+) => {
+  const remoteMediaMode = existing.media.mode;
+  const nextCaption = payload.action === "edit"
+    ? payload.caption ?? existing.caption
+    : existing.caption;
+  const nextPublishAtIso = payload.publishAt ?? existing.publishAt.toISOString();
+  const shouldUpdateRemoteCaption =
+    payload.action === "edit" && payload.caption !== undefined;
+  const shouldUpdateRemoteSchedule = payload.publishAt !== undefined;
+  if (remoteMediaMode === "carousel") {
+    throw invalid(
+      "Facebook publishing currently supports single image and single video posts only.",
+    );
+  }
+
+  let remoteState: {
+    remoteObjectId: string;
+    publishId?: string;
+    creationId?: string;
+    isPublished: boolean;
+    scheduledPublishTime?: string;
+    remotePermalink?: string;
+  } = {
+    remoteObjectId:
+      existing.publishId ??
+      existing.creationId ??
+      existing.id,
+    publishId: existing.publishId ?? undefined,
+    creationId: existing.creationId ?? undefined,
+    isPublished: false,
+    scheduledPublishTime: existing.publishAt.toISOString(),
+    remotePermalink: undefined as string | undefined,
+  };
+
+  if (payload.action === "edit") {
+    validateRemoteAuthoritativeFacebookEdit(existing, payload);
+  }
+
+  const claimed = shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule
+    ? await claimRemoteAuthoritativeFacebookMutation(db, actor, existing)
+    : existing;
+
+  if (shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule) {
+    try {
+      const auth = await resolveRemoteAuthoritativeFacebookAuth(actor, claimed);
+      remoteState = await updateFacebookPagePost(
+        {
+          mediaMode: remoteMediaMode,
+          publishId: claimed.publishId ?? undefined,
+          creationId: claimed.creationId ?? undefined,
+          ...(shouldUpdateRemoteCaption ? { caption: nextCaption } : {}),
+          ...(shouldUpdateRemoteSchedule ? { publishAt: nextPublishAtIso } : {}),
+        },
+        auth,
+      );
+    } catch (error) {
+      await restoreClaimedRemoteAuthoritativeFacebookMutation(
+        db,
+        actor,
+        claimed,
+        existing.status,
+      );
+      throw error;
+    }
+  }
+
+  const [updated] = await db
+    .update(publishJobs)
+    .set({
+      status: "queued",
+      caption: nextCaption,
+      firstComment:
+        payload.action === "edit" && payload.firstComment !== undefined
+          ? payload.firstComment
+          : existing.firstComment,
+      locationId:
+        payload.action === "edit" && payload.locationId !== undefined
+          ? payload.locationId
+          : existing.locationId,
+      userTags:
+        payload.action === "edit" && payload.userTags !== undefined
+          ? payload.userTags
+          : existing.userTags,
+      media: existing.media,
+      publishAt: new Date(
+        remoteState.scheduledPublishTime ?? nextPublishAtIso,
+      ),
+      outcomeContext:
+        payload.action === "edit" && payload.outcomeContext !== undefined
+          ? payload.outcomeContext
+          : claimed.outcomeContext,
+      attempts: 0,
+      lastAttemptAt: null,
+      completedAt: null,
+      lastError: null,
+      updatedAt: new Date(),
+      events: appendPublishJobEvent(claimed.events, {
+        type: "updated",
+        detail:
+          payload.action === "reschedule"
+            ? `Rescheduled in Meta to ${new Date(remoteState.scheduledPublishTime ?? nextPublishAtIso).toISOString()}.`
+            : shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule
+              ? "Meta-synced Facebook schedule updated by user."
+              : "Job details updated by user.",
+      }),
+    })
+    .where(
+      shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule
+        ? buildRemoteAuthoritativeWriteWhere(actor, claimed)
+        : buildJobWriteWhere(actor, existing)
+    )
+    .returning();
+
+  if (!updated) {
+    throw conflict(RACE_CONFLICT_MESSAGE);
+  }
+
+  if (existing.postId) {
+    await markPostScheduled(db, actor.ownerHash, existing.postId);
+  }
+
+  if (shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule) {
+    await syncScheduledFacebookDestination(db, updated, remoteState, nextCaption);
+  }
+
+  return updated;
 };
 
 export const updatePublishJob = async (
@@ -142,6 +518,10 @@ export const updatePublishJob = async (
       throw conflict("Only saved posts can be moved back to draft.");
     }
 
+    if (isRemoteAuthoritativeFacebookJob(existing)) {
+      return cancelRemoteAuthoritativeFacebookJob(db, actor, existing, payload.action);
+    }
+
     const [updated] = await db
       .update(publishJobs)
       .set({
@@ -173,6 +553,12 @@ export const updatePublishJob = async (
   assertMutableJob(existing.status);
 
   if (payload.action === "retry-now") {
+    if (isRemoteAuthoritativeFacebookJob(existing)) {
+      throw conflict(
+        "Retry now is not available for Meta-synced Facebook schedules. Create a new schedule instead.",
+      );
+    }
+
     if (existing.status !== "failed") {
       throw conflict("Retry now is only available for failed jobs.");
     }
@@ -207,6 +593,10 @@ export const updatePublishJob = async (
   }
 
   if (payload.action === "reschedule") {
+    if (isRemoteAuthoritativeFacebookJob(existing)) {
+      return updateRemoteAuthoritativeFacebookJob(db, actor, existing, payload);
+    }
+
     const [updated] = await db
       .update(publishJobs)
       .set({
@@ -263,6 +653,10 @@ export const updatePublishJob = async (
 
   if (payload.media) {
     await preflightMetaMediaForPublish(payload.media);
+  }
+
+  if (isRemoteAuthoritativeFacebookJob(existing)) {
+    return updateRemoteAuthoritativeFacebookJob(db, actor, existing, payload);
   }
 
   const [updated] = await db
