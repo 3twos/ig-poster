@@ -127,14 +127,17 @@ install_bridge() {
   bin_path_file="$(mktemp "${TMPDIR:-/tmp}/ig-poster-companion-bin-path.XXXXXX")"
 
   print "Building release bridge..."
-  (
-    cd "$PACKAGE_DIR"
-    swift build -c release --product ig-poster-companion-bridge
-    swift build -c release --show-bin-path > "$bin_path_file"
-  )
+  {
+    (
+      cd "$PACKAGE_DIR"
+      swift build -c release --product ig-poster-companion-bridge
+      swift build -c release --show-bin-path > "$bin_path_file"
+    )
 
-  build_bin_dir="$(<"$bin_path_file")"
-  rm -f "$bin_path_file"
+    build_bin_dir="$(<"$bin_path_file")"
+  } always {
+    rm -f "$bin_path_file"
+  }
 
   cp "$build_bin_dir/ig-poster-companion-bridge" "$BRIDGE_BIN"
   render_plist > "$PLIST_PATH"
