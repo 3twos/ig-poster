@@ -104,13 +104,29 @@ describe("StrategySection", () => {
           lastRefinePromptPreview={{
             systemPrompt: "You refine Instagram creative variants.",
             userPrompt: "Refinement instruction: \"Shorten the CTA.\"",
+            instructionPlan: {
+              ctaAction: "remove",
+              toneDirection: "preserve",
+              audienceHint: null,
+              preserveLayout: true,
+              shorten: {
+                hook: false,
+                headline: false,
+                supportingText: false,
+                cta: true,
+                caption: false,
+                intensity: "standard",
+              },
+            },
           }}
         />
       </TooltipProvider>,
     );
 
     expect(screen.getByText("Last refine prompt used")).not.toBeNull();
+    expect(screen.getByText("Parsed plan")).not.toBeNull();
     expect(screen.getByText("You refine Instagram creative variants.")).not.toBeNull();
     expect(screen.getByText('Refinement instruction: "Shorten the CTA."')).not.toBeNull();
+    expect(screen.getByText(/"ctaAction": "remove"/)).not.toBeNull();
   });
 });

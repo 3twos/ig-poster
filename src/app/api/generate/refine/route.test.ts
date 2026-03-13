@@ -106,6 +106,20 @@ describe("POST /api/generate/refine", () => {
       promptPreview: {
         systemPrompt: expect.stringContaining("You refine Instagram creative variants."),
         userPrompt: expect.stringContaining("Refinement instruction:"),
+        instructionPlan: {
+          ctaAction: "remove",
+          preserveLayout: true,
+          toneDirection: "preserve",
+          audienceHint: null,
+          shorten: {
+            hook: true,
+            headline: true,
+            supportingText: true,
+            cta: true,
+            caption: true,
+            intensity: "aggressive",
+          },
+        },
       },
     });
     expect(payload.variant.hook.length).toBeLessThan(variant.hook.length);

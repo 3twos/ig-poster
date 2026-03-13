@@ -63,6 +63,7 @@ import {
   resolveVariantOverlayCopy,
   syncOverlayLayoutToVariantCopy,
   type GenerationResponse,
+  type RefinementPlan,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
 import { importApplePhotosSelection } from "@/lib/apple-photos";
@@ -119,6 +120,7 @@ const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
 type RefinePromptPreview = {
   systemPrompt: string;
   userPrompt: string;
+  instructionPlan: RefinementPlan;
 };
 
 export default function Home() {
