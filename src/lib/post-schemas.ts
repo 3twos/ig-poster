@@ -65,7 +65,7 @@ export const PostCreateRequestSchema = z
     mediaComposition: MediaCompositionSchema.nullish(),
     publishSettings: PublishSettingsSchema.nullish(),
   })
-  .passthrough();
+  .strip();
 
 export type PostCreateRequest = z.infer<typeof PostCreateRequestSchema>;
 
@@ -89,6 +89,6 @@ export const PostUpdateRequestSchema = z
     result: GenerationResponseSchema.nullish(),
     publishHistory: z.array(PublishHistoryEntrySchema).max(200).optional(),
   })
-  .passthrough();
+  .strip();
 
 export type PostUpdateRequest = z.infer<typeof PostUpdateRequestSchema>;

@@ -122,7 +122,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
   const [activePost, dispatch] = useReducer(postReducer, null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const refreshPostsRef = useRef<(() => Promise<void>) | undefined>(undefined);
-  const { saveStatus, saveNow, markSaved } = useAutoSave(activePost, {
+  const { saveStatus, saveNow, markSaved, lastSavedRef } = useAutoSave(activePost, {
     onSaved: () => void refreshPostsRef.current?.(),
   });
 
@@ -361,24 +361,27 @@ export function PostProvider({ children }: { children: ReactNode }) {
   }, [posts, activePost, selectPost]);
 
   // beforeunload — flush save using keepalive fetch (survives page close)
+  // Assign draftRef during render (not in useEffect) so the latest value is
+  // always available even if the browser fires beforeunload before effects run.
   const draftRef = useRef(activePost);
-  useEffect(() => {
-    draftRef.current = activePost;
-  });
+  draftRef.current = activePost;
   useEffect(() => {
     const handler = () => {
       const d = draftRef.current;
       if (!d || d.status === "posted") return;
+      const body = serializePostDraft(d);
+      // Skip if nothing changed since last save
+      if (body === lastSavedRef.current) return;
       fetch(`/api/posts/${d.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: serializePostDraft(d),
+        body,
         keepalive: true,
       });
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, []);
+  }, [lastSavedRef]);
 
   const toggleSidebar = useCallback(() => setIsSidebarOpen((o) => !o), []);
   const closeSidebar = useCallback(() => setIsSidebarOpen(false), []);
