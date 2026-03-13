@@ -52,15 +52,19 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
    - Added remote Facebook cancel/reschedule handling, browser/cron reconciliation for shadow jobs, and best-effort imports of compatible scheduled Page posts created in Meta tools.
    - References: merged in PRs `#168`, `#171`.
 
+12. Facebook webhook-driven reconciliation
+   - Added Meta Page webhook ingestion so remote Facebook publish/cancel drift can trigger shadow-job reconciliation without waiting for planner load or cron polling.
+   - Reference: merged in PR `#180`.
+
 ## In Progress
 
-1. Facebook webhook-driven reconciliation
-   - Trigger the Facebook shadow-job sync path from Meta Page webhooks and project Meta-side publish/cancel drift back into local queue + planner state faster.
-   - Goal: reduce the lag between changes made in Meta tools and what the app shows for remote-authoritative Facebook schedules.
+1. Browser dual-destination fanout
+   - Add a `Both` publish target in the browser composer so one action can publish or schedule to Facebook and Instagram together while preserving destination-specific queue state, sync state, and partial-failure reporting.
+   - Goal: close the main product gap for linked Meta accounts that routinely post to both destinations from one creative.
 
 ## Remaining phases
 
-- No additional phases are queued right now. Extend this roadmap when the next concrete Meta publishing slice is selected.
+- Instagram reconciliation and operational hardening are the next likely areas after the browser `Both` target is complete. Extend this roadmap when the next concrete Meta publishing slice is selected.
 
 ## Notes
 

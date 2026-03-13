@@ -69,6 +69,10 @@ import {
 import { formatElapsed } from "@/lib/agent-types";
 import { importApplePhotosSelection } from "@/lib/apple-photos";
 import type { MetaDestination } from "@/lib/meta-accounts";
+import {
+  getBrowserPublishTargetLabel,
+  type BrowserPublishTarget,
+} from "@/lib/meta-publish-target";
 import type { PostStatus } from "@/lib/post";
 import {
   type BrandState,
@@ -121,8 +125,24 @@ const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
 
 const PUBLISH_DESTINATIONS: MetaDestination[] = ["instagram", "facebook"];
 
-const publishDestinationLabel = (destination: MetaDestination) =>
-  destination === "facebook" ? "Facebook" : "Instagram";
+const resolveInitialPublishTarget = (
+  enabledDestinations: MetaDestination[],
+  availableDestinations: MetaDestination[],
+): BrowserPublishTarget => {
+  if (enabledDestinations.length > 1) {
+    return "both";
+  }
+
+  if (enabledDestinations.length === 1) {
+    return enabledDestinations[0]!;
+  }
+
+  if (availableDestinations.length > 1) {
+    return "both";
+  }
+
+  return availableDestinations[0] ?? "instagram";
+};
 
 type RefinePromptPreview = {
   systemPrompt: string;
@@ -152,7 +172,7 @@ export default function Home() {
   const [sharingForPostId, setSharingForPostId] = useState<string | null>(null);
   const [publishingForPostId, setPublishingForPostId] = useState<string | null>(null);
   const [publishMessageState, setPublishMessageState] = useState<{ postId: string | null; text: string | null }>({ postId: null, text: null });
-  const [publishDestination, setPublishDestination] = useState<MetaDestination>("instagram");
+  const [publishDestination, setPublishDestination] = useState<BrowserPublishTarget>("instagram");
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -467,16 +487,17 @@ export default function Home() {
   }, [authStatus.account?.capabilities, authStatus.connected]);
 
   useEffect(() => {
-    const enabledDestination = activePost?.destinations.find(
+    const enabledDestinations = activePost?.destinations.filter(
       (destination) =>
         destination.enabled &&
         availablePublishDestinations.includes(destination.destination),
-    )?.destination;
+    ).map((destination) => destination.destination) ?? [];
 
     setPublishDestination(
-      enabledDestination ??
-        availablePublishDestinations[0] ??
-        "instagram",
+      resolveInitialPublishTarget(
+        enabledDestinations,
+        availablePublishDestinations,
+      ),
     );
   }, [activePost?.destinations, activePost?.id, availablePublishDestinations]);
 
@@ -771,24 +792,28 @@ export default function Home() {
     [carouselTagAssets, singlePublishTagAsset],
   );
   const publishDestinationValidationMessage = useMemo(() => {
-    if (publishDestination !== "facebook") {
+    if (publishDestination === "instagram") {
       return null;
     }
 
     if (activeVariant?.postType === "carousel") {
-      return "Facebook publishing currently supports single-image and single-video posts only.";
+      return publishDestination === "both"
+        ? "Publishing to both currently supports single-image and single-video posts only because Facebook does not support carousels."
+        : "Facebook publishing currently supports single-image and single-video posts only.";
     }
 
-    if (publishSettings.firstComment.trim()) {
-      return "Facebook publishing does not support Instagram-style first comments.";
-    }
+    if (publishDestination === "facebook") {
+      if (publishSettings.firstComment.trim()) {
+        return "Facebook publishing does not support Instagram-style first comments.";
+      }
 
-    if (publishSettings.locationId.trim()) {
-      return "Facebook publishing does not support Instagram location IDs.";
-    }
+      if (publishSettings.locationId.trim()) {
+        return "Facebook publishing does not support Instagram location IDs.";
+      }
 
-    if (hasAnyPublishUserTags) {
-      return "Facebook publishing does not support Instagram user tags.";
+      if (hasAnyPublishUserTags) {
+        return "Facebook publishing does not support Instagram user tags.";
+      }
     }
 
     return null;
@@ -807,7 +832,7 @@ export default function Home() {
     hasIncompletePublishUserTags ||
     Boolean(publishDestinationValidationMessage);
   const selectedPublishDestinationLabel =
-    publishDestinationLabel(publishDestination);
+    getBrowserPublishTargetLabel(publishDestination);
 
   const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
 
@@ -1297,8 +1322,8 @@ export default function Home() {
 
   const publishToMeta = async (scheduleAt?: string) => {
     const postId = activePostIdRef.current;
-    const destination = publishDestination;
-    const destinationLabel = publishDestinationLabel(destination);
+    const target = publishDestination;
+    const targetLabel = getBrowserPublishTargetLabel(target);
     if (activePostStatusRef.current === "posted") {
       const m = "Posted posts are locked. Duplicate the post to publish a new version.";
       generation.setError(m);
@@ -1312,7 +1337,7 @@ export default function Home() {
       return;
     }
     if (!authStatus.connected) {
-      const m = `Connect a Meta publishing pair before publishing to ${destinationLabel}.`;
+      const m = `Connect a Meta publishing pair before publishing to ${targetLabel}.`;
       generation.setError(m);
       toast.error(m);
       return;
@@ -1377,19 +1402,77 @@ export default function Home() {
             return parsedScheduleAt.toISOString();
           })()
         : undefined;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, destination, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const r = await fetch("/api/meta/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId,
+          target,
+          destination: target === "both" ? undefined : target,
+          caption,
+          firstComment: normalizedFirstComment,
+          locationId,
+          userTags,
+          media,
+          publishAt,
+          outcomeContext: {
+            variantName: activeVariant.name,
+            postType: activeVariant.postType,
+            caption,
+            hook: activeVariant.hook,
+            hashtags: activeVariant.hashtags,
+            brandName: brand.brandName,
+            score: activeVariant.score,
+          },
+        }),
+      });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as {
         status?: string;
+        target?: BrowserPublishTarget;
         destination?: MetaDestination;
-        mode?: string;
         publishAt?: string;
         publishId?: string;
         firstCommentStatus?: "posted" | "failed";
         firstCommentWarning?: string;
+        results?: Array<{
+          status: "scheduled" | "published";
+          destination: MetaDestination;
+          publishAt?: string;
+          publishId?: string;
+          firstCommentStatus?: "posted" | "failed";
+          firstCommentWarning?: string;
+        }>;
+        errors?: Array<{
+          destination: MetaDestination;
+          error: string;
+        }>;
       };
+      const results = j.results ?? [];
+      const formatDestinationList = (destinations: MetaDestination[]) =>
+        getBrowserPublishTargetLabel(
+          destinations.length > 1
+            ? "both"
+            : destinations[0] ?? target,
+        );
+
+      if (postId) {
+        await refreshPosts();
+        if (isPostStillActive(postId)) {
+          const postResponse = await fetch(`/api/posts/${postId}`, {
+            cache: "no-store",
+          });
+          if (postResponse.ok) {
+            dispatch({
+              type: "LOAD_POST",
+              row: await postResponse.json(),
+            });
+          }
+        }
+      }
+
       if (j.status === "scheduled") {
-        const scheduledIso = j.publishAt ?? publishAt;
+        const scheduledIso = results[0]?.publishAt ?? j.publishAt ?? publishAt;
         const scheduledText = scheduledIso
           ? formatDateTimeInTimeZone(scheduledIso, localTimeZone, {
               dateStyle: "medium",
@@ -1397,38 +1480,53 @@ export default function Home() {
             })
           : "the selected time";
         const m = normalizedFirstComment
-          ? `Scheduled ${destinationLabel} publish for ${scheduledText} (${localTimeZone}). First comment will post after publish.`
-          : `Scheduled ${destinationLabel} publish for ${scheduledText} (${localTimeZone}).`;
+          ? `Scheduled ${targetLabel} publish for ${scheduledText} (${localTimeZone}). First comment will post to Instagram after publish.`
+          : `Scheduled ${targetLabel} publish for ${scheduledText} (${localTimeZone}).`;
         if (!isPostStillActive(postId)) return;
         setPublishMessageState({ postId, text: m });
         setPublishJobsRefreshKey((current) => current + 1);
         toast.success(m);
-      }
-      else {
-        if (j.firstCommentStatus === "failed") {
-          const warning = j.firstCommentWarning ?? "Could not post first comment.";
-          const m = `Published to ${destinationLabel}. First comment failed: ${warning}`;
+      } else if (j.status === "partial") {
+        const successfulDestinations = results.map((result) => result.destination);
+        const successfulLabel = formatDestinationList(successfulDestinations);
+        const failureText = (j.errors ?? [])
+          .map(
+            ({ destination, error }) =>
+              `${getBrowserPublishTargetLabel(destination)} failed: ${error}`,
+          )
+          .join(" ");
+        const scheduledResult = results.find((result) => result.status === "scheduled");
+        const m = scheduledResult
+          ? `Scheduled ${successfulLabel} publish${scheduledResult.publishAt ? ` for ${formatDateTimeInTimeZone(scheduledResult.publishAt, localTimeZone, { dateStyle: "medium", timeStyle: "short" })} (${localTimeZone})` : ""}. ${failureText}`
+          : `Published to ${successfulLabel}. ${failureText}`;
+        if (!isPostStillActive(postId)) return;
+        setPublishMessageState({ postId, text: m });
+        if (scheduledResult) {
+          setPublishJobsRefreshKey((current) => current + 1);
+        }
+        toast.warning(m);
+      } else {
+        const firstCommentFailure = results.find(
+          (result) => result.firstCommentStatus === "failed",
+        );
+        if (firstCommentFailure) {
+          const warning =
+            firstCommentFailure.firstCommentWarning ??
+            "Could not post first comment.";
+          const m = `Published to ${targetLabel}. Instagram first comment failed: ${warning}`;
           if (!isPostStillActive(postId)) return;
           setPublishMessageState({ postId, text: m });
           toast.warning(m);
         } else {
-          const m = `Published to ${destinationLabel} successfully.`;
+          const m = `Published to ${targetLabel} successfully.`;
           if (!isPostStillActive(postId)) return;
           setPublishMessageState({ postId, text: m });
           toast.success(m);
         }
-        dispatch({
-          type: "ADD_PUBLISH",
-          postId: postId ?? undefined,
-          entry:
-            destination === "instagram"
-              ? { publishedAt: new Date().toISOString(), igMediaId: j.publishId }
-              : { publishedAt: new Date().toISOString() },
-        });
       }
     } catch (e) {
       if (isPostStillActive(postId)) {
-        const m = e instanceof Error ? e.message : `${destinationLabel} publish failed`;
+        const m = e instanceof Error ? e.message : `${targetLabel} publish failed`;
         generation.setError(m);
         toast.error(m);
       }
