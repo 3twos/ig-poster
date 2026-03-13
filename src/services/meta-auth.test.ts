@@ -63,6 +63,13 @@ const makeConnection = (id: string) => ({
   instagramName: `User ${id}`,
   instagramPictureUrl: "https://cdn.example.com/profile.jpg",
   tokenExpiresAt: "2026-04-09T23:00:00.000Z",
+  grantedScopes: [
+    "instagram_basic",
+    "instagram_content_publish",
+    "pages_read_engagement",
+    "pages_show_list",
+    "pages_manage_posts",
+  ],
   encryptedAccessToken: "encrypted-token-12345",
 });
 
@@ -151,6 +158,33 @@ describe("resolveMetaAuthForApi", () => {
       account: {
         connectionId: "conn-2",
         accountKey: "page-conn-2:ig-conn-2",
+      },
+    });
+  });
+
+  it("keeps facebook publishing disabled when a stored connection never received page-post permission", async () => {
+    mockedIsCredentialStoreEnabled.mockReturnValue(true);
+    mockedGetMetaConnection.mockResolvedValue({
+      ...makeConnection("conn-3"),
+      grantedScopes: [
+        "instagram_basic",
+        "instagram_content_publish",
+        "pages_read_engagement",
+        "pages_show_list",
+      ],
+    });
+
+    await expect(
+      resolveMetaAuthForApi({
+        connectionId: "conn-3",
+      }),
+    ).resolves.toMatchObject({
+      account: {
+        capabilities: {
+          facebook: {
+            publishEnabled: false,
+          },
+        },
       },
     });
   });
