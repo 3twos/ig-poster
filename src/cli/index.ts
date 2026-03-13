@@ -208,7 +208,6 @@ const shouldSkipAuthRefresh = (command: string, commandArgs: string[]) =>
   command === "config" ||
   command === "link" ||
   command === "unlink" ||
-  (command === "photos" &&
-    (commandArgs[0] === "recent" || commandArgs[0] === "search")) ||
+  command === "photos" ||
   (command === "auth" &&
     (commandArgs[0] === "login" || commandArgs[0] === "logout"));

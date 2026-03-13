@@ -136,7 +136,8 @@ const isApplePhotosBridgePhotoAsset = (
     typeof candidate.mediaType === "string" &&
     typeof candidate.createdAt === "string" &&
     typeof candidate.favorite === "boolean" &&
-    Array.isArray(candidate.albumNames)
+    Array.isArray(candidate.albumNames) &&
+    candidate.albumNames.every((name) => typeof name === "string")
   );
 };
 

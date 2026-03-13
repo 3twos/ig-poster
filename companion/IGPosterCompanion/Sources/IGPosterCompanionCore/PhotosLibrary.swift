@@ -4,7 +4,7 @@ import Photos
 public enum ApplePhotosLibraryError: Error, Equatable, Sendable {
   case invalidFilter(String)
   case invalidSince(String)
-  case invalidLimit(Int)
+  case invalidLimit(String)
   case photosPermissionRequired
 }
 
@@ -29,7 +29,7 @@ public struct ApplePhotosLibrary: Sendable {
     query: ApplePhotosAssetQuery
   ) async throws -> ApplePhotosAssetListResponse {
     guard query.limit > 0 else {
-      throw ApplePhotosLibraryError.invalidLimit(query.limit)
+      throw ApplePhotosLibraryError.invalidLimit(String(query.limit))
     }
 
     guard await hasPhotoLibraryAccess() else {
@@ -91,6 +91,10 @@ public struct ApplePhotosLibrary: Sendable {
     let options = buildFetchOptions(query: query, sinceDate: sinceDate)
 
     for collection in collections {
+      if assetsByIdentifier.count >= query.limit {
+        break
+      }
+
       let fetchResult = PHAsset.fetchAssets(in: collection, options: options)
       fetchResult.enumerateObjects { asset, _, stop in
         guard self.matches(asset: asset, mediaType: query.mediaType) else {
@@ -144,8 +148,8 @@ public struct ApplePhotosLibrary: Sendable {
     if let sinceDate {
       predicates.append(NSPredicate(format: "creationDate >= %@", sinceDate as NSDate))
     }
-    if query.favorite == true {
-      predicates.append(NSPredicate(format: "favorite == YES"))
+    if let favorite = query.favorite {
+      predicates.append(NSPredicate(format: "favorite == %@", NSNumber(value: favorite)))
     }
 
     switch query.mediaType {

@@ -420,12 +420,12 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
           message: "Unsupported Photos since filter: \(rawValue)"
         )
       )
-    case .invalidLimit(let limit):
+    case .invalidLimit(let rawValue):
       return httpResponse(
         status: "400 Bad Request",
         body: errorBody(
           code: "INVALID_INPUT",
-          message: "Photos limit must be greater than zero; received \(limit)."
+          message: "Photos limit must be greater than zero; received \(rawValue)."
         )
       )
     case .photosPermissionRequired:
@@ -460,7 +460,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     }
 
     guard let parsed = Int(rawValue), parsed > 0 else {
-      throw ApplePhotosLibraryError.invalidLimit(Int(rawValue) ?? 0)
+      throw ApplePhotosLibraryError.invalidLimit(rawValue)
     }
 
     return min(parsed, 200)
