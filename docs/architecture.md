@@ -60,6 +60,7 @@ Why this shape:
 - the first live bridge slice can stay narrow: a localhost health endpoint plus CORS-safe probing is enough to validate the handoff loop before PhotoKit is wired in
 - before PhotoKit exists, the native shell should still parse and display the incoming custom-URL launch context so the web-to-native handoff can be validated end to end
 - before export/import exists, the native shell can still validate the human picker UX with PhotosPicker and ordered local selection state
+- a shared local state file between the native app and bridge is a useful intermediate step, because it lets the bridge report active draft/selection context without embedding UI logic
 
 ## Runtime and Layers
 
@@ -217,6 +218,7 @@ Why this shape:
 - The next Apple Photos bridge slice now exists too: `ig-poster-companion-bridge` exposes `GET /v1/health` with permissive localhost CORS so the browser can probe for a running native helper before attempting a custom-URL handoff.
 - The current native shell also parses that shared handoff URL and surfaces the incoming draft/profile/return context, giving the browser a meaningful native landing state while PhotosPicker and PhotoKit are still pending.
 - The native shell now goes one step further on the human path: it embeds a PhotosPicker-based selection surface and retains ordered local selection metadata, while export/import wiring still remains for the next slice.
+- The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge includes as an optional health summary. That gives future web/CLI flows one place to discover the active native draft/selection context.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

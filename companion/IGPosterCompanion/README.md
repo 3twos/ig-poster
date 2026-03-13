@@ -9,6 +9,7 @@ Current scope:
 - native PhotosPicker preview for ordered image/video selection
 - minimal localhost bridge executable for `GET /v1/health`
 - custom-URL handoff parsing so the app can reflect the current web draft/profile context
+- shared local selection-state persistence so the app and bridge can report the active picker context
 
 Local validation:
 

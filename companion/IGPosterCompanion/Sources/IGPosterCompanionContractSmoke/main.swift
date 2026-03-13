@@ -63,6 +63,36 @@ struct IGPosterCompanionContractSmoke {
       response.capabilities == [.pick, .recent, .search, .importAssets],
       "unexpected capabilities"
     )
+    require(response.selection == nil, "unexpected default selection summary")
+
+    let tempStateURL = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent(UUID().uuidString)
+      .appendingPathComponent("selection-state.json")
+    let stateStore = ApplePhotosCompanionStateStore(stateURL: tempStateURL)
+    let snapshot = ApplePhotosCompanionSelectionSnapshot(
+      updatedAt: "2026-03-13T15:30:00Z",
+      action: .pick,
+      draftId: "post_123",
+      profile: "default",
+      returnTo: "https://ig-poster.example.com/drafts/post_123",
+      bridgeOrigin: "http://127.0.0.1:43123",
+      assets: [
+        ApplePhotosCompanionSelectionAsset(
+          order: 1,
+          localIdentifier: "A1",
+          supportedContentTypes: ["public.jpeg"]
+        ),
+      ]
+    )
+    try? stateStore.save(snapshot)
+    require(stateStore.load() == snapshot, "unexpected state store round trip")
+
+    let responseWithSelection = ApplePhotosCompanionBridge.healthResponse(
+      selection: stateStore.load()?.summary
+    )
+    require(responseWithSelection.selection?.assetCount == 1, "unexpected selection count")
+    require(responseWithSelection.selection?.draftId == "post_123", "unexpected selection draft")
+    try? stateStore.clear()
 
     print("IGPosterCompanion contract smoke passed")
   }

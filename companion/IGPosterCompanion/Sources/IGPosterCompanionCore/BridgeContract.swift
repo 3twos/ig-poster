@@ -84,6 +84,15 @@ public struct ApplePhotosBridgeHealthResponse: Codable, Equatable, Sendable {
   public let version: String
   public let bridge: ApplePhotosBridgeInfo
   public let capabilities: [ApplePhotosBridgeCapability]
+  public let selection: ApplePhotosBridgeSelectionSummary?
+}
+
+public struct ApplePhotosBridgeSelectionSummary: Codable, Equatable, Sendable {
+  public let updatedAt: String
+  public let action: ApplePhotosCompanionBridge.LaunchAction?
+  public let draftId: String?
+  public let profile: String?
+  public let assetCount: Int
 }
 
 public struct ApplePhotosAssetRecord: Codable, Equatable, Sendable {
@@ -184,7 +193,7 @@ public enum ApplePhotosCompanionBridge {
   public static let tokenHeader = "X-IG-Poster-Bridge-Token"
   public static let paths = ApplePhotosBridgePaths()
 
-  public enum LaunchAction: String, Sendable {
+  public enum LaunchAction: String, Codable, Sendable {
     case open
     case pick
   }
@@ -219,7 +228,8 @@ public enum ApplePhotosCompanionBridge {
 
   public static func healthResponse(
     host: String = defaultHost,
-    port: Int = defaultPort
+    port: Int = defaultPort,
+    selection: ApplePhotosBridgeSelectionSummary? = nil
   ) -> ApplePhotosBridgeHealthResponse {
     let bridgeURLs = urls(host: host, port: port)
 
@@ -235,7 +245,8 @@ public enum ApplePhotosCompanionBridge {
         pickURL: bridgeURLs.pick.absoluteString,
         importURL: bridgeURLs.importURL.absoluteString
       ),
-      capabilities: [.pick, .recent, .search, .importAssets]
+      capabilities: [.pick, .recent, .search, .importAssets],
+      selection: selection
     )
   }
 
