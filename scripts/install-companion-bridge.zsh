@@ -10,6 +10,7 @@ APP_INFO_TEMPLATE="$PACKAGE_DIR/support/IGPosterCompanion.Info.plist"
 
 LABEL="com.3twos.igposter.bridge"
 DEFAULT_PORT="${IG_POSTER_BRIDGE_PORT:-43123}"
+BROWSER_DEFAULT_PORT="43123"
 INSTALL_ROOT="${IG_POSTER_COMPANION_HOME:-$HOME/Library/Application Support/IGPosterCompanion}"
 BIN_DIR="$INSTALL_ROOT/bin"
 BRIDGE_BIN="$BIN_DIR/ig-poster-companion-bridge"
@@ -40,7 +41,7 @@ user Library/Application folders, and optionally register the LaunchAgent and
 native app launch metadata.
 
 Options:
-  --port <n>          Bridge port to install into the LaunchAgent (default: $DEFAULT_PORT)
+  --port <n>          Primary bridge port to install into the LaunchAgent (default: $DEFAULT_PORT)
   --no-load           Install files but do not load/restart the LaunchAgent
   --no-register-app   Install the companion app bundle without Launch Services registration
   --uninstall         Remove the installed bridge binary, app bundle, and LaunchAgent
@@ -200,6 +201,10 @@ install_bridge() {
     print "Bridge is registered with launchd."
     print "Health check:"
     print "  curl http://127.0.0.1:$PORT/v1/health"
+    if [[ "$PORT" != "$BROWSER_DEFAULT_PORT" ]]; then
+      print "Browser-compatible default port alias:"
+      print "  curl http://127.0.0.1:$BROWSER_DEFAULT_PORT/v1/health"
+    fi
   else
     print "LaunchAgent not loaded (--no-load)."
     print "To load it later:"
