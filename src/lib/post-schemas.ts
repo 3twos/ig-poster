@@ -28,6 +28,7 @@ const DraftBrandSchema = z.object({
   logoNotes: z.string().max(300).optional(),
   defaultCornerRadius: z.number().min(0).max(32).optional(),
   defaultBgOpacity: z.number().min(0).max(100).optional(),
+  defaultOverlayStrength: z.number().min(0).max(100).optional(),
 });
 
 const DraftBriefSchema = z.object({

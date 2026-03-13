@@ -234,6 +234,7 @@ export const OverlayLayoutSchema = z.object({
   cta: OverlayBlockSchema,
   custom: z.array(CustomOverlayBlockSchema).max(6).optional().default([]),
   logo: LogoPositionSchema.optional(),
+  overlayStrength: z.number().min(0).max(100).optional(),
 });
 
 // Lenient overlay schema — allows blocks dragged/resized below strict minimums
@@ -361,7 +362,7 @@ const OVERLAY_DEFAULTS: Record<CreativeLayout, OverlayLayout> = {
 
 export const createDefaultOverlayLayout = (
   layout: CreativeLayout,
-  brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
+  brandDefaults?: { cornerRadius?: number; bgOpacity?: number; overlayStrength?: number },
 ): OverlayLayout => {
   const base = OVERLAY_DEFAULTS[layout];
   const br = brandDefaults?.cornerRadius;
@@ -378,6 +379,7 @@ export const createDefaultOverlayLayout = (
     cta: { ...base.cta, ...(br != null ? { borderRadius: br } : {}) },
     custom: [],
     logo: { ...DEFAULT_LOGO_POSITION },
+    ...(brandDefaults?.overlayStrength != null ? { overlayStrength: brandDefaults.overlayStrength } : {}),
   };
 };
 
@@ -429,6 +431,7 @@ export const normalizeOverlayLayout = (
         )
       : [],
     logo: layout?.logo ? { ...DEFAULT_LOGO_POSITION, ...layout.logo } : { ...DEFAULT_LOGO_POSITION },
+    ...(layout?.overlayStrength != null ? { overlayStrength: layout.overlayStrength } : {}),
   };
 };
 
@@ -933,7 +936,7 @@ export const fitOverlayLayoutToCopy = (
   },
   aspectRatio: AspectRatio,
   layout?: Partial<OverlayLayout> | null,
-  brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
+  brandDefaults?: { cornerRadius?: number; bgOpacity?: number; overlayStrength?: number },
   // Percent-of-canvas heights in [0, 100] captured from live DOM rendering.
   measuredHeightsPercent?: Partial<Record<CanonicalOverlayKey, number>>,
 ): OverlayLayout => {
@@ -1131,7 +1134,7 @@ export const createFittedOverlayLayout = (
     "layout" | "hook" | "headline" | "supportingText" | "cta"
   >,
   aspectRatio: AspectRatio,
-  brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
+  brandDefaults?: { cornerRadius?: number; bgOpacity?: number; overlayStrength?: number },
 ) =>
   fitOverlayLayoutToCopy(
     {
@@ -1158,6 +1161,7 @@ const inferOverlayBrandDefaults = (layout: OverlayLayout) => {
     cornerRadius: canonicalBlocks.find((block) => block.borderRadius != null)
       ?.borderRadius,
     bgOpacity: canonicalBlocks.find((block) => block.bgOpacity != null)?.bgOpacity,
+    overlayStrength: layout.overlayStrength,
   };
 };
 

@@ -708,6 +708,7 @@ export function useGeneration({
           createFittedOverlayLayout(variant, post.aspectRatio, {
             cornerRadius: brand.defaultCornerRadius,
             bgOpacity: brand.defaultBgOpacity,
+            overlayStrength: brand.defaultOverlayStrength,
           }),
         ]),
       );
