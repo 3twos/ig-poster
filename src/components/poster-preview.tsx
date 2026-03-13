@@ -919,7 +919,7 @@ export const PosterPreview = memo(
         }
 
         const raf = requestAnimationFrame(() => {
-          const measuredHeights = Object.fromEntries(
+          const measuredHeightsPercent = Object.fromEntries(
             activeKeys
               .map((key) => {
                 const node = canonicalBlockRefs.current[key];
@@ -937,7 +937,7 @@ export const PosterPreview = memo(
               ),
           ) as Partial<Record<CanonicalOverlayKey, number>>;
 
-          if (Object.keys(measuredHeights).length === 0) {
+          if (Object.keys(measuredHeightsPercent).length === 0) {
             return;
           }
 
@@ -949,7 +949,7 @@ export const PosterPreview = memo(
             aspectRatio,
             resolvedOverlayLayout,
             undefined,
-            measuredHeights,
+            measuredHeightsPercent,
           );
 
           if (

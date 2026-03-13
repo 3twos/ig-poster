@@ -757,6 +757,26 @@ describe("creative helpers", () => {
     );
   });
 
+  it("does not shrink existing block heights when rounding fitted values", () => {
+    const base = createDefaultOverlayLayout("hero-quote");
+    base.headline.height = 12.04;
+
+    const fitted = fitOverlayLayoutToCopy(
+      {
+        layout: "hero-quote",
+        hook: "Short hook",
+        headline: "Short headline",
+        supportingText: "Supporting text that keeps the canonical stack active.",
+        cta: "",
+      },
+      "4:5",
+      base,
+    );
+
+    expect(fitted.headline.height).toBeGreaterThanOrEqual(12.04);
+    expect(fitted.headline.height).toBe(12.1);
+  });
+
   it("clamps auto-fit blocks to valid sizes and safe stack bounds", () => {
     const fitted = fitOverlayLayoutToCopy(
       {
