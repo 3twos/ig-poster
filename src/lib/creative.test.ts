@@ -726,6 +726,57 @@ describe("creative helpers", () => {
     );
   });
 
+  it("honors measured canonical heights when rendered text is taller than estimates", () => {
+    const base = createDefaultOverlayLayout("hero-quote");
+
+    const fitted = fitOverlayLayoutToCopy(
+      {
+        layout: "hero-quote",
+        hook: "A practical hook",
+        headline: "A headline with real-world wrapping that rendered taller than expected.",
+        supportingText:
+          "A supporting paragraph that also rendered taller than the heuristic estimate in the browser preview.",
+        cta: "Visit profile",
+      },
+      "4:5",
+      base,
+      undefined,
+      {
+        headline: 24.4,
+        supportingText: 18.7,
+      },
+    );
+
+    expect(fitted.headline.height).toBe(24.4);
+    expect(fitted.supportingText.height).toBe(18.7);
+    expect(fitted.supportingText.y).toBeGreaterThanOrEqual(
+      fitted.headline.y + fitted.headline.height,
+    );
+    expect(fitted.cta.y).toBeGreaterThanOrEqual(
+      fitted.supportingText.y + fitted.supportingText.height,
+    );
+  });
+
+  it("does not shrink existing block heights when rounding fitted values", () => {
+    const base = createDefaultOverlayLayout("hero-quote");
+    base.headline.height = 12.04;
+
+    const fitted = fitOverlayLayoutToCopy(
+      {
+        layout: "hero-quote",
+        hook: "Short hook",
+        headline: "Short headline",
+        supportingText: "Supporting text that keeps the canonical stack active.",
+        cta: "",
+      },
+      "4:5",
+      base,
+    );
+
+    expect(fitted.headline.height).toBeGreaterThanOrEqual(12.04);
+    expect(fitted.headline.height).toBe(12.1);
+  });
+
   it("clamps auto-fit blocks to valid sizes and safe stack bounds", () => {
     const fitted = fitOverlayLayoutToCopy(
       {

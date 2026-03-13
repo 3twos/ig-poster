@@ -751,6 +751,13 @@ const estimateTextLines = (
     }, 0);
 };
 
+const roundOverlayPercent = (value: number) => Math.round(value * 10) / 10;
+
+const ceilOverlayPercent = (value: number) => Math.ceil(value * 10) / 10;
+
+const clampOverlayBlockHeight = (value: number) =>
+  Math.min(100, Math.max(5, ceilOverlayPercent(value)));
+
 const estimateCanonicalBlockHeight = (params: {
   key: CanonicalOverlayKey;
   block: OverlayBlock;
@@ -776,10 +783,7 @@ const estimateCanonicalBlockHeight = (params: {
 
   const estimatedPx = lines * fontPx * metrics.lineHeight + metrics.paddingPx;
   const estimatedPct = (estimatedPx / canvas.height) * 100;
-  return Math.min(
-    100,
-    Math.max(params.block.height, Math.round(estimatedPct * 10) / 10),
-  );
+  return clampOverlayBlockHeight(Math.max(params.block.height, estimatedPct));
 };
 
 export const resolveVariantOverlayCopy = (
@@ -828,6 +832,8 @@ export const fitOverlayLayoutToCopy = (
   aspectRatio: AspectRatio,
   layout?: Partial<OverlayLayout> | null,
   brandDefaults?: { cornerRadius?: number; bgOpacity?: number },
+  // Percent-of-canvas heights in [0, 100] captured from live DOM rendering.
+  measuredHeightsPercent?: Partial<Record<CanonicalOverlayKey, number>>,
 ): OverlayLayout => {
   const base = layout
     ? normalizeOverlayLayout(input.layout, layout)
@@ -867,12 +873,17 @@ export const fitOverlayLayoutToCopy = (
   const heights = Object.fromEntries(
     activeKeys.map((key) => [
       key,
-      estimateCanonicalBlockHeight({
-        key,
-        block: next[key],
-        text: copyByKey[key],
-        aspectRatio,
-      }),
+      clampOverlayBlockHeight(
+        Math.max(
+          estimateCanonicalBlockHeight({
+            key,
+            block: next[key],
+            text: copyByKey[key],
+            aspectRatio,
+          }),
+          measuredHeightsPercent?.[key] ?? 0,
+        ),
+      ),
     ]),
   ) as Record<CanonicalOverlayKey, number>;
 
@@ -896,7 +907,7 @@ export const fitOverlayLayoutToCopy = (
   for (const key of activeKeys) {
     next[key] = {
       ...next[key],
-      y: Math.round(currentY * 10) / 10,
+      y: roundOverlayPercent(currentY),
       height: heights[key],
     };
     currentY += heights[key] + gap;
