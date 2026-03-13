@@ -129,6 +129,52 @@ public struct ApplePhotosAssetRecord: Codable, Equatable, Sendable {
   }
 }
 
+public enum ApplePhotosBridgeQueryMode: String, Codable, Equatable, Sendable {
+  case recent
+  case search
+}
+
+public struct ApplePhotosAssetQuery: Codable, Equatable, Sendable {
+  public let mode: ApplePhotosBridgeQueryMode
+  public let since: String?
+  public let limit: Int
+  public let album: String?
+  public let mediaType: ApplePhotosMediaType?
+  public let favorite: Bool?
+
+  public init(
+    mode: ApplePhotosBridgeQueryMode,
+    since: String? = nil,
+    limit: Int,
+    album: String? = nil,
+    mediaType: ApplePhotosMediaType? = nil,
+    favorite: Bool? = nil
+  ) {
+    self.mode = mode
+    self.since = since
+    self.limit = limit
+    self.album = album
+    self.mediaType = mediaType
+    self.favorite = favorite
+  }
+}
+
+public struct ApplePhotosAssetListResponse: Codable, Equatable, Sendable {
+  public let assets: [ApplePhotosAssetRecord]
+  public let fetchedAt: String
+  public let query: ApplePhotosAssetQuery
+
+  public init(
+    assets: [ApplePhotosAssetRecord],
+    fetchedAt: String,
+    query: ApplePhotosAssetQuery
+  ) {
+    self.assets = assets
+    self.fetchedAt = fetchedAt
+    self.query = query
+  }
+}
+
 public struct ApplePhotosImportedAssetRecord: Codable, Equatable, Sendable {
   public let id: String
   public let filename: String

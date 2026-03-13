@@ -21,6 +21,16 @@ struct IGPosterCompanionContractSmoke {
       "unexpected pick endpoint"
     )
     require(
+      urls.recent.absoluteString
+        == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/recent",
+      "unexpected recent endpoint"
+    )
+    require(
+      urls.search.absoluteString
+        == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/search",
+      "unexpected search endpoint"
+    )
+    require(
       ApplePhotosCompanionBridge.exportDownloadURL(exportID: "export_123").absoluteString
         == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/exports/export_123",
       "unexpected export download endpoint"
@@ -69,6 +79,31 @@ struct IGPosterCompanionContractSmoke {
       "unexpected capabilities"
     )
     require(response.selection == nil, "unexpected default selection summary")
+    let recentResponse = ApplePhotosAssetListResponse(
+      assets: [
+        ApplePhotosAssetRecord(
+          id: "asset-1",
+          filename: "IMG_0001.JPG",
+          mediaType: .image,
+          createdAt: "2026-03-13T18:00:00Z",
+          width: 1080,
+          height: 1350,
+          durationMs: nil,
+          favorite: true,
+          albumNames: ["Favorites"]
+        ),
+      ],
+      fetchedAt: "2026-03-13T18:05:00Z",
+      query: ApplePhotosAssetQuery(
+        mode: .recent,
+        since: "7d",
+        limit: 20,
+        mediaType: .image,
+        favorite: true
+      )
+    )
+    require(recentResponse.query.mode == .recent, "unexpected recent query mode")
+    require(recentResponse.assets.first?.albumNames == ["Favorites"], "unexpected album names")
 
     let tempStateURL = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent(UUID().uuidString)

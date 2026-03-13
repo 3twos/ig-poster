@@ -13,6 +13,7 @@ import { runConfigCommand } from "./commands/config";
 import { runGenerateCommand } from "./commands/generate";
 import { runLinkCommand, runUnlinkCommand } from "./commands/link";
 import { runMcpCommand } from "./commands/mcp";
+import { runPhotosCommand } from "./commands/photos";
 import { runPostsCommand } from "./commands/posts";
 import { runPublishCommand } from "./commands/publish";
 import { runQueueCommand } from "./commands/queue";
@@ -39,6 +40,7 @@ Usage:
   ig chat <ask>
   ig config <list|get|set>
   ig generate <run|refine>
+  ig photos <recent|search>
   ig link [--host <url>] [--profile <name>] [--brand-kit <id>] [--output-dir <path>]
   ig unlink
   ig completion <bash|zsh|fish>
@@ -117,6 +119,9 @@ export const runCli = async (argv: string[]) => {
         break;
       case "publish":
         result = await runPublishCommand(ctx, commandArgs);
+        break;
+      case "photos":
+        result = await runPhotosCommand(ctx, commandArgs);
         break;
       case "brand-kits":
         result = await runBrandKitsCommand(ctx, commandArgs);
@@ -203,5 +208,6 @@ const shouldSkipAuthRefresh = (command: string, commandArgs: string[]) =>
   command === "config" ||
   command === "link" ||
   command === "unlink" ||
+  command === "photos" ||
   (command === "auth" &&
     (commandArgs[0] === "login" || commandArgs[0] === "logout"));

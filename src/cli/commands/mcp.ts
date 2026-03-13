@@ -143,6 +143,52 @@ const TOOLS: ToolDefinition[] = [
     ],
   },
   {
+    name: "photos_recent",
+    description: "List recent Apple Photos assets from the local macOS companion bridge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string" },
+        limit: { type: "integer" },
+        mediaType: { type: "string", enum: ["image", "video", "live-photo"] },
+        favorite: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    buildArgv: (args) => [
+      "photos",
+      "recent",
+      ...(typeof args.since === "string" ? ["--since", args.since] : []),
+      ...(typeof args.limit === "number" ? ["--limit", String(args.limit)] : []),
+      ...(typeof args.mediaType === "string" ? ["--media", args.mediaType] : []),
+      ...(args.favorite === true ? ["--favorite"] : []),
+    ],
+  },
+  {
+    name: "photos_search",
+    description: "Search Apple Photos assets by album/media filters through the local macOS companion bridge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        album: { type: "string" },
+        since: { type: "string" },
+        limit: { type: "integer" },
+        mediaType: { type: "string", enum: ["image", "video", "live-photo"] },
+        favorite: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    buildArgv: (args) => [
+      "photos",
+      "search",
+      ...(typeof args.album === "string" ? ["--album", args.album] : []),
+      ...(typeof args.since === "string" ? ["--since", args.since] : []),
+      ...(typeof args.limit === "number" ? ["--limit", String(args.limit)] : []),
+      ...(typeof args.mediaType === "string" ? ["--media", args.mediaType] : []),
+      ...(args.favorite === true ? ["--favorite"] : []),
+    ],
+  },
+  {
     name: "chat_ask",
     description: "Ask the IG Poster chat assistant, optionally grounded to a saved post.",
     inputSchema: {
