@@ -15,7 +15,8 @@ set -euo pipefail
 
 # Dependency check: jq and gh are required
 if ! command -v jq &>/dev/null || ! command -v gh &>/dev/null; then
-  exit 0  # Skip enforcement when dependencies are unavailable
+  echo "BLOCKED: jq and gh are required for pr-workflow-guard but were not found in PATH. Install them to proceed." >&2
+  exit 2  # Deny-by-default when dependencies are missing
 fi
 
 INPUT=$(cat)
