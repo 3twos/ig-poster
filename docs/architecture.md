@@ -74,7 +74,7 @@ Why this shape:
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, adaptive logo-chip contrast, and feed landscape ratio support.
-  - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, refine/caption controls, and the last refine prompt preview.
+  - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, refine/caption controls, and the last refine prompt preview including the parsed refinement plan.
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
@@ -98,7 +98,7 @@ Why this shape:
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
-  - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text
+  - structured refinement-plan parsing plus deterministic enforcement for common post-generation instructions like shortening copy or removing CTA text
   - brief-aware variant ranking heuristics that prefer saved theme/subject/thought/audience alignment over generic engagement tropes when selecting finalists
   - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses
   - LLM provider abstraction
@@ -142,7 +142,7 @@ Why this shape:
 - Fallback response keeps the core workflow available during outages or unconfigured environments.
 - Keeps `Generate` as a clean re-run from persisted brief inputs, while `Refine` remains the incremental path that preserves the current canvas look unless asked otherwise.
 - Gives refine requests more context by sending the saved brief, prompt instructions, and current overlay layout state alongside the selected variant.
-- Returns the assembled refine system/user prompts with successful refine responses so the UI can expose the exact last refine prompt used for debugging.
+- Returns the parsed refinement plan plus the assembled refine system/user prompts with successful refine responses so the UI can expose the exact last refine interpretation used for debugging.
 - Runs a deterministic refine-enforcement pass after model output for recurring instruction families (for example shorter copy and no-CTA requests), so the UX does not rely entirely on prompt obedience.
 - Re-fits the canonical overlay stack after successful refine responses so updated copy is less likely to overlap, while preserving existing widths, x positions, custom boxes, and visibility choices from the current layout.
 - Builds generation prompts with an explicit priority order where the saved brief outranks supporting website/performance context and house best-practice examples, then uses the same brief signals again during finalist selection as a deterministic backstop.

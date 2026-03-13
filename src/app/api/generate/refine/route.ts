@@ -10,6 +10,7 @@ import {
   applyRefinementDirectives,
   buildRefineSystemPrompt,
   buildRefineUserPrompt,
+  deriveRefinementPlan,
 } from "@/lib/creative";
 import { resolveAllLlmAuthFromRequest } from "@/lib/llm-auth";
 import { generateWithFallback } from "@/lib/llm";
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
     }
 
     try {
+      const instructionPlan = deriveRefinementPlan(instruction, variant);
       const systemPrompt = buildRefineSystemPrompt(promptConfig);
       const userPrompt = buildRefineUserPrompt({
         variant,
@@ -57,6 +59,7 @@ export async function POST(req: Request) {
         post,
         promptConfig,
         overlayLayout,
+        instructionPlan,
       });
       const { result: generated } = await generateWithFallback<unknown>(
         authList.connections,
@@ -74,6 +77,8 @@ export async function POST(req: Request) {
           currentVariant: variant,
           refinedVariant: CreativeVariantSchema.parse(generated),
           instruction,
+          post,
+          instructionPlan,
         }),
       );
       return NextResponse.json({
@@ -82,6 +87,7 @@ export async function POST(req: Request) {
         promptPreview: {
           systemPrompt,
           userPrompt,
+          instructionPlan,
         },
       });
     } catch (refinementError) {

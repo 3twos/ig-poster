@@ -418,12 +418,32 @@ export const applyLayoutCopyBudget = (
 
 type RefineShortenIntensity = "standard" | "aggressive";
 
-export type RefinementDirectives = {
-  removeCta: boolean;
-  preserveEmptyCta: boolean;
-  shortenOverlayText: boolean;
-  shortenCaption: boolean;
-  shortenIntensity: RefineShortenIntensity;
+type RefinementToneDirection =
+  | "preserve"
+  | "editorial"
+  | "premium"
+  | "direct"
+  | "playful";
+
+type RefinementCtaAction =
+  | "preserve"
+  | "remove"
+  | "add"
+  | "keep-empty";
+
+export type RefinementPlan = {
+  shorten: {
+    hook: boolean;
+    headline: boolean;
+    supportingText: boolean;
+    cta: boolean;
+    caption: boolean;
+    intensity: RefineShortenIntensity;
+  };
+  ctaAction: RefinementCtaAction;
+  toneDirection: RefinementToneDirection;
+  audienceHint: string | null;
+  preserveLayout: boolean;
 };
 
 const CTA_REMOVE_PATTERN =
@@ -434,11 +454,26 @@ const SHORTEN_PATTERN =
   /\b(?:shorter|shorten|concise|punchier|tighter|trim|reduce|leaner)\b|(?:less|fewer)\s+(?:text|copy|words)/;
 const AGGRESSIVE_SHORTEN_PATTERN =
   /\b(?:significantly|substantially|dramatically|considerably)\b|\b(?:much|way|far)\s+shorter\b/;
+const HOOK_PATTERN = /\bhook\b/;
+const HEADLINE_PATTERN = /\bheadline\b/;
+const BODY_PATTERN =
+  /\b(?:body|supporting text|supporting copy|body copy|paragraph|paragraphs)\b/;
 const CAPTION_PATTERN = /\b(?:caption|captions|hashtags)\b/;
 const OVERLAY_PATTERN =
   /\b(?:component|components|overlay|hook|headline|body|supporting text|on-canvas|text boxes)\b/;
 const EDITORIAL_ONLY_PATTERN =
   /\b(?:(?:purely|strictly|fully)\s+editorial|editorial[- ]only)\b/;
+const PREMIUM_TONE_PATTERN =
+  /\b(?:premium|luxury|luxurious|sophisticated|elevated|aspirational)\b/;
+const DIRECT_TONE_PATTERN =
+  /\b(?:direct|clearer|clear|plainspoken|plain-spoken|straightforward)\b/;
+const PLAYFUL_TONE_PATTERN = /\b(?:playful|lighter|witty|fun|funny)\b/;
+const LAYOUT_CHANGE_PATTERN =
+  /\b(?:change|switch|rework|different|new)\s+(?:the\s+)?(?:layout|template|design|visual|composition)\b|\b(?:move|reposition|restack|resize)\b/;
+const AUDIENCE_RETARGET_PATTERN =
+  /\b(?:retarget|rewrite|rework|adapt|tailor|aim|target)(?:\s+(?:this|it))?\s+(?:for|toward(?:s)?|to)\s+([^.,;\n]{3,80})/;
+const AUDIENCE_LABEL_PATTERN =
+  /\baudience\s*:\s*([^.,;\n]{3,80})/;
 
 const REFINE_SHORTEN_FACTORS: Record<RefineShortenIntensity, number> = {
   standard: 0.82,
@@ -474,71 +509,90 @@ const trimTowardLength = (
   return trimToWordBoundary(nextValue, target);
 };
 
-export const deriveRefinementDirectives = (
+const normalizeAudienceHint = (value: string | undefined) => {
+  const trimmed = value?.trim().replace(/^["']|["']$/g, "") ?? "";
+  return trimmed.length >= 3 ? trimmed : null;
+};
+
+export const deriveRefinementPlan = (
   instruction: string,
   variant: Pick<CreativeVariant, "cta">,
-): RefinementDirectives => {
+): RefinementPlan => {
   const normalized = instruction.trim().toLowerCase();
   const shortenRequested = SHORTEN_PATTERN.test(normalized);
   const mentionsCaption = CAPTION_PATTERN.test(normalized);
   const mentionsOverlay = OVERLAY_PATTERN.test(normalized);
+  const mentionsHook = HOOK_PATTERN.test(normalized);
+  const mentionsHeadline = HEADLINE_PATTERN.test(normalized);
+  const mentionsBody = BODY_PATTERN.test(normalized);
+  const mentionsCta = /\b(?:cta|call[\s-]?to[\s-]?action)\b/.test(normalized);
+  const hasSpecificCopyTarget = mentionsHook || mentionsHeadline || mentionsBody;
+  const applyGenericOverlayShorten =
+    mentionsOverlay || (!hasSpecificCopyTarget && !mentionsCaption);
+  const shortenOverlay =
+    shortenRequested && (applyGenericOverlayShorten || hasSpecificCopyTarget);
+  const audienceMatch =
+    normalized.match(AUDIENCE_RETARGET_PATTERN)?.[1] ??
+    normalized.match(AUDIENCE_LABEL_PATTERN)?.[1];
 
   return {
-    removeCta:
-      CTA_REMOVE_PATTERN.test(normalized) || EDITORIAL_ONLY_PATTERN.test(normalized),
-    preserveEmptyCta:
-      variant.cta.trim().length === 0 && !CTA_ADD_PATTERN.test(normalized),
-    shortenOverlayText:
-      shortenRequested && (mentionsOverlay || !mentionsCaption),
-    shortenCaption:
-      shortenRequested && (mentionsCaption || !mentionsOverlay),
-    shortenIntensity: AGGRESSIVE_SHORTEN_PATTERN.test(normalized)
-      ? "aggressive"
-      : "standard",
+    shorten: {
+      hook:
+        shortenOverlay &&
+        (mentionsHook || (!hasSpecificCopyTarget && applyGenericOverlayShorten)),
+      headline:
+        shortenOverlay &&
+        (mentionsHeadline || (!hasSpecificCopyTarget && applyGenericOverlayShorten)),
+      supportingText:
+        shortenOverlay &&
+        (mentionsBody || (!hasSpecificCopyTarget && applyGenericOverlayShorten)),
+      cta:
+        shortenOverlay &&
+        (mentionsCta || (!hasSpecificCopyTarget && applyGenericOverlayShorten)),
+      caption: shortenRequested && (mentionsCaption || !mentionsOverlay),
+      intensity: AGGRESSIVE_SHORTEN_PATTERN.test(normalized)
+        ? "aggressive"
+        : "standard",
+    },
+    ctaAction: CTA_REMOVE_PATTERN.test(normalized) || EDITORIAL_ONLY_PATTERN.test(normalized)
+      ? "remove"
+      : CTA_ADD_PATTERN.test(normalized)
+        ? "add"
+        : variant.cta.trim().length === 0
+          ? "keep-empty"
+          : "preserve",
+    toneDirection: EDITORIAL_ONLY_PATTERN.test(normalized)
+      ? "editorial"
+      : PREMIUM_TONE_PATTERN.test(normalized)
+        ? "premium"
+        : DIRECT_TONE_PATTERN.test(normalized)
+          ? "direct"
+          : PLAYFUL_TONE_PATTERN.test(normalized)
+            ? "playful"
+            : "preserve",
+    audienceHint: normalizeAudienceHint(audienceMatch),
+    preserveLayout: !LAYOUT_CHANGE_PATTERN.test(normalized),
   };
 };
 
-const buildRefinementDirectiveBlock = (directives: RefinementDirectives) => {
-  const lines: string[] = [];
-
-  if (directives.removeCta) {
-    lines.push("- Remove CTA text.");
-  } else if (directives.preserveEmptyCta) {
-    lines.push("- Keep CTA empty unless the user explicitly asks to add one.");
-  }
-
-  if (directives.shortenOverlayText) {
-    lines.push(
-      `- Shorten on-canvas copy (${directives.shortenIntensity === "aggressive" ? "aggressively" : "moderately"}).`,
-    );
-  }
-
-  if (directives.shortenCaption) {
-    lines.push(
-      `- Shorten the caption (${directives.shortenIntensity === "aggressive" ? "aggressively" : "moderately"}).`,
-    );
-  }
-
-  if (lines.length === 0) {
-    return "";
-  }
-
-  return `Parsed refinement constraints:\n${lines.join("\n")}\n\n`;
+const buildRefinementPlanBlock = (plan: RefinementPlan) => {
+  return `Parsed refinement plan (structured interpretation of the instruction):\n${JSON.stringify(plan, null, 2)}\n\n`;
 };
 
 export const applyRefinementDirectives = (input: {
   currentVariant: CreativeVariant;
   refinedVariant: CreativeVariant;
   instruction: string;
+  post?: Pick<GenerationRequest["post"], "objective">;
+  instructionPlan?: RefinementPlan;
 }): CreativeVariant => {
-  const directives = deriveRefinementDirectives(
-    input.instruction,
-    input.currentVariant,
-  );
-  const factor = REFINE_SHORTEN_FACTORS[directives.shortenIntensity];
+  const plan =
+    input.instructionPlan ??
+    deriveRefinementPlan(input.instruction, input.currentVariant);
+  const factor = REFINE_SHORTEN_FACTORS[plan.shorten.intensity];
   const budget = LAYOUT_COPY_BUDGETS[input.currentVariant.layout];
 
-  let nextVariant: CreativeVariant = {
+  const nextVariant: CreativeVariant = {
     ...input.refinedVariant,
     carouselSlides: input.refinedVariant.carouselSlides?.map((slide) => ({ ...slide })),
     reelPlan: input.refinedVariant.reelPlan
@@ -550,65 +604,81 @@ export const applyRefinementDirectives = (input: {
       : undefined,
   };
 
-  if (directives.shortenOverlayText) {
-    nextVariant = {
-      ...nextVariant,
-      hook: trimTowardLength(nextVariant.hook, input.currentVariant.hook, {
-        minLength: 8,
-        maxLength: budget.hook,
-        factor,
-      }),
-      headline: trimTowardLength(nextVariant.headline, input.currentVariant.headline, {
+  if (plan.shorten.hook) {
+    nextVariant.hook = trimTowardLength(nextVariant.hook, input.currentVariant.hook, {
+      minLength: 8,
+      maxLength: budget.hook,
+      factor,
+    });
+  }
+
+  if (plan.shorten.headline) {
+    nextVariant.headline = trimTowardLength(
+      nextVariant.headline,
+      input.currentVariant.headline,
+      {
         minLength: 8,
         maxLength: budget.headline,
         factor,
-      }),
-      supportingText: trimTowardLength(
-        nextVariant.supportingText,
-        input.currentVariant.supportingText,
-        {
-          minLength: 20,
-          maxLength: budget.supportingText,
-          factor,
-        },
-      ),
-    };
-
-    if (nextVariant.cta.trim()) {
-      nextVariant.cta = trimTowardLength(nextVariant.cta, input.currentVariant.cta, {
-        minLength: 0,
-        maxLength: budget.cta,
-        factor,
-      });
-    }
-
-    if (nextVariant.carouselSlides?.length) {
-      nextVariant.carouselSlides = nextVariant.carouselSlides.map((slide, index) => {
-        const currentSlide = input.currentVariant.carouselSlides?.[index] ?? slide;
-
-        return {
-          ...slide,
-          goal: trimTowardLength(slide.goal, currentSlide.goal, {
-            minLength: 6,
-            maxLength: budget.hook,
-            factor,
-          }),
-          headline: trimTowardLength(slide.headline, currentSlide.headline, {
-            minLength: 4,
-            maxLength: budget.headline,
-            factor,
-          }),
-          body: trimTowardLength(slide.body, currentSlide.body, {
-            minLength: 12,
-            maxLength: budget.supportingText,
-            factor,
-          }),
-        };
-      });
-    }
+      },
+    );
   }
 
-  if (directives.shortenCaption) {
+  if (plan.shorten.supportingText) {
+    nextVariant.supportingText = trimTowardLength(
+      nextVariant.supportingText,
+      input.currentVariant.supportingText,
+      {
+        minLength: 20,
+        maxLength: budget.supportingText,
+        factor,
+      },
+    );
+  }
+
+  if (plan.shorten.cta && nextVariant.cta.trim()) {
+    nextVariant.cta = trimTowardLength(nextVariant.cta, input.currentVariant.cta, {
+      minLength: 0,
+      maxLength: budget.cta,
+      factor,
+    });
+  }
+
+  if (
+    nextVariant.carouselSlides?.length &&
+    (plan.shorten.hook || plan.shorten.headline || plan.shorten.supportingText)
+  ) {
+    nextVariant.carouselSlides = nextVariant.carouselSlides.map((slide, index) => {
+      const currentSlide = input.currentVariant.carouselSlides?.[index] ?? slide;
+
+      return {
+        ...slide,
+        goal: plan.shorten.hook
+          ? trimTowardLength(slide.goal, currentSlide.goal, {
+              minLength: 6,
+              maxLength: budget.hook,
+              factor,
+            })
+          : slide.goal,
+        headline: plan.shorten.headline
+          ? trimTowardLength(slide.headline, currentSlide.headline, {
+              minLength: 4,
+              maxLength: budget.headline,
+              factor,
+            })
+          : slide.headline,
+        body: plan.shorten.supportingText
+          ? trimTowardLength(slide.body, currentSlide.body, {
+              minLength: 12,
+              maxLength: budget.supportingText,
+              factor,
+            })
+          : slide.body,
+      };
+    });
+  }
+
+  if (plan.shorten.caption) {
     nextVariant.caption = trimTowardLength(nextVariant.caption, input.currentVariant.caption, {
       minLength: 40,
       maxLength: 700,
@@ -616,8 +686,12 @@ export const applyRefinementDirectives = (input: {
     });
   }
 
-  if (directives.removeCta || directives.preserveEmptyCta) {
+  if (plan.ctaAction === "remove" || plan.ctaAction === "keep-empty") {
     nextVariant.cta = "";
+  } else if (plan.ctaAction === "add" && !nextVariant.cta.trim()) {
+    nextVariant.cta =
+      input.currentVariant.cta.trim() ||
+      (input.post ? deriveObjectiveCta(input.post.objective) : "");
   }
 
   return applyLayoutCopyBudget(nextVariant);
@@ -1780,6 +1854,7 @@ export const buildRefineUserPrompt = (input: {
   post?: GenerationRequest["post"];
   promptConfig?: Partial<PromptConfig> | null;
   overlayLayout?: OverlayLayout | null;
+  instructionPlan?: RefinementPlan;
 }): string => {
   const briefBlock = input.post
     ? `Original post brief:
@@ -1803,9 +1878,10 @@ ${JSON.stringify(input.overlayLayout, null, 2)}
 `
     : "";
   const budget = LAYOUT_COPY_BUDGETS[input.variant.layout];
-  const directiveBlock = buildRefinementDirectiveBlock(
-    deriveRefinementDirectives(input.instruction, input.variant),
-  );
+  const instructionPlan =
+    input.instructionPlan ??
+    deriveRefinementPlan(input.instruction, input.variant);
+  const directiveBlock = buildRefinementPlanBlock(instructionPlan);
 
   return `Refine this Instagram creative variant according to the instruction below.
 
@@ -1828,6 +1904,7 @@ ${directiveBlock}Refinement instruction: "${input.instruction}"
 
 Refinement rules:
 - Preserve postType, layout, assetSequence, and overall visual direction unless the user explicitly asks to change them.
+- Use the parsed refinement plan above as the structured interpretation of the instruction.
 - Keep the variant tightly aligned to the original brief when that context is provided.
 - If the instruction asks for shorter text, prioritize shortening hook, headline, supportingText, and cta before changing the concept.
 - If the instruction says to avoid CTA, remove CTA, or keep the post purely editorial, set "cta" to an empty string.
