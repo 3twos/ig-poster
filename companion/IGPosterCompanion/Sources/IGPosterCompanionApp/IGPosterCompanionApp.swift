@@ -57,6 +57,7 @@ struct CompanionHomeView: View {
 
   private func handleIncomingURL(_ url: URL) {
     guard let request = ApplePhotosCompanionBridge.parseLaunchURL(url) else {
+      activeLaunchRequest = nil
       invalidLaunchURL = url.absoluteString
       return
     }
