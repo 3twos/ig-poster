@@ -5,6 +5,7 @@ import {
   buildOAuthState,
   createMetaOAuthStartUrl,
   META_OAUTH_STATE_COOKIE,
+  type MetaOAuthScopeProfile,
 } from "@/lib/meta-auth";
 
 export const runtime = "nodejs";
@@ -14,7 +15,14 @@ export async function GET(req: Request) {
     const requestUrl = new URL(req.url);
     const origin = requestUrl.origin;
     const state = buildOAuthState();
-    const redirectUrl = createMetaOAuthStartUrl(origin, state);
+    const requestedScopeProfile = requestUrl.searchParams.get("scopeProfile");
+    const scopeProfile: MetaOAuthScopeProfile =
+      requestedScopeProfile === "page-publishing"
+        ? "page-publishing"
+        : "instagram-basic";
+    const redirectUrl = createMetaOAuthStartUrl(origin, state, {
+      scopeProfile,
+    });
 
     const response = NextResponse.redirect(redirectUrl);
     response.cookies.set(META_OAUTH_STATE_COOKIE, state, {

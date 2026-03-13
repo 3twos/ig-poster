@@ -26,8 +26,24 @@ export const META_OAUTH_STATE_COOKIE = "meta_oauth_state";
 export const META_CONNECTION_COOKIE = "ig_connection";
 const INLINE_CONNECTION_PREFIX = "inline:";
 const META_CONNECTION_NAMESPACE: CredentialNamespace = "meta";
+const META_PAGE_PUBLISH_PERMISSION = "pages_manage_posts";
+
+const META_OAUTH_BASE_SCOPES = [
+  "instagram_basic",
+  "instagram_content_publish",
+  "pages_show_list",
+  "pages_read_engagement",
+  "business_management",
+] as const;
+
+const META_OAUTH_PAGE_PUBLISH_SCOPES = [
+  "pages_manage_posts",
+  "pages_manage_metadata",
+] as const;
 
 const graphVersion = process.env.META_GRAPH_VERSION ?? "v22.0";
+
+export type MetaOAuthScopeProfile = "instagram-basic" | "page-publishing";
 
 const OAuthTokenSchema = z.object({
   access_token: z.string().min(1),
@@ -64,6 +80,7 @@ export const MetaOAuthConnectionSchema = z.object({
   instagramName: z.string().default(""),
   instagramPictureUrl: z.string().default(""),
   tokenExpiresAt: z.string().datetime().optional(),
+  grantedScopes: z.array(z.string().trim().min(1)).optional(),
   encryptedAccessToken: z.string().min(12),
 });
 
@@ -77,6 +94,7 @@ const InlineMetaOAuthConnectionSchema = z.object({
   instagramName: z.string().optional().default(""),
   pageName: z.string().optional().default(""),
   tokenExpiresAt: z.string().datetime().optional(),
+  grantedScopes: z.array(z.string().trim().min(1)).optional(),
   accessToken: z.string().trim().min(8).max(4000),
 });
 
@@ -174,6 +192,49 @@ const decryptConnectionToken = (connection: MetaOAuthConnection) => {
   return decryptString(connection.encryptedAccessToken, secret);
 };
 
+const normalizeMetaGrantedScopes = (
+  grantedScopes?: readonly string[] | string | null,
+) => {
+  const rawScopes = Array.isArray(grantedScopes)
+    ? grantedScopes
+    : typeof grantedScopes === "string"
+      ? grantedScopes.split(/[,\s]+/)
+      : [];
+
+  const normalized = Array.from(
+    new Set(
+      rawScopes.map((scope) => scope.trim()).filter((scope) => scope.length > 0),
+    ),
+  ).sort();
+
+  return normalized.length > 0 ? normalized : undefined;
+};
+
+const resolveFacebookPublishEnabled = (params: {
+  pageId?: string;
+  grantedScopes?: readonly string[];
+}) => {
+  if (!params.pageId?.trim()) {
+    return false;
+  }
+
+  if (!params.grantedScopes) {
+    return undefined;
+  }
+
+  return params.grantedScopes.includes(META_PAGE_PUBLISH_PERMISSION);
+};
+
+const buildMetaOAuthScopes = (scopeProfile: MetaOAuthScopeProfile) => {
+  const scopes = new Set<string>(META_OAUTH_BASE_SCOPES);
+
+  if (scopeProfile === "page-publishing") {
+    META_OAUTH_PAGE_PUBLISH_SCOPES.forEach((scope) => scopes.add(scope));
+  }
+
+  return Array.from(scopes);
+};
+
 const buildResolvedMetaAccount = (params: {
   connectionId?: string;
   pageId?: string;
@@ -182,6 +243,7 @@ const buildResolvedMetaAccount = (params: {
   instagramUsername?: string;
   instagramName?: string;
   tokenExpiresAt?: string;
+  grantedScopes?: readonly string[];
 }): ResolvedMetaAccount => ({
   connectionId: params.connectionId,
   accountKey: buildMetaAccountKey({
@@ -197,6 +259,10 @@ const buildResolvedMetaAccount = (params: {
   capabilities: buildMetaDestinationCapabilities({
     pageId: params.pageId,
     instagramUserId: params.instagramUserId,
+    facebookPublishEnabled: resolveFacebookPublishEnabled({
+      pageId: params.pageId,
+      grantedScopes: params.grantedScopes,
+    }),
   }),
 });
 
@@ -215,10 +281,12 @@ const saveMetaConnection = async (params: {
   instagramUsername: string;
   instagramName: string;
   instagramPictureUrl: string;
+  grantedScopes?: string[];
 }): Promise<SavedMetaConnection> => {
   const secret = requireAppEncryptionSecret();
   const now = new Date();
   const id = randomUUID().replace(/-/g, "").slice(0, 20);
+  const grantedScopes = normalizeMetaGrantedScopes(params.grantedScopes);
   const tokenExpiresAt = params.tokenExpiresIn
     ? new Date(now.getTime() + params.tokenExpiresIn * 1000).toISOString()
     : undefined;
@@ -235,6 +303,7 @@ const saveMetaConnection = async (params: {
     instagramName: params.instagramName,
     instagramPictureUrl: params.instagramPictureUrl,
     tokenExpiresAt,
+    grantedScopes,
     encryptedAccessToken: encryptString(params.accessToken, secret),
   });
 
@@ -250,6 +319,7 @@ const saveMetaConnection = async (params: {
         instagramUsername: connection.instagramUsername,
         instagramName: connection.instagramName,
         tokenExpiresAt: connection.tokenExpiresAt,
+        grantedScopes: connection.grantedScopes,
       }),
     };
   }
@@ -262,6 +332,7 @@ const saveMetaConnection = async (params: {
     instagramName: params.instagramName,
     pageName: params.pageName,
     tokenExpiresAt,
+    grantedScopes,
     accessToken: params.accessToken,
   });
   const encryptedInline = encryptString(JSON.stringify(inline), secret);
@@ -280,6 +351,7 @@ const saveMetaConnection = async (params: {
       instagramUsername: inline.instagramUsername,
       instagramName: inline.instagramName,
       tokenExpiresAt: inline.tokenExpiresAt,
+      grantedScopes: inline.grantedScopes,
     }),
   };
 };
@@ -311,21 +383,20 @@ export const getStoredMetaConnectionIdFromCookie = (cookieValue: string) => {
   return parsed.id;
 };
 
-export const createMetaOAuthStartUrl = (origin: string, state: string) => {
+export const createMetaOAuthStartUrl = (
+  origin: string,
+  state: string,
+  options: {
+    scopeProfile?: MetaOAuthScopeProfile;
+  } = {},
+) => {
   const config = getMetaOAuthConfig(origin);
   if (!config) {
     throw new Error("Missing META_APP_ID or META_APP_SECRET");
   }
 
-  const scope = [
-    "instagram_basic",
-    "instagram_content_publish",
-    "pages_show_list",
-    "pages_read_engagement",
-    "pages_manage_posts",
-    "pages_manage_metadata",
-    "business_management",
-  ].join(",");
+  const scopeProfile = options.scopeProfile ?? "instagram-basic";
+  const scope = buildMetaOAuthScopes(scopeProfile).join(",");
 
   const oauthUrl = new URL(
     `https://www.facebook.com/${config.graphVersion}/dialog/oauth`,
@@ -333,16 +404,23 @@ export const createMetaOAuthStartUrl = (origin: string, state: string) => {
 
   oauthUrl.searchParams.set("client_id", config.appId);
   oauthUrl.searchParams.set("redirect_uri", config.redirectUri);
-  oauthUrl.searchParams.set("response_type", "code");
+  oauthUrl.searchParams.set("response_type", "code granted_scopes");
   oauthUrl.searchParams.set("state", state);
   oauthUrl.searchParams.set("scope", scope);
+  if (scopeProfile === "page-publishing") {
+    oauthUrl.searchParams.set("auth_type", "rerequest");
+  }
 
   return oauthUrl;
 };
 
 export const buildOAuthState = () => randomUUID().replace(/-/g, "");
 
-export const completeMetaOAuth = async (req: Request, code: string) => {
+export const completeMetaOAuth = async (
+  req: Request,
+  code: string,
+  grantedScopes?: string[],
+) => {
   const origin = new URL(req.url).origin;
   const config = getMetaOAuthConfig(origin);
   if (!config) {
@@ -416,6 +494,7 @@ export const completeMetaOAuth = async (req: Request, code: string) => {
     instagramUsername: page.instagram_business_account.username,
     instagramName: page.instagram_business_account.name,
     instagramPictureUrl: page.instagram_business_account.profile_picture_url,
+    grantedScopes,
   });
 
   return connection;
@@ -445,6 +524,7 @@ export const resolveMetaAuthFromRequest = async (
           instagramUsername: inline.instagramUsername,
           instagramName: inline.instagramName,
           tokenExpiresAt: inline.tokenExpiresAt,
+          grantedScopes: inline.grantedScopes,
         }),
       };
     } catch (error) {
@@ -476,6 +556,7 @@ export const resolveMetaAuthFromRequest = async (
             instagramUsername: connection.instagramUsername,
             instagramName: connection.instagramName,
             tokenExpiresAt: connection.tokenExpiresAt,
+            grantedScopes: connection.grantedScopes,
           }),
         };
       }

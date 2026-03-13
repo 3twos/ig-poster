@@ -20,6 +20,7 @@ export type MetaDestinationCapabilities = Record<
 type MetaCapabilityInput = {
   pageId?: string | null;
   instagramUserId?: string | null;
+  facebookPublishEnabled?: boolean | null;
 };
 
 export const buildMetaAccountKey = (
@@ -39,7 +40,9 @@ export const buildMetaDestinationCapabilities = (
 ): MetaDestinationCapabilities => ({
   facebook: {
     destination: "facebook",
-    publishEnabled: Boolean(input.pageId?.trim()),
+    publishEnabled: Boolean(
+      input.pageId?.trim() && (input.facebookPublishEnabled ?? true),
+    ),
     syncMode: "remote_authoritative",
     sourceOfTruth: "meta",
   },

@@ -57,4 +57,17 @@ describe("buildMetaDestinationCapabilities", () => {
       syncMode: "remote_authoritative",
     });
   });
+
+  it("allows callers to explicitly disable facebook publishing for a connected page", () => {
+    expect(
+      buildMetaDestinationCapabilities({
+        pageId: "page-123",
+        instagramUserId: "ig-123",
+        facebookPublishEnabled: false,
+      }).facebook,
+    ).toMatchObject({
+      publishEnabled: false,
+      syncMode: "remote_authoritative",
+    });
+  });
 });
