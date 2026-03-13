@@ -17,9 +17,19 @@ vi.mock("@/services/post-destinations", () => ({
   getStoredPostDestinations: vi.fn(),
 }));
 
+vi.mock("@/services/meta-auth", () => ({
+  resolveMetaAuthForRequest: vi.fn(),
+}));
+
+vi.mock("@/services/instagram-sync", () => ({
+  syncInstagramPublishedPost: vi.fn(),
+}));
+
 import { DELETE, GET, PUT } from "@/app/api/posts/[id]/route";
 import { resolveActorFromRequest } from "@/services/actors";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
 import { getStoredPostDestinations } from "@/services/post-destinations";
+import { syncInstagramPublishedPost } from "@/services/instagram-sync";
 import {
   deletePost,
   getPost,
@@ -32,6 +42,8 @@ const mockedUpdatePost = vi.mocked(updatePost);
 const mockedDeletePost = vi.mocked(deletePost);
 const mockedGetPost = vi.mocked(getPost);
 const mockedGetStoredPostDestinations = vi.mocked(getStoredPostDestinations);
+const mockedResolveMetaAuthForRequest = vi.mocked(resolveMetaAuthForRequest);
+const mockedSyncInstagramPublishedPost = vi.mocked(syncInstagramPublishedPost);
 
 const actor = {
   ownerHash: "owner_hash",
@@ -81,6 +93,22 @@ describe("PUT /api/posts/:id", () => {
     vi.resetAllMocks();
     mockedResolveActorFromRequest.mockResolvedValue(actor);
     mockedGetStoredPostDestinations.mockResolvedValue([]);
+    mockedResolveMetaAuthForRequest.mockResolvedValue({
+      source: "oauth",
+      auth: {
+        accessToken: "token",
+        instagramUserId: "ig-id",
+        graphVersion: "v22.0",
+      },
+      account: {
+        accountKey: "ig-id",
+        instagramUserId: "ig-id",
+      },
+    } as never);
+    mockedSyncInstagramPublishedPost.mockResolvedValue({
+      attempted: true,
+      synced: true,
+    });
   });
 
   it("returns 401 when auth is missing", async () => {
@@ -123,6 +151,57 @@ describe("PUT /api/posts/:id", () => {
         expect.objectContaining({ destination: "instagram" }),
       ]),
     });
+  });
+
+  it("best-effort syncs posted Instagram state on load", async () => {
+    mockedGetPost.mockResolvedValue({
+      ...makePostRow(),
+      status: "posted",
+      publishHistory: [
+        {
+          publishedAt: "2026-03-13T16:00:00.000Z",
+          igMediaId: "ig_media_1",
+        },
+      ],
+      publishedAt: new Date("2026-03-13T16:00:00.000Z"),
+    } as never);
+    mockedGetStoredPostDestinations
+      .mockResolvedValueOnce([
+        {
+          ...instagramDestination,
+          desiredState: "published",
+          remoteState: "published",
+          remoteObjectId: "ig_media_1",
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          ...instagramDestination,
+          desiredState: "published",
+          remoteState: "published",
+          remoteObjectId: "ig_media_1",
+          remotePermalink: "https://instagram.com/p/ig_media_1",
+        },
+      ] as never);
+
+    const req = new Request("https://app.example.com/api/posts/p1");
+    const res = await GET(req, { params: Promise.resolve({ id: "p1" }) });
+
+    expect(res.status).toBe(200);
+    expect(mockedResolveMetaAuthForRequest).toHaveBeenCalledTimes(1);
+    expect(mockedSyncInstagramPublishedPost).toHaveBeenCalledWith(
+      actor,
+      expect.objectContaining({
+        account: expect.objectContaining({
+          instagramUserId: "ig-id",
+        }),
+      }),
+      expect.objectContaining({ id: "p1", status: "posted" }),
+      expect.arrayContaining([
+        expect.objectContaining({ destination: "instagram" }),
+      ]),
+    );
+    expect(mockedGetStoredPostDestinations).toHaveBeenCalledTimes(2);
   });
 
   it("delegates valid updates to the shared post service", async () => {

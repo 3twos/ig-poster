@@ -83,17 +83,33 @@ export const markPostPublished = async (
     ? new Date()
     : publishedAt;
   const publishedAtIso = normalizedPublishedAt.toISOString();
-  const nextPublishHistory =
-    destination === "instagram"
-      ? [
-          ...(existing.publishHistory ?? []),
-          {
-            publishedAt: publishedAtIso,
-            igMediaId: publishId,
-            igPermalink: options.remotePermalink,
-          },
-        ]
-      : (existing.publishHistory ?? []);
+  const nextPublishHistory = (() => {
+    if (destination !== "instagram") {
+      return existing.publishHistory ?? [];
+    }
+
+    const history = [...(existing.publishHistory ?? [])];
+    const existingIndex = publishId
+      ? history.findIndex((entry) => entry.igMediaId === publishId)
+      : -1;
+
+    const nextEntry = {
+      publishedAt: publishedAtIso,
+      igMediaId: publishId,
+      igPermalink: options.remotePermalink,
+    };
+
+    if (existingIndex === -1) {
+      history.push(nextEntry);
+      return history;
+    }
+
+    history[existingIndex] = {
+      ...history[existingIndex],
+      ...nextEntry,
+    };
+    return history;
+  })();
 
   await db
     .update(posts)

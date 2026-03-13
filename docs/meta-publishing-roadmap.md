@@ -60,12 +60,14 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
    - Reference: merged in PR `#184`.
 14. Instagram publish-state reconciliation
    - Successful Instagram publishes now do a best-effort Graph read for published permalink/timestamp metadata, then project that data back into `posts.publishHistory` and `post_destinations`.
+15. Instagram post-detail backfill sync
+   - Opening a posted post now does a best-effort Instagram published-state refresh when the app has a known media id but local destination metadata is stale or incomplete.
 
 ## In Progress
 
-1. Instagram webhook and backfill reconciliation
-   - Extend Instagram sync past the immediate publish response so webhook deliveries or targeted backfills can detect drift and refresh published destination state even when the original publish happened outside the app-managed request path.
-   - Goal: close the remaining gap between "publish succeeded" tracking and broader Meta-side state changes for Instagram posts.
+1. Broader Instagram published-state backfill
+   - Extend Instagram sync beyond post-detail reads so larger batches or manual reconciliation flows can refresh published destination metadata when immediate publish-time metadata was unavailable or older local rows need repair.
+   - Goal: keep Instagram destination records healthy without implying a publish-state webhook contract that Meta's public docs do not currently document.
 
 ## Remaining phases
 
