@@ -76,6 +76,30 @@ type GraphResponse = {
 };
 
 type FacebookPagePublishStateResponse = GraphResponse;
+type FacebookScheduledPostsResponse = GraphResponse & {
+  data?: Array<{
+    id?: string;
+    message?: string;
+    scheduled_publish_time?: string | number;
+    permalink_url?: string;
+    full_picture?: string;
+    attachments?: {
+      data?: Array<{
+        media_type?: string;
+        url?: string;
+        source?: string;
+        media?: {
+          image?: {
+            src?: string;
+          };
+        };
+        subattachments?: {
+          data?: Array<unknown>;
+        };
+      }>;
+    };
+  }>;
+};
 
 export type FacebookPagePublishState = {
   remoteObjectId: string;
@@ -84,6 +108,23 @@ export type FacebookPagePublishState = {
   isPublished: boolean;
   scheduledPublishTime?: string;
   remotePermalink?: string;
+};
+
+export type FacebookScheduledPost = {
+  remoteObjectId: string;
+  caption: string;
+  publishAt: string;
+  remotePermalink?: string;
+  media:
+    | {
+      mode: "image";
+      imageUrl: string;
+    }
+    | {
+      mode: "reel";
+      videoUrl: string;
+      shareToFeed: true;
+    };
 };
 
 const FACEBOOK_SCHEDULE_MIN_MS = 10 * 60 * 1000;
@@ -243,6 +284,67 @@ const normalizeFacebookScheduledPublishTime = (
     typeof value === "number" ? value * 1000 : value,
   );
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
+const normalizeFacebookScheduledPost = (
+  item: NonNullable<FacebookScheduledPostsResponse["data"]>[number],
+): FacebookScheduledPost | null => {
+  const remoteObjectId = item.id?.trim();
+  const publishAt = normalizeFacebookScheduledPublishTime(item.scheduled_publish_time);
+  if (!remoteObjectId || !publishAt) {
+    return null;
+  }
+
+  const attachments = item.attachments?.data ?? [];
+  if (attachments.length > 1) {
+    return null;
+  }
+
+  const primaryAttachment = attachments[0];
+  if ((primaryAttachment?.subattachments?.data?.length ?? 0) > 0) {
+    return null;
+  }
+
+  const mediaType = primaryAttachment?.media_type?.trim().toUpperCase();
+  if (mediaType?.includes("VIDEO")) {
+    const videoUrl =
+      primaryAttachment?.source?.trim() ||
+      primaryAttachment?.url?.trim();
+    if (!videoUrl) {
+      return null;
+    }
+
+    return {
+      remoteObjectId,
+      caption: item.message?.trim() ?? "",
+      publishAt,
+      remotePermalink: item.permalink_url?.trim() || undefined,
+      media: {
+        mode: "reel",
+        videoUrl,
+        shareToFeed: true,
+      },
+    };
+  }
+
+  const imageUrl =
+    item.full_picture?.trim() ||
+    primaryAttachment?.media?.image?.src?.trim() ||
+    primaryAttachment?.url?.trim();
+  if (!imageUrl) {
+    return null;
+  }
+
+  return {
+    remoteObjectId,
+    caption: item.message?.trim() ?? "",
+    publishAt,
+    remotePermalink: item.permalink_url?.trim() || undefined,
+    media: {
+      mode: "image",
+      imageUrl,
+    },
+  };
 };
 
 const applyFacebookPublishState = (
@@ -676,6 +778,38 @@ export const getFacebookPagePublishState = async (
   }
 
   throw new Error("Could not load Facebook publish state.");
+};
+
+export const listFacebookPageScheduledPosts = async (
+  auth?: MetaAuthContext,
+): Promise<FacebookScheduledPost[]> => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Facebook publishing credentials");
+  }
+
+  const pageId = requirePageId(resolvedAuth);
+  const response = await callGraphGetWithParams<FacebookScheduledPostsResponse>(
+    `${pageId}/scheduled_posts`,
+    resolvedAuth,
+    {
+      fields: [
+        "id",
+        "message",
+        "scheduled_publish_time",
+        "permalink_url",
+        "full_picture",
+        "attachments{media_type,media,source,url,subattachments}",
+      ],
+      params: {
+        limit: "100",
+      },
+    },
+  );
+
+  return (response.data ?? [])
+    .map((item) => normalizeFacebookScheduledPost(item))
+    .filter((item): item is FacebookScheduledPost => item !== null);
 };
 
 export const updateFacebookPagePost = async (

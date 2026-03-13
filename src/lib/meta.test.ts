@@ -5,6 +5,7 @@ import {
   getFacebookPagePublishState,
   getEnvMetaAuth,
   getMediaInsights,
+  listFacebookPageScheduledPosts,
   publishFacebookPageContent,
   publishInstagramContent,
   publishInstagramFirstComment,
@@ -442,6 +443,85 @@ describe("getFacebookPagePublishState", () => {
       scheduledPublishTime: "2026-03-13T18:00:00.000Z",
       remotePermalink: undefined,
     });
+  });
+});
+
+describe("listFacebookPageScheduledPosts", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("normalizes supported Facebook scheduled posts", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "page_1_1",
+            message: "Scheduled image",
+            scheduled_publish_time: "2026-03-13T18:00:00.000Z",
+            permalink_url: "https://facebook.com/page/posts/1",
+            full_picture: "https://cdn.example.com/image.jpg",
+            attachments: {
+              data: [{ media_type: "photo" }],
+            },
+          },
+          {
+            id: "page_1_2",
+            message: "Scheduled video",
+            scheduled_publish_time: "2026-03-14T18:00:00.000Z",
+            attachments: {
+              data: [{ media_type: "video", source: "https://cdn.example.com/video.mp4" }],
+            },
+          },
+          {
+            id: "page_1_3",
+            scheduled_publish_time: "2026-03-15T18:00:00.000Z",
+            attachments: {
+              data: [
+                { media_type: "photo" },
+                { media_type: "photo" },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      listFacebookPageScheduledPosts({
+        accessToken: "token",
+        instagramUserId: "ig-id",
+        pageId: "page-id",
+        graphVersion: "v22.0",
+      }),
+    ).resolves.toEqual([
+      {
+        remoteObjectId: "page_1_1",
+        caption: "Scheduled image",
+        publishAt: "2026-03-13T18:00:00.000Z",
+        remotePermalink: "https://facebook.com/page/posts/1",
+        media: {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+        },
+      },
+      {
+        remoteObjectId: "page_1_2",
+        caption: "Scheduled video",
+        publishAt: "2026-03-14T18:00:00.000Z",
+        remotePermalink: undefined,
+        media: {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/video.mp4",
+          shareToFeed: true,
+        },
+      },
+    ]);
+
+    const call = fetchMock.mock.calls[0];
+    expect(String(call?.[0])).toContain("/v22.0/page-id/scheduled_posts?");
   });
 });
 
