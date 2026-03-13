@@ -283,6 +283,70 @@ describe("PosterPreview", () => {
     }
   });
 
+  it("reports measured canonical heights in editor mode without forcing a restack", async () => {
+    const onChange = vi.fn();
+    const onMeasuredCanonicalHeightsChange = vi.fn();
+    const measuredVariant: CreativeVariant = {
+      ...carouselVariant,
+      id: "single-measured-editor",
+      postType: "single-image",
+      assetSequence: ["asset-1"],
+      carouselSlides: undefined,
+      layout: "hero-quote",
+      hook: "Measured hook",
+      headline: "Measured headline for editor mode",
+      supportingText:
+        "Measured supporting text for editor mode that should produce a taller measured body block.",
+      cta: "Measured CTA",
+    };
+    const offsetHeightSpy = vi
+      .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        const text = this.textContent ?? "";
+        if (text.includes("Measured headline for editor mode")) {
+          return 180;
+        }
+        if (text.includes("Measured supporting text for editor mode")) {
+          return 210;
+        }
+        if (text.includes("Measured CTA")) {
+          return 60;
+        }
+        if (text.includes("Measured hook")) {
+          return 50;
+        }
+        return 40;
+      });
+
+    try {
+      render(
+        <PosterPreview
+          variant={measuredVariant}
+          brandName="Nexa Labs"
+          aspectRatio="4:5"
+          overlayLayout={createDefaultOverlayLayout(measuredVariant.layout)}
+          editorMode
+          onOverlayLayoutChange={onChange}
+          onMeasuredCanonicalHeightsChange={onMeasuredCanonicalHeightsChange}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(onMeasuredCanonicalHeightsChange).toHaveBeenCalled();
+      });
+
+      const lastCall =
+        onMeasuredCanonicalHeightsChange.mock.calls[
+          onMeasuredCanonicalHeightsChange.mock.calls.length - 1
+        ]?.[0];
+      expect(lastCall.headline).toBeGreaterThanOrEqual(36);
+      expect(lastCall.supportingText).toBeGreaterThanOrEqual(42);
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      offsetHeightSpy.mockRestore();
+    }
+  });
+
   it("renders logo at layout position and uses brandName in alt text", () => {
     render(
       <PosterPreview
