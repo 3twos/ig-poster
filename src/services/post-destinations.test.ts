@@ -245,9 +245,11 @@ describe("post-destinations", () => {
         firstComment: "First comment",
         locationId: "place_1",
         userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+        publishAt: new Date("2026-03-13T16:00:00.000Z"),
         remoteObjectId: "ig_media_1",
         remoteContainerId: "container_1",
         remotePermalink: "https://instagram.com/p/ig_media_1",
+        lastSyncedAt: expect.any(Date),
       }),
     );
   });

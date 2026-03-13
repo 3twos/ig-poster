@@ -72,6 +72,7 @@ import {
   createPublishJob,
   completePublishJobSuccess,
   failQueuedPublishJob,
+  markPostPublished,
   markPostScheduled,
   reserveImmediatePublishJob,
   syncQueuedPublishJobRemoteState,
@@ -88,6 +89,7 @@ const mockedResolveMetaAuthForApi = vi.mocked(resolveMetaAuthForApi);
 const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
 const mockedFailQueuedPublishJob = vi.mocked(failQueuedPublishJob);
+const mockedMarkPostPublished = vi.mocked(markPostPublished);
 const mockedMarkPostScheduled = vi.mocked(markPostScheduled);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
 const mockedSyncQueuedPublishJobRemoteState = vi.mocked(syncQueuedPublishJobRemoteState);
@@ -326,6 +328,62 @@ describe("POST /api/v1/publish", () => {
         userTags: undefined,
       },
       expect.anything(),
+    );
+  });
+
+  it("reconciles linked Instagram posts after immediate publish", async () => {
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue([{ id: "post_1" }]),
+    };
+    mockedGetDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+    } as unknown as ReturnType<typeof getDb>);
+    mockedPublishInstagramContent.mockResolvedValueOnce({
+      mode: "image",
+      publishId: "publish_1",
+      creationId: "creation_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
+    });
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/publish", {
+        method: "POST",
+        body: JSON.stringify({
+          postId: "post_1",
+          caption: "Caption",
+          firstComment: "First comment",
+          media: {
+            mode: "image",
+            imageUrl: "https://cdn.example.com/image.jpg",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedMarkPostPublished).toHaveBeenCalledWith(
+      expect.anything(),
+      "owner_hash",
+      "post_1",
+      "publish_1",
+      "instagram",
+      {
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      },
+    );
+    expect(mockedSyncPublishedInstagramDestination).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        remoteObjectId: "publish_1",
+        remoteContainerId: "creation_1",
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      }),
     );
   });
 

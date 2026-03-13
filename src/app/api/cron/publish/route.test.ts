@@ -573,6 +573,43 @@ describe("GET /api/cron/publish", () => {
     );
   });
 
+  it("keeps publish success when Instagram destination sync fails", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([{ ...baseJob }] as never);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      pageId: "page_1",
+      graphVersion: "v22.0",
+    });
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
+    });
+    mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
+    mockedSyncPublishedInstagramDestination.mockRejectedValueOnce(
+      new Error("sync failed"),
+    );
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 1,
+      failed: 0,
+      errorCount: 0,
+    });
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
+    expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
+  });
+
   it("records failures and retry transitions", async () => {
     mockedClaimDuePublishJobs.mockResolvedValue([baseJob]);
     mockedGetEnvMetaAuth.mockReturnValue({

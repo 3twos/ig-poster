@@ -284,6 +284,7 @@ export const syncPublishedInstagramDestination = async (
   const normalizedPublishedAt = Number.isNaN(publishedAt.getTime())
     ? new Date()
     : publishedAt;
+  const syncedAt = new Date();
 
   await upsertPostDestinationRemoteState(db, {
     postId: input.postId,
@@ -303,7 +304,7 @@ export const syncPublishedInstagramDestination = async (
     remoteStatePayload: {
       publishedAt: normalizedPublishedAt.toISOString(),
     },
-    lastSyncedAt: normalizedPublishedAt,
+    lastSyncedAt: syncedAt,
     lastError: null,
   });
 };
