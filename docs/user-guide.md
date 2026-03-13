@@ -97,15 +97,16 @@
 10. Share project
    - Create a share link to persist project state and open it later at `/share/<id>`.
 
-11. Publish or schedule to Instagram
-   - Connect Instagram via Meta OAuth in Settings (if not already connected).
+11. Publish or schedule to Meta
+   - Connect a Meta publishing pair in Settings (if not already connected).
+   - Use the destination selector in the publish section to choose Instagram or Facebook when both are available.
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - Use the dedicated `Post Caption` field as the source of truth for publish/schedule; the generated caption stays available as a suggestion.
-   - Optionally add a `First comment` in the publish section; it is posted right after media publish.
-   - For reel posts, choose whether `Share reel to main feed` stays on or off before posting or scheduling.
-   - For single-image posts and reels, optionally search Meta places to fill `Location ID` (or paste the ID manually) and add structured `User tags`.
-   - For carousel posts, tag each included image individually from the publish metadata editor. Carousel video items remain schedulable, but Meta does not accept user tags on carousel videos.
-   - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar.
+   - Optionally add a `First comment` in the publish section for Instagram; it is posted right after media publish.
+   - For Instagram reel posts, choose whether `Share reel to main feed` stays on or off before posting or scheduling.
+   - For Instagram single-image posts and reels, optionally search Meta places to fill `Location ID` (or paste the ID manually) and add structured `User tags`.
+   - For Instagram carousel posts, tag each included image individually from the publish metadata editor. Carousel video items remain schedulable, but Meta does not accept user tags on carousel videos.
+   - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar, and they follow the currently selected publish destination.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
    - Open `Planner` from the publish section to review scheduled posts on a calendar, reschedule them, open the linked post, or move them back to draft.
    - The publish section also shows a workspace queue for queued, processing, and failed jobs.
@@ -224,7 +225,7 @@ If the macOS companion app is not installed or not reachable:
 - `single-image` variant publishes a rendered poster image.
 - `carousel` variant uses the Carousel Composer sequence (minimum 2 items, up to 10) and the selected feed orientation.
 - `reel` variant requires at least one uploaded video and includes a `Share reel to main feed` toggle. The default is on, matching the previous hardcoded behavior.
-- The main browser composer still publishes/schedules to Instagram by default. The destination-aware API/queue backend can also target a connected Facebook Page for single-image and single-video jobs.
+- The main browser composer now exposes an Instagram/Facebook destination selector whenever the connected Meta publishing pair supports both destinations.
 - Post status lifecycle is `Draft -> Scheduled -> Posted`, with archiving handled separately via the archive action.
 - Location ID is supported for single-image posts, reels, and carousel parents.
 - User tags are supported for single-image posts, reels, and carousel image items. Carousel videos cannot carry user tags.
@@ -254,8 +255,8 @@ If the macOS companion app is not installed or not reachable:
 - Meta publishing:
   - Connect/disconnect in Settings under the Meta publishing pair section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in the private credential store (DB) when available, with encrypted cookie fallback.
-  - A connected Page + Instagram professional account pair enables Instagram publishing in the browser app today and Facebook destination execution through the API/queue backend.
-  - Facebook scheduled posts now round-trip through the connected Page first and then sync back into the app via a local shadow job + cron reconciliation path.
+  - A connected Page + Instagram professional account pair enables destination selection in the browser app, with Facebook currently limited to single-image and single-video publishing.
+  - Facebook scheduled posts now round-trip through the connected Page first and then sync back into the app via a local shadow job plus cron reconciliation.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.
 

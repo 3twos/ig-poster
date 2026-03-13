@@ -94,6 +94,30 @@ describe("PostListItem quick actions", () => {
     expect(postNow).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the selected destination label in publish confirmations", () => {
+    renderPostListItem(
+      {
+        post: makePost(),
+        isActive: false,
+        publishDestinationLabel: "Facebook",
+        onSelect: vi.fn(),
+        onPostNow: vi.fn(),
+        onSchedulePost: vi.fn(),
+        onArchive: vi.fn(),
+        onDelete: vi.fn(),
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "DRAFT" }));
+    fireEvent.click(screen.getByRole("button", { name: "POST" }));
+
+    expect(
+      screen.queryByText(
+        "This will immediately publish this post to Facebook.",
+      ),
+    ).not.toBeNull();
+  });
+
   it("shows menu publish actions independently and clears expanded state before post-now confirm", () => {
     const postNow = vi.fn();
 

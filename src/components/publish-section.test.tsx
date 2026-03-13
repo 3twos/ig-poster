@@ -40,23 +40,26 @@ describe("PublishSection", () => {
       <PublishSection
         activePostId="post-1"
         authStatus={{ connected: true, source: "oauth" }}
+        availableDestinations={["instagram", "facebook"]}
         isAuthLoading={false}
         isSharing={false}
         isPublishing={false}
         publishJobsRefreshKey={0}
+        publishDestination="instagram"
         shareUrl={null}
         shareCopyState="idle"
         localTimeZone="America/Los_Angeles"
         hasBlockingValidationError
         validationMessage="Fix incomplete user tag rows before posting or scheduling."
         onCreateShareLink={vi.fn()}
+        onPublishDestinationChange={vi.fn()}
         onPostNow={onPostNow}
         onSchedulePost={vi.fn()}
       />,
     );
 
     expect(screen.getByText(/Fix incomplete user tag rows/)).not.toBeNull();
-    const postNowButton = screen.getByRole("button", { name: /post now/i }) as HTMLButtonElement;
+    const postNowButton = screen.getByRole("button", { name: /post to instagram/i }) as HTMLButtonElement;
     expect(postNowButton.disabled).toBe(true);
     fireEvent.click(postNowButton);
     expect(onPostNow).not.toHaveBeenCalled();
@@ -67,14 +70,17 @@ describe("PublishSection", () => {
       <PublishSection
         activePostId="post-1"
         authStatus={{ connected: true, source: "oauth" }}
+        availableDestinations={["instagram", "facebook"]}
         isAuthLoading={false}
         isSharing={false}
         isPublishing={false}
         publishJobsRefreshKey={0}
+        publishDestination="instagram"
         shareUrl={null}
         shareCopyState="idle"
         localTimeZone="America/Los_Angeles"
         onCreateShareLink={vi.fn()}
+        onPublishDestinationChange={vi.fn()}
         onPostNow={vi.fn()}
         onSchedulePost={vi.fn()}
         onSelectPlannerPost={vi.fn().mockRejectedValue(new Error("boom"))}
@@ -89,5 +95,39 @@ describe("PublishSection", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("scheduled-planner")).toBeNull();
     });
+  });
+
+  it("lets the user switch publish destinations", () => {
+    const onPublishDestinationChange = vi.fn();
+
+    render(
+      <PublishSection
+        activePostId="post-1"
+        authStatus={{ connected: true, source: "oauth" }}
+        availableDestinations={["instagram", "facebook"]}
+        isAuthLoading={false}
+        isSharing={false}
+        isPublishing={false}
+        publishJobsRefreshKey={0}
+        publishDestination="instagram"
+        shareUrl={null}
+        shareCopyState="idle"
+        localTimeZone="America/Los_Angeles"
+        onCreateShareLink={vi.fn()}
+        onPublishDestinationChange={onPublishDestinationChange}
+        onPostNow={vi.fn()}
+        onSchedulePost={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("radiogroup", { name: "Destination" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("radio", { name: "Instagram" }),
+    ).toHaveProperty("ariaChecked", "true");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Facebook" }));
+    expect(onPublishDestinationChange).toHaveBeenCalledWith("facebook");
   });
 });
