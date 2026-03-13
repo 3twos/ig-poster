@@ -132,7 +132,9 @@ describe("PublishJobQueue", () => {
     expect(screen.getByText("Recent activity")).not.toBeNull();
     expect(screen.getByText(/Retry scheduled/)).not.toBeNull();
     expect(screen.getByText(/Attempt failed: upstream timeout/)).not.toBeNull();
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/publish-jobs?status=queued,processing&limit=8");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/publish-jobs?status=queued,processing&limit=8&syncMeta=facebook",
+    );
     expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/publish-jobs?status=failed&limit=4");
   });
 

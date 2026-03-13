@@ -74,6 +74,10 @@ const resolveStoredMetaConnection = (
       capabilities: buildMetaDestinationCapabilities({
         pageId: connection.pageId,
         instagramUserId: connection.instagramUserId,
+        facebookPublishEnabled:
+          connection.grantedScopes === undefined
+            ? undefined
+            : connection.grantedScopes.includes("pages_manage_posts"),
       }),
     },
   };

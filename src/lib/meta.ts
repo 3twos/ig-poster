@@ -69,12 +69,37 @@ type GraphResponse = {
   scheduled_publish_time?: string | number;
   status_code?: string;
   status?: string;
+  success?: boolean;
   error?: {
     message?: string;
   };
 };
 
 type FacebookPagePublishStateResponse = GraphResponse;
+type FacebookScheduledPostsResponse = GraphResponse & {
+  data?: Array<{
+    id?: string;
+    message?: string;
+    scheduled_publish_time?: string | number;
+    permalink_url?: string;
+    full_picture?: string;
+    attachments?: {
+      data?: Array<{
+        media_type?: string;
+        url?: string;
+        source?: string;
+        media?: {
+          image?: {
+            src?: string;
+          };
+        };
+        subattachments?: {
+          data?: Array<unknown>;
+        };
+      }>;
+    };
+  }>;
+};
 
 export type FacebookPagePublishState = {
   remoteObjectId: string;
@@ -83,6 +108,23 @@ export type FacebookPagePublishState = {
   isPublished: boolean;
   scheduledPublishTime?: string;
   remotePermalink?: string;
+};
+
+export type FacebookScheduledPost = {
+  remoteObjectId: string;
+  caption: string;
+  publishAt: string;
+  remotePermalink?: string;
+  media:
+    | {
+      mode: "image";
+      imageUrl: string;
+    }
+    | {
+      mode: "reel";
+      videoUrl: string;
+      shareToFeed: true;
+    };
 };
 
 const FACEBOOK_SCHEDULE_MIN_MS = 10 * 60 * 1000;
@@ -115,7 +157,45 @@ const callGraphPost = async (
   } catch {
     throw new Error(`Meta API returned non-JSON response on ${path} (${response.status})`);
   }
-  if (!response.ok || json.error) {
+  if (!response.ok || json.error || json.success === false) {
+    throw new Error(json.error?.message ?? `Meta API call failed on ${path}`);
+  }
+
+  return json;
+};
+
+const callGraphDelete = async (
+  path: string,
+  auth: MetaAuthContext,
+  params?: Record<string, string | undefined>,
+) => {
+  const url = new URL(`https://graph.facebook.com/${auth.graphVersion}/${path}`);
+  url.searchParams.set("access_token", auth.accessToken);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) {
+        url.searchParams.set(key, value);
+      }
+    }
+  }
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    cache: "no-store",
+  });
+
+  if (response.status === 204) {
+    return { success: true } satisfies GraphResponse;
+  }
+
+  let json: GraphResponse;
+  try {
+    json = (await response.json()) as GraphResponse;
+  } catch {
+    throw new Error(`Meta API returned non-JSON response on ${path} (${response.status})`);
+  }
+
+  if (!response.ok || json.error || json.success === false) {
     throw new Error(json.error?.message ?? `Meta API call failed on ${path}`);
   }
 
@@ -174,6 +254,25 @@ const requirePageId = (auth: MetaAuthContext) => {
   return auth.pageId.trim();
 };
 
+const getFacebookCandidateIds = (
+  input: {
+    publishId?: string;
+    creationId?: string;
+  },
+  emptyMessage: string,
+) => {
+  const candidateIds = [
+    input.publishId?.trim(),
+    input.creationId?.trim(),
+  ].filter((value): value is string => Boolean(value));
+
+  if (candidateIds.length === 0) {
+    throw new Error(emptyMessage);
+  }
+
+  return [...new Set(candidateIds)];
+};
+
 const normalizeFacebookScheduledPublishTime = (
   value?: string | number,
 ) => {
@@ -185,6 +284,67 @@ const normalizeFacebookScheduledPublishTime = (
     typeof value === "number" ? value * 1000 : value,
   );
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
+const normalizeFacebookScheduledPost = (
+  item: NonNullable<FacebookScheduledPostsResponse["data"]>[number],
+): FacebookScheduledPost | null => {
+  const remoteObjectId = item.id?.trim();
+  const publishAt = normalizeFacebookScheduledPublishTime(item.scheduled_publish_time);
+  if (!remoteObjectId || !publishAt) {
+    return null;
+  }
+
+  const attachments = item.attachments?.data ?? [];
+  if (attachments.length > 1) {
+    return null;
+  }
+
+  const primaryAttachment = attachments[0];
+  if ((primaryAttachment?.subattachments?.data?.length ?? 0) > 0) {
+    return null;
+  }
+
+  const mediaType = primaryAttachment?.media_type?.trim().toUpperCase();
+  if (mediaType?.includes("VIDEO")) {
+    const videoUrl =
+      primaryAttachment?.source?.trim() ||
+      primaryAttachment?.url?.trim();
+    if (!videoUrl) {
+      return null;
+    }
+
+    return {
+      remoteObjectId,
+      caption: item.message?.trim() ?? "",
+      publishAt,
+      remotePermalink: item.permalink_url?.trim() || undefined,
+      media: {
+        mode: "reel",
+        videoUrl,
+        shareToFeed: true,
+      },
+    };
+  }
+
+  const imageUrl =
+    item.full_picture?.trim() ||
+    primaryAttachment?.media?.image?.src?.trim() ||
+    primaryAttachment?.url?.trim();
+  if (!imageUrl) {
+    return null;
+  }
+
+  return {
+    remoteObjectId,
+    caption: item.message?.trim() ?? "",
+    publishAt,
+    remotePermalink: item.permalink_url?.trim() || undefined,
+    media: {
+      mode: "image",
+      imageUrl,
+    },
+  };
 };
 
 const applyFacebookPublishState = (
@@ -572,14 +732,10 @@ export const getFacebookPagePublishState = async (
     throw new Error("Missing Facebook publishing credentials");
   }
 
-  const candidateIds = [
-    input.publishId?.trim(),
-    input.creationId?.trim(),
-  ].filter((value): value is string => Boolean(value));
-
-  if (candidateIds.length === 0) {
-    throw new Error("Missing Facebook publish identifiers for remote state lookup.");
-  }
+  const candidateIds = getFacebookCandidateIds(
+    input,
+    "Missing Facebook publish identifiers for remote state lookup.",
+  );
 
   let lastError: unknown;
   for (const candidateId of [...new Set(candidateIds)]) {
@@ -622,6 +778,163 @@ export const getFacebookPagePublishState = async (
   }
 
   throw new Error("Could not load Facebook publish state.");
+};
+
+export const listFacebookPageScheduledPosts = async (
+  auth?: MetaAuthContext,
+): Promise<FacebookScheduledPost[]> => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Facebook publishing credentials");
+  }
+
+  const pageId = requirePageId(resolvedAuth);
+  const response = await callGraphGetWithParams<FacebookScheduledPostsResponse>(
+    `${pageId}/scheduled_posts`,
+    resolvedAuth,
+    {
+      fields: [
+        "id",
+        "message",
+        "scheduled_publish_time",
+        "permalink_url",
+        "full_picture",
+        "attachments{media_type,media,source,url,subattachments}",
+      ],
+      params: {
+        limit: "100",
+      },
+    },
+  );
+
+  return (response.data ?? [])
+    .map((item) => normalizeFacebookScheduledPost(item))
+    .filter((item): item is FacebookScheduledPost => item !== null);
+};
+
+export const updateFacebookPagePost = async (
+  input: {
+    mediaMode: "image" | "reel";
+    publishId?: string;
+    creationId?: string;
+    caption?: string;
+    publishAt?: string;
+  },
+  auth?: MetaAuthContext,
+): Promise<FacebookPagePublishState> => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Facebook publishing credentials");
+  }
+
+  if (input.caption === undefined && input.publishAt === undefined) {
+    throw new Error("Provide at least one Facebook post field to update.");
+  }
+
+  const candidateIds = getFacebookCandidateIds(
+    input,
+    "Missing Facebook publish identifiers for remote update.",
+  );
+
+  const updateAttempts = candidateIds.map((candidateId) => {
+    const params = new URLSearchParams();
+    if (input.caption !== undefined) {
+      if (candidateId === input.creationId?.trim()) {
+        params.set(input.mediaMode === "reel" ? "description" : "caption", input.caption);
+      } else {
+        params.set("message", input.caption);
+      }
+    }
+    if (input.publishAt !== undefined) {
+      applyFacebookPublishState(params, input.publishAt);
+    }
+
+    return {
+      candidateId,
+      params,
+    };
+  }).filter((attempt) => Array.from(attempt.params.keys()).length > 0);
+
+  if (updateAttempts.length === 0) {
+    throw new Error("Provide at least one Facebook post field to update.");
+  }
+
+  let lastError: unknown;
+  let updatedRemotePost = false;
+  for (const attempt of updateAttempts) {
+    try {
+      await callGraphPost(attempt.candidateId, attempt.params, resolvedAuth);
+      updatedRemotePost = true;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!updatedRemotePost) {
+    if (lastError instanceof Error) {
+      throw lastError;
+    }
+    throw new Error("Could not update Facebook Page post.");
+  }
+
+  try {
+    return await getFacebookPagePublishState(
+      {
+        publishId: input.publishId,
+        creationId: input.creationId,
+      },
+      resolvedAuth,
+    );
+  } catch {
+    return {
+      remoteObjectId:
+        input.publishId?.trim() ??
+        input.creationId?.trim() ??
+        candidateIds[0]!,
+      publishId: input.publishId?.trim(),
+      creationId: input.creationId?.trim(),
+      isPublished: false,
+      scheduledPublishTime: input.publishAt,
+      remotePermalink: undefined,
+    };
+  }
+};
+
+export const deleteFacebookPagePost = async (
+  input: {
+    publishId?: string;
+    creationId?: string;
+  },
+  auth?: MetaAuthContext,
+) => {
+  const resolvedAuth = auth ?? getEnvMetaAuth();
+  if (!resolvedAuth) {
+    throw new Error("Missing Facebook publishing credentials");
+  }
+
+  const candidateIds = getFacebookCandidateIds(
+    input,
+    "Missing Facebook publish identifiers for remote delete.",
+  );
+
+  let lastError: unknown;
+  for (const candidateId of candidateIds) {
+    try {
+      await callGraphDelete(candidateId, resolvedAuth);
+      return {
+        deletedId: candidateId,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error("Could not delete Facebook Page post.");
 };
 
 export const publishInstagramFirstComment = async (

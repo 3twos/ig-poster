@@ -115,7 +115,8 @@
    - Each queue card now shows recent activity entries so you can see retries, deferrals, failures, and manual edits without checking the database.
    - After a post is successfully published, IG Poster marks it `Posted` and switches it to a read-only snapshot view. Posted posts cannot be edited or deleted; archive them to hide them from the main list, or duplicate them to create a new draft.
    - Facebook schedules are now created remotely on the connected Page as soon as you schedule them. The app stores a Meta-synced shadow job so the planner and queue still show the item while cron reconciles the final published state.
-   - Those Meta-synced Facebook shadow jobs are read-only in IG Poster for now; manage schedule edits/cancellation in Meta tools until remote mutation support lands here.
+   - Those Meta-synced Facebook shadow jobs can now be canceled or rescheduled directly from the planner/queue. Media swaps and other unsupported remote Facebook edits still require recreating the schedule or using Meta tools.
+   - When the planner or active queue loads, IG Poster now does a best-effort import of compatible scheduled Facebook Page posts that already exist in Meta tools, so single-image and single-video Page schedules can show up in-app even when they were created outside IG Poster.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -273,8 +274,9 @@ If the macOS companion app is not installed or not reachable:
 - Meta publishing:
   - Connect/disconnect in Settings under the Meta publishing pair section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in the private credential store (DB) when available, with encrypted cookie fallback.
-  - A connected Page + Instagram professional account pair enables destination selection in the browser app, with Facebook currently limited to single-image and single-video publishing.
-  - Facebook scheduled posts now round-trip through the connected Page first and then sync back into the app via a local shadow job plus cron reconciliation.
+  - The default Meta OAuth connect flow enables Instagram publishing in the browser app today.
+  - Facebook destination selection and execution require a connection that also granted Facebook Page posting permissions; Facebook remains limited to single-image and single-video publishing.
+  - Facebook scheduled posts round-trip through the connected Page first and then sync back into the app via a local shadow job plus cron reconciliation.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.
 
