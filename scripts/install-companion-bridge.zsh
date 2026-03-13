@@ -125,7 +125,6 @@ install_bridge() {
 
   mkdir -p "$BIN_DIR" "$LOG_DIR" "$PLIST_DIR"
   bin_path_file="$(mktemp "${TMPDIR:-/tmp}/ig-poster-companion-bin-path.XXXXXX")"
-  trap 'rm -f "$bin_path_file"' RETURN
 
   print "Building release bridge..."
   (
@@ -135,6 +134,7 @@ install_bridge() {
   )
 
   build_bin_dir="$(<"$bin_path_file")"
+  rm -f "$bin_path_file"
 
   cp "$build_bin_dir/ig-poster-companion-bridge" "$BRIDGE_BIN"
   render_plist > "$PLIST_PATH"
