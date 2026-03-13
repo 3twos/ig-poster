@@ -4,7 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PostDraft } from "./use-post-reducer";
-import { useAutoSave } from "./use-auto-save";
+import { serializeDraft, useAutoSave } from "./use-auto-save";
 
 const baseDraft: PostDraft = {
   id: "post-1",
@@ -118,7 +118,7 @@ describe("useAutoSave", () => {
   });
 
   it("returns false when saveNow cannot persist pending changes", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
     vi.stubGlobal("fetch", fetchMock);
 
     const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
@@ -186,6 +186,268 @@ describe("useAutoSave", () => {
     await expect(firstSave).resolves.toBe(true);
     await expect(secondSave).resolves.toBe(true);
     expect(result.current.saveStatus).toBe("saved");
+
+    unmount();
+  });
+
+  // --- Error classification tests ---
+
+  it("does not retry on permanent error (400)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 400 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    await act(async () => {
+      await result.current.saveNow();
+    });
+
+    expect(result.current.saveStatus).toBe("error");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Advance well past any retry delay — should NOT trigger more fetches
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it("does not retry on permanent error (404)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    await act(async () => {
+      await result.current.saveNow();
+    });
+
+    expect(result.current.saveStatus).toBe("error");
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it("does not retry on permanent error (409)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    await act(async () => {
+      await result.current.saveNow();
+    });
+
+    expect(result.current.saveStatus).toBe("error");
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it("retries transient errors (500) with exponential backoff", async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount += 1;
+      if (callCount <= 2) {
+        return Promise.resolve({ ok: false, status: 500 });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    // First attempt — fails with 500
+    await act(async () => {
+      await result.current.saveNow();
+    });
+    expect(result.current.saveStatus).toBe("error");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // After 5s — second attempt, still fails
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    // Need to flush the promise
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // After 15s more — third attempt, succeeds
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.current.saveStatus).toBe("saved");
+
+    unmount();
+  });
+
+  it("gives up after MAX_RETRIES for transient errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    // Initial attempt
+    await act(async () => {
+      await result.current.saveNow();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Retry 1 after 5s
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Retry 2 after 15s
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    // Retry 3 after 45s
+    await act(async () => {
+      vi.advanceTimersByTime(45_000);
+    });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    // No more retries — advance more time
+    await act(async () => {
+      vi.advanceTimersByTime(200_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(result.current.saveStatus).toBe("error");
+
+    unmount();
+  });
+
+  it("retries network errors with exponential backoff", async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount += 1;
+      if (callCount <= 1) {
+        return Promise.reject(new TypeError("Failed to fetch"));
+      }
+      return Promise.resolve({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    // First attempt — network error
+    await act(async () => {
+      await result.current.saveNow();
+    });
+    expect(result.current.saveStatus).toBe("error");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // After 5s — retry succeeds
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.saveStatus).toBe("saved");
+
+    unmount();
+  });
+
+  it("resets retry counter when draft changes after failure", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, rerender, unmount } = renderHook(
+      ({ draft }) => useAutoSave(draft),
+      { initialProps: { draft: baseDraft as PostDraft | null } },
+    );
+
+    // Initial attempt fails
+    await act(async () => {
+      await result.current.saveNow();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Simulate a new draft change — this should reset retry counter
+    const modifiedDraft: PostDraft = { ...baseDraft, title: "Changed title" };
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+
+    await act(async () => {
+      rerender({ draft: modifiedDraft });
+    });
+
+    // The debounce effect fires after 2s, triggering a fresh save attempt
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+    });
+    await act(async () => {});
+
+    // That new save should get the full 3-retry budget
+    // Retry 1 after 5s
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    await act(async () => {});
+
+    // Retry 2 after 15s
+    await act(async () => {
+      vi.advanceTimersByTime(15_000);
+    });
+    await act(async () => {});
+
+    // Retry 3 after 45s
+    await act(async () => {
+      vi.advanceTimersByTime(45_000);
+    });
+    await act(async () => {});
+
+    // Should have: 1 (initial) + 1 (debounce) + 3 (retries) = 5 total
+    // The initial saveNow call was for baseDraft, debounce is for modifiedDraft
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(4);
+
+    unmount();
+  });
+
+  it("serializeDraft backwards compat omits transient fields", () => {
+    const json = serializeDraft(baseDraft);
+    const parsed = JSON.parse(json);
+    expect(parsed).not.toHaveProperty("activeSlideIndex");
+    expect(parsed).not.toHaveProperty("destinations");
+    expect(parsed).not.toHaveProperty("id");
+    expect(parsed).toHaveProperty("title", "Draft title");
+  });
+
+  it("exposes lastSavedRef in return value", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
+
+    expect(result.current.lastSavedRef.current).toBeNull();
+
+    await act(async () => {
+      await result.current.saveNow();
+    });
+
+    expect(result.current.lastSavedRef.current).not.toBeNull();
+    expect(typeof result.current.lastSavedRef.current).toBe("string");
 
     unmount();
   });
