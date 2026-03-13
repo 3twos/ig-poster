@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
-import { apiErrorResponse } from "@/lib/api-error";
+import { apiErrorResponse, safeErrorDetail } from "@/lib/api-error";
 import { isBlobEnabled, putJson } from "@/lib/blob-store";
 import type { MetaDestination } from "@/lib/meta-accounts";
 import {
@@ -137,7 +137,16 @@ const formatDestinationError = (
   destination: MetaDestination,
   error: unknown,
 ) => {
-  const detail = error instanceof Error ? error.message : "Unknown error";
+  const detail = isClientFacingError(error)
+    ? error instanceof Error
+      ? error.message
+      : "Could not publish to this destination."
+    : safeErrorDetail(
+        error,
+        destination === "facebook"
+          ? "Could not publish to Facebook."
+          : "Could not publish to Instagram.",
+      );
   return {
     destination,
     error: detail,

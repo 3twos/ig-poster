@@ -125,6 +125,25 @@ const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
 
 const PUBLISH_DESTINATIONS: MetaDestination[] = ["instagram", "facebook"];
 
+const resolveInitialPublishTarget = (
+  enabledDestinations: MetaDestination[],
+  availableDestinations: MetaDestination[],
+): BrowserPublishTarget => {
+  if (enabledDestinations.length > 1) {
+    return "both";
+  }
+
+  if (enabledDestinations.length === 1) {
+    return enabledDestinations[0]!;
+  }
+
+  if (availableDestinations.length > 1) {
+    return "both";
+  }
+
+  return availableDestinations[0] ?? "instagram";
+};
+
 type RefinePromptPreview = {
   systemPrompt: string;
   userPrompt: string;
@@ -475,15 +494,10 @@ export default function Home() {
     ).map((destination) => destination.destination) ?? [];
 
     setPublishDestination(
-      enabledDestinations.length > 1
-        ? "both"
-        : enabledDestinations[0] ??
-            (
-              availablePublishDestinations.length > 1
-                ? "both"
-                : availablePublishDestinations[0]
-            ) ??
-            "instagram",
+      resolveInitialPublishTarget(
+        enabledDestinations,
+        availablePublishDestinations,
+      ),
     );
   }, [activePost?.destinations, activePost?.id, availablePublishDestinations]);
 
