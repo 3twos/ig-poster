@@ -4,7 +4,7 @@ This package is the first checked-in macOS scaffold for Apple Photos support.
 
 Current scope:
 
-- shared local bridge contract that mirrors `/Users/jestrada/dev/ig-poster-photos-companion-20260312/src/lib/apple-photos-bridge.ts`
+- shared local bridge contract that mirrors `src/lib/apple-photos-bridge.ts`
 - native SwiftUI shell for the future signed `IG Poster Companion.app`
 - no PhotosPicker, PhotoKit, or HTTP bridge listener yet
 

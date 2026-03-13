@@ -17,7 +17,7 @@ struct IGPosterCompanionContractSmoke {
       "unexpected default bridge origin"
     )
     require(
-      urls.pick.absoluteString == "http://127.0.0.1:43123/v1/photos/pick",
+      urls.pick.absoluteString == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/pick",
       "unexpected pick endpoint"
     )
 

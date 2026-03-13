@@ -5,13 +5,14 @@ export const APPLE_PHOTOS_BRIDGE_HOST = "127.0.0.1";
 export const APPLE_PHOTOS_BRIDGE_PORT = 43123;
 export const APPLE_PHOTOS_BRIDGE_TOKEN_HEADER = "X-IG-Poster-Bridge-Token";
 export const APPLE_PHOTOS_BRIDGE_ORIGIN = `http://${APPLE_PHOTOS_BRIDGE_HOST}:${APPLE_PHOTOS_BRIDGE_PORT}`;
+export const APPLE_PHOTOS_BRIDGE_BASE_PATH = `/${APPLE_PHOTOS_BRIDGE_VERSION}`;
 
 export const APPLE_PHOTOS_BRIDGE_PATHS = {
-  health: "/v1/health",
-  recent: "/v1/photos/recent",
-  search: "/v1/photos/search",
-  pick: "/v1/photos/pick",
-  import: "/v1/photos/import",
+  health: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/health`,
+  recent: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/recent`,
+  search: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
+  pick: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
+  import: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
 } as const;
 
 export type ApplePhotosBridgeErrorCode =

@@ -28,11 +28,11 @@ public struct ApplePhotosBridgePaths: Codable, Equatable, Sendable {
   public let importPath: String
 
   public init(
-    health: String = "/v1/health",
-    recent: String = "/v1/photos/recent",
-    search: String = "/v1/photos/search",
-    pick: String = "/v1/photos/pick",
-    importPath: String = "/v1/photos/import"
+    health: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/health",
+    recent: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/recent",
+    search: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/search",
+    pick: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/pick",
+    importPath: String = "\(ApplePhotosCompanionBridge.versionPathPrefix)/photos/import"
   ) {
     self.health = health
     self.recent = recent
@@ -168,6 +168,7 @@ public struct ApplePhotosImportResponse: Codable, Equatable, Sendable {
 public enum ApplePhotosCompanionBridge {
   public static let appName = "IG Poster Companion"
   public static let version = "v1"
+  public static let versionPathPrefix = "/\(version)"
   public static let urlScheme = "igposter-companion"
   public static let defaultHost = "127.0.0.1"
   public static let defaultPort = 43123
@@ -188,7 +189,14 @@ public enum ApplePhotosCompanionBridge {
     originComponents.host = host
     originComponents.port = port
 
-    let origin = originComponents.url ?? URL(string: "http://\(host):\(port)")!
+    let origin: URL
+    if let url = originComponents.url ?? URL(string: "http://\(host):\(port)") {
+      origin = url
+    } else {
+      preconditionFailure(
+        "ApplePhotosCompanionBridge.urls(host:port:) could not form a valid URL from host '\(host)' and port \(port)"
+      )
+    }
 
     return ApplePhotosBridgeURLs(
       origin: origin,

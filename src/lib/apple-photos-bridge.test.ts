@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  APPLE_PHOTOS_BRIDGE_BASE_PATH,
   APPLE_PHOTOS_BRIDGE_ORIGIN,
   APPLE_PHOTOS_BRIDGE_TOKEN_HEADER,
   APPLE_PHOTOS_COMPANION_APP_NAME,
@@ -14,22 +15,22 @@ describe("getApplePhotosBridgeUrls", () => {
   it("returns the default localhost bridge endpoints", () => {
     expect(getApplePhotosBridgeUrls()).toEqual({
       origin: APPLE_PHOTOS_BRIDGE_ORIGIN,
-      healthUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/health`,
-      recentUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/recent`,
-      searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/search`,
-      pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/pick`,
-      importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/import`,
+      healthUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/health`,
+      recentUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/recent`,
+      searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
+      pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
+      importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
     });
   });
 
   it("normalizes a custom origin before appending paths", () => {
     expect(getApplePhotosBridgeUrls("http://localhost:43123/")).toEqual({
       origin: "http://localhost:43123",
-      healthUrl: "http://localhost:43123/v1/health",
-      recentUrl: "http://localhost:43123/v1/photos/recent",
-      searchUrl: "http://localhost:43123/v1/photos/search",
-      pickUrl: "http://localhost:43123/v1/photos/pick",
-      importUrl: "http://localhost:43123/v1/photos/import",
+      healthUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/health`,
+      recentUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/recent`,
+      searchUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
+      pickUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
+      importUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
     });
   });
 });
@@ -42,11 +43,11 @@ describe("buildApplePhotosBridgeHealthResponse", () => {
       bridge: {
         origin: APPLE_PHOTOS_BRIDGE_ORIGIN,
         authTokenHeader: APPLE_PHOTOS_BRIDGE_TOKEN_HEADER,
-        healthUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/health`,
-        recentUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/recent`,
-        searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/search`,
-        pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/pick`,
-        importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}/v1/photos/import`,
+        healthUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/health`,
+        recentUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/recent`,
+        searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
+        pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
+        importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
       },
       capabilities: ["pick", "recent", "search", "import"],
     });
