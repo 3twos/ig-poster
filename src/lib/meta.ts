@@ -116,7 +116,7 @@ const callGraphPost = async (
   } catch {
     throw new Error(`Meta API returned non-JSON response on ${path} (${response.status})`);
   }
-  if (!response.ok || json.error) {
+  if (!response.ok || json.error || json.success === false) {
     throw new Error(json.error?.message ?? `Meta API call failed on ${path}`);
   }
 
