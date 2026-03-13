@@ -46,6 +46,23 @@ export type ApplePhotosImportedAsset = ApplePhotosBridgePhotoAsset & {
   downloadUrl: string;
 };
 
+export type ApplePhotosBridgeQueryMode = "recent" | "search";
+
+export type ApplePhotosAssetQuery = {
+  mode: ApplePhotosBridgeQueryMode;
+  since?: string;
+  limit: number;
+  album?: string;
+  mediaType?: ApplePhotosMediaType;
+  favorite?: boolean;
+};
+
+export type ApplePhotosAssetListResponse = {
+  assets: ApplePhotosBridgePhotoAsset[];
+  fetchedAt: string;
+  query: ApplePhotosAssetQuery;
+};
+
 export type ApplePhotosCompanionLaunchAction = "open" | "pick";
 
 export type ApplePhotosBridgeSelectionSummary = {

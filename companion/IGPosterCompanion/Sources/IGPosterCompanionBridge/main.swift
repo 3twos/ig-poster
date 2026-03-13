@@ -11,6 +11,7 @@ private struct BridgeOptions {
 private struct HTTPRequest {
   let method: String
   let path: String
+  let queryItems: [String: String]
   let body: Data
 }
 
@@ -21,6 +22,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
   private let serveOnce: Bool
   private let stopHandler: @Sendable () -> Void
   private let stateStore = ApplePhotosCompanionStateStore()
+  private let photoLibrary = ApplePhotosLibrary()
   private let completedRequestsLock = NSLock()
   private var completedRequests = 0
 
@@ -100,12 +102,14 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
 
   private func respond(to requestData: Data, on connection: NWConnection) {
     let request = parseRequest(from: requestData)
-    let response = responseData(for: request)
+    Task {
+      let response = await responseData(for: request)
 
-    connection.send(content: response, completion: .contentProcessed { [weak self] _ in
-      connection.cancel()
-      self?.finishRequest()
-    })
+      connection.send(content: response, completion: .contentProcessed { [weak self] _ in
+        connection.cancel()
+        self?.finishRequest()
+      })
+    }
   }
 
   private func finishRequest() {
@@ -140,15 +144,24 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
 
     let method = String(parts[0]).uppercased()
     let rawPath = String(parts[1])
-    let path = URLComponents(
+    let components = URLComponents(
       string:
         "http://\(ApplePhotosCompanionBridge.defaultHost):\(port)\(rawPath)"
-    )?.path ?? rawPath
+    )
+    let path = components?.path ?? rawPath
+    let queryPairs: [(String, String)] = (components?.queryItems ?? []).compactMap { item in
+        guard let value = item.value else { return nil }
+        return (item.name, value)
+      }
+    let queryItems = Dictionary(
+      queryPairs,
+      uniquingKeysWith: { _, latest in latest }
+    )
 
-    return HTTPRequest(method: method, path: path, body: body)
+    return HTTPRequest(method: method, path: path, queryItems: queryItems, body: body)
   }
 
-  private func responseData(for request: HTTPRequest?) -> Data {
+  private func responseData(for request: HTTPRequest?) async -> Data {
     guard let request else {
       return httpResponse(
         status: "400 Bad Request",
@@ -173,15 +186,13 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     }
 
     if request.method == "GET",
-       [ApplePhotosCompanionBridge.paths.recent, ApplePhotosCompanionBridge.paths.search]
-       .contains(request.path) {
-      return httpResponse(
-        status: "501 Not Implemented",
-        body: errorBody(
-          code: "NOT_IMPLEMENTED",
-          message: "The companion bridge only serves /v1/health in this slice."
-        )
-      )
+       request.path == ApplePhotosCompanionBridge.paths.recent {
+      return await recentResponseData(for: request)
+    }
+
+    if request.method == "GET",
+       request.path == ApplePhotosCompanionBridge.paths.search {
+      return await searchResponseData(for: request)
     }
 
     if request.method == "POST",
@@ -224,6 +235,50 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       )
   }
 
+  private func recentResponseData(for request: HTTPRequest) async -> Data {
+    do {
+      let query = try assetQuery(
+        for: .recent,
+        queryItems: request.queryItems
+      )
+
+      let payload = try await photoLibrary.recent(query: query)
+      return encodedResponse(status: "200 OK", payload: payload)
+    } catch let error as ApplePhotosLibraryError {
+      return responseData(for: error)
+    } catch {
+      return httpResponse(
+        status: "500 Internal Server Error",
+        body: errorBody(
+          code: "UNEXPECTED_ERROR",
+          message: "The companion bridge could not enumerate recent Photos assets."
+        )
+      )
+    }
+  }
+
+  private func searchResponseData(for request: HTTPRequest) async -> Data {
+    do {
+      let query = try assetQuery(
+        for: .search,
+        queryItems: request.queryItems
+      )
+
+      let payload = try await photoLibrary.search(query: query)
+      return encodedResponse(status: "200 OK", payload: payload)
+    } catch let error as ApplePhotosLibraryError {
+      return responseData(for: error)
+    } catch {
+      return httpResponse(
+        status: "500 Internal Server Error",
+        body: errorBody(
+          code: "UNEXPECTED_ERROR",
+          message: "The companion bridge could not search the local Photos library."
+        )
+      )
+    }
+  }
+
   private func pickResponseData() -> Data {
     guard let snapshot = stateStore.load(), !snapshot.exportedAssets.isEmpty else {
       return httpResponse(
@@ -242,10 +297,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       port: Int(port)
     )
 
-    return httpResponse(
-      status: "200 OK",
-      body: (try? encoder.encode(payload)) ?? Data("{}".utf8)
-    )
+    return encodedResponse(status: "200 OK", payload: payload, encoder: encoder)
   }
 
   private func importResponseData(for request: HTTPRequest) -> Data {
@@ -289,10 +341,7 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
 
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    return httpResponse(
-      status: "200 OK",
-      body: (try? encoder.encode(payload)) ?? Data("{}".utf8)
-    )
+    return encodedResponse(status: "200 OK", payload: payload, encoder: encoder)
   }
 
   private func exportedAssetResponse(for path: String) -> Data {
@@ -353,6 +402,114 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
       ?? Data("{}".utf8)
   }
 
+  private func responseData(for error: ApplePhotosLibraryError) -> Data {
+    switch error {
+    case .invalidFilter(let rawValue):
+      return httpResponse(
+        status: "400 Bad Request",
+        body: errorBody(
+          code: "INVALID_INPUT",
+          message: "Unsupported Photos filter: \(rawValue)"
+        )
+      )
+    case .invalidSince(let rawValue):
+      return httpResponse(
+        status: "400 Bad Request",
+        body: errorBody(
+          code: "INVALID_INPUT",
+          message: "Unsupported Photos since filter: \(rawValue)"
+        )
+      )
+    case .invalidLimit(let rawValue):
+      return httpResponse(
+        status: "400 Bad Request",
+        body: errorBody(
+          code: "INVALID_INPUT",
+          message: "Photos limit must be greater than zero; received \(rawValue)."
+        )
+      )
+    case .photosPermissionRequired:
+      return httpResponse(
+        status: "403 Forbidden",
+        body: errorBody(
+          code: ApplePhotosBridgeErrorCode.photosPermissionRequired.rawValue,
+          message: "The companion needs Photos permission before it can enumerate the local library."
+        )
+      )
+    }
+  }
+
+  private func assetQuery(
+    for mode: ApplePhotosBridgeQueryMode,
+    queryItems: [String: String]
+  ) throws -> ApplePhotosAssetQuery {
+    let limit = try parseLimit(queryItems["limit"])
+    return ApplePhotosAssetQuery(
+      mode: mode,
+      since: normalizedOptionalString(queryItems["since"]),
+      limit: limit,
+      album: normalizedOptionalString(queryItems["album"]),
+      mediaType: try parseMediaType(queryItems["media"]),
+      favorite: try parseFavorite(queryItems["favorite"])
+    )
+  }
+
+  private func parseLimit(_ rawValue: String?) throws -> Int {
+    guard let rawValue = normalizedOptionalString(rawValue) else {
+      return 20
+    }
+
+    guard let parsed = Int(rawValue), parsed > 0 else {
+      throw ApplePhotosLibraryError.invalidLimit(rawValue)
+    }
+
+    return min(parsed, 200)
+  }
+
+  private func parseMediaType(_ rawValue: String?) throws -> ApplePhotosMediaType? {
+    guard let rawValue = normalizedOptionalString(rawValue) else {
+      return nil
+    }
+
+    guard let mediaType = ApplePhotosMediaType(rawValue: rawValue) else {
+      throw ApplePhotosLibraryError.invalidFilter("media=\(rawValue)")
+    }
+
+    return mediaType
+  }
+
+  private func parseFavorite(_ rawValue: String?) throws -> Bool? {
+    guard let rawValue = normalizedOptionalString(rawValue) else {
+      return nil
+    }
+
+    switch rawValue.lowercased() {
+    case "1", "true", "yes":
+      return true
+    case "0", "false", "no":
+      return false
+    default:
+      throw ApplePhotosLibraryError.invalidFilter("favorite=\(rawValue)")
+    }
+  }
+
+  private func encodedResponse<T: Encodable>(
+    status: String,
+    payload: T,
+    encoder: JSONEncoder? = nil
+  ) -> Data {
+    let responseEncoder = encoder ?? {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys]
+      return encoder
+    }()
+
+    return httpResponse(
+      status: status,
+      body: (try? responseEncoder.encode(payload)) ?? Data("{}".utf8)
+    )
+  }
+
   private func httpResponse(
     status: String,
     body: Data,
@@ -378,6 +535,14 @@ private final class ApplePhotosBridgeServer: @unchecked Sendable {
     response.append(body)
     return response
   }
+}
+
+private func normalizedOptionalString(_ value: String?) -> String? {
+  guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+    return nil
+  }
+
+  return trimmed
 }
 
 private func parseOptions() throws -> BridgeOptions {

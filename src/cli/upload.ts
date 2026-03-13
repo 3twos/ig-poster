@@ -31,11 +31,33 @@ export const buildUploadFormData = async (
   folder?: string,
 ) => {
   const details = await readUploadFile(filePath);
-  const formData = new FormData();
-  formData.set(
-    "file",
+  return buildUploadFormDataFromFile(
     new File([details.bytes], details.name, { type: details.contentType }),
+    folder,
   );
+};
+
+export const buildUploadFormDataFromFile = (
+  file: File,
+  folder?: string,
+) => {
+  const contentType = file.type || inferContentType(file.name);
+  if (!contentType) {
+    throw new CliError(
+      `Unsupported file type for upload: ${file.name}`,
+      EXIT_CODES.usage,
+    );
+  }
+
+  const uploadFile =
+    file.type === contentType
+      ? file
+      : new File([file], file.name, {
+          type: contentType,
+          lastModified: file.lastModified,
+        });
+  const formData = new FormData();
+  formData.set("file", uploadFile);
   if (folder) {
     formData.set("folder", folder);
   }

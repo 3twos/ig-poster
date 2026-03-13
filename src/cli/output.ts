@@ -208,6 +208,38 @@ export const printGenerationVariantsTable = (
   printLines(rows.map(formatRow));
 };
 
+export const printApplePhotosAssets = (
+  assets: Array<{
+    id: string;
+    filename: string;
+    mediaType: string;
+    createdAt: string;
+    width?: number;
+    height?: number;
+    durationMs?: number;
+    favorite: boolean;
+    albumNames: string[];
+  }>,
+) => {
+  if (assets.length === 0) {
+    printLines(["No Apple Photos assets matched."]);
+    return;
+  }
+
+  const lines = assets.flatMap((asset, index) => [
+    `${index + 1}. ${asset.filename} (${asset.mediaType})`,
+    `   id: ${asset.id}`,
+    `   createdAt: ${formatIso(asset.createdAt)}`,
+    `   dimensions: ${formatDimensions(asset.width, asset.height)}`,
+    `   durationMs: ${asset.durationMs ?? "-"}`,
+    `   favorite: ${asset.favorite ? "yes" : "no"}`,
+    `   albums: ${asset.albumNames.length > 0 ? asset.albumNames.join(", ") : "-"}`,
+    ...(index === assets.length - 1 ? [] : [""]),
+  ]);
+
+  printLines(lines);
+};
+
 export const printKeyValue = (entries: Array<[string, string | undefined]>) => {
   printLines(entries.map(([key, value]) => `${key}: ${value ?? "-"}`));
 };
@@ -227,6 +259,11 @@ const formatBytes = (value: number) => {
   }
   return `${value}B`;
 };
+
+const formatDimensions = (width?: number, height?: number) =>
+  typeof width === "number" && typeof height === "number"
+    ? `${width}x${height}`
+    : "-";
 
 const formatRow = (columns: string[]) =>
   columns
