@@ -57,6 +57,7 @@ Why this shape:
 - the server should stay Apple-agnostic and continue to operate on uploaded files, draft posts, and publish requests
 - missing-native-helper cases should degrade to install guidance plus the existing regular upload flow, not block the draft editor
 - the native scaffold should share one explicit bridge contract with the web and CLI layers so launch URLs, localhost paths, and remediation codes do not drift
+- the first live bridge slice can stay narrow: a localhost health endpoint plus CORS-safe probing is enough to validate the handoff loop before PhotoKit is wired in
 
 ## Runtime and Layers
 
@@ -210,6 +211,7 @@ Why this shape:
 - Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
 - The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. Until the native companion app exists, that entry point intentionally degrades to a regular-upload fallback dialog instead of attempting a broken native handoff.
 - The first native-side implementation step now exists in `companion/IGPosterCompanion`: a buildable SwiftUI shell plus shared bridge models/constants that mirror `src/lib/apple-photos-bridge.ts`.
+- The next Apple Photos bridge slice now exists too: `ig-poster-companion-bridge` exposes `GET /v1/health` with permissive localhost CORS so the browser can probe for a running native helper before attempting a custom-URL handoff.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

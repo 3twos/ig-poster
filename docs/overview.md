@@ -42,6 +42,7 @@
 - Ships an experimental `ig` CLI preview with profile-aware host/token config, repo-local project links, automatic browser auth bootstrap for interactive auth-required commands, explicit device-code login for headless environments, stable JSON envelopes with non-TTY auto-defaulting, `--flags-file` argument preloading, richer status summaries for linked-project/provider/quota visibility, macOS Keychain-backed refresh-token storage, shell completion output, raw API access, auth/status checks, asset upload, generation run/refine commands, chat prompts, direct publish/schedule commands, brand-kit lookup, core post read/write commands, directory watch ingestion, an MCP stdio adapter, and publish-job queue controls backed by `/api/v1/*`.
 - Starts the Apple Photos ingestion path with a macOS-only `Add from Photos` entry point in the asset panel. Today that action stays web-first and falls back to the normal upload flow with clear remediation copy, while the native companion app and local bridge remain the next planned step for richer human and agent workflows.
 - The repo now includes a buildable `companion/IGPosterCompanion` macOS scaffold with a shared bridge contract, SwiftUI shell, and localhost URL scheme/endpoint definitions for the future native Photos helper.
+- The companion scaffold now also ships a minimal localhost bridge executable for `GET /v1/health`, and the web asset panel will probe that bridge before falling back to the regular upload path.
 
 ## Key Features
 

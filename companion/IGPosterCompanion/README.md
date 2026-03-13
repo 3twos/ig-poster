@@ -14,6 +14,7 @@ Local validation:
 cd companion/IGPosterCompanion
 swift build
 swift run ig-poster-companion-contract-smoke
+swift run ig-poster-companion-bridge --print-health
 swift run ig-poster-companion
 ```
 
@@ -21,5 +22,5 @@ Planned next steps:
 
 1. add PhotosPicker-based human selection flow
 2. add PhotoKit-backed recent/search enumeration
-3. add the localhost bridge listener and token handshake
+3. expand the localhost bridge beyond `GET /v1/health` into pick/import/recent/search
 4. hand imported exports back to the web editor and CLI
