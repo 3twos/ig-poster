@@ -5,7 +5,7 @@ import * as schema from "./schema";
 
 let _db: NeonHttpDatabase<typeof schema> | null = null;
 
-const resolveDatabaseUrl = () => {
+export const resolveDatabaseUrl = () => {
   const postgresUrl = process.env.POSTGRES_URL?.trim();
   if (postgresUrl) {
     return postgresUrl;

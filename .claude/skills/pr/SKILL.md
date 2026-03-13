@@ -10,7 +10,7 @@ argument-hint: <task-description>
 
 Execute the complete PR workflow for: $ARGUMENTS
 
-Follow every phase in order. Do not skip phases. Refer to AGENTS.md for detailed rules.
+Follow every phase in order. Do not skip phases. Refer to `AGENTS.md` for repo-specific rules and merge gates.
 
 ---
 

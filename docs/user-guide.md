@@ -176,22 +176,38 @@
 - The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and will surface the incoming draft ID, profile, bridge origin, and return URL in-app once the browser handoff lands there. Packaging and URL-scheme registration are still pending, so this is a developer-facing scaffold step rather than an end-user flow yet.
 - The native companion shell now includes a real PhotosPicker button for ordered image/video selection, exports those selections into a managed local cache, and persists a shared manifest that the localhost bridge can serve back to the browser.
 - The companion now persists the active handoff, selection summary, and exported asset manifest into a local shared state file, and the localhost bridge surfaces that shared state for browser/CLI/MCP coordination.
+- On macOS, the localhost bridge now also exposes PhotoKit-backed `GET /v1/photos/recent` and `GET /v1/photos/search`, and the CLI preview exposes those as `ig photos recent` and `ig photos search`.
+- `ig mcp` now mirrors that local enumeration path for agents with `photos_recent` and `photos_search` tools, so local automation can inspect the Photos library without going through the remote service first.
+- The CLI preview now also exposes `ig photos import [--ids <id,id,...>]`, which resolves exported local bridge assets and uploads them into the normal remote `/api/v1/assets` flow. `ig mcp` mirrors that with a `photos_import` tool.
+- The first recent/search request may prompt macOS for Photos access. If access is denied or unavailable, the bridge returns `PHOTOS_PERMISSION_REQUIRED` and the CLI exits with a clear error instead of hanging.
 
 ### Planned macOS Apple Photos workflow
 
-This is not shipped yet, but the planned direction is:
+The direction is partially shipped now. Today you can:
+
+- click `Add from Photos` in the web editor on macOS
+- export a native PhotosPicker selection through the companion scaffold
+- import that exported selection back into the current draft
+- enumerate local Photos assets with `ig photos recent` / `ig photos search`
+- import selected exported assets into IG Poster with `ig photos import`
+- call the same enumeration/import path from `ig mcp` with `photos_recent` / `photos_search` / `photos_import`
+
+Still planned:
 
 - a signed `IG Poster Companion.app` handles Apple Photos permissions, native picker/search UI, and export caching
 - the web editor remains the main human workflow and should launch the native helper when needed
 - `ig` continues to be the scripting surface
 - `ig mcp` exposes the same Photos capabilities to agents through the local CLI
 
-Planned commands:
+Available now:
 
-- `ig photos pick --create-draft --brand-kit <id>`
 - `ig photos recent --since 7d --limit 20`
 - `ig photos search --album Favorites --media image`
 - `ig photos import --ids <asset-id,...>`
+
+Planned next commands:
+
+- `ig photos pick --create-draft --brand-kit <id>`
 - `ig photos propose --since 7d --limit 20 --brand-kit <id>`
 
 Expected behavior:
@@ -209,6 +225,7 @@ If the macOS companion app is not installed or not reachable:
 - for internal development, `swift run ig-poster-companion` now includes a `Load sample handoff` action so you can inspect the native handoff state even before the app is packaged and registered with Launch Services
 - for internal development, that same shell now includes a native Photos picker button that exports chosen items into the local companion cache
 - for internal development, `swift run ig-poster-companion-bridge --print-health` now also reflects the persisted selection summary when the companion app has an active draft/selection context
+- for internal development, `ig photos recent` / `ig photos search` and the MCP `photos_recent` / `photos_search` tools now hit that same bridge directly, so you can validate the local PhotoKit path without packaging the app first
 
 ## Working with Saved Posts
 

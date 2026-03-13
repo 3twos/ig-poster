@@ -69,7 +69,9 @@ describe("useAutoSave", () => {
       }),
     );
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(String(requestInit.body))).not.toHaveProperty("activeSlideIndex");
+    const parsed = JSON.parse(String(requestInit.body));
+    expect(parsed).not.toHaveProperty("activeSlideIndex");
+    expect(parsed).not.toHaveProperty("destinations");
 
     unmount();
   });

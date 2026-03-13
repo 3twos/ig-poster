@@ -143,6 +143,78 @@ const TOOLS: ToolDefinition[] = [
     ],
   },
   {
+    name: "photos_recent",
+    description: "List recent Apple Photos assets from the local macOS companion bridge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string" },
+        limit: { type: "integer" },
+        mediaType: { type: "string", enum: ["image", "video", "live-photo"] },
+        favorite: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    buildArgv: (args) => [
+      "photos",
+      "recent",
+      ...(typeof args.since === "string" ? ["--since", args.since] : []),
+      ...(typeof args.limit === "number" ? ["--limit", String(args.limit)] : []),
+      ...(typeof args.mediaType === "string" ? ["--media", args.mediaType] : []),
+      ...(args.favorite === true ? ["--favorite"] : []),
+    ],
+  },
+  {
+    name: "photos_search",
+    description: "Search Apple Photos assets by album/media filters through the local macOS companion bridge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        album: { type: "string" },
+        since: { type: "string" },
+        limit: { type: "integer" },
+        mediaType: { type: "string", enum: ["image", "video", "live-photo"] },
+        favorite: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    buildArgv: (args) => [
+      "photos",
+      "search",
+      ...(typeof args.album === "string" ? ["--album", args.album] : []),
+      ...(typeof args.since === "string" ? ["--since", args.since] : []),
+      ...(typeof args.limit === "number" ? ["--limit", String(args.limit)] : []),
+      ...(typeof args.mediaType === "string" ? ["--media", args.mediaType] : []),
+      ...(args.favorite === true ? ["--favorite"] : []),
+    ],
+  },
+  {
+    name: "photos_import",
+    description: "Import exported Apple Photos assets through the local companion bridge, then upload them into IG Poster.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "string" },
+        },
+        folder: {
+          type: "string",
+          enum: ["assets", "videos", "logos", "renders"],
+        },
+      },
+      additionalProperties: false,
+    },
+    buildArgv: (args) => [
+      "photos",
+      "import",
+      ...(Array.isArray(args.ids) && args.ids.every((id) => typeof id === "string")
+        ? ["--ids", args.ids.join(",")]
+        : []),
+      ...(typeof args.folder === "string" ? ["--folder", args.folder] : []),
+    ],
+  },
+  {
     name: "chat_ask",
     description: "Ask the IG Poster chat assistant, optionally grounded to a saved post.",
     inputSchema: {
