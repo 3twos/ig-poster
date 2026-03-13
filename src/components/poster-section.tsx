@@ -71,9 +71,6 @@ type Props = {
   editorMode: boolean;
   onResetTextLayout: () => void;
   onAutoFitTextLayout: () => void;
-  onMeasuredCanonicalHeightsChange?: (
-    heights: Partial<Record<CanonicalOverlayKey, number>>,
-  ) => void;
   saveStatus: SaveStatus;
   overlayLayout?: OverlayLayout;
   activeSlideIndex: number;
@@ -92,7 +89,6 @@ export function PosterSection({
   editorMode,
   onResetTextLayout,
   onAutoFitTextLayout,
-  onMeasuredCanonicalHeightsChange,
   saveStatus,
   overlayLayout,
   activeSlideIndex,
@@ -201,7 +197,6 @@ export function PosterSection({
             layout,
           });
         }}
-        onMeasuredCanonicalHeightsChange={onMeasuredCanonicalHeightsChange}
         carouselSlides={activeVariant.carouselSlides}
         activeSlideIndex={activeSlideIndex}
         onSlideChange={(index: number) =>

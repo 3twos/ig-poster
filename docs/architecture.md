@@ -102,7 +102,7 @@ Why this shape:
   - `src/db/index.ts` resolves `POSTGRES_URL` with `DATABASE_URL` fallback.
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
-  - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions, plus measured-height overrides when the browser preview/editor can prove a taller rendered result
+  - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions, plus measured-height overrides when the browser preview can prove a taller rendered result
   - structured refinement-plan parsing plus deterministic enforcement for common post-generation instructions like shortening copy or removing CTA text, plus CTA-policy-aware fallback/refine cleanup
   - brief-aware variant ranking heuristics that prefer saved theme/subject/thought/audience alignment over generic engagement tropes when selecting finalists
   - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses

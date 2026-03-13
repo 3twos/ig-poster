@@ -36,9 +36,6 @@ type PosterPreviewProps = {
   overlayLayout?: OverlayLayout;
   editorMode?: boolean;
   onOverlayLayoutChange?: (layout: OverlayLayout) => void;
-  onMeasuredCanonicalHeightsChange?: (
-    heights: Partial<Record<CanonicalOverlayKey, number>>,
-  ) => void;
   carouselSlides?: CarouselSlide[];
   activeSlideIndex?: number;
   onSlideChange?: (index: number) => void;
@@ -112,31 +109,6 @@ const hasCanonicalLayoutDelta = (
       Math.abs(current.height - next.height) > 0.1
     );
   });
-
-const collectMeasuredCanonicalHeights = ({
-  keys,
-  refs,
-  frameHeight,
-}: {
-  keys: CanonicalOverlayKey[];
-  refs: Partial<Record<CanonicalOverlayKey, HTMLDivElement | null>>;
-  frameHeight: number;
-}) =>
-  Object.fromEntries(
-    keys
-      .map((key) => {
-        const node = refs[key];
-        const measuredHeightPx = node?.offsetHeight || node?.scrollHeight || 0;
-        if (measuredHeightPx <= 0) {
-          return null;
-        }
-
-        return [key, (measuredHeightPx / frameHeight) * 100];
-      })
-      .filter(
-        (entry): entry is [CanonicalOverlayKey, number] => entry != null,
-      ),
-  ) as Partial<Record<CanonicalOverlayKey, number>>;
 
 const buildOverlayBlocks = (
   variant: CreativeVariant,
@@ -518,15 +490,11 @@ const EditorOverlay = ({
   layout,
   onChange,
   frame,
-  getMeasureRef,
 }: {
   blocks: OverlayCanvasBlock[];
   layout: OverlayLayout;
   onChange: (next: OverlayLayout) => void;
   frame: { width: number; height: number };
-  getMeasureRef?: (
-    key: CanonicalOverlayKey,
-  ) => (node: HTMLDivElement | null) => void;
 }) => {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   // Track known block IDs to detect newly added custom blocks
@@ -678,11 +646,6 @@ const EditorOverlay = ({
             }}
           >
             <div
-              ref={
-                block.type === "canonical" && block.key && getMeasureRef
-                  ? getMeasureRef(block.key)
-                  : undefined
-              }
               className="group/block relative w-full border border-transparent hover:border-orange-300/70"
               style={{ borderRadius: block.borderRadius }}
             >
@@ -806,7 +769,6 @@ export const PosterPreview = memo(
         overlayLayout,
         editorMode,
         onOverlayLayoutChange,
-        onMeasuredCanonicalHeightsChange,
         carouselSlides,
         activeSlideIndex = 0,
         onSlideChange,
@@ -940,10 +902,7 @@ export const PosterPreview = memo(
       }, [onOverlayLayoutChange, resolvedOverlayLayout]);
 
       useEffect(() => {
-        if (
-          frameSize.height <= 0 ||
-          (!onOverlayLayoutChange && !onMeasuredCanonicalHeightsChange)
-        ) {
+        if (!onOverlayLayoutChange || frameSize.height <= 0 || editorMode) {
           return;
         }
 
@@ -956,24 +915,29 @@ export const PosterPreview = memo(
         });
 
         if (activeKeys.length === 0) {
-          onMeasuredCanonicalHeightsChange?.({});
           return;
         }
 
         const raf = requestAnimationFrame(() => {
-          const measuredHeightsPercent = collectMeasuredCanonicalHeights({
-            keys: activeKeys,
-            refs: canonicalBlockRefs.current,
-            frameHeight: frameSize.height,
-          });
+          const measuredHeightsPercent = Object.fromEntries(
+            activeKeys
+              .map((key) => {
+                const node = canonicalBlockRefs.current[key];
+                const measuredHeightPx = node?.offsetHeight || node?.scrollHeight || 0;
+                if (measuredHeightPx <= 0) {
+                  return null;
+                }
 
-          onMeasuredCanonicalHeightsChange?.(measuredHeightsPercent);
+                return [key, (measuredHeightPx / frameSize.height) * 100];
+              })
+              .filter(
+                (
+                  entry,
+                ): entry is [CanonicalOverlayKey, number] => entry != null,
+              ),
+          ) as Partial<Record<CanonicalOverlayKey, number>>;
 
-          if (
-            editorMode ||
-            !onOverlayLayoutChange ||
-            Object.keys(measuredHeightsPercent).length === 0
-          ) {
+          if (Object.keys(measuredHeightsPercent).length === 0) {
             return;
           }
 
@@ -1007,7 +971,6 @@ export const PosterPreview = memo(
         displayedOverlayCopy,
         editorMode,
         frameSize.height,
-        onMeasuredCanonicalHeightsChange,
         onOverlayLayoutChange,
         resolvedOverlayLayout,
         variant.layout,
@@ -1069,7 +1032,6 @@ export const PosterPreview = memo(
               layout={resolvedOverlayLayout}
               onChange={onOverlayLayoutChange}
               frame={frameSize}
-              getMeasureRef={registerCanonicalBlockRef}
             />
           ) : null}
 
