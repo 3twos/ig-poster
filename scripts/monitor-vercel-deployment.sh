@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DASHBOARD_ENABLED=0
-LAST_EVENT_MESSAGE="Starting..."
-LAST_ALERT_MESSAGE="None"
-LAST_EVENT_EPOCH=0
-LAST_ALERT_EPOCH=0
-LAST_ALERT_LEVEL="info"
-DASHBOARD_LAST_RENDER_LINES=0
-DASHBOARD_CURRENT_RENDER_LINES=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/monitor-core.sh"
+source "${SCRIPT_DIR}/lib/monitor-dashboard.sh"
+source "${SCRIPT_DIR}/lib/monitor-audio.sh"
 
 usage() {
   cat <<'HELP'
@@ -45,62 +41,6 @@ Examples:
   # Watch one deployment continuously until Ctrl+C
   ./scripts/monitor-vercel-deployment.sh dpl_123abc --interval 5
 HELP
-}
-
-print_error() {
-  echo "Error: $*" >&2
-}
-
-log_line() {
-  local message="$*"
-  LAST_EVENT_MESSAGE="$message"
-  LAST_EVENT_EPOCH="$(date +%s)"
-  if (( DASHBOARD_ENABLED == 0 )); then
-    echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $message"
-  fi
-}
-
-warn_line() {
-  local message="$*"
-  LAST_EVENT_MESSAGE="$message"
-  LAST_EVENT_EPOCH="$(date +%s)"
-  if (( DASHBOARD_ENABLED == 0 )); then
-    echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $message" >&2
-  fi
-}
-
-sanitize_field() {
-  local value="$1"
-
-  value="${value//$'\x1f'/ }"
-  value="${value//$'\n'/ }"
-  value="${value//$'\r'/ }"
-  value="${value//$'\t'/ }"
-  value="${value#${value%%[![:space:]]*}}"
-  value="${value%${value##*[![:space:]]}}"
-  printf '%s' "$value"
-}
-
-truncate_text() {
-  local text="$1"
-  local max_len="$2"
-
-  if ! [[ "$max_len" =~ ^[0-9]+$ ]] || (( max_len <= 0 )); then
-    printf '%s' "$text"
-    return
-  fi
-
-  if (( ${#text} <= max_len )); then
-    printf '%s' "$text"
-    return
-  fi
-
-  if (( max_len <= 3 )); then
-    printf '%s' "${text:0:max_len}"
-    return
-  fi
-
-  printf '%s...' "${text:0:$(( max_len - 3 ))}"
 }
 
 normalize_target() {
@@ -1587,43 +1527,7 @@ render_progress_bar() {
   fi
 }
 
-begin_dashboard_render() {
-  DASHBOARD_CURRENT_RENDER_LINES=0
-  if (( DASHBOARD_LAST_RENDER_LINES > 0 )); then
-    printf '\033[%dA' "$DASHBOARD_LAST_RENDER_LINES"
-  fi
-}
-
-print_dashboard_line() {
-  local line="$1"
-
-  printf '\r\033[2K%s\n' "$line"
-  DASHBOARD_CURRENT_RENDER_LINES=$(( DASHBOARD_CURRENT_RENDER_LINES + 1 ))
-}
-
-print_dashboard_linef() {
-  local format="$1"
-  shift || true
-
-  printf '\r\033[2K'
-  printf "$format" "$@"
-  printf '\n'
-  DASHBOARD_CURRENT_RENDER_LINES=$(( DASHBOARD_CURRENT_RENDER_LINES + 1 ))
-}
-
-end_dashboard_render() {
-  local extra_lines i
-
-  if (( DASHBOARD_LAST_RENDER_LINES > DASHBOARD_CURRENT_RENDER_LINES )); then
-    extra_lines=$(( DASHBOARD_LAST_RENDER_LINES - DASHBOARD_CURRENT_RENDER_LINES ))
-    for (( i = 0; i < extra_lines; i++ )); do
-      printf '\r\033[2K\n'
-    done
-    printf '\033[%dA' "$extra_lines"
-  fi
-
-  DASHBOARD_LAST_RENDER_LINES="$DASHBOARD_CURRENT_RENDER_LINES"
-}
+## Dashboard rendering primitives are provided by lib/monitor-dashboard.sh
 
 duration_seconds_for_record() {
   local created_at_ms="$1"
@@ -1652,17 +1556,8 @@ duration_seconds_for_record() {
   echo $(( end_seconds - start_seconds ))
 }
 
-ensure_runtime_dir() {
-  if [[ -n "${RUNTIME_DIR:-}" && -d "${RUNTIME_DIR}" ]]; then
-    return 0
-  fi
-
-  if ! RUNTIME_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vercel-deploy-monitor.XXXXXX" 2>/dev/null)"; then
-    return 1
-  fi
-
-  return 0
-}
+## Audio infra is provided by lib/monitor-audio.sh
+## Custom audio event handler for the "beat" event (production deploy sound).
 
 play_production_beat_sync() {
   local deployment_target="$1"
@@ -1682,114 +1577,18 @@ play_production_beat_sync() {
   fi
 }
 
-start_audio_queue_worker() {
-  local event_kind event_payload
-
-  if (( ENABLE_SPEAK == 0 )); then
-    return
-  fi
-  if [[ -z "$SPEAKER_CMD" ]]; then
-    return
-  fi
-  if (( AUDIO_QUEUE_ENABLED == 1 )); then
-    return
-  fi
-
-  if ! ensure_runtime_dir; then
-    warn_line "Failed to create runtime dir for audio queue. Voice alerts may overlap."
-    return
-  fi
-
-  AUDIO_QUEUE_PIPE="${RUNTIME_DIR}/audio.queue"
-  rm -f "${AUDIO_QUEUE_PIPE}" >/dev/null 2>&1 || true
-  if ! mkfifo "${AUDIO_QUEUE_PIPE}"; then
-    warn_line "Failed to initialize audio queue FIFO. Voice alerts may overlap."
-    AUDIO_QUEUE_PIPE=""
-    return
-  fi
-
-  (
-    while IFS=$'\x1f' read -r event_kind event_payload; do
-      case "$event_kind" in
-        beat)
-          play_production_beat_sync "$event_payload"
-          ;;
-        speak)
-          if [[ -n "$event_payload" && -n "$SPEAKER_CMD" ]]; then
-            "$SPEAKER_CMD" "$event_payload" >/dev/null 2>&1 || true
-          fi
-          ;;
-        stop)
-          break
-          ;;
-      esac
-    done < "${AUDIO_QUEUE_PIPE}"
-  ) &
-  AUDIO_QUEUE_PID="$!"
-
-  if ! exec 9> "${AUDIO_QUEUE_PIPE}"; then
-    warn_line "Failed to open audio queue writer. Voice alerts may overlap."
-    kill "${AUDIO_QUEUE_PID}" >/dev/null 2>&1 || true
-    wait "${AUDIO_QUEUE_PID}" >/dev/null 2>&1 || true
-    AUDIO_QUEUE_PID=""
-    rm -f "${AUDIO_QUEUE_PIPE}" >/dev/null 2>&1 || true
-    AUDIO_QUEUE_PIPE=""
-    return
-  fi
-
-  AUDIO_QUEUE_ENABLED=1
-}
-
-stop_audio_queue_worker() {
-  if (( AUDIO_QUEUE_ENABLED == 0 )); then
-    return
-  fi
-
-  printf 'stop\x1f\n' >&9 || true
-  exec 9>&- || true
-
-  if [[ "${AUDIO_QUEUE_PID:-}" =~ ^[0-9]+$ ]]; then
-    wait "${AUDIO_QUEUE_PID}" >/dev/null 2>&1 || true
-  fi
-
-  AUDIO_QUEUE_ENABLED=0
-  AUDIO_QUEUE_PID=""
-  AUDIO_QUEUE_PIPE=""
-}
-
-enqueue_audio_event() {
+_audio_queue_custom_handler() {
   local event_kind="$1"
-  local event_payload="${2:-}"
-
-  if (( AUDIO_QUEUE_ENABLED == 0 )); then
-    return 1
-  fi
-
-  event_kind="$(sanitize_field "$event_kind")"
-  event_payload="$(sanitize_field "$event_payload")"
-  if [[ -z "$event_kind" ]]; then
-    return 1
-  fi
-
-  printf '%s\x1f%s\n' "$event_kind" "$event_payload" >&9
-}
-
-speak_alert() {
-  local message="$1"
-
-  if [[ -z "$SPEAKER_CMD" ]]; then
-    return
-  fi
-
-  if (( AUDIO_QUEUE_ENABLED == 1 )); then
-    enqueue_audio_event "speak" "$message" || true
-    return
-  fi
-
-  # Speak asynchronously so polling is not blocked.
-  (
-    "$SPEAKER_CMD" "$message" >/dev/null 2>&1
-  ) &
+  local event_payload="$2"
+  case "$event_kind" in
+    beat)
+      _acquire_speech_lock
+      play_production_beat_sync "$event_payload"
+      _release_speech_lock
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 play_production_beat() {
@@ -2776,11 +2575,7 @@ render_dashboard() {
 
 cleanup_runtime() {
   stop_all_event_stream_workers
-  stop_audio_queue_worker
-
-  if [[ -n "${RUNTIME_DIR:-}" && -d "${RUNTIME_DIR}" ]]; then
-    rm -rf "${RUNTIME_DIR}" >/dev/null 2>&1 || true
-  fi
+  cleanup_audio_runtime
 }
 
 handle_interrupt() {
@@ -3011,17 +2806,8 @@ if [[ "$EVENT_MODE_ACTIVE" == "auto" ]]; then
   fi
 fi
 
-SPEAKER_CMD=""
 if (( ENABLE_SPEAK == 1 )); then
-  if command -v say >/dev/null 2>&1; then
-    SPEAKER_CMD="say"
-  elif command -v spd-say >/dev/null 2>&1; then
-    SPEAKER_CMD="spd-say"
-  elif command -v espeak >/dev/null 2>&1; then
-    SPEAKER_CMD="espeak"
-  else
-    warn_line "Speech command not found (checked: say, spd-say, espeak). Alerts will be text-only."
-  fi
+  detect_speaker_cmd
 fi
 
 DASH_MODE_LABEL="$(friendly_mode_label)"
@@ -3074,15 +2860,12 @@ EVENT_BUS_OFFSET=0
 EVENT_BUS_TRUNCATE_LINES=2000
 EVENT_RECONCILE_EVERY=6
 EVENT_RECONCILE_CYCLE=0
-RUNTIME_DIR=""
 EVENT_BUS_FILE=""
-AUDIO_QUEUE_ENABLED=0
-AUDIO_QUEUE_PIPE=""
-AUDIO_QUEUE_PID=""
+RUNTIME_DIR_PREFIX="vercel-deploy-monitor"
 ACTIVE_SINGLE_TARGET=""
 
 if [[ "$EVENT_MODE_ACTIVE" == "stream" ]]; then
-  if ensure_runtime_dir; then
+  if ensure_runtime_dir "$RUNTIME_DIR_PREFIX"; then
     EVENT_BUS_FILE="${RUNTIME_DIR}/events.log"
     : >"$EVENT_BUS_FILE"
   else
