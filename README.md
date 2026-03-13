@@ -74,7 +74,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Node runtime: `22.x` (see `.nvmrc`).
+Preferred Node runtime: `22.x` (see `.nvmrc`), with repository/package support for Node `20.9+` and `22.x`.
 
 ## Environment Variables
 

@@ -77,6 +77,8 @@ describe("GET /api/publish-jobs", () => {
     mockedSyncFacebookScheduledPublishJobs.mockResolvedValue({
       imported: 1,
       updated: 0,
+      published: 0,
+      canceled: 0,
       unchanged: 0,
     });
 
@@ -98,10 +100,7 @@ describe("GET /api/publish-jobs", () => {
     expect(res.status).toBe(200);
     expect(mockedResolveMetaAuthForRequest).toHaveBeenCalledTimes(1);
     expect(mockedSyncFacebookScheduledPublishJobs).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: session.email,
-        ownerHash: expect.any(String),
-      }),
+      { ownerHash: expect.any(String) },
       expect.objectContaining({
         account: expect.objectContaining({
           pageId: "page-id",
