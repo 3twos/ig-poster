@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { serializePostDraft } from "@/lib/post-draft";
 import { withPerfSync } from "@/lib/perf";
 import type { PostDraft } from "./use-post-reducer";
 
@@ -7,11 +8,8 @@ export type SaveStatus = "saved" | "saving" | "unsaved" | "error";
 
 /** Strips transient fields before comparing / sending to API */
 export function serializeDraft(draft: PostDraft): string {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { activeSlideIndex, destinations, ...rest } = draft;
-  return JSON.stringify(rest);
+  return serializePostDraft(draft);
 }
-
 export function useAutoSave(
   draft: PostDraft | null,
   options?: { onSaved?: () => void },
@@ -30,7 +28,9 @@ export function useAutoSave(
   const markSaved = useCallback(() => {
     const d = draftRef.current;
     if (d) {
-      lastSavedRef.current = withPerfSync("autoSave:serialize", () => serializeDraft(d));
+      lastSavedRef.current = withPerfSync("autoSave:serialize", () =>
+        serializePostDraft(d),
+      );
     }
     setSaveStatus("saved");
   }, []);
@@ -42,7 +42,9 @@ export function useAutoSave(
     if (d.status === "posted") return true;
 
     const cached = lastSerializedRef.current;
-    const serialized = (cached && cached.id === d.id) ? cached.json : withPerfSync("autoSave:serialize", () => serializeDraft(d));
+    const serialized = (cached && cached.id === d.id)
+      ? cached.json
+      : withPerfSync("autoSave:serialize", () => serializePostDraft(d));
     if (serialized === lastSavedRef.current) {
       setSaveStatus("saved");
       return true;
@@ -112,7 +114,9 @@ export function useAutoSave(
       return;
     }
 
-    const serialized = withPerfSync("autoSave:serialize", () => serializeDraft(draft));
+    const serialized = withPerfSync("autoSave:serialize", () =>
+      serializePostDraft(draft),
+    );
     lastSerializedRef.current = { id: draft.id, json: serialized };
     if (serialized === lastSavedRef.current) {
       // Draft reverted to saved state (e.g. undo) — clear pending timer
