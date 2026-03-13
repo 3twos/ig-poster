@@ -96,7 +96,7 @@ export function GeneralSection() {
           </div>
         ) : (
           <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
-            <p>Connect a Meta publishing pair to publish to Instagram now and prepare Facebook destination sync from this workspace.</p>
+            <p>Connect a Meta publishing pair to publish to Instagram from this workspace. Facebook Page posting can be added later with a separate permission reconnect when your Meta app is ready for it.</p>
             <a
               href="/api/auth/meta/start"
               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"
