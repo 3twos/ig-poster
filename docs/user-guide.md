@@ -167,12 +167,12 @@
 - `ig queue` mirrors the browser queue lifecycle controls: inspect a job, cancel it, retry a failed one, move a linked post back to draft, or send an edit/reschedule patch through `queue update`.
 - `ig watch` ingests supported local image/video files into the remote service by uploading each file and creating a draft post around it. In human mode or `--stream-json`, it keeps polling the directory for new files; in `--json` mode it performs a single scan pass and emits one summary envelope.
 - `ig mcp` runs a stdio MCP adapter over the CLI so local agents can call tools like `status`, `posts_list`, `generate_run`, `chat_ask`, `publish`, and `queue_list` through the same authenticated CLI surface.
-- On macOS, the editor asset panel now shows `Add from Photos`. For now this is a safe fallback entry point: it explains that the native companion is not available yet and routes you back to the normal upload picker so your draft flow keeps moving.
-- The repository now contains the first native companion scaffold under `companion/IGPosterCompanion`, but that scaffold is not packaged or installed for end users yet, so the web fallback behavior remains the current user-facing path.
-- If a local Apple Photos bridge is running on `127.0.0.1:43123`, the editor now probes it before falling back. When that probe succeeds, the draft offers to open the native companion handoff instead of immediately showing the fallback-only state.
+- On macOS, the editor asset panel now shows `Add from Photos`. The browser first probes the local companion bridge on `127.0.0.1:43123`. If the bridge is unavailable, the dialog falls back to the normal upload flow so your draft keeps moving.
+- If the bridge is available, the draft offers to open the native companion handoff. Once the companion exports a Photos selection into its managed cache, the web editor can import those files back into the current draft and run them through the normal upload pipeline automatically.
+- The repository contains the native companion scaffold under `companion/IGPosterCompanion`, but it is still a developer-facing build target rather than a packaged end-user install.
 - The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and will surface the incoming draft ID, profile, bridge origin, and return URL in-app once the browser handoff lands there. Packaging and URL-scheme registration are still pending, so this is a developer-facing scaffold step rather than an end-user flow yet.
-- The native companion shell now also includes a real PhotosPicker button for ordered image/video selection. In this slice it stops at showing the selected local identifiers and content types; importing those selections back into the draft is still pending.
-- The companion now persists the active handoff and picker-selection summary into a local shared state file, and the localhost bridge health response surfaces that summary back out for future web/CLI coordination.
+- The native companion shell now includes a real PhotosPicker button for ordered image/video selection, exports those selections into a managed local cache, and persists a shared manifest that the localhost bridge can serve back to the browser.
+- The companion now persists the active handoff, selection summary, and exported asset manifest into a local shared state file, and the localhost bridge surfaces that shared state for browser/CLI/MCP coordination.
 
 ### Planned macOS Apple Photos workflow
 
@@ -204,7 +204,7 @@ If the macOS companion app is not installed or not reachable:
 - CLI/MCP should return a structured error with remediation instead of hanging or failing opaquely
 - for internal development, you can run `swift run ig-poster-companion-bridge` from `companion/IGPosterCompanion` to satisfy the web probe and exercise the handoff path
 - for internal development, `swift run ig-poster-companion` now includes a `Load sample handoff` action so you can inspect the native handoff state even before the app is packaged and registered with Launch Services
-- for internal development, that same shell now includes a native Photos picker button so you can validate the basic macOS selection UX before export/import is implemented
+- for internal development, that same shell now includes a native Photos picker button that exports chosen items into the local companion cache
 - for internal development, `swift run ig-poster-companion-bridge --print-health` now also reflects the persisted selection summary when the companion app has an active draft/selection context
 
 ## Working with Saved Posts

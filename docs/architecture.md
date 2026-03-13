@@ -57,10 +57,9 @@ Why this shape:
 - the server should stay Apple-agnostic and continue to operate on uploaded files, draft posts, and publish requests
 - missing-native-helper cases should degrade to install guidance plus the existing regular upload flow, not block the draft editor
 - the native scaffold should share one explicit bridge contract with the web and CLI layers so launch URLs, localhost paths, and remediation codes do not drift
-- the first live bridge slice can stay narrow: a localhost health endpoint plus CORS-safe probing is enough to validate the handoff loop before PhotoKit is wired in
+- the first live bridge slices should stay narrow: localhost health, pick/import manifest routes, and exported-file download serving are enough to validate the handoff loop before PhotoKit is wired in
 - before PhotoKit exists, the native shell should still parse and display the incoming custom-URL launch context so the web-to-native handoff can be validated end to end
-- before export/import exists, the native shell can still validate the human picker UX with PhotosPicker and ordered local selection state
-- a shared local state file between the native app and bridge is a useful intermediate step, because it lets the bridge report active draft/selection context without embedding UI logic
+- a shared local state file between the native app and bridge is a useful intermediate step, because it lets the bridge report active draft/selection context and exported-file manifests without embedding UI logic
 
 ## Runtime and Layers
 
@@ -213,12 +212,12 @@ Why this shape:
 - `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
 - `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
 - Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
-- The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. Until the native companion app exists, that entry point intentionally degrades to a regular-upload fallback dialog instead of attempting a broken native handoff.
+- The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. It probes the local bridge first, opens the native handoff when the bridge is reachable, and otherwise degrades to the regular-upload fallback dialog instead of blocking the draft flow.
 - The first native-side implementation step now exists in `companion/IGPosterCompanion`: a buildable SwiftUI shell plus shared bridge models/constants that mirror `src/lib/apple-photos-bridge.ts`.
-- The next Apple Photos bridge slice now exists too: `ig-poster-companion-bridge` exposes `GET /v1/health` with permissive localhost CORS so the browser can probe for a running native helper before attempting a custom-URL handoff.
+- `ig-poster-companion-bridge` now exposes `GET /v1/health`, `POST /v1/photos/pick`, and `POST /v1/photos/import` with localhost CORS so the browser can probe for a running helper, detect bridge-ready native selections, and fetch import manifests back into the draft flow.
 - The current native shell also parses that shared handoff URL and surfaces the incoming draft/profile/return context, giving the browser a meaningful native landing state while PhotosPicker and PhotoKit are still pending.
-- The native shell now goes one step further on the human path: it embeds a PhotosPicker-based selection surface and retains ordered local selection metadata, while export/import wiring still remains for the next slice.
-- The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge includes as an optional health summary. That gives future web/CLI flows one place to discover the active native draft/selection context.
+- The native shell now goes further on the human path: it embeds a PhotosPicker-based selection surface, exports chosen items into a managed cache, and persists ordered selection plus exported-file metadata into shared state.
+- The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge uses for both health summaries and pick/import responses. That gives future web/CLI flows one place to discover the active native draft/selection context and available exported assets.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

@@ -43,6 +43,7 @@ export type ApplePhotosBridgePhotoAsset = {
 
 export type ApplePhotosImportedAsset = ApplePhotosBridgePhotoAsset & {
   exportPath: string;
+  downloadUrl: string;
 };
 
 export type ApplePhotosCompanionLaunchAction = "open" | "pick";
