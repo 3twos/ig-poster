@@ -323,18 +323,23 @@ export async function GET(req: Request) {
           usage.remaining = Math.max(usage.limit - usage.used, 0);
         }
         if (job.postId) {
-          await markPostPublished(
-            db,
-            job.ownerHash,
-            job.postId,
-            publish.publishId,
-            job.destination,
-            {
-              remotePermalink: publish.remotePermalink,
-              publishedAt: publish.publishedAt,
-            },
-          );
+          try {
+            await markPostPublished(
+              db,
+              job.ownerHash,
+              job.postId,
+              publish.publishId,
+              job.destination,
+              {
+                remotePermalink: publish.remotePermalink,
+                publishedAt: publish.publishedAt,
+              },
+            );
+          } catch {
+            // Preserve successful publish state even if post snapshot update fails.
+          }
           if (job.destination === "instagram") {
+            try {
             await syncPublishedInstagramDestination(db, {
               postId: job.postId,
               caption: job.caption,
@@ -346,6 +351,9 @@ export async function GET(req: Request) {
               remotePermalink: publish.remotePermalink ?? null,
               publishedAt: publish.publishedAt,
             });
+            } catch {
+              // Preserve successful publish state even if destination sync fails.
+            }
           }
         }
         if (isBlobEnabled() && job.outcomeContext && publish.publishId) {
