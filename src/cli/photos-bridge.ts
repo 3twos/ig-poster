@@ -12,6 +12,11 @@ export type ApplePhotosBridgePhotoAsset = {
   albumNames: string[];
 };
 
+export type ApplePhotosImportedAsset = ApplePhotosBridgePhotoAsset & {
+  exportPath: string;
+  downloadUrl: string;
+};
+
 export type ApplePhotosAssetQuery = {
   mode: "recent" | "search";
   since?: string;
@@ -25,6 +30,17 @@ export type ApplePhotosAssetListResponse = {
   assets: ApplePhotosBridgePhotoAsset[];
   fetchedAt: string;
   query: ApplePhotosAssetQuery;
+};
+
+export type ApplePhotosImportResponse = {
+  assets: ApplePhotosImportedAsset[];
+  importedAt: string;
+};
+
+export type ApplePhotosBridgeImportResult = {
+  importedAt: string;
+  assets: ApplePhotosImportedAsset[];
+  files: File[];
 };
 
 export class ApplePhotosBridgeRequestError extends Error {
@@ -85,6 +101,20 @@ const isPhotoAsset = (
   );
 };
 
+const isImportedAsset = (
+  value: unknown,
+): value is ApplePhotosImportedAsset => {
+  if (!isPhotoAsset(value)) {
+    return false;
+  }
+
+  const candidate = value as ApplePhotosImportedAsset;
+  return (
+    typeof candidate.exportPath === "string" &&
+    typeof candidate.downloadUrl === "string"
+  );
+};
+
 const isAssetListResponse = (
   value: unknown,
 ): value is ApplePhotosAssetListResponse => {
@@ -97,6 +127,19 @@ const isAssetListResponse = (
     typeof candidate.fetchedAt === "string" &&
     typeof candidate.query?.mode === "string" &&
     typeof candidate.query?.limit === "number"
+  );
+};
+
+const isImportResponse = (
+  value: unknown,
+): value is ApplePhotosImportResponse => {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as ApplePhotosImportResponse;
+  return (
+    Array.isArray(candidate.assets) &&
+    candidate.assets.every(isImportedAsset) &&
+    typeof candidate.importedAt === "string"
   );
 };
 
@@ -155,6 +198,14 @@ const requestAssetList = async ({
   return payload;
 };
 
+const defaultMimeTypeForAsset = (asset: ApplePhotosImportedAsset) => {
+  if (asset.mediaType === "video") {
+    return "video/quicktime";
+  }
+
+  return "image/jpeg";
+};
+
 export const listRecentApplePhotos = async (
   query: Partial<Omit<ApplePhotosAssetQuery, "mode">> = {},
 ) =>
@@ -170,3 +221,56 @@ export const searchApplePhotos = async (
     path: "/v1/photos/search",
     query,
   });
+
+export const importApplePhotosSelection = async ({
+  ids,
+}: {
+  ids?: string[];
+} = {}): Promise<ApplePhotosBridgeImportResult> => {
+  const path = ids?.length ? "/v1/photos/import" : "/v1/photos/pick";
+  const response = await fetch(buildBridgeUrl(path), {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(ids?.length ? { ids } : {}),
+  });
+
+  if (!response.ok) {
+    throw await readBridgeError(response);
+  }
+
+  const payload: unknown = await response.json();
+  if (!isImportResponse(payload)) {
+    throw new Error(
+      "The local Apple Photos bridge returned an unexpected import payload.",
+    );
+  }
+
+  const files = await Promise.all(
+    payload.assets.map(async (asset) => {
+      const assetResponse = await fetch(asset.downloadUrl, {
+        headers: { Accept: "*/*" },
+      });
+
+      if (!assetResponse.ok) {
+        throw await readBridgeError(assetResponse);
+      }
+
+      const blob = await assetResponse.blob();
+      return new File([blob], asset.filename, {
+        type: blob.type || defaultMimeTypeForAsset(asset),
+        lastModified: Number.isNaN(Date.parse(asset.createdAt))
+          ? Date.now()
+          : Date.parse(asset.createdAt),
+      });
+    }),
+  );
+
+  return {
+    importedAt: payload.importedAt,
+    assets: payload.assets,
+    files,
+  };
+};

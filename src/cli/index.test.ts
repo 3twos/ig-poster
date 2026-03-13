@@ -94,7 +94,7 @@ describe("runCli", () => {
       expect.stringContaining("ig chat <ask>"),
     );
     expect(stdout).toHaveBeenCalledWith(
-      expect.stringContaining("ig photos <recent|search>"),
+      expect.stringContaining("ig photos <recent|search|import>"),
     );
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining("ig watch <dir>"),

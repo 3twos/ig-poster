@@ -179,4 +179,96 @@ describe("runPhotosCommand", () => {
       exitCode: EXIT_CODES.forbidden,
     });
   });
+
+  it("imports exported Photos assets and uploads them through the standard asset API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/v1/photos/import") {
+          expect(init?.method).toBe("POST");
+          expect(init?.body).toBe(JSON.stringify({ ids: ["asset-1"] }));
+
+          return new Response(
+            JSON.stringify({
+              importedAt: "2026-03-13T18:30:00Z",
+              assets: [
+                {
+                  id: "asset-1",
+                  filename: "IMG_1001.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-12T18:00:00Z",
+                  favorite: false,
+                  albumNames: ["Favorites"],
+                  exportPath: "/tmp/IMG_1001.JPG",
+                  downloadUrl: "http://127.0.0.1:43123/v1/photos/exports/asset-1",
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/photos/exports/asset-1") {
+          return new Response(new Blob(["image-bytes"], { type: "image/jpeg" }), {
+            status: 200,
+            headers: { "Content-Type": "image/jpeg" },
+          });
+        }
+
+        throw new Error(`Unexpected URL: ${url.toString()}`);
+      }),
+    );
+    const requestJson = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        asset: {
+          id: "assets/123-IMG_1001.JPG",
+          name: "IMG_1001.JPG",
+          url: "https://blob.example.com/IMG_1001.JPG",
+          pathname: "assets/123-IMG_1001.JPG",
+          size: 11,
+          folder: "assets",
+          contentType: "image/jpeg",
+        },
+      },
+    });
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+
+    await runPhotosCommand(
+      {
+        client: { requestJson },
+        globalOptions: {
+          json: true,
+          streamJson: false,
+          jq: undefined,
+          quiet: false,
+          noColor: false,
+          yes: false,
+          dryRun: false,
+        },
+      } as never,
+      ["import", "--ids", "asset-1"],
+    );
+
+    expect(requestJson).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        path: "/api/v1/assets",
+        body: expect.any(FormData),
+      }),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"uploadedAssets"'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"IMG_1001.JPG"'),
+    );
+  });
 });

@@ -3,6 +3,7 @@ import type { CliContext } from "../context";
 import { CliError, exitCodeFromStatus } from "../errors";
 import {
   ApplePhotosBridgeRequestError,
+  importApplePhotosSelection,
   listRecentApplePhotos,
   searchApplePhotos,
   type ApplePhotosAssetListResponse,
@@ -10,9 +11,16 @@ import {
 } from "../photos-bridge";
 import {
   printApplePhotosAssets,
+  printAssetsTable,
   printJsonEnvelope,
   printKeyValue,
 } from "../output";
+import {
+  buildUploadFormDataFromFile,
+  inferUploadFolder,
+  type UploadedAsset,
+  type UploadFolder,
+} from "../upload";
 
 type SharedPhotoOptions = {
   since?: string;
@@ -25,11 +33,25 @@ type SearchPhotoOptions = SharedPhotoOptions & {
   album?: string;
 };
 
-const PHOTO_USAGE = "Usage: ig photos <recent|search>";
+type ImportPhotoOptions = {
+  ids?: string;
+  folder?: string;
+};
+
+type AssetResponse = {
+  ok: true;
+  data: {
+    asset: UploadedAsset;
+  };
+};
+
+const PHOTO_USAGE = "Usage: ig photos <recent|search|import>";
 const RECENT_USAGE =
   "Usage: ig photos recent [--since <7d|ISO>] [--limit <n>] [--media <image|video|live-photo>] [--favorite]";
 const SEARCH_USAGE =
   "Usage: ig photos search [--album <name>] [--since <7d|ISO>] [--limit <n>] [--media <image|video|live-photo>] [--favorite]";
+const IMPORT_USAGE =
+  "Usage: ig photos import [--ids <id,id,...>] [--folder <assets|videos|logos|renders>]";
 
 export const runPhotosCommand = async (ctx: CliContext, argv: string[]) => {
   const action = argv[0];
@@ -39,6 +61,8 @@ export const runPhotosCommand = async (ctx: CliContext, argv: string[]) => {
       return listRecent(ctx, argv.slice(1));
     case "search":
       return listSearch(ctx, argv.slice(1));
+    case "import":
+      return importSelection(ctx, argv.slice(1));
     default:
       throw new CliError(PHOTO_USAGE);
   }
@@ -96,6 +120,60 @@ const listSearch = async (ctx: CliContext, argv: string[]) => {
   }
 };
 
+const importSelection = async (ctx: CliContext, argv: string[]) => {
+  const { options, positionals } = parseCommandOptions<ImportPhotoOptions>(argv, {
+    ids: "string",
+    folder: "string",
+  });
+
+  if (positionals.length > 0) {
+    throw new CliError(IMPORT_USAGE);
+  }
+
+  const ids = parseIds(options.ids);
+  const folder = parseUploadFolder(options.folder);
+
+  try {
+    const imported = await importApplePhotosSelection({ ids });
+    const uploadedAssets: UploadedAsset[] = [];
+
+    for (const file of imported.files) {
+      const body = buildUploadFormDataFromFile(
+        file,
+        folder ?? inferUploadFolder(file.name),
+      );
+      const response = await ctx.client.requestJson<AssetResponse>({
+        method: "POST",
+        path: "/api/v1/assets",
+        body,
+      });
+      uploadedAssets.push(response.data.asset);
+    }
+
+    if (ctx.globalOptions.json) {
+      printJsonEnvelope(
+        {
+          importedAt: imported.importedAt,
+          importedAssets: imported.assets,
+          uploadedAssets,
+        },
+        ctx.globalOptions.jq,
+      );
+      return;
+    }
+
+    printKeyValue([
+      ["importedAt", imported.importedAt],
+      ["selectedCount", String(imported.assets.length)],
+      ["uploadedCount", String(uploadedAssets.length)],
+    ]);
+    process.stdout.write("\n");
+    printAssetsTable(uploadedAssets);
+  } catch (error) {
+    normalizeBridgeError(error);
+  }
+};
+
 const parseLimit = (value?: string) => {
   if (!value) {
     return undefined;
@@ -119,6 +197,29 @@ const parseMediaType = (value?: string): ApplePhotosMediaType | undefined => {
   }
 
   throw new CliError(`Unsupported Photos media type: ${value}`);
+};
+
+const parseIds = (value?: string) =>
+  value
+    ?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const parseUploadFolder = (value?: string): UploadFolder | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  if (
+    value === "assets" ||
+    value === "videos" ||
+    value === "logos" ||
+    value === "renders"
+  ) {
+    return value;
+  }
+
+  throw new CliError(`Unsupported upload folder: ${value}`);
 };
 
 const printResult = (
