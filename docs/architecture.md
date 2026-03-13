@@ -41,7 +41,7 @@ Planned split of responsibilities:
 - `ig` CLI: automation surface for humans and agents
 - `IG Poster Companion.app`: native Apple Photos picker/search UI, PhotoKit access, managed export cache, and local bridge
 - `companion/IGPosterCompanion`: checked-in Swift package scaffold that mirrors the bridge contract currently defined in `src/lib/apple-photos-bridge.ts`
-- `src/cli/photos-bridge.ts`: CLI-local bridge client for `ig photos recent|search`, kept under `src/cli` so the standalone CLI build can enumerate Apple Photos without pulling in the web app bundle graph
+- `src/cli/photos-bridge.ts`: CLI-local bridge client for `ig photos recent|search|import`, kept under `src/cli` so the standalone CLI build can enumerate/import Apple Photos assets without pulling in the web app bundle graph
 
 Planned flow:
 
@@ -220,6 +220,7 @@ Why this shape:
 - The native shell now goes further on the human path: it embeds a PhotosPicker-based selection surface, exports chosen items into a managed cache, and persists ordered selection plus exported-file metadata into shared state.
 - The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge uses for both health summaries and pick/import responses. That gives future web/CLI flows one place to discover the active native draft/selection context and available exported assets.
 - The latest agent-side step is PhotoKit-backed local enumeration in `IGPosterCompanionCore/PhotosLibrary.swift`. `ig photos recent|search` and the MCP tools `photos_recent|photos_search` talk to that localhost bridge directly and intentionally skip remote `/api/v1/*` auth refresh because they only inspect the local macOS library.
+- The next bridge-to-service step is now partially in place too: `ig photos import` and the MCP tool `photos_import` first call the local bridge for exported asset metadata/download URLs, then upload those files through the normal remote `/api/v1/assets` API instead of inventing a separate Apple-specific ingest path.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

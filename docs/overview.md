@@ -47,7 +47,7 @@
 - The repo now includes a buildable `companion/IGPosterCompanion` macOS scaffold with a shared bridge contract, SwiftUI shell, custom URL handoff parsing, a managed local export cache, and localhost bridge routes for `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, and `POST /v1/photos/import`.
 - The native companion now exports PhotosPicker selections into a managed local cache and persists a shared selection snapshot/manifest so the bridge can expose ready-to-import asset metadata back to the browser.
 - The web asset panel now reuses the normal upload pipeline after native selection: once the companion exports assets, the draft can pull them back through the localhost bridge and upload them through the same existing asset flow as manual file uploads.
-- The CLI preview now exposes local Apple Photos enumeration through `ig photos recent` / `ig photos search`, and `ig mcp` now mirrors that capability with `photos_recent` / `photos_search` tools for agents on macOS.
+- The CLI preview now exposes local Apple Photos enumeration/import through `ig photos recent` / `ig photos search` / `ig photos import`, and `ig mcp` now mirrors that capability with `photos_recent` / `photos_search` / `photos_import` tools for agents on macOS.
 
 ## Key Features
 
@@ -105,4 +105,4 @@
 - A hidden dev-only `--local` flag pins the CLI to the local dev server host (`IG_POSTER_LOCAL_HOST` or `http://localhost:3000`) while still calling the same `/api/v1/*` service interfaces.
 - The CLI preview can also store repo-local project defaults in `.ig-poster/project.json`, which currently cover linked host/profile plus optional brand-kit and output-directory preferences.
 - Apple Photos support is now partially shipped behind the checked-in macOS companion scaffold. The approved direction remains a web-first flow with a macOS companion app plus local bridge for Photos-only access, while the web app and versioned API remain the source of truth for auth, uploads, posts, generation, and publish state. If the companion is missing, the product should fall back to install guidance plus the normal upload flow rather than blocking the user.
-- The current Apple Photos slice covers native pick/export, localhost import handoff, and PhotoKit-backed `recent` / `search` enumeration for CLI + MCP. It still does not cover packaged app installation, hardened local bridge auth, or the higher-level `ig photos pick|import|propose` flows yet.
+- The current Apple Photos slice covers native pick/export, localhost import handoff, PhotoKit-backed `recent` / `search` enumeration for CLI + MCP, and CLI/MCP `import` handoff into the standard remote asset upload path. It still does not cover packaged app installation, hardened local bridge auth, or the higher-level `ig photos pick|propose` flows yet.

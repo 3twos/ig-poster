@@ -189,6 +189,32 @@ const TOOLS: ToolDefinition[] = [
     ],
   },
   {
+    name: "photos_import",
+    description: "Import exported Apple Photos assets through the local companion bridge, then upload them into IG Poster.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "string" },
+        },
+        folder: {
+          type: "string",
+          enum: ["assets", "videos", "logos", "renders"],
+        },
+      },
+      additionalProperties: false,
+    },
+    buildArgv: (args) => [
+      "photos",
+      "import",
+      ...(Array.isArray(args.ids) && args.ids.every((id) => typeof id === "string")
+        ? ["--ids", args.ids.join(",")]
+        : []),
+      ...(typeof args.folder === "string" ? ["--folder", args.folder] : []),
+    ],
+  },
+  {
     name: "chat_ask",
     description: "Ask the IG Poster chat assistant, optionally grounded to a saved post.",
     inputSchema: {

@@ -304,6 +304,7 @@ Current native scaffold status:
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes localhost bridge routes for `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, and `POST /v1/photos/import`, plus exported-file download URLs so the web editor can pull the native selection back into the draft and the CLI/MCP surfaces can enumerate local PhotoKit assets.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/PhotosLibrary.swift` is the first PhotoKit-backed enumeration layer for the companion bridge. It handles macOS Photos authorization, recent/search filters, album matching, and asset metadata mapping.
 - `src/cli/photos-bridge.ts` is the CLI-side localhost client for `ig photos recent|search`; it exists under `src/cli` specifically so `npm run build:cli` can compile the standalone binary without importing the web app modules.
+- `src/cli/commands/photos.ts` now covers the first three Apple Photos CLI subcommands: `recent`, `search`, and `import`. `import` resolves exported bridge assets and uploads them through the same `/api/v1/assets` path as any other CLI upload.
 - Validate the native scaffold locally with:
 
 ```bash
@@ -328,9 +329,10 @@ Then, in another terminal on the same Mac:
 ```bash
 npm run cli -- photos recent --since 7d --limit 10 --json
 npm run cli -- photos search --album Favorites --media image --json
+npm run cli -- photos import --ids asset_123,asset_456 --json
 ```
 
-The first call may trigger the macOS Photos permission prompt. If permission is denied, the CLI will return a `PHOTOS_PERMISSION_REQUIRED` error.
+The first recent/search call may trigger the macOS Photos permission prompt. If permission is denied, the CLI will return a `PHOTOS_PERMISSION_REQUIRED` error. `photos import` requires both the local bridge selection/export state and a normal authenticated CLI session because it uploads through `/api/v1/assets`.
 
 To exercise the new web-side probe locally:
 
@@ -339,7 +341,7 @@ cd companion/IGPosterCompanion
 swift run ig-poster-companion-bridge
 ```
 
-Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health`, offer the native companion handoff when available, and import the exported native selection back into the normal upload flow once the bridge reports ready assets. Local agents can hit the same running bridge through `ig mcp` with `photos_recent` / `photos_search`.
+Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health`, offer the native companion handoff when available, and import the exported native selection back into the normal upload flow once the bridge reports ready assets. Local agents can hit the same running bridge through `ig mcp` with `photos_recent` / `photos_search` / `photos_import`.
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.

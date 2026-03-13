@@ -60,6 +60,7 @@ describe("handleMcpMessage", () => {
           expect.objectContaining({ name: "status" }),
           expect.objectContaining({ name: "photos_recent" }),
           expect.objectContaining({ name: "photos_search" }),
+          expect.objectContaining({ name: "photos_import" }),
           expect.objectContaining({ name: "generate_run" }),
           expect.objectContaining({ name: "publish" }),
         ]),
