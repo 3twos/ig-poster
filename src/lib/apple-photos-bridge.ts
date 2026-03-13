@@ -45,6 +45,16 @@ export type ApplePhotosImportedAsset = ApplePhotosBridgePhotoAsset & {
   exportPath: string;
 };
 
+export type ApplePhotosCompanionLaunchAction = "open" | "pick";
+
+export type ApplePhotosBridgeSelectionSummary = {
+  updatedAt: string;
+  action?: ApplePhotosCompanionLaunchAction;
+  draftId?: string;
+  profile?: string;
+  assetCount: number;
+};
+
 export type ApplePhotosBridgeHealthResponse = {
   appName: string;
   version: string;
@@ -58,6 +68,7 @@ export type ApplePhotosBridgeHealthResponse = {
     importUrl: string;
   };
   capabilities: ApplePhotosBridgeCapability[];
+  selection?: ApplePhotosBridgeSelectionSummary;
 };
 
 export type ApplePhotosPickRequest = {
@@ -90,7 +101,6 @@ export type ApplePhotosBridgeUrls = {
   importUrl: string;
 };
 
-export type ApplePhotosCompanionLaunchAction = "open" | "pick";
 export type ApplePhotosCompanionLaunchRequest = {
   action: ApplePhotosCompanionLaunchAction;
   returnTo?: string;
@@ -123,7 +133,11 @@ export const getApplePhotosBridgeUrls = (
 };
 
 export const buildApplePhotosBridgeHealthResponse =
-  (): ApplePhotosBridgeHealthResponse => {
+  (
+    options: {
+      selection?: ApplePhotosBridgeSelectionSummary;
+    } = {},
+  ): ApplePhotosBridgeHealthResponse => {
     const urls = getApplePhotosBridgeUrls();
 
     return {
@@ -139,6 +153,7 @@ export const buildApplePhotosBridgeHealthResponse =
         importUrl: urls.importUrl,
       },
       capabilities: ["pick", "recent", "search", "import"],
+      ...(options.selection ? { selection: options.selection } : {}),
     };
   };
 
