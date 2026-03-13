@@ -5,6 +5,8 @@ import { attachPostDestinations } from "@/lib/post-destinations";
 import { PostUpdateRequestSchema } from "@/lib/post-schemas";
 import { resolveActorFromRequest } from "@/services/actors";
 import { getStoredPostDestinations } from "@/services/post-destinations";
+import { resolveMetaAuthForRequest } from "@/services/meta-auth";
+import { syncInstagramPublishedPost } from "@/services/instagram-sync";
 import {
   deletePost,
   getPost,
@@ -30,7 +32,19 @@ export async function GET(req: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const destinations = await getStoredPostDestinations(row.id);
+    let destinations = await getStoredPostDestinations(row.id);
+    if (row.status === "posted") {
+      try {
+        const resolvedAuth = await resolveMetaAuthForRequest(req, {
+          ownerHash: actor.ownerHash,
+        });
+        await syncInstagramPublishedPost(actor, resolvedAuth, row, destinations);
+        destinations = await getStoredPostDestinations(row.id);
+      } catch (error) {
+        console.warn("[api/posts/id] skipped Instagram sync", error);
+      }
+    }
+
     return NextResponse.json(attachPostDestinations(row, destinations));
   } catch (err) {
     console.error("[api/posts/id]", err);

@@ -4,6 +4,8 @@ import { apiError, apiOk } from "@/lib/api/v1/envelope";
 import { toPostResource } from "@/lib/api/v1/posts";
 import { resolveActorFromRequest } from "@/services/actors";
 import { getStoredPostDestinations } from "@/services/post-destinations";
+import { resolveMetaAuthForApi } from "@/services/meta-auth";
+import { syncInstagramPublishedPost } from "@/services/instagram-sync";
 import { getPost, updatePost } from "@/services/posts";
 
 export const runtime = "nodejs";
@@ -27,7 +29,19 @@ export async function GET(
       return apiError(404, "NOT_FOUND", "Post not found");
     }
 
-    const destinations = await getStoredPostDestinations(row.id);
+    let destinations = await getStoredPostDestinations(row.id);
+    if (row.status === "posted") {
+      try {
+        const resolvedAuth = await resolveMetaAuthForApi({
+          ownerHash: actor.ownerHash,
+        });
+        await syncInstagramPublishedPost(actor, resolvedAuth, row, destinations);
+        destinations = await getStoredPostDestinations(row.id);
+      } catch (error) {
+        console.warn("[api/v1/posts/id] skipped Instagram sync", error);
+      }
+    }
+
     return apiOk({ post: toPostResource(row, destinations) });
   } catch (error) {
     console.error("[api/v1/posts/id]", error);

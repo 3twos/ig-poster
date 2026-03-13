@@ -189,6 +189,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/services/posts.ts`: extracted post service functions used by the v1 API surface.
 - `src/services/brand-kits.ts`: extracted brand-kit service functions used by the v1 API surface.
 - `src/services/meta-auth.ts`: CLI-safe Meta auth resolution for bearer-auth publish and Meta place-search routes.
+- `src/services/instagram-sync.ts`: best-effort Instagram published-state reconciliation for stale or incomplete local destination metadata on post-detail reads.
 - `src/services/publish-jobs.ts`: extracted publish-job service functions used by the v1 API surface.
 - `src/services/status.ts`: aggregated CLI status summaries for actor auth, Meta readiness, LLM providers, and publish-window usage.
 - `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
