@@ -212,6 +212,12 @@ export type OverlayBlock = z.infer<typeof OverlayBlockSchema>;
 export type CustomOverlayBlock = z.infer<typeof CustomOverlayBlockSchema>;
 export type OverlayLayout = z.infer<typeof OverlayLayoutSchema>;
 export type LogoPosition = z.infer<typeof LogoPositionSchema>;
+export type OverlayGeometryIssue = {
+  type: "overlap" | "out-of-bounds";
+  key: CanonicalOverlayKey;
+  relatedKey?: CanonicalOverlayKey;
+  message: string;
+};
 export type PublishOutcome = z.infer<typeof PublishOutcomeSchema>;
 
 export const DEFAULT_LOGO_POSITION: LogoPosition = {
@@ -914,6 +920,84 @@ export const fitOverlayLayoutToCopy = (
   }
 
   return next;
+};
+
+const CANONICAL_OVERLAY_LABELS: Record<CanonicalOverlayKey, string> = {
+  hook: "Hook",
+  headline: "Headline",
+  supportingText: "Body",
+  cta: "CTA",
+};
+
+export const analyzeCanonicalOverlayLayout = (input: {
+  layout: CreativeLayout;
+  copy: {
+    hook: string;
+    headline: string;
+    supportingText: string;
+    cta?: string;
+  };
+  overlayLayout?: Partial<OverlayLayout> | null;
+}): OverlayGeometryIssue[] => {
+  const layout = normalizeOverlayLayout(input.layout, input.overlayLayout);
+  const orderedKeys: CanonicalOverlayKey[] = [
+    "hook",
+    "headline",
+    "supportingText",
+    "cta",
+  ];
+  const copyByKey: Record<CanonicalOverlayKey, string> = {
+    hook: input.copy.hook,
+    headline: input.copy.headline,
+    supportingText: input.copy.supportingText,
+    cta: input.copy.cta ?? "",
+  };
+  const activeKeys = orderedKeys.filter((key) => {
+    const block = layout[key];
+    return (block.visible ?? true) && copyByKey[key].trim().length > 0;
+  });
+
+  const issues: OverlayGeometryIssue[] = [];
+
+  for (const key of activeKeys) {
+    const block = layout[key];
+    const rightEdge = block.x + block.width;
+    const bottomEdge = block.y + block.height;
+
+    if (rightEdge > 100.1) {
+      issues.push({
+        type: "out-of-bounds",
+        key,
+        message: `${CANONICAL_OVERLAY_LABELS[key]} extends beyond the right edge`,
+      });
+    }
+
+    if (bottomEdge > 100.1) {
+      issues.push({
+        type: "out-of-bounds",
+        key,
+        message: `${CANONICAL_OVERLAY_LABELS[key]} extends below the canvas`,
+      });
+    }
+  }
+
+  for (let index = 1; index < activeKeys.length; index += 1) {
+    const previousKey = activeKeys[index - 1];
+    const key = activeKeys[index];
+    const previousBottom = layout[previousKey].y + layout[previousKey].height;
+    const top = layout[key].y;
+
+    if (top + 0.1 < previousBottom) {
+      issues.push({
+        type: "overlap",
+        key,
+        relatedKey: previousKey,
+        message: `${CANONICAL_OVERLAY_LABELS[previousKey]} overlaps ${CANONICAL_OVERLAY_LABELS[key]}`,
+      });
+    }
+  }
+
+  return issues;
 };
 
 export const createFittedOverlayLayout = (

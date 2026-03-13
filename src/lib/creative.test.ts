@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  analyzeCanonicalOverlayLayout,
   applyRefinementPlan,
   GenerationRequestSchema,
   applyLayoutCopyBudget,
@@ -775,6 +776,63 @@ describe("creative helpers", () => {
 
     expect(fitted.headline.height).toBeGreaterThanOrEqual(12.04);
     expect(fitted.headline.height).toBe(12.1);
+  });
+
+  it("detects canonical overlaps and out-of-bounds blocks", () => {
+    const layout = createDefaultOverlayLayout("hero-quote");
+    layout.headline.y = 68;
+    layout.headline.height = 20;
+    layout.supportingText.y = 84;
+    layout.supportingText.height = 18;
+    layout.cta.y = 97;
+    layout.cta.height = 6;
+
+    const issues = analyzeCanonicalOverlayLayout({
+      layout: "hero-quote",
+      copy: {
+        hook: "Hook",
+        headline: "Headline",
+        supportingText: "Body",
+        cta: "CTA",
+      },
+      overlayLayout: layout,
+    });
+
+    expect(issues.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([
+        "Headline overlaps Body",
+        "CTA extends below the canvas",
+      ]),
+    );
+  });
+
+  it("reports no canonical geometry issues for fitted layouts", () => {
+    const fitted = createFittedOverlayLayout(
+      {
+        ...makeVariant("geometry-clean", "single-image"),
+        layout: "split-story",
+        hook: "Practical hook",
+        headline: "A clean headline that still needs a real layout pass",
+        supportingText:
+          "Supporting text with enough detail to exercise the stack without forcing an invalid layout.",
+        cta: "Visit profile",
+      },
+      "4:5",
+    );
+
+    const issues = analyzeCanonicalOverlayLayout({
+      layout: "split-story",
+      copy: {
+        hook: "Practical hook",
+        headline: "A clean headline that still needs a real layout pass",
+        supportingText:
+          "Supporting text with enough detail to exercise the stack without forcing an invalid layout.",
+        cta: "Visit profile",
+      },
+      overlayLayout: fitted,
+    });
+
+    expect(issues).toHaveLength(0);
   });
 
   it("clamps auto-fit blocks to valid sizes and safe stack bounds", () => {
