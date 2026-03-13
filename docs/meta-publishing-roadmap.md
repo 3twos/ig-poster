@@ -52,15 +52,26 @@ This document tracks the Meta/Instagram content publishing rollout in this repo 
    - Added remote Facebook cancel/reschedule handling, browser/cron reconciliation for shadow jobs, and best-effort imports of compatible scheduled Page posts created in Meta tools.
    - References: merged in PRs `#168`, `#171`.
 
+12. Facebook webhook-driven reconciliation
+   - Added Meta Page webhook ingestion so remote Facebook publish/cancel drift can trigger shadow-job reconciliation without waiting for planner load or cron polling.
+   - Reference: merged in PR `#180`.
+13. Browser dual-destination fanout
+   - Added a `Both` publish target in the browser composer so one action can publish or schedule to Facebook and Instagram together while preserving destination-specific queue state, sync state, and partial-failure reporting.
+   - Reference: merged in PR `#184`.
+14. Instagram publish-state reconciliation
+   - Successful Instagram publishes now do a best-effort Graph read for published permalink/timestamp metadata, then project that data back into `posts.publishHistory` and `post_destinations`.
+15. Instagram post-detail backfill sync
+   - Opening a posted post now does a best-effort Instagram published-state refresh when the app has a known media id but local destination metadata is stale or incomplete.
+
 ## In Progress
 
-1. Facebook webhook-driven reconciliation
-   - Trigger the Facebook shadow-job sync path from Meta Page webhooks and project Meta-side publish/cancel drift back into local queue + planner state faster.
-   - Goal: reduce the lag between changes made in Meta tools and what the app shows for remote-authoritative Facebook schedules.
+1. Broader Instagram published-state backfill
+   - Extend Instagram sync beyond post-detail reads so larger batches or manual reconciliation flows can refresh published destination metadata when immediate publish-time metadata was unavailable or older local rows need repair.
+   - Goal: keep Instagram destination records healthy without implying a publish-state webhook contract that Meta's public docs do not currently document.
 
 ## Remaining phases
 
-- No additional phases are queued right now. Extend this roadmap when the next concrete Meta publishing slice is selected.
+- Operational hardening remains after the current Instagram reconciliation work. Extend this roadmap when the next concrete Meta publishing slice is selected.
 
 ## Notes
 

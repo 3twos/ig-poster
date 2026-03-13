@@ -21,7 +21,10 @@ import {
   recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
 import { decryptString } from "@/lib/secure";
-import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
+import {
+  syncPublishedInstagramDestination,
+  upsertPostDestinationRemoteState,
+} from "@/services/post-destinations";
 import { executePublishJob } from "@/services/publish-executor";
 
 export const runtime = "nodejs";
@@ -320,13 +323,38 @@ export async function GET(req: Request) {
           usage.remaining = Math.max(usage.limit - usage.used, 0);
         }
         if (job.postId) {
-          await markPostPublished(
-            db,
-            job.ownerHash,
-            job.postId,
-            publish.publishId,
-            job.destination,
-          );
+          try {
+            await markPostPublished(
+              db,
+              job.ownerHash,
+              job.postId,
+              publish.publishId,
+              job.destination,
+              {
+                remotePermalink: publish.remotePermalink,
+                publishedAt: publish.publishedAt,
+              },
+            );
+          } catch {
+            // Preserve successful publish state even if post snapshot update fails.
+          }
+          if (job.destination === "instagram") {
+            try {
+            await syncPublishedInstagramDestination(db, {
+              postId: job.postId,
+              caption: job.caption,
+              firstComment: job.firstComment,
+              locationId: job.locationId,
+              userTags: job.userTags,
+              remoteObjectId: publish.publishId ?? null,
+              remoteContainerId: publish.creationId ?? null,
+              remotePermalink: publish.remotePermalink ?? null,
+              publishedAt: publish.publishedAt,
+            });
+            } catch {
+              // Preserve successful publish state even if destination sync fails.
+            }
+          }
         }
         if (isBlobEnabled() && job.outcomeContext && publish.publishId) {
           try {

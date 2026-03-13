@@ -262,6 +262,53 @@ export const upsertPostDestinationRemoteState = async (
   }, { isolationLevel: "serializable" });
 };
 
+export const syncPublishedInstagramDestination = async (
+  db: TransactionCapableDbExecutor,
+  input: {
+    postId: string;
+    caption?: string | null;
+    firstComment?: string | null;
+    locationId?: string | null;
+    userTags?: MetaScheduleRequest["userTags"] | null;
+    remoteObjectId?: string | null;
+    remoteContainerId?: string | null;
+    remotePermalink?: string | null;
+    publishedAt?: string | Date | null;
+  },
+) => {
+  const publishedAt = input.publishedAt instanceof Date
+    ? input.publishedAt
+    : input.publishedAt
+      ? new Date(input.publishedAt)
+      : new Date();
+  const normalizedPublishedAt = Number.isNaN(publishedAt.getTime())
+    ? new Date()
+    : publishedAt;
+  const syncedAt = new Date();
+
+  await upsertPostDestinationRemoteState(db, {
+    postId: input.postId,
+    destination: "instagram",
+    enabled: true,
+    syncMode: "app_managed",
+    desiredState: "published",
+    remoteState: "published",
+    caption: input.caption,
+    firstComment: input.firstComment,
+    locationId: input.locationId,
+    userTags: input.userTags,
+    publishAt: normalizedPublishedAt,
+    remoteObjectId: input.remoteObjectId ?? null,
+    remoteContainerId: input.remoteContainerId ?? null,
+    remotePermalink: input.remotePermalink ?? null,
+    remoteStatePayload: {
+      publishedAt: normalizedPublishedAt.toISOString(),
+    },
+    lastSyncedAt: syncedAt,
+    lastError: null,
+  });
+};
+
 export const syncPostDestinationsFromPublishSettings = async (
   db: DbExecutor,
   post: PostInsertLike,

@@ -61,6 +61,10 @@ export const markPostPublished = async (
   postId: string,
   publishId?: string,
   destination: PublishJobRow["destination"] = "instagram",
+  options: {
+    remotePermalink?: string;
+    publishedAt?: string;
+  } = {},
 ) => {
   const [existing] = await db
     .select({
@@ -72,22 +76,46 @@ export const markPostPublished = async (
 
   if (!existing) return;
 
-  const nextPublishHistory =
-    destination === "instagram"
-      ? [
-          ...(existing.publishHistory ?? []),
-          {
-            publishedAt: new Date().toISOString(),
-            igMediaId: publishId,
-          },
-        ]
-      : (existing.publishHistory ?? []);
+  const publishedAt = options.publishedAt
+    ? new Date(options.publishedAt)
+    : new Date();
+  const normalizedPublishedAt = Number.isNaN(publishedAt.getTime())
+    ? new Date()
+    : publishedAt;
+  const publishedAtIso = normalizedPublishedAt.toISOString();
+  const nextPublishHistory = (() => {
+    if (destination !== "instagram") {
+      return existing.publishHistory ?? [];
+    }
+
+    const history = [...(existing.publishHistory ?? [])];
+    const existingIndex = publishId
+      ? history.findIndex((entry) => entry.igMediaId === publishId)
+      : -1;
+
+    const nextEntry = {
+      publishedAt: publishedAtIso,
+      igMediaId: publishId,
+      igPermalink: options.remotePermalink,
+    };
+
+    if (existingIndex === -1) {
+      history.push(nextEntry);
+      return history;
+    }
+
+    history[existingIndex] = {
+      ...history[existingIndex],
+      ...nextEntry,
+    };
+    return history;
+  })();
 
   await db
     .update(posts)
     .set({
       status: "posted",
-      publishedAt: new Date(),
+      publishedAt: normalizedPublishedAt,
       updatedAt: new Date(),
       publishHistory: nextPublishHistory,
     })

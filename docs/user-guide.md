@@ -101,13 +101,14 @@
 
 11. Publish or schedule to Meta
    - Connect a Meta publishing pair in Settings (if not already connected).
-   - Use the destination selector in the publish section to choose Instagram or Facebook when both are available.
+   - Use the destination selector in the publish section to choose Instagram, Facebook, or Both when both destinations are available on the connected Meta pair.
    - Use `Post now` or `Post at` (date/time picker) in the publish section.
    - Use the dedicated `Post Caption` field as the source of truth for publish/schedule; the generated caption stays available as a suggestion.
-   - Optionally add a `First comment` in the publish section for Instagram; it is posted right after media publish.
+   - Optionally add a `First comment` in the publish section for Instagram; it is posted right after media publish. When you choose `Both`, that first comment still posts only on Instagram.
    - For Instagram reel posts, choose whether `Share reel to main feed` stays on or off before posting or scheduling.
-   - For Instagram single-image posts and reels, optionally search Meta places to fill `Location ID` (or paste the ID manually) and add structured `User tags`.
+   - For Instagram single-image posts and reels, optionally search Meta places to fill `Location ID` (or paste the ID manually) and add structured `User tags`. When you choose `Both`, those metadata fields stay Instagram-only and are omitted from the Facebook payload.
    - For Instagram carousel posts, tag each included image individually from the publish metadata editor. Carousel video items remain schedulable, but Meta does not accept user tags on carousel videos.
+   - Facebook still supports only single-image and single-video publishing, so `Both` is unavailable for carousel payloads.
    - The same `Post now` / `Post at` actions are available from each post row `...` menu in the sidebar, and they follow the currently selected publish destination.
    - Scheduling uses your browser's local timezone (shown next to the date-time field).
    - Open `Planner` from the publish section to review scheduled posts on a calendar, reschedule them, open the linked post, or move them back to draft.
@@ -119,6 +120,8 @@
 - Those Meta-synced Facebook shadow jobs can now be canceled or rescheduled directly from the planner/queue. Media swaps and other unsupported remote Facebook edits still require recreating the schedule or using Meta tools.
 - When the planner or active queue loads, IG Poster now does a best-effort import of compatible scheduled Facebook Page posts that already exist in Meta tools, so single-image and single-video Page schedules can show up in-app even when they were created outside IG Poster.
 - If you configure the Meta Page webhook, remote Facebook publish/cancel changes can trigger that same reconciliation path immediately instead of waiting for the next planner load or cron pass.
+- Successful Instagram publishes now also capture the remote Meta permalink and publish timestamp in the post record, which keeps destination sync state and downstream history closer to what actually published.
+- Opening a posted Instagram-backed post now also does a best-effort refresh when the app already knows the IG media id, which helps older posts fill in missing permalink or sync metadata without republishing them.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).
@@ -175,16 +178,17 @@
 - `ig watch` ingests supported local image/video files into the remote service by uploading each file and creating a draft post around it. In human mode or `--stream-json`, it keeps polling the directory for new files; in `--json` mode it performs a single scan pass and emits one summary envelope.
 - `ig mcp` runs a stdio MCP adapter over the CLI so local agents can call tools like `status`, `posts_list`, `generate_run`, `chat_ask`, `publish`, and `queue_list` through the same authenticated CLI surface.
 - On macOS, the editor asset panel now shows `Add from Photos`. The browser first probes the local companion bridge on `127.0.0.1:43123`. If the bridge is unavailable, the dialog falls back to the normal upload flow so your draft keeps moving.
-- If the bridge is available, the draft offers to open the native companion handoff. Once the companion exports a Photos selection into its managed cache, the web editor can import those files back into the current draft and run them through the normal upload pipeline automatically.
-- The repository contains the native companion scaffold under `companion/IGPosterCompanion`, but it is still a developer-facing build target rather than a packaged end-user install.
-- For local development on macOS, the repo now includes `./scripts/install-companion-bridge.zsh`, which builds the release bridge binary, installs it into your user Library, and writes a LaunchAgent so the browser and CLI can reach the bridge without keeping a separate `swift run` terminal open.
-- The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and will surface the incoming draft ID, profile, bridge origin, and return URL in-app once the browser handoff lands there. Packaging and URL-scheme registration are still pending, so this is a developer-facing scaffold step rather than an end-user flow yet.
+- If the bridge is available, the draft now also checks whether the native companion bundle is installed locally. When it is, the web app asks the bridge to open the native app and then waits for the exported Photos selection to come back through the localhost import path. If the bridge is running but the app bundle is missing, the dialog stays explicit and falls back to the normal upload flow instead of silently waiting.
+- The repository contains the native companion scaffold under `companion/IGPosterCompanion`, and the local installer now packages that into an unsigned `IG Poster Companion.app` bundle for development use on macOS.
+- For local development on macOS, the repo now includes `./scripts/install-companion-bridge.zsh`, which builds the release bridge binary, installs it into your user Library, installs `IG Poster Companion.app` into `~/Applications`, registers that app bundle with Launch Services by default, and writes a LaunchAgent so the browser and CLI can reach the bridge without keeping a separate `swift run` terminal open.
+- The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and can also accept that same handoff as a startup argument when the local bridge opens the app bundle directly. Signed distribution is still pending, so this is a developer-friendly local install path rather than the final end-user packaging flow.
 - The native companion shell now includes a real PhotosPicker button for ordered image/video selection, exports those selections into a managed local cache, and persists a shared manifest that the localhost bridge can serve back to the browser.
 - The companion now persists the active handoff, selection summary, and exported asset manifest into a local shared state file, and the localhost bridge surfaces that shared state for browser/CLI/MCP coordination.
 - On macOS, the localhost bridge now also exposes PhotoKit-backed `GET /v1/photos/recent` and `GET /v1/photos/search`, and the CLI preview exposes those as `ig photos recent` and `ig photos search`.
 - `ig mcp` now mirrors that local enumeration path for agents with `photos_recent` and `photos_search` tools, so local automation can inspect the Photos library without going through the remote service first.
-- The CLI preview now also exposes `ig photos import [--ids <id,id,...>]`, which resolves exported local bridge assets and uploads them into the normal remote `/api/v1/assets` flow. `ig mcp` mirrors that with a `photos_import` tool.
+- The CLI preview now also exposes `ig photos import [--ids <id,id,...>]`, which resolves exported local bridge assets and uploads them into the normal remote `/api/v1/assets` flow, plus `ig photos propose`, which scores local Photos assets, creates a draft, and runs generation. `ig mcp` mirrors those with `photos_import` and `photos_propose` tools.
 - The first recent/search request may prompt macOS for Photos access. If access is denied or unavailable, the bridge returns `PHOTOS_PERMISSION_REQUIRED` and the CLI exits with a clear error instead of hanging.
+- `./scripts/install-companion-bridge.zsh` now installs both the localhost bridge and a local `~/Applications/IG Poster Companion.app` bundle, then registers that app with Launch Services by default so the web editor can ask the bridge to open the native picker flow directly.
 
 ### Planned macOS Apple Photos workflow
 
@@ -195,7 +199,8 @@ The direction is partially shipped now. Today you can:
 - import that exported selection back into the current draft
 - enumerate local Photos assets with `ig photos recent` / `ig photos search`
 - import selected exported assets into IG Poster with `ig photos import`
-- call the same enumeration/import path from `ig mcp` with `photos_recent` / `photos_search` / `photos_import`
+- create a draft proposal directly from local Photos with `ig photos propose`
+- call the same enumeration/import/propose path from `ig mcp` with `photos_recent` / `photos_search` / `photos_import` / `photos_propose`
 
 Still planned:
 
@@ -209,11 +214,11 @@ Available now:
 - `ig photos recent --since 7d --limit 20`
 - `ig photos search --album Favorites --media image`
 - `ig photos import --ids <asset-id,...>`
+- `ig photos propose --since 7d --limit 20 --count 4 --brand-kit <id> --draft-title "Weekly picks"`
 
-Planned next commands:
+Still planned:
 
 - `ig photos pick --create-draft --brand-kit <id>`
-- `ig photos propose --since 7d --limit 20 --brand-kit <id>`
 
 Expected behavior:
 
@@ -227,8 +232,8 @@ If the macOS companion app is not installed or not reachable:
 - the web app should offer an install prompt plus a fallback to the normal file-upload flow
 - CLI/MCP should return a structured error with remediation instead of hanging or failing opaquely
 - for internal development, you can run `swift run ig-poster-companion-bridge` from `companion/IGPosterCompanion` to satisfy the web probe and exercise the handoff path
-- for internal development, you can also run `./scripts/install-companion-bridge.zsh` once to install the bridge as `~/Library/Application Support/IGPosterCompanion/bin/ig-poster-companion-bridge` and load `~/Library/LaunchAgents/com.3twos.igposter.bridge.plist`
-- for internal development, `swift run ig-poster-companion` now includes a `Load sample handoff` action so you can inspect the native handoff state even before the app is packaged and registered with Launch Services
+- for internal development, you can also run `./scripts/install-companion-bridge.zsh` once to install the bridge as `~/Library/Application Support/IGPosterCompanion/bin/ig-poster-companion-bridge`, install `~/Applications/IG Poster Companion.app`, and load `~/Library/LaunchAgents/com.3twos.igposter.bridge.plist`
+- for internal development, `swift run ig-poster-companion` still includes a `Load sample handoff` action so you can inspect the native handoff state without going through the web editor
 - for internal development, that same shell now includes a native Photos picker button that exports chosen items into the local companion cache
 - for internal development, `swift run ig-poster-companion-bridge --print-health` now also reflects the persisted selection summary when the companion app has an active draft/selection context
 - for internal development, `ig photos recent` / `ig photos search` and the MCP `photos_recent` / `photos_search` tools now hit that same bridge directly, so you can validate the local PhotoKit path without packaging the app first

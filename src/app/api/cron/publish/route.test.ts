@@ -40,6 +40,7 @@ vi.mock("@/lib/secure", () => ({
 }));
 
 vi.mock("@/services/post-destinations", () => ({
+  syncPublishedInstagramDestination: vi.fn(),
   upsertPostDestinationRemoteState: vi.fn(),
 }));
 
@@ -62,7 +63,10 @@ import {
   markPostPublished,
   recoverStaleProcessingJobs,
 } from "@/lib/publish-jobs";
-import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
+import {
+  syncPublishedInstagramDestination,
+  upsertPostDestinationRemoteState,
+} from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
@@ -80,6 +84,9 @@ const mockedMarkPostPublished = vi.mocked(markPostPublished);
 const mockedRecoverStaleProcessingJobs = vi.mocked(recoverStaleProcessingJobs);
 const mockedUpsertPostDestinationRemoteState = vi.mocked(
   upsertPostDestinationRemoteState,
+);
+const mockedSyncPublishedInstagramDestination = vi.mocked(
+  syncPublishedInstagramDestination,
 );
 
 const baseJob = {
@@ -131,6 +138,7 @@ describe("GET /api/cron/publish", () => {
       windowStart: new Date("2026-03-06T00:00:00.000Z"),
     });
     mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
+    mockedSyncPublishedInstagramDestination.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -158,6 +166,8 @@ describe("GET /api/cron/publish", () => {
       mode: "image",
       creationId: "create_1",
       publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
     });
     mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
 
@@ -184,6 +194,20 @@ describe("GET /api/cron/publish", () => {
       baseJob.postId,
       "publish_1",
       "instagram",
+      {
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      },
+    );
+    expect(mockedSyncPublishedInstagramDestination).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: baseJob.postId,
+        remoteObjectId: "publish_1",
+        remoteContainerId: "create_1",
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      }),
     );
   });
 
@@ -291,6 +315,10 @@ describe("GET /api/cron/publish", () => {
       baseJob.postId,
       "page_1_1",
       "facebook",
+      {
+        remotePermalink: undefined,
+        publishedAt: undefined,
+      },
     );
   });
 
@@ -543,6 +571,43 @@ describe("GET /api/cron/publish", () => {
       expect.objectContaining({ id: "job_1" }),
       expect.objectContaining({ warningDetail: "comment denied" }),
     );
+  });
+
+  it("keeps publish success when Instagram destination sync fails", async () => {
+    mockedClaimDuePublishJobs.mockResolvedValue([{ ...baseJob }] as never);
+    mockedGetEnvMetaAuth.mockReturnValue({
+      accessToken: "token",
+      instagramUserId: "ig-id",
+      pageId: "page_1",
+      graphVersion: "v22.0",
+    });
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
+    });
+    mockedCompletePublishJobSuccess.mockResolvedValue(baseJob);
+    mockedSyncPublishedInstagramDestination.mockRejectedValueOnce(
+      new Error("sync failed"),
+    );
+
+    const req = new Request("https://app.example.com/api/cron/publish", {
+      headers: { authorization: "Bearer cron-secret" },
+    });
+
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      claimed: 1,
+      published: 1,
+      failed: 0,
+      errorCount: 0,
+    });
+    expect(mockedCompletePublishJobSuccess).toHaveBeenCalledTimes(1);
+    expect(mockedCompletePublishJobFailure).not.toHaveBeenCalled();
   });
 
   it("records failures and retry transitions", async () => {

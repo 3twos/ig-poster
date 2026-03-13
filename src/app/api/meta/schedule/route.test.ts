@@ -13,6 +13,7 @@ vi.mock("@/services/meta-auth", () => ({
 }));
 
 vi.mock("@/services/post-destinations", () => ({
+  syncPublishedInstagramDestination: vi.fn(),
   upsertPostDestinationRemoteState: vi.fn(),
 }));
 
@@ -75,7 +76,10 @@ import {
 } from "@/lib/publish-jobs";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 import { resolveMetaAuthForRequest } from "@/services/meta-auth";
-import { upsertPostDestinationRemoteState } from "@/services/post-destinations";
+import {
+  syncPublishedInstagramDestination,
+  upsertPostDestinationRemoteState,
+} from "@/services/post-destinations";
 
 const mockedGetDb = vi.mocked(getDb);
 const mockedReadWorkspace = vi.mocked(readWorkspaceSessionFromRequest);
@@ -94,6 +98,9 @@ const mockedMarkPostPublished = vi.mocked(markPostPublished);
 const mockedMarkPostScheduled = vi.mocked(markPostScheduled);
 const mockedUpsertPostDestinationRemoteState = vi.mocked(
   upsertPostDestinationRemoteState,
+);
+const mockedSyncPublishedInstagramDestination = vi.mocked(
+  syncPublishedInstagramDestination,
 );
 
 const session = {
@@ -202,6 +209,7 @@ describe("POST /api/meta/schedule", () => {
     );
     mockedMarkPostScheduled.mockResolvedValue(undefined);
     mockedUpsertPostDestinationRemoteState.mockResolvedValue(undefined);
+    mockedSyncPublishedInstagramDestination.mockResolvedValue(undefined);
   });
 
   it("returns 401 when workspace auth is missing", async () => {
@@ -276,6 +284,30 @@ describe("POST /api/meta/schedule", () => {
     expect(res.status).toBe(400);
     expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
     expect(mockedPublishFacebookPageContent).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when publishing to both with carousel media", async () => {
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        target: "both",
+        caption: "Invalid",
+        media: {
+          mode: "carousel",
+          items: [
+            { mediaType: "image", url: "https://cdn.example.com/c1.jpg" },
+            { mediaType: "image", url: "https://cdn.example.com/c2.jpg" },
+          ],
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
+    expect(mockedPublishFacebookPageContent).not.toHaveBeenCalled();
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
   });
 
   it("queues a scheduled publish job", async () => {
@@ -505,6 +537,8 @@ describe("POST /api/meta/schedule", () => {
       mode: "image",
       creationId: "create_1",
       publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
     });
 
     const req = new Request("https://app.example.com/api/meta/schedule", {
@@ -583,6 +617,143 @@ describe("POST /api/meta/schedule", () => {
     expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
   });
 
+  it("publishes to both destinations immediately and returns per-destination results", async () => {
+    mockedReserveImmediatePublishJob
+      .mockResolvedValueOnce({
+        ...reservedJob,
+        id: "job_fb_1",
+        destination: "facebook",
+        remoteAuthority: "remote_authoritative",
+      } as never)
+      .mockResolvedValueOnce({
+        ...reservedJob,
+        id: "job_ig_1",
+        destination: "instagram",
+      } as never);
+    mockedPublishFacebookPageContent.mockResolvedValue({
+      mode: "image",
+      creationId: "photo_1",
+      publishId: "page_1_1",
+    });
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        target: "both",
+        caption: "Now",
+        firstComment: "First comment",
+        locationId: "12345",
+        userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      status: "published",
+      target: "both",
+      results: [
+        expect.objectContaining({
+          destination: "facebook",
+          publishId: "page_1_1",
+        }),
+        expect.objectContaining({
+          destination: "instagram",
+          publishId: "publish_1",
+          firstCommentStatus: "posted",
+        }),
+      ],
+    });
+    expect(mockedReserveImmediatePublishJob).toHaveBeenCalledTimes(2);
+    expect(mockedPublishFacebookPageContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        imageUrl: "https://cdn.example.com/image.jpg",
+        caption: "Now",
+      }),
+      expect.objectContaining({ pageId: "page_1" }),
+    );
+    expect(mockedPublishInstagramContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        imageUrl: "https://cdn.example.com/image.jpg",
+        caption: "Now",
+        locationId: "12345",
+        userTags: [{ username: "handle", x: 0.25, y: 0.75 }],
+      }),
+      expect.objectContaining({ accessToken: "token" }),
+    );
+    expect(mockedPublishInstagramFirstComment).toHaveBeenCalledWith(
+      "publish_1",
+      "First comment",
+      expect.objectContaining({ accessToken: "token" }),
+    );
+  });
+
+  it("returns partial success when one both destination fails", async () => {
+    mockedReserveImmediatePublishJob
+      .mockResolvedValueOnce({
+        ...reservedJob,
+        id: "job_fb_1",
+        destination: "facebook",
+        remoteAuthority: "remote_authoritative",
+      } as never)
+      .mockResolvedValueOnce({
+        ...reservedJob,
+        id: "job_ig_1",
+        destination: "instagram",
+      } as never);
+    mockedPublishFacebookPageContent.mockRejectedValue(
+      new Error("Facebook publish failed"),
+    );
+    mockedPublishInstagramContent.mockResolvedValue({
+      mode: "image",
+      creationId: "create_1",
+      publishId: "publish_1",
+    });
+
+    const req = new Request("https://app.example.com/api/meta/schedule", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        target: "both",
+        caption: "Now",
+        media: { mode: "image", imageUrl: "https://cdn.example.com/image.jpg" },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      status: "partial",
+      target: "both",
+      results: [
+        expect.objectContaining({
+          destination: "instagram",
+          publishId: "publish_1",
+        }),
+      ],
+      errors: [
+        expect.objectContaining({
+          destination: "facebook",
+          error: "Facebook publish failed",
+        }),
+      ],
+    });
+    expect(mockedCompletePublishJobFailure).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "job_fb_1" }),
+      "Facebook publish failed",
+    );
+  });
+
   it("defaults reel share-to-feed to true for immediate publish", async () => {
     mockedPublishInstagramContent.mockResolvedValue({
       mode: "reel",
@@ -633,6 +804,8 @@ describe("POST /api/meta/schedule", () => {
       mode: "image",
       creationId: "create_1",
       publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
     });
 
     const req = new Request("https://app.example.com/api/meta/schedule", {
@@ -664,6 +837,20 @@ describe("POST /api/meta/schedule", () => {
       "post_1",
       "publish_1",
       "instagram",
+      {
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      },
+    );
+    expect(mockedSyncPublishedInstagramDestination).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        postId: "post_1",
+        remoteObjectId: "publish_1",
+        remoteContainerId: "create_1",
+        remotePermalink: "https://instagram.com/p/publish_1",
+        publishedAt: "2026-03-13T16:00:00.000Z",
+      }),
     );
   });
 

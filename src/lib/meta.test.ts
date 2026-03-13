@@ -4,6 +4,7 @@ import {
   deleteFacebookPagePost,
   getFacebookPagePublishState,
   getEnvMetaAuth,
+  getInstagramMediaPublishState,
   getMediaInsights,
   listFacebookPageScheduledPosts,
   publishFacebookPageContent,
@@ -110,6 +111,53 @@ describe("getMediaInsights", () => {
 describe("publishInstagramContent", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("captures Instagram permalink and publish timestamp after publish", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "creation_1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: "publish_1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: "publish_1",
+          permalink: "https://instagram.com/p/publish_1",
+          timestamp: "2026-03-13T16:00:00+00:00",
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishInstagramContent(
+        {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+          caption: "Caption",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toMatchObject({
+      mode: "image",
+      creationId: "creation_1",
+      publishId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
+    });
+
+    expect(fetchMock.mock.calls[2]?.[0]).toBeInstanceOf(URL);
+    expect((fetchMock.mock.calls[2]?.[0] as URL).toString()).toBe(
+      "https://graph.facebook.com/v22.0/publish_1?access_token=token&fields=id%2Cpermalink%2Ctimestamp",
+    );
   });
 
   it("passes location id and user tags for single-image publish", async () => {
@@ -242,6 +290,38 @@ describe("publishInstagramContent", () => {
     const createCall = fetchMock.mock.calls[0];
     const createBody = createCall?.[1]?.body as URLSearchParams;
     expect(createBody.get("share_to_feed")).toBe("false");
+  });
+});
+
+describe("getInstagramMediaPublishState", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns Instagram media permalink state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "publish_1",
+          permalink: "https://instagram.com/p/publish_1",
+          timestamp: "2026-03-13T16:00:00+00:00",
+        }),
+      }),
+    );
+
+    await expect(
+      getInstagramMediaPublishState("publish_1", {
+        accessToken: "token",
+        instagramUserId: "ig-id",
+        graphVersion: "v22.0",
+      }),
+    ).resolves.toEqual({
+      remoteObjectId: "publish_1",
+      remotePermalink: "https://instagram.com/p/publish_1",
+      publishedAt: "2026-03-13T16:00:00.000Z",
+    });
   });
 });
 

@@ -1,7 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { IgPosterClient } from "@/cli/client";
 import { runPhotosCommand } from "@/cli/commands/photos";
-import { EXIT_CODES } from "@/cli/errors";
+import { CliError, EXIT_CODES } from "@/cli/errors";
+
+const createStreamResponse = (events: unknown[]) =>
+  new Response(
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
+    {
+      headers: {
+        "content-type": "text/event-stream",
+      },
+    },
+  );
 
 describe("runPhotosCommand", () => {
   afterEach(() => {
@@ -270,5 +281,352 @@ describe("runPhotosCommand", () => {
     expect(stdout).toHaveBeenCalledWith(
       expect.stringContaining('"IMG_1001.JPG"'),
     );
+  });
+
+  it("proposes a draft from scored Apple Photos assets and runs generation", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-03-13T18:00:00Z"));
+    const requestStream = vi
+      .spyOn(IgPosterClient.prototype, "requestStream")
+      .mockResolvedValue(
+        createStreamResponse([
+          {
+            type: "run-start",
+            runId: "run-1",
+            label: "Generate",
+          },
+          {
+            type: "run-complete",
+            summary: "Generated draft concepts.",
+            fallbackUsed: false,
+            result: {
+              strategy: "Lead with the strongest recent proof asset.",
+              variants: [
+                {
+                  id: "variant-1",
+                  name: "Hero",
+                  postType: "single-image",
+                  score: 0.91,
+                },
+                {
+                  id: "variant-2",
+                  name: "Editorial",
+                  postType: "single-image",
+                  score: 0.77,
+                },
+              ],
+            },
+          },
+        ]),
+      );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/v1/photos/recent") {
+          return new Response(
+            JSON.stringify({
+              assets: [
+                {
+                  id: "asset-1",
+                  filename: "IMG_1001.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-13T17:00:00Z",
+                  favorite: false,
+                  albumNames: ["Camera Roll"],
+                },
+                {
+                  id: "asset-2",
+                  filename: "IMG_1002.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-12T12:00:00Z",
+                  favorite: true,
+                  albumNames: ["Favorites"],
+                },
+                {
+                  id: "asset-3",
+                  filename: "Clip.mov",
+                  mediaType: "video",
+                  createdAt: "2026-03-13T17:30:00Z",
+                  favorite: false,
+                  albumNames: ["Camera Roll"],
+                },
+              ],
+              fetchedAt: "2026-03-13T18:05:00Z",
+              query: {
+                mode: "recent",
+                since: "7d",
+                limit: 3,
+              },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/photos/import") {
+          expect(init?.method).toBe("POST");
+          expect(init?.body).toBe(JSON.stringify({ ids: ["asset-2", "asset-1"] }));
+
+          return new Response(
+            JSON.stringify({
+              importedAt: "2026-03-13T18:10:00Z",
+              assets: [
+                {
+                  id: "asset-2",
+                  filename: "IMG_1002.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-12T12:00:00Z",
+                  favorite: true,
+                  albumNames: ["Favorites"],
+                  exportPath: "/tmp/IMG_1002.JPG",
+                  downloadUrl: "http://127.0.0.1:43123/v1/photos/exports/asset-2",
+                },
+                {
+                  id: "asset-1",
+                  filename: "IMG_1001.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-13T17:00:00Z",
+                  favorite: false,
+                  albumNames: ["Camera Roll"],
+                  exportPath: "/tmp/IMG_1001.JPG",
+                  downloadUrl: "http://127.0.0.1:43123/v1/photos/exports/asset-1",
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/photos/exports/asset-2") {
+          return new Response(new Blob(["asset-2"], { type: "image/jpeg" }), {
+            status: 200,
+            headers: { "Content-Type": "image/jpeg" },
+          });
+        }
+
+        if (url.pathname === "/v1/photos/exports/asset-1") {
+          return new Response(new Blob(["asset-1"], { type: "image/jpeg" }), {
+            status: 200,
+            headers: { "Content-Type": "image/jpeg" },
+          });
+        }
+
+        throw new Error(`Unexpected URL: ${url.toString()}`);
+      }),
+    );
+
+    let uploadCall = 0;
+    const requestJson = vi.fn(async (request: {
+      path: string;
+      body?: unknown;
+    }) => {
+      if (request.path === "/api/v1/assets") {
+        uploadCall += 1;
+        const fileName = uploadCall === 1 ? "IMG_1002.JPG" : "IMG_1001.JPG";
+        return {
+          ok: true,
+          data: {
+            asset: {
+              id: `assets/${uploadCall}`,
+              name: fileName,
+              url: `https://blob.example.com/${fileName}`,
+              pathname: `assets/${uploadCall}-${fileName}`,
+              size: 7,
+              folder: "assets",
+              contentType: "image/jpeg",
+            },
+          },
+        };
+      }
+
+      if (request.path === "/api/v1/posts") {
+        expect(request.body).toMatchObject({
+          title: "Weekly picks",
+          brandKitId: "kit-1",
+          assets: [
+            expect.objectContaining({
+              id: "assets/1",
+              name: "IMG_1002.JPG",
+              mediaType: "image",
+            }),
+            expect.objectContaining({
+              id: "assets/2",
+              name: "IMG_1001.JPG",
+              mediaType: "image",
+            }),
+          ],
+        });
+
+        return {
+          ok: true,
+          data: {
+            post: {
+              id: "post-1",
+              title: "Weekly picks",
+              status: "draft",
+            },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected request path: ${request.path}`);
+    });
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+
+    await runPhotosCommand(
+      {
+        client: {
+          requestJson,
+        },
+        host: "https://ig-poster.example.com",
+        token: "cli-token",
+        globalOptions: {
+          json: true,
+          streamJson: false,
+          jq: undefined,
+          quiet: false,
+          noColor: false,
+          yes: false,
+          dryRun: false,
+          timeoutMs: 1_000,
+        },
+      } as never,
+      [
+        "propose",
+        "--since",
+        "7d",
+        "--limit",
+        "3",
+        "--count",
+        "2",
+        "--brand-kit",
+        "kit-1",
+        "--draft-title",
+        "Weekly picks",
+      ],
+    );
+
+    expect(requestStream).toHaveBeenCalledWith({
+      method: "POST",
+      path: "/api/v1/generate",
+      headers: {
+        accept: "text/event-stream",
+      },
+      body: { postId: "post-1" },
+    });
+    expect(
+      (requestStream.mock.instances[0] as IgPosterClient | undefined)?.timeoutMs,
+    ).toBe(120_000);
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"draftUrl": "https://ig-poster.example.com/?post=post-1"'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"topVariants"'),
+    );
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('"variant-1"'),
+    );
+  });
+
+  it("preserves remote API CliError exit codes during propose failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = input instanceof URL ? input : new URL(String(input));
+
+        if (url.pathname === "/v1/photos/recent") {
+          return new Response(
+            JSON.stringify({
+              assets: [
+                {
+                  id: "asset-1",
+                  filename: "IMG_1001.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-13T17:00:00Z",
+                  favorite: false,
+                  albumNames: ["Camera Roll"],
+                },
+              ],
+              fetchedAt: "2026-03-13T18:05:00Z",
+              query: {
+                mode: "recent",
+                since: "7d",
+                limit: 1,
+              },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/photos/import") {
+          return new Response(
+            JSON.stringify({
+              importedAt: "2026-03-13T18:10:00Z",
+              assets: [
+                {
+                  id: "asset-1",
+                  filename: "IMG_1001.JPG",
+                  mediaType: "image",
+                  createdAt: "2026-03-13T17:00:00Z",
+                  favorite: false,
+                  albumNames: ["Camera Roll"],
+                  exportPath: "/tmp/IMG_1001.JPG",
+                  downloadUrl: "http://127.0.0.1:43123/v1/photos/exports/asset-1",
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.pathname === "/v1/photos/exports/asset-1") {
+          return new Response(new Blob(["asset-1"], { type: "image/jpeg" }), {
+            status: 200,
+            headers: { "Content-Type": "image/jpeg" },
+          });
+        }
+
+        throw new Error(`Unexpected URL: ${url.toString()}`);
+      }),
+    );
+
+    const requestJson = vi
+      .fn()
+      .mockRejectedValue(new CliError("Unauthorized", EXIT_CODES.auth));
+
+    await expect(
+      runPhotosCommand(
+        {
+          client: { requestJson },
+          globalOptions: {
+            json: false,
+            streamJson: false,
+            jq: undefined,
+            quiet: false,
+            noColor: false,
+            yes: false,
+            dryRun: false,
+          },
+        } as never,
+        ["propose", "--since", "7d", "--limit", "1", "--count", "1"],
+      ),
+    ).rejects.toMatchObject({
+      message: "Unauthorized",
+      exitCode: EXIT_CODES.auth,
+    });
   });
 });
