@@ -116,6 +116,7 @@
    - After a post is successfully published, IG Poster marks it `Posted` and switches it to a read-only snapshot view. Posted posts cannot be edited or deleted; archive them to hide them from the main list, or duplicate them to create a new draft.
    - Facebook schedules are now created remotely on the connected Page as soon as you schedule them. The app stores a Meta-synced shadow job so the planner and queue still show the item while cron reconciles the final published state.
    - Those Meta-synced Facebook shadow jobs can now be canceled or rescheduled directly from the planner/queue. Media swaps and other unsupported remote Facebook edits still require recreating the schedule or using Meta tools.
+   - When the planner or active queue loads, IG Poster now does a best-effort import of compatible scheduled Facebook Page posts that already exist in Meta tools, so single-image and single-video Page schedules can show up in-app even when they were created outside IG Poster.
 
 12. Use the AI Chat assistant
    - Switch to the Chat tab in the right panel (or tap the Chat button on mobile).

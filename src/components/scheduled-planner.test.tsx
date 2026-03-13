@@ -97,6 +97,9 @@ describe("ScheduledPlanner", () => {
     ).not.toBeNull();
     expect(screen.getByText("Instagram")).not.toBeNull();
     expect(screen.getByText("App-managed")).not.toBeNull();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/publish-jobs?status=queued,processing&limit=50&syncMeta=facebook",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /open post/i }));
     expect(onSelectPost).toHaveBeenCalledWith("post-1");
