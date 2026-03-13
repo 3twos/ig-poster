@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  deleteFacebookPagePost,
   getFacebookPagePublishState,
   getEnvMetaAuth,
   getMediaInsights,
@@ -8,6 +9,7 @@ import {
   publishInstagramContent,
   publishInstagramFirstComment,
   searchMetaLocations,
+  updateFacebookPagePost,
 } from "@/lib/meta";
 
 describe("meta auth/env helpers", () => {
@@ -439,6 +441,157 @@ describe("getFacebookPagePublishState", () => {
       isPublished: false,
       scheduledPublishTime: "2026-03-13T18:00:00.000Z",
       remotePermalink: undefined,
+    });
+  });
+});
+
+describe("updateFacebookPagePost", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("updates scheduled Facebook page posts by post id", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: "photo_1",
+          post_id: "page_1_1",
+          published: false,
+          scheduled_publish_time: "2026-03-13T18:00:00.000Z",
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      updateFacebookPagePost(
+        {
+          mediaMode: "image",
+          publishId: "page_1_1",
+          creationId: "photo_1",
+          caption: "Updated caption",
+          publishAt: "2026-03-13T18:00:00.000Z",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toEqual({
+      remoteObjectId: "page_1_1",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+      isPublished: false,
+      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      remotePermalink: undefined,
+    });
+
+    const updateCall = fetchMock.mock.calls[0];
+    const updateBody = updateCall?.[1]?.body as URLSearchParams;
+    expect(updateCall?.[0]).toBe("https://graph.facebook.com/v22.0/page_1_1");
+    expect(updateBody.get("message")).toBe("Updated caption");
+    expect(updateBody.get("published")).toBe("false");
+    expect(updateBody.get("published_content_type")).toBe("SCHEDULED");
+  });
+
+  it("falls back to creation id update when post id update fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: { message: "not found" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: { message: "not found" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: "video_1",
+          published: false,
+          scheduled_publish_time: "2026-03-13T18:00:00.000Z",
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      updateFacebookPagePost(
+        {
+          mediaMode: "reel",
+          publishId: "page_1_1",
+          creationId: "video_1",
+          caption: "Updated caption",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toEqual({
+      remoteObjectId: "video_1",
+      publishId: "page_1_1",
+      creationId: "video_1",
+      isPublished: false,
+      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      remotePermalink: undefined,
+    });
+
+    const fallbackCall = fetchMock.mock.calls[1];
+    const fallbackBody = fallbackCall?.[1]?.body as URLSearchParams;
+    expect(fallbackCall?.[0]).toBe("https://graph.facebook.com/v22.0/video_1");
+    expect(fallbackBody.get("description")).toBe("Updated caption");
+  });
+});
+
+describe("deleteFacebookPagePost", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("deletes scheduled Facebook page posts by post id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      deleteFacebookPagePost(
+        {
+          publishId: "page_1_1",
+          creationId: "photo_1",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toEqual({
+      deletedId: "page_1_1",
+    });
+
+    const deleteCall = fetchMock.mock.calls[0];
+    expect(String(deleteCall?.[0])).toBe(
+      "https://graph.facebook.com/v22.0/page_1_1?access_token=token",
+    );
+    expect(deleteCall?.[1]).toMatchObject({
+      method: "DELETE",
     });
   });
 });
