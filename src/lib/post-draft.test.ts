@@ -200,6 +200,7 @@ describe("post draft serialization", () => {
           headline: { x: 50, y: 50, width: 100, height: 100, fontScale: 2.4, visible: true, text: "" },
           supportingText: { x: 0, y: 80, width: 60, height: 10, fontScale: 1.0, visible: false, text: "" },
           cta: { x: 0, y: 90, width: 40, height: 8, fontScale: 1.0, visible: true, text: "" },
+          custom: [],
         },
       },
     };
