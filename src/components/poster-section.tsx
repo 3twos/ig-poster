@@ -72,7 +72,7 @@ type Props = {
   onResetTextLayout: () => void;
   onAutoFitTextLayout: () => void;
   onMeasuredCanonicalHeightsChange?: (
-    heights: Partial<Record<CanonicalOverlayKey, number>>,
+    heightsPercent: Partial<Record<CanonicalOverlayKey, number>>,
   ) => void;
   saveStatus: SaveStatus;
   overlayLayout?: OverlayLayout;

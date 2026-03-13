@@ -347,6 +347,25 @@ describe("PosterPreview", () => {
     }
   });
 
+  it("skips editor-mode measurement work when no measurement callback is provided", () => {
+    const requestAnimationFrameSpy = vi.spyOn(window, "requestAnimationFrame");
+
+    render(
+      <PosterPreview
+        variant={carouselVariant}
+        brandName="Nexa Labs"
+        aspectRatio="4:5"
+        overlayLayout={createDefaultOverlayLayout(carouselVariant.layout)}
+        editorMode
+        onOverlayLayoutChange={vi.fn()}
+      />,
+    );
+
+    expect(requestAnimationFrameSpy).not.toHaveBeenCalled();
+
+    requestAnimationFrameSpy.mockRestore();
+  });
+
   it("renders logo at layout position and uses brandName in alt text", () => {
     render(
       <PosterPreview

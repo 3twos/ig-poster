@@ -1270,11 +1270,11 @@ export default function Home() {
   ]);
 
   const handleMeasuredCanonicalHeightsChange = useCallback(
-    (heights: Partial<Record<CanonicalOverlayKey, number>>) => {
+    (heightsPercent: Partial<Record<CanonicalOverlayKey, number>>) => {
       if (!activeVariant) return;
       measuredCanonicalHeightsPercentRef.current[
         canonicalMeasurementKey(activeVariant.id, activeSlideIndex)
-      ] = heights;
+      ] = heightsPercent;
     },
     [activeSlideIndex, activeVariant],
   );

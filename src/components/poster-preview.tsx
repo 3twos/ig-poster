@@ -37,7 +37,8 @@ type PosterPreviewProps = {
   editorMode?: boolean;
   onOverlayLayoutChange?: (layout: OverlayLayout) => void;
   onMeasuredCanonicalHeightsChange?: (
-    heights: Partial<Record<CanonicalOverlayKey, number>>,
+    // Percent-of-canvas heights in the same [0, 100] space as overlay boxes.
+    heightsPercent: Partial<Record<CanonicalOverlayKey, number>>,
   ) => void;
   carouselSlides?: CarouselSlide[];
   activeSlideIndex?: number;
@@ -113,7 +114,8 @@ const hasCanonicalLayoutDelta = (
     );
   });
 
-const collectMeasuredCanonicalHeights = ({
+// Percent-of-canvas heights in the same [0, 100] coordinate space as overlay boxes.
+const collectMeasuredCanonicalHeightsPercent = ({
   keys,
   refs,
   frameHeight,
@@ -942,7 +944,8 @@ export const PosterPreview = memo(
       useEffect(() => {
         if (
           frameSize.height <= 0 ||
-          (!onOverlayLayoutChange && !onMeasuredCanonicalHeightsChange)
+          (!onOverlayLayoutChange && !onMeasuredCanonicalHeightsChange) ||
+          (editorMode && !onMeasuredCanonicalHeightsChange)
         ) {
           return;
         }
@@ -961,18 +964,18 @@ export const PosterPreview = memo(
         }
 
         const raf = requestAnimationFrame(() => {
-          const measuredHeights = collectMeasuredCanonicalHeights({
+          const measuredHeightsPercent = collectMeasuredCanonicalHeightsPercent({
             keys: activeKeys,
             refs: canonicalBlockRefs.current,
             frameHeight: frameSize.height,
           });
 
-          onMeasuredCanonicalHeightsChange?.(measuredHeights);
+          onMeasuredCanonicalHeightsChange?.(measuredHeightsPercent);
 
           if (
             editorMode ||
             !onOverlayLayoutChange ||
-            Object.keys(measuredHeights).length === 0
+            Object.keys(measuredHeightsPercent).length === 0
           ) {
             return;
           }
@@ -985,7 +988,7 @@ export const PosterPreview = memo(
             aspectRatio,
             resolvedOverlayLayout,
             undefined,
-            measuredHeights,
+            measuredHeightsPercent,
           );
 
           if (
