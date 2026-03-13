@@ -451,6 +451,7 @@ describe("updateFacebookPagePost", () => {
   });
 
   it("updates scheduled Facebook page posts by post id", async () => {
+    const nextPublishAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -463,7 +464,7 @@ describe("updateFacebookPagePost", () => {
           id: "photo_1",
           post_id: "page_1_1",
           published: false,
-          scheduled_publish_time: "2026-03-13T18:00:00.000Z",
+          scheduled_publish_time: nextPublishAt,
         }),
       });
     vi.stubGlobal("fetch", fetchMock);
@@ -475,7 +476,7 @@ describe("updateFacebookPagePost", () => {
           publishId: "page_1_1",
           creationId: "photo_1",
           caption: "Updated caption",
-          publishAt: "2026-03-13T18:00:00.000Z",
+          publishAt: nextPublishAt,
         },
         {
           accessToken: "token",
@@ -489,7 +490,7 @@ describe("updateFacebookPagePost", () => {
       publishId: "page_1_1",
       creationId: "photo_1",
       isPublished: false,
-      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      scheduledPublishTime: nextPublishAt,
       remotePermalink: undefined,
     });
 
@@ -502,6 +503,7 @@ describe("updateFacebookPagePost", () => {
   });
 
   it("falls back to creation id update when post id update fails", async () => {
+    const nextPublishAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -521,7 +523,7 @@ describe("updateFacebookPagePost", () => {
         json: async () => ({
           id: "video_1",
           published: false,
-          scheduled_publish_time: "2026-03-13T18:00:00.000Z",
+          scheduled_publish_time: nextPublishAt,
         }),
       });
     vi.stubGlobal("fetch", fetchMock);
@@ -546,7 +548,7 @@ describe("updateFacebookPagePost", () => {
       publishId: "page_1_1",
       creationId: "video_1",
       isPublished: false,
-      scheduledPublishTime: "2026-03-13T18:00:00.000Z",
+      scheduledPublishTime: nextPublishAt,
       remotePermalink: undefined,
     });
 
@@ -554,6 +556,32 @@ describe("updateFacebookPagePost", () => {
     const fallbackBody = fallbackCall?.[1]?.body as URLSearchParams;
     expect(fallbackCall?.[0]).toBe("https://graph.facebook.com/v22.0/video_1");
     expect(fallbackBody.get("description")).toBe("Updated caption");
+  });
+
+  it("treats success-false responses as failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: false }),
+      }),
+    );
+
+    await expect(
+      updateFacebookPagePost(
+        {
+          mediaMode: "image",
+          publishId: "page_1_1",
+          caption: "Updated caption",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).rejects.toThrow("Meta API call failed on page_1_1");
   });
 });
 

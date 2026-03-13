@@ -111,13 +111,14 @@ const buildRemoteAuthoritativeWriteWhere = (
   actor: Actor,
   existing: Pick<
     typeof publishJobs.$inferSelect,
-    "id" | "ownerHash" | "status"
+    "id" | "ownerHash" | "status" | "updatedAt"
   >,
 ) =>
   and(
     eq(publishJobs.id, existing.id),
     eq(publishJobs.ownerHash, actor.ownerHash),
     eq(publishJobs.status, existing.status),
+    eq(publishJobs.updatedAt, existing.updatedAt),
   );
 
 const assertMutableJob = (status: (typeof publishJobs.$inferSelect)["status"]) => {
@@ -242,20 +243,68 @@ const syncScheduledFacebookDestination = async (
   });
 };
 
+const claimRemoteAuthoritativeFacebookMutation = async (
+  db: ReturnType<typeof getDb>,
+  actor: Actor,
+  existing: PublishJobRow,
+) => {
+  const [claimed] = await db
+    .update(publishJobs)
+    .set({
+      status: "processing",
+      updatedAt: new Date(),
+    })
+    .where(buildJobWriteWhere(actor, existing))
+    .returning();
+
+  if (!claimed) {
+    throw conflict(RACE_CONFLICT_MESSAGE);
+  }
+
+  return claimed;
+};
+
+const restoreClaimedRemoteAuthoritativeFacebookMutation = async (
+  db: ReturnType<typeof getDb>,
+  actor: Actor,
+  claimed: PublishJobRow,
+  status: PublishJobRow["status"],
+) => {
+  await db
+    .update(publishJobs)
+    .set({
+      status,
+      updatedAt: new Date(),
+    })
+    .where(buildRemoteAuthoritativeWriteWhere(actor, claimed));
+};
+
 const cancelRemoteAuthoritativeFacebookJob = async (
   db: ReturnType<typeof getDb>,
   actor: Actor,
   existing: PublishJobRow,
   action: "cancel" | "move-to-draft",
 ) => {
-  const auth = await resolveRemoteAuthoritativeFacebookAuth(actor, existing);
-  await deleteFacebookPagePost(
-    {
-      publishId: existing.publishId ?? undefined,
-      creationId: existing.creationId ?? undefined,
-    },
-    auth,
-  );
+  const claimed = await claimRemoteAuthoritativeFacebookMutation(db, actor, existing);
+
+  try {
+    const auth = await resolveRemoteAuthoritativeFacebookAuth(actor, claimed);
+    await deleteFacebookPagePost(
+      {
+        publishId: claimed.publishId ?? undefined,
+        creationId: claimed.creationId ?? undefined,
+      },
+      auth,
+    );
+  } catch (error) {
+    await restoreClaimedRemoteAuthoritativeFacebookMutation(
+      db,
+      actor,
+      claimed,
+      existing.status,
+    );
+    throw error;
+  }
 
   const [updated] = await db
     .update(publishJobs)
@@ -264,7 +313,7 @@ const cancelRemoteAuthoritativeFacebookJob = async (
       canceledAt: new Date(),
       lastError: null,
       updatedAt: new Date(),
-      events: appendPublishJobEvent(existing.events, {
+      events: appendPublishJobEvent(claimed.events, {
         type: "canceled",
         detail:
           action === "move-to-draft"
@@ -272,7 +321,7 @@ const cancelRemoteAuthoritativeFacebookJob = async (
             : "Canceled by user.",
       }),
     })
-    .where(buildRemoteAuthoritativeWriteWhere(actor, existing))
+    .where(buildRemoteAuthoritativeWriteWhere(actor, claimed))
     .returning();
 
   if (!updated) {
@@ -307,6 +356,7 @@ const updateRemoteAuthoritativeFacebookJob = async (
     | Extract<PublishJobUpdateRequest, { action: "reschedule" }>
     | Extract<PublishJobUpdateRequest, { action: "edit" }>,
 ) => {
+  const remoteMediaMode = existing.media.mode;
   const nextCaption = payload.action === "edit"
     ? payload.caption ?? existing.caption
     : existing.caption;
@@ -314,7 +364,7 @@ const updateRemoteAuthoritativeFacebookJob = async (
   const shouldUpdateRemoteCaption =
     payload.action === "edit" && payload.caption !== undefined;
   const shouldUpdateRemoteSchedule = payload.publishAt !== undefined;
-  if (existing.media.mode === "carousel") {
+  if (remoteMediaMode === "carousel") {
     throw invalid(
       "Facebook publishing currently supports single image and single video posts only.",
     );
@@ -343,18 +393,32 @@ const updateRemoteAuthoritativeFacebookJob = async (
     validateRemoteAuthoritativeFacebookEdit(existing, payload);
   }
 
+  const claimed = shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule
+    ? await claimRemoteAuthoritativeFacebookMutation(db, actor, existing)
+    : existing;
+
   if (shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule) {
-    const auth = await resolveRemoteAuthoritativeFacebookAuth(actor, existing);
-    remoteState = await updateFacebookPagePost(
-      {
-        mediaMode: existing.media.mode,
-        publishId: existing.publishId ?? undefined,
-        creationId: existing.creationId ?? undefined,
-        ...(shouldUpdateRemoteCaption ? { caption: nextCaption } : {}),
-        ...(shouldUpdateRemoteSchedule ? { publishAt: nextPublishAtIso } : {}),
-      },
-      auth,
-    );
+    try {
+      const auth = await resolveRemoteAuthoritativeFacebookAuth(actor, claimed);
+      remoteState = await updateFacebookPagePost(
+        {
+          mediaMode: remoteMediaMode,
+          publishId: claimed.publishId ?? undefined,
+          creationId: claimed.creationId ?? undefined,
+          ...(shouldUpdateRemoteCaption ? { caption: nextCaption } : {}),
+          ...(shouldUpdateRemoteSchedule ? { publishAt: nextPublishAtIso } : {}),
+        },
+        auth,
+      );
+    } catch (error) {
+      await restoreClaimedRemoteAuthoritativeFacebookMutation(
+        db,
+        actor,
+        claimed,
+        existing.status,
+      );
+      throw error;
+    }
   }
 
   const [updated] = await db
@@ -381,13 +445,13 @@ const updateRemoteAuthoritativeFacebookJob = async (
       outcomeContext:
         payload.action === "edit" && payload.outcomeContext !== undefined
           ? payload.outcomeContext
-          : existing.outcomeContext,
+          : claimed.outcomeContext,
       attempts: 0,
       lastAttemptAt: null,
       completedAt: null,
       lastError: null,
       updatedAt: new Date(),
-      events: appendPublishJobEvent(existing.events, {
+      events: appendPublishJobEvent(claimed.events, {
         type: "updated",
         detail:
           payload.action === "reschedule"
@@ -397,7 +461,11 @@ const updateRemoteAuthoritativeFacebookJob = async (
               : "Job details updated by user.",
       }),
     })
-    .where(buildRemoteAuthoritativeWriteWhere(actor, existing))
+    .where(
+      shouldUpdateRemoteCaption || shouldUpdateRemoteSchedule
+        ? buildRemoteAuthoritativeWriteWhere(actor, claimed)
+        : buildJobWriteWhere(actor, existing)
+    )
     .returning();
 
   if (!updated) {

@@ -173,6 +173,14 @@ describe("updatePublishJob", () => {
       .mockReturnValueOnce({ from: selectFromJobs })
       .mockReturnValueOnce({ from: selectFromPosts });
 
+    const claimedJob = {
+      ...job,
+      status: "processing" as const,
+      updatedAt: new Date("2026-03-08T11:30:00.000Z"),
+    };
+    const updateReturningClaim = vi.fn().mockResolvedValue([claimedJob]);
+    const updateWhereClaim = vi.fn(() => ({ returning: updateReturningClaim }));
+    const updateSetClaim = vi.fn(() => ({ where: updateWhereClaim }));
     const updateReturningJob = vi.fn().mockResolvedValue([
       { ...job, status: "canceled", canceledAt: new Date("2026-03-08T12:00:00.000Z") },
     ]);
@@ -182,6 +190,7 @@ describe("updatePublishJob", () => {
     const updateSetPost = vi.fn(() => ({ where: updateWherePost }));
     const update = vi
       .fn()
+      .mockReturnValueOnce({ set: updateSetClaim })
       .mockReturnValueOnce({ set: updateSetJob })
       .mockReturnValueOnce({ set: updateSetPost });
 
@@ -231,6 +240,9 @@ describe("updatePublishJob", () => {
         remoteObjectId: null,
       }),
     );
+    expect(update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedDeleteFacebookPagePost.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("reschedules Meta-synced Facebook jobs through the Graph API", async () => {
@@ -253,6 +265,11 @@ describe("updatePublishJob", () => {
     const selectFromJobs = vi.fn(() => ({ where: selectWhereJob }));
     const select = vi.fn().mockReturnValueOnce({ from: selectFromJobs });
 
+    const claimedJob = {
+      ...job,
+      status: "processing" as const,
+      updatedAt: new Date("2026-03-08T11:30:00.000Z"),
+    };
     const updatedJob = {
       ...job,
       status: "queued" as const,
@@ -262,6 +279,9 @@ describe("updatePublishJob", () => {
       lastError: null,
       completedAt: null,
     };
+    const updateReturningClaim = vi.fn().mockResolvedValue([claimedJob]);
+    const updateWhereClaim = vi.fn(() => ({ returning: updateReturningClaim }));
+    const updateSetClaim = vi.fn(() => ({ where: updateWhereClaim }));
     const updateReturningJob = vi.fn().mockResolvedValue([updatedJob]);
     const updateWhereJob = vi.fn(() => ({ returning: updateReturningJob }));
     const updateSetJob = vi.fn(() => ({ where: updateWhereJob }));
@@ -269,6 +289,7 @@ describe("updatePublishJob", () => {
     const updateSetPost = vi.fn(() => ({ where: updateWherePost }));
     const update = vi
       .fn()
+      .mockReturnValueOnce({ set: updateSetClaim })
       .mockReturnValueOnce({ set: updateSetJob })
       .mockReturnValueOnce({ set: updateSetPost });
 
@@ -326,6 +347,9 @@ describe("updatePublishJob", () => {
         remoteState: "scheduled",
         remoteObjectId: "page_1_1",
       }),
+    );
+    expect(update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedUpdateFacebookPagePost.mock.invocationCallOrder[0]!,
     );
   });
 
@@ -467,6 +491,14 @@ describe("updatePublishJob", () => {
     const selectWhereJob = vi.fn(() => ({ limit: selectLimitJob }));
     const selectFromJobs = vi.fn(() => ({ where: selectWhereJob }));
     const select = vi.fn().mockReturnValueOnce({ from: selectFromJobs });
+    const claimedJob = {
+      ...job,
+      status: "processing" as const,
+      updatedAt: new Date("2026-03-08T11:30:00.000Z"),
+    };
+    const updateReturningClaim = vi.fn().mockResolvedValue([claimedJob]);
+    const updateWhereClaim = vi.fn(() => ({ returning: updateReturningClaim }));
+    const updateSetClaim = vi.fn(() => ({ where: updateWhereClaim }));
     const updateReturningJob = vi.fn().mockResolvedValue([
       {
         ...job,
@@ -479,7 +511,10 @@ describe("updatePublishJob", () => {
     ]);
     const updateWhereJob = vi.fn(() => ({ returning: updateReturningJob }));
     const updateSetJob = vi.fn(() => ({ where: updateWhereJob }));
-    const update = vi.fn().mockReturnValueOnce({ set: updateSetJob });
+    const update = vi
+      .fn()
+      .mockReturnValueOnce({ set: updateSetClaim })
+      .mockReturnValueOnce({ set: updateSetJob });
 
     mockedGetDb.mockReturnValue({
       select,
@@ -512,6 +547,9 @@ describe("updatePublishJob", () => {
       expect.objectContaining({
         accessToken: "env-token",
       }),
+    );
+    expect(update.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedUpdateFacebookPagePost.mock.invocationCallOrder[0]!,
     );
   });
 });
