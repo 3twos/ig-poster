@@ -466,7 +466,7 @@ const EDITORIAL_ONLY_PATTERN =
 const PREMIUM_TONE_PATTERN =
   /\b(?:premium|luxury|luxurious|sophisticated|elevated|aspirational)\b/;
 const DIRECT_TONE_PATTERN =
-  /\b(?:direct|clearer|clear|plainspoken|plain-spoken|straightforward)\b/;
+  /\b(?:more\s+direct|direct(?:\s+tone)?|clearer\s+tone|plainspoken|plain-spoken|straightforward)\b/;
 const PLAYFUL_TONE_PATTERN = /\b(?:playful|lighter|witty|fun|funny)\b/;
 const LAYOUT_CHANGE_PATTERN =
   /\b(?:change|switch|rework|different|new)\s+(?:the\s+)?(?:layout|template|design|visual|composition)\b|\b(?:move|reposition|restack|resize)\b/;
@@ -579,7 +579,7 @@ const buildRefinementPlanBlock = (plan: RefinementPlan) => {
   return `Parsed refinement plan (structured interpretation of the instruction):\n${JSON.stringify(plan, null, 2)}\n\n`;
 };
 
-export const applyRefinementDirectives = (input: {
+export const applyRefinementPlan = (input: {
   currentVariant: CreativeVariant;
   refinedVariant: CreativeVariant;
   instruction: string;

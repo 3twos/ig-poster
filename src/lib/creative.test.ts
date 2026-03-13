@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyRefinementDirectives,
+  applyRefinementPlan,
   GenerationRequestSchema,
   applyLayoutCopyBudget,
   buildGenerationUserPrompt,
@@ -398,6 +398,16 @@ describe("creative helpers", () => {
     expect(plan.preserveLayout).toBe(true);
   });
 
+  it("does not infer a direct-tone shift from generic clarity wording", () => {
+    const plan = deriveRefinementPlan(
+      "Make the headline clear and shorter.",
+      makeVariant("clear-headline", "single-image"),
+    );
+
+    expect(plan.toneDirection).toBe("preserve");
+    expect(plan.shorten.headline).toBe(true);
+  });
+
   it("builds generation prompts with explicit brief precedence", () => {
     const prompt = buildGenerationUserPrompt(generationRequest, {
       websiteStyleContext: "Confident editorial layouts with motion-heavy cutaways.",
@@ -458,7 +468,7 @@ describe("creative helpers", () => {
       ],
     };
 
-    const refined = applyRefinementDirectives({
+    const refined = applyRefinementPlan({
       currentVariant,
       refinedVariant: {
         ...currentVariant,
@@ -496,7 +506,7 @@ describe("creative helpers", () => {
       cta: "Visit profile",
     };
 
-    const refined = applyRefinementDirectives({
+    const refined = applyRefinementPlan({
       currentVariant,
       refinedVariant: {
         ...currentVariant,
@@ -524,7 +534,7 @@ describe("creative helpers", () => {
         "Caption should stay unchanged because the user only asked to tighten the headline and body.",
     };
 
-    const refined = applyRefinementDirectives({
+    const refined = applyRefinementPlan({
       currentVariant,
       refinedVariant: {
         ...currentVariant,
