@@ -21,6 +21,7 @@ describe("getApplePhotosBridgeUrls", () => {
       searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
       pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
       importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
+      openCompanionUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/companion/open`,
     });
   });
 
@@ -32,6 +33,7 @@ describe("getApplePhotosBridgeUrls", () => {
       searchUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
       pickUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
       importUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
+      openCompanionUrl: `http://localhost:43123${APPLE_PHOTOS_BRIDGE_BASE_PATH}/companion/open`,
     });
   });
 });
@@ -49,8 +51,12 @@ describe("buildApplePhotosBridgeHealthResponse", () => {
         searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
         pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
         importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
+        openCompanionUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/companion/open`,
       },
       capabilities: ["pick", "recent", "search", "import"],
+      companionApp: {
+        installed: false,
+      },
     });
   });
 
@@ -76,8 +82,12 @@ describe("buildApplePhotosBridgeHealthResponse", () => {
         searchUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
         pickUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
         importUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
+        openCompanionUrl: `${APPLE_PHOTOS_BRIDGE_ORIGIN}${APPLE_PHOTOS_BRIDGE_BASE_PATH}/companion/open`,
       },
       capabilities: ["pick", "recent", "search", "import"],
+      companionApp: {
+        installed: false,
+      },
       selection: {
         updatedAt: "2026-03-13T15:30:00Z",
         action: "pick",

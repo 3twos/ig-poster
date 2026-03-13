@@ -186,6 +186,35 @@ struct CompanionHomeView: View {
   @State private var exportStatusMessage: String?
   @State private var exportErrorMessage: String?
 
+  init() {
+    let initialLaunchState = Self.initialLaunchState()
+    _activeLaunchRequest = State(initialValue: initialLaunchState.request)
+    _invalidLaunchURL = State(initialValue: initialLaunchState.invalidURL)
+  }
+
+  private static func initialLaunchState() -> (
+    request: ApplePhotosCompanionLaunchRequest?,
+    invalidURL: String?
+  ) {
+    for argument in CommandLine.arguments.dropFirst() {
+      guard argument.hasPrefix("\(ApplePhotosCompanionBridge.urlScheme)://") else {
+        continue
+      }
+
+      guard let url = URL(string: argument) else {
+        return (nil, argument)
+      }
+
+      if let request = ApplePhotosCompanionBridge.parseLaunchURL(url) {
+        return (request, nil)
+      }
+
+      return (nil, url.absoluteString)
+    }
+
+    return (nil, nil)
+  }
+
   private func handleIncomingURL(_ url: URL) {
     guard let request = ApplePhotosCompanionBridge.parseLaunchURL(url) else {
       activeLaunchRequest = nil
@@ -431,7 +460,7 @@ struct CompanionHomeView: View {
         }
         .font(.system(size: 13, weight: .regular, design: .monospaced))
       } else {
-        Text("Waiting for a browser handoff from the web editor. Until packaging registers the URL scheme, you can still exercise the state change locally with the sample handoff button below.")
+        Text("Waiting for a browser handoff from the web editor. A packaged install can now pass the draft handoff directly at launch, and the sample handoff button below still lets you exercise that state locally.")
           .foregroundStyle(.secondary)
       }
 

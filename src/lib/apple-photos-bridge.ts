@@ -13,6 +13,7 @@ export const APPLE_PHOTOS_BRIDGE_PATHS = {
   search: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/search`,
   pick: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/pick`,
   import: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/photos/import`,
+  openCompanion: `${APPLE_PHOTOS_BRIDGE_BASE_PATH}/companion/open`,
 } as const;
 
 export type ApplePhotosBridgeErrorCode =
@@ -44,6 +45,11 @@ export type ApplePhotosBridgePhotoAsset = {
 export type ApplePhotosImportedAsset = ApplePhotosBridgePhotoAsset & {
   exportPath: string;
   downloadUrl: string;
+};
+
+export type ApplePhotosCompanionAppInfo = {
+  installed: boolean;
+  bundlePath?: string;
 };
 
 export type ApplePhotosBridgeQueryMode = "recent" | "search";
@@ -84,8 +90,10 @@ export type ApplePhotosBridgeHealthResponse = {
     searchUrl: string;
     pickUrl: string;
     importUrl: string;
+    openCompanionUrl?: string;
   };
   capabilities: ApplePhotosBridgeCapability[];
+  companionApp?: ApplePhotosCompanionAppInfo;
   selection?: ApplePhotosBridgeSelectionSummary;
 };
 
@@ -117,6 +125,20 @@ export type ApplePhotosBridgeUrls = {
   searchUrl: string;
   pickUrl: string;
   importUrl: string;
+  openCompanionUrl: string;
+};
+
+export type ApplePhotosCompanionOpenRequest = {
+  action?: ApplePhotosCompanionLaunchAction;
+  returnTo?: string;
+  draftId?: string;
+  profile?: string;
+};
+
+export type ApplePhotosCompanionOpenResponse = {
+  launchedAt: string;
+  launchUrl: string;
+  companionApp: ApplePhotosCompanionAppInfo;
 };
 
 export type ApplePhotosCompanionLaunchRequest = {
@@ -147,12 +169,14 @@ export const getApplePhotosBridgeUrls = (
     searchUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.search}`,
     pickUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.pick}`,
     importUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.import}`,
+    openCompanionUrl: `${normalizedOrigin}${APPLE_PHOTOS_BRIDGE_PATHS.openCompanion}`,
   };
 };
 
 export const buildApplePhotosBridgeHealthResponse =
   (
     options: {
+      companionApp?: ApplePhotosCompanionAppInfo;
       selection?: ApplePhotosBridgeSelectionSummary;
     } = {},
   ): ApplePhotosBridgeHealthResponse => {
@@ -169,8 +193,10 @@ export const buildApplePhotosBridgeHealthResponse =
         searchUrl: urls.searchUrl,
         pickUrl: urls.pickUrl,
         importUrl: urls.importUrl,
+        openCompanionUrl: urls.openCompanionUrl,
       },
       capabilities: ["pick", "recent", "search", "import"],
+      companionApp: options.companionApp ?? { installed: false },
       ...(options.selection ? { selection: options.selection } : {}),
     };
   };

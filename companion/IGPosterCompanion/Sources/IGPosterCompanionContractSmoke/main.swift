@@ -31,6 +31,11 @@ struct IGPosterCompanionContractSmoke {
       "unexpected search endpoint"
     )
     require(
+      urls.openCompanionURL.absoluteString
+        == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/companion/open",
+      "unexpected companion-open endpoint"
+    )
+    require(
       ApplePhotosCompanionBridge.exportDownloadURL(exportID: "export_123").absoluteString
         == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/photos/exports/export_123",
       "unexpected export download endpoint"
@@ -72,11 +77,26 @@ struct IGPosterCompanionContractSmoke {
       "unexpected parse result for non-companion URL"
     )
 
-    let response = ApplePhotosCompanionBridge.healthResponse()
+    let response = ApplePhotosCompanionBridge.healthResponse(
+      companionApp: ApplePhotosCompanionAppInfo(
+        installed: true,
+        bundlePath: "/Applications/IG Poster Companion.app"
+      )
+    )
     require(response.appName == ApplePhotosCompanionBridge.appName, "unexpected app name")
     require(
       response.capabilities == [.pick, .recent, .search, .importAssets],
       "unexpected capabilities"
+    )
+    require(
+      response.bridge.openCompanionURL
+        == "http://127.0.0.1:43123/\(ApplePhotosCompanionBridge.version)/companion/open",
+      "unexpected health open-companion URL"
+    )
+    require(response.companionApp.installed, "expected installed companion app info")
+    require(
+      response.companionApp.bundlePath == "/Applications/IG Poster Companion.app",
+      "unexpected companion app bundle path"
     )
     require(response.selection == nil, "unexpected default selection summary")
     let recentResponse = ApplePhotosAssetListResponse(
@@ -144,6 +164,7 @@ struct IGPosterCompanionContractSmoke {
     require(stateStore.load() == snapshot, "unexpected state store round trip")
 
     let responseWithSelection = ApplePhotosCompanionBridge.healthResponse(
+      companionApp: ApplePhotosCompanionAppInfo(installed: false),
       selection: stateStore.load()?.summary
     )
     require(responseWithSelection.selection?.assetCount == 1, "unexpected selection count")

@@ -7,6 +7,7 @@ import {
   importApplePhotosSelection,
   isMacOsUserAgent,
   listRecentApplePhotos,
+  openApplePhotosCompanion,
   probeApplePhotosBridge,
   searchApplePhotos,
 } from "@/lib/apple-photos";
@@ -141,6 +142,41 @@ describe("probeApplePhotosBridge", () => {
       message: "The local Apple Photos bridge advertised an unexpected origin.",
     });
   });
+
+  it("accepts older bridge health payloads without companion metadata", async () => {
+    const health = buildApplePhotosBridgeHealthResponse();
+    const legacyHealth = { ...health };
+    const legacyBridge = { ...health.bridge };
+    delete legacyHealth.companionApp;
+    delete legacyBridge.openCompanionUrl;
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          ...legacyHealth,
+          bridge: legacyBridge,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(
+      probeApplePhotosBridge({
+        fetchImpl: fetchImpl as typeof fetch,
+        timeoutMs: APPLE_PHOTOS_BRIDGE_PROBE_TIMEOUT_MS,
+      }),
+    ).resolves.toMatchObject({
+      available: true,
+      health: {
+        bridge: {
+          origin: health.bridge.origin,
+        },
+      },
+      launchUrl: expect.stringContaining("igposter-companion://photos/pick"),
+    });
+  });
 });
 
 describe("importApplePhotosSelection", () => {
@@ -248,6 +284,103 @@ describe("importApplePhotosSelection", () => {
     ).rejects.toThrow(
       "The local Apple Photos bridge returned an unexpected import payload.",
     );
+  });
+});
+
+describe("openApplePhotosCompanion", () => {
+  it("asks the local bridge to open the native companion", async () => {
+    const health = buildApplePhotosBridgeHealthResponse({
+      companionApp: {
+        installed: true,
+        bundlePath: "/Applications/IG Poster Companion.app",
+      },
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === health.bridge.openCompanionUrl) {
+        expect(init?.method).toBe("POST");
+        expect(init?.body).toBe(
+          JSON.stringify({
+            action: "pick",
+            returnTo: "https://ig-poster.example.com/drafts/post_123",
+            draftId: "post_123",
+            profile: "default",
+          }),
+        );
+
+        return new Response(
+          JSON.stringify({
+            launchedAt: "2026-03-13T19:00:00Z",
+            launchUrl:
+              "igposter-companion://photos/pick?draft_id=post_123&profile=default",
+            companionApp: {
+              installed: true,
+              bundlePath: "/Applications/IG Poster Companion.app",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      openApplePhotosCompanion({
+        fetchImpl: fetchImpl as typeof fetch,
+        returnTo: "https://ig-poster.example.com/drafts/post_123",
+        draftId: "post_123",
+        profile: "default",
+      }),
+    ).resolves.toMatchObject({
+      launchedAt: "2026-03-13T19:00:00Z",
+      companionApp: {
+        installed: true,
+        bundlePath: "/Applications/IG Poster Companion.app",
+      },
+    });
+  });
+
+  it("accepts bridge open responses without a companion bundle path", async () => {
+    const health = buildApplePhotosBridgeHealthResponse({
+      companionApp: {
+        installed: true,
+      },
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === health.bridge.openCompanionUrl) {
+        return new Response(
+          JSON.stringify({
+            launchedAt: "2026-03-13T19:05:00Z",
+            launchUrl: "igposter-companion://photos/pick",
+            companionApp: {
+              installed: true,
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    await expect(
+      openApplePhotosCompanion({
+        fetchImpl: fetchImpl as typeof fetch,
+      }),
+    ).resolves.toMatchObject({
+      launchedAt: "2026-03-13T19:05:00Z",
+      companionApp: {
+        installed: true,
+      },
+    });
   });
 });
 
