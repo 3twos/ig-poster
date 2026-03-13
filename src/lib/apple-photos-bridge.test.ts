@@ -9,6 +9,7 @@ import {
   buildApplePhotosBridgeHealthResponse,
   buildApplePhotosCompanionLaunchUrl,
   getApplePhotosBridgeUrls,
+  parseApplePhotosCompanionLaunchUrl,
 } from "@/lib/apple-photos-bridge";
 
 describe("getApplePhotosBridgeUrls", () => {
@@ -76,5 +77,35 @@ describe("buildApplePhotosCompanionLaunchUrl", () => {
     expect(url.searchParams.get("bridge_origin")).toBe(
       "http://localhost:43123",
     );
+  });
+});
+
+describe("parseApplePhotosCompanionLaunchUrl", () => {
+  it("round-trips the shared launch URL contract", () => {
+    const launchUrl = buildApplePhotosCompanionLaunchUrl("pick", {
+      returnTo: "https://ig-poster.example.com/drafts/post_123",
+      draftId: "post_123",
+      profile: "default",
+      bridgeOrigin: "http://localhost:43123/",
+    });
+
+    expect(parseApplePhotosCompanionLaunchUrl(launchUrl)).toEqual({
+      action: "pick",
+      returnTo: "https://ig-poster.example.com/drafts/post_123",
+      draftId: "post_123",
+      profile: "default",
+      bridgeOrigin: "http://localhost:43123",
+    });
+  });
+
+  it("rejects non-companion URLs", () => {
+    expect(
+      parseApplePhotosCompanionLaunchUrl(
+        "https://ig-poster.example.com/drafts/post_123",
+      ),
+    ).toBeNull();
+    expect(
+      parseApplePhotosCompanionLaunchUrl("igposter-companion://photos/unknown"),
+    ).toBeNull();
   });
 });

@@ -91,9 +91,21 @@ export type ApplePhotosBridgeUrls = {
 };
 
 export type ApplePhotosCompanionLaunchAction = "open" | "pick";
+export type ApplePhotosCompanionLaunchRequest = {
+  action: ApplePhotosCompanionLaunchAction;
+  returnTo?: string;
+  draftId?: string;
+  profile?: string;
+  bridgeOrigin?: string;
+};
 
 const trimTrailingSlash = (value: string) =>
   value.endsWith("/") ? value.slice(0, -1) : value;
+
+const trimPathSlashes = (value: string) => value.replace(/^\/+|\/+$/g, "");
+
+const normalizeOptionalString = (value: string | null) =>
+  value && value.length > 0 ? value : undefined;
 
 export const getApplePhotosBridgeUrls = (
   origin = APPLE_PHOTOS_BRIDGE_ORIGIN,
@@ -157,4 +169,41 @@ export const buildApplePhotosCompanionLaunchUrl = (
   }
 
   return url.toString();
+};
+
+export const parseApplePhotosCompanionLaunchUrl = (
+  value: string | URL,
+): ApplePhotosCompanionLaunchRequest | null => {
+  let url: URL;
+
+  try {
+    url = value instanceof URL ? value : new URL(value);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== `${APPLE_PHOTOS_COMPANION_URL_SCHEME}:`) {
+    return null;
+  }
+
+  if (url.hostname !== "photos") {
+    return null;
+  }
+
+  const action = trimPathSlashes(url.pathname);
+  if (action !== "open" && action !== "pick") {
+    return null;
+  }
+
+  const bridgeOrigin = normalizeOptionalString(
+    url.searchParams.get("bridge_origin"),
+  );
+
+  return {
+    action,
+    returnTo: normalizeOptionalString(url.searchParams.get("return_to")),
+    draftId: normalizeOptionalString(url.searchParams.get("draft_id")),
+    profile: normalizeOptionalString(url.searchParams.get("profile")),
+    bridgeOrigin: bridgeOrigin ? trimTrailingSlash(bridgeOrigin) : undefined,
+  };
 };

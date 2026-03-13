@@ -38,6 +38,24 @@ struct IGPosterCompanionContractSmoke {
         == "http://localhost:43123",
       "unexpected bridge origin query"
     )
+    let launchRequest = ApplePhotosCompanionBridge.parseLaunchURL(launchURL)
+    require(launchRequest?.action == .pick, "unexpected launch action")
+    require(
+      launchRequest?.returnTo == "https://ig-poster.example.com/drafts/post_123",
+      "unexpected returnTo query"
+    )
+    require(launchRequest?.draftId == "post_123", "unexpected draftId query")
+    require(launchRequest?.profile == "default", "unexpected profile query")
+    require(
+      launchRequest?.bridgeOrigin == "http://localhost:43123",
+      "unexpected normalized bridge origin"
+    )
+    require(
+      ApplePhotosCompanionBridge.parseLaunchURL(
+        URL(string: "https://ig-poster.example.com/drafts/post_123")!
+      ) == nil,
+      "unexpected parse result for non-companion URL"
+    )
 
     let response = ApplePhotosCompanionBridge.healthResponse()
     require(response.appName == ApplePhotosCompanionBridge.appName, "unexpected app name")
