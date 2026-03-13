@@ -308,7 +308,7 @@ Current native scaffold status:
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/PhotosLibrary.swift` is the first PhotoKit-backed enumeration layer for the companion bridge. It handles macOS Photos authorization, recent/search filters, album matching, and asset metadata mapping.
 - `scripts/install-companion-bridge.zsh` now gives the repo a repeatable local install path for both the bridge and the native app bundle: it builds the release binaries, copies the bridge into your user Library, creates `~/Applications/IG Poster Companion.app`, writes a LaunchAgent plist from the checked-in template, registers the app bundle with Launch Services by default, and can register the bridge agent with `launchd`.
 - `src/cli/photos-bridge.ts` is the CLI-side localhost client for `ig photos recent|search`; it exists under `src/cli` specifically so `npm run build:cli` can compile the standalone binary without importing the web app modules.
-- `src/cli/commands/photos.ts` now covers the first three Apple Photos CLI subcommands: `recent`, `search`, and `import`. `import` resolves exported bridge assets and uploads them through the same `/api/v1/assets` path as any other CLI upload.
+- `src/cli/commands/photos.ts` now covers the first four Apple Photos CLI subcommands: `recent`, `search`, `import`, and `propose`. `import` resolves exported bridge assets and uploads them through the same `/api/v1/assets` path as any other CLI upload, while `propose` continues through `/api/v1/posts` and `/api/v1/generate` to create a draft and run generation.
 - Validate the native scaffold locally with:
 
 ```bash
@@ -353,9 +353,10 @@ Then, in another terminal on the same Mac:
 npm run cli -- photos recent --since 7d --limit 10 --json
 npm run cli -- photos search --album Favorites --media image --json
 npm run cli -- photos import --ids asset_123,asset_456 --json
+npm run cli -- photos propose --since 7d --limit 20 --count 4 --brand-kit kit_123 --draft-title "Weekly picks" --json
 ```
 
-The first recent/search call may trigger the macOS Photos permission prompt. If permission is denied, the CLI will return a `PHOTOS_PERMISSION_REQUIRED` error. `photos import` requires both the local bridge selection/export state and a normal authenticated CLI session because it uploads through `/api/v1/assets`.
+The first recent/search call may trigger the macOS Photos permission prompt. If permission is denied, the CLI will return a `PHOTOS_PERMISSION_REQUIRED` error. `photos import` requires both the local bridge selection/export state and a normal authenticated CLI session because it uploads through `/api/v1/assets`. `photos propose` builds on the same bridge/export path, then creates a draft post and triggers generation through the normal remote APIs.
 
 To exercise the new web-side probe locally:
 

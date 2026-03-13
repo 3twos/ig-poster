@@ -215,6 +215,46 @@ const TOOLS: ToolDefinition[] = [
     ],
   },
   {
+    name: "photos_propose",
+    description:
+      "Select Apple Photos assets with local heuristics, import them, create a draft, and run generation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        album: { type: "string" },
+        since: { type: "string" },
+        limit: { type: "integer" },
+        count: { type: "integer" },
+        mediaType: { type: "string", enum: ["image", "video", "live-photo"] },
+        favorite: { type: "boolean" },
+        brandKitId: { type: "string" },
+        draftTitle: { type: "string" },
+        folder: {
+          type: "string",
+          enum: ["assets", "videos", "logos", "renders"],
+        },
+      },
+      additionalProperties: false,
+    },
+    buildArgv: (args) => [
+      "photos",
+      "propose",
+      ...(typeof args.album === "string" ? ["--album", args.album] : []),
+      ...(typeof args.since === "string" ? ["--since", args.since] : []),
+      ...(typeof args.limit === "number" ? ["--limit", String(args.limit)] : []),
+      ...(typeof args.count === "number" ? ["--count", String(args.count)] : []),
+      ...(typeof args.mediaType === "string" ? ["--media", args.mediaType] : []),
+      ...(args.favorite === true ? ["--favorite"] : []),
+      ...(typeof args.brandKitId === "string"
+        ? ["--brand-kit", args.brandKitId]
+        : []),
+      ...(typeof args.draftTitle === "string"
+        ? ["--draft-title", args.draftTitle]
+        : []),
+      ...(typeof args.folder === "string" ? ["--folder", args.folder] : []),
+    ],
+  },
+  {
     name: "chat_ask",
     description: "Ask the IG Poster chat assistant, optionally grounded to a saved post.",
     inputSchema: {
