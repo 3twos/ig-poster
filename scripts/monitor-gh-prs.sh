@@ -448,8 +448,24 @@ process_pr_transitions_and_alerts() {
     if [[ "${PR_REVIEW_COUNT[i]}" =~ ^[0-9]+$ ]] && [[ "${PR_PREV_REVIEW_COUNT[i]}" =~ ^[0-9]+$ ]]; then
       if (( PR_REVIEW_COUNT[i] > PR_PREV_REVIEW_COUNT[i] )); then
         local reviewers_str="${PR_LATEST_REVIEWERS[i]}"
+        # Extract first name from each login for voice (e.g. "copilot,julio-estrada" → "copilot, julio")
+        local voice_names=""
         if [[ -n "$reviewers_str" ]]; then
-          msg="PR ${num} has new reviews from ${reviewers_str}"
+          local IFS=','
+          for login in $reviewers_str; do
+            # Take part before first hyphen/underscore/dot as first name, lowercase
+            local first_name="${login%%-*}"
+            first_name="${first_name%%_*}"
+            first_name="${first_name%%.*}"
+            if [[ -n "$voice_names" ]]; then
+              voice_names="${voice_names}, ${first_name}"
+            else
+              voice_names="$first_name"
+            fi
+          done
+        fi
+        if [[ -n "$voice_names" ]]; then
+          msg="PR ${num} has new reviews from ${voice_names}"
         else
           msg="PR ${num} has new reviews"
         fi
