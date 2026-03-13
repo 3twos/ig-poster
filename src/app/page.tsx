@@ -63,8 +63,10 @@ import {
   resolveVariantOverlayCopy,
   syncOverlayLayoutToVariantCopy,
   type GenerationResponse,
+  type RefinementPlan,
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
+import { importApplePhotosSelection } from "@/lib/apple-photos";
 import type { PostStatus } from "@/lib/post";
 import {
   type BrandState,
@@ -118,6 +120,7 @@ const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
 type RefinePromptPreview = {
   systemPrompt: string;
   userPrompt: string;
+  instructionPlan: RefinementPlan;
 };
 
 export default function Home() {
@@ -768,7 +771,7 @@ export default function Home() {
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
   }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPostedPost, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, saveStatus, shareUrl]);
 
-  const uploadFileToStorage = async (
+  const uploadFileToStorage = useCallback(async (
     file: File,
     folder: string,
     signal?: AbortSignal,
@@ -779,12 +782,10 @@ export default function Home() {
     const j = (await r.json()) as { url?: string };
     if (!j.url) throw new Error("Storage did not return a URL");
     return j.url;
-  };
+  }, []);
 
-  const handleAssetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+  const uploadFilesToActivePost = useCallback(async (selected: File[]) => {
     const postId = activePostIdRef.current;
-    const selected = Array.from(event.target.files ?? []);
-    event.target.value = "";
     if (!postId || !selected.length || activePostStatusRef.current === "posted") return;
     generation.setError(null);
     setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current);
@@ -855,7 +856,25 @@ export default function Home() {
       }
       setUploadingAssetsForPostId((current) => current === postId ? null : current);
     }
-  };
+  }, [
+    generation,
+    localAssets.length,
+    setLocalAssetsForPost,
+    setUploadingAssetsForPostId,
+    syncAssetsToPost,
+    uploadFileToStorage,
+  ]);
+
+  const handleAssetUpload = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    await uploadFilesToActivePost(selected);
+  }, [uploadFilesToActivePost]);
+
+  const handleApplePhotosImport = useCallback(async () => {
+    const result = await importApplePhotosSelection();
+    await uploadFilesToActivePost(result.files);
+  }, [uploadFilesToActivePost]);
 
   const removeAsset = useCallback((id: string) => {
     if (activePostStatusRef.current === "posted") {
@@ -1734,7 +1753,14 @@ export default function Home() {
                     </section>
                     {!isPostedPost ? (
                       <section className="border-b border-white/10 pb-6">
-                        <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
+                        <AssetManager
+                          assets={localAssets}
+                          onRemove={removeAsset}
+                          onReorder={reorderAssets}
+                          onAssetUpload={(e) => void handleAssetUpload(e)}
+                          onApplePhotosImport={handleApplePhotosImport}
+                          draftId={activePost?.id ?? undefined}
+                        />
                       </section>
                     ) : null}
                     {result && !isPostedPost ? (
@@ -1793,7 +1819,14 @@ export default function Home() {
             {isPostedPost ? (
               renderComposerActions()
             ) : (
-              <AssetManager assets={localAssets} onRemove={removeAsset} onReorder={reorderAssets} onAssetUpload={(e) => void handleAssetUpload(e)} />
+              <AssetManager
+                assets={localAssets}
+                onRemove={removeAsset}
+                onReorder={reorderAssets}
+                onAssetUpload={(e) => void handleAssetUpload(e)}
+                onApplePhotosImport={handleApplePhotosImport}
+                draftId={activePost?.id ?? undefined}
+              />
             )}
             <PosterSection posterRef={posterRef} activeVariant={activeVariant} brandName={brand.brandName} aspectRatio={post.aspectRatio} primaryVisual={primaryVisual} secondaryVisual={secondaryVisual} logoImage={selectedLogo?.previewUrl} editorMode={editorMode && !isPostedPost} onResetTextLayout={handleResetTextLayout} onAutoFitTextLayout={handleAutoFitTextLayout} saveStatus={saveStatus} overlayLayout={activeOverlayLayout} activeSlideIndex={activeSlideIndex} dispatch={typedDispatch} />
             {activeVariant?.postType === "carousel" && !isPostedPost ? (

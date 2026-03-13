@@ -57,10 +57,9 @@ Why this shape:
 - the server should stay Apple-agnostic and continue to operate on uploaded files, draft posts, and publish requests
 - missing-native-helper cases should degrade to install guidance plus the existing regular upload flow, not block the draft editor
 - the native scaffold should share one explicit bridge contract with the web and CLI layers so launch URLs, localhost paths, and remediation codes do not drift
-- the first live bridge slice can stay narrow: a localhost health endpoint plus CORS-safe probing is enough to validate the handoff loop before PhotoKit is wired in
+- the first live bridge slices should stay narrow: localhost health, pick/import manifest routes, and exported-file download serving are enough to validate the handoff loop before PhotoKit is wired in
 - before PhotoKit exists, the native shell should still parse and display the incoming custom-URL launch context so the web-to-native handoff can be validated end to end
-- before export/import exists, the native shell can still validate the human picker UX with PhotosPicker and ordered local selection state
-- a shared local state file between the native app and bridge is a useful intermediate step, because it lets the bridge report active draft/selection context without embedding UI logic
+- a shared local state file between the native app and bridge is a useful intermediate step, because it lets the bridge report active draft/selection context and exported-file manifests without embedding UI logic
 
 ## Runtime and Layers
 
@@ -78,7 +77,7 @@ Why this shape:
   - `src/lib/agent-types.ts` defines agent run/step types and UI utility functions.
   - `src/app/share/[id]/page.tsx` is read-only project playback.
   - `src/components/poster-preview.tsx` renders persisted overlay layouts for both preview and editor mode, including per-block visibility/text overrides, custom text boxes, carousel slide-aware previewing, adaptive logo-chip contrast, and feed landscape ratio support.
-  - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, refine/caption controls, and the last refine prompt preview.
+  - `src/components/strategy-section.tsx` exposes the editor inspector for text overrides, custom box CRUD, save-state visibility, refine/caption controls, and the last refine prompt preview including the parsed refinement plan.
 - `src/contexts/post-context.tsx` coordinates post selection, draft auto-save, duplication, and sidebar summary refresh behavior.
 - API layer:
   - Route handlers in `src/app/api/**/route.ts`.
@@ -103,7 +102,7 @@ Why this shape:
 - Domain layer (`src/lib/*`):
   - creative generation schemas + prompt builders
   - deterministic overlay fitting helpers that estimate canonical text block heights and restack them into layout-safe zones for new generations and editor auto-fit actions
-  - deterministic refinement-directive parsing/enforcement for common post-generation instructions like shortening copy or removing CTA text, plus CTA-policy-aware fallback/refine cleanup
+  - structured refinement-plan parsing plus deterministic enforcement for common post-generation instructions like shortening copy or removing CTA text, plus CTA-policy-aware fallback/refine cleanup
   - brief-aware variant ranking heuristics that prefer saved theme/subject/thought/audience alignment over generic engagement tropes when selecting finalists
   - refine-time overlay sync helpers that re-fit canonical blocks after successful refine responses
   - LLM provider abstraction
@@ -147,7 +146,7 @@ Why this shape:
 - Fallback response keeps the core workflow available during outages or unconfigured environments.
 - Keeps `Generate` as a clean re-run from persisted brief inputs, while `Refine` remains the incremental path that preserves the current canvas look unless asked otherwise.
 - Gives refine requests more context by sending the saved brief, prompt instructions, and current overlay layout state alongside the selected variant.
-- Returns the assembled refine system/user prompts with successful refine responses so the UI can expose the exact last refine prompt used for debugging.
+- Returns the parsed refinement plan plus the assembled refine system/user prompts with successful refine responses so the UI can expose the exact last refine interpretation used for debugging.
 - Runs a deterministic refine-enforcement pass after model output for recurring instruction families (for example shorter copy and no-CTA requests), so the UX does not rely entirely on prompt obedience.
 - Re-fits the canonical overlay stack after successful refine responses so updated copy is less likely to overlap, while preserving existing widths, x positions, custom boxes, and visibility choices from the current layout.
 - Builds generation prompts with an explicit priority order where the saved brief outranks supporting website/performance context and house best-practice examples, threads CTA policy through prompt/ranking/fallback logic, and then uses the same brief signals again during finalist selection as a deterministic backstop.
@@ -213,12 +212,12 @@ Why this shape:
 - `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
 - `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
 - Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
-- The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. Until the native companion app exists, that entry point intentionally degrades to a regular-upload fallback dialog instead of attempting a broken native handoff.
+- The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. It probes the local bridge first, opens the native handoff when the bridge is reachable, and otherwise degrades to the regular-upload fallback dialog instead of blocking the draft flow.
 - The first native-side implementation step now exists in `companion/IGPosterCompanion`: a buildable SwiftUI shell plus shared bridge models/constants that mirror `src/lib/apple-photos-bridge.ts`.
-- The next Apple Photos bridge slice now exists too: `ig-poster-companion-bridge` exposes `GET /v1/health` with permissive localhost CORS so the browser can probe for a running native helper before attempting a custom-URL handoff.
+- `ig-poster-companion-bridge` now exposes `GET /v1/health`, `POST /v1/photos/pick`, and `POST /v1/photos/import` with localhost CORS so the browser can probe for a running helper, detect bridge-ready native selections, and fetch import manifests back into the draft flow.
 - The current native shell also parses that shared handoff URL and surfaces the incoming draft/profile/return context, giving the browser a meaningful native landing state while PhotosPicker and PhotoKit are still pending.
-- The native shell now goes one step further on the human path: it embeds a PhotosPicker-based selection surface and retains ordered local selection metadata, while export/import wiring still remains for the next slice.
-- The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge includes as an optional health summary. That gives future web/CLI flows one place to discover the active native draft/selection context.
+- The native shell now goes further on the human path: it embeds a PhotosPicker-based selection surface, exports chosen items into a managed cache, and persists ordered selection plus exported-file metadata into shared state.
+- The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge uses for both health summaries and pick/import responses. That gives future web/CLI flows one place to discover the active native draft/selection context and available exported assets.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

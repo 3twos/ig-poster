@@ -19,6 +19,7 @@ import {
 import {
   type CreativeVariant,
   type GenerationResponse,
+  type RefinementPlan,
 } from "@/lib/creative";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +65,7 @@ type Props = {
   lastRefinePromptPreview?: {
     systemPrompt: string;
     userPrompt: string;
+    instructionPlan: RefinementPlan;
   } | null;
 };
 
@@ -320,6 +322,14 @@ export function StrategySection({
                   Last refine prompt used
                 </summary>
                 <div className="mt-3 space-y-3">
+                  <div>
+                    <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
+                      Parsed plan
+                    </p>
+                    <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-black/25 p-2 text-[11px] leading-relaxed text-slate-200">
+                      {JSON.stringify(lastRefinePromptPreview.instructionPlan, null, 2)}
+                    </pre>
+                  </div>
                   <div>
                     <p className="text-[11px] font-semibold tracking-[0.14em] text-slate-400 uppercase">
                       System prompt

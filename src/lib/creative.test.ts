@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  applyRefinementDirectives,
+  applyRefinementPlan,
   GenerationRequestSchema,
   applyLayoutCopyBudget,
   buildGenerationUserPrompt,
@@ -11,6 +11,7 @@ import {
   coerceInternalGenerationResponse,
   createFallbackResponse,
   createDefaultOverlayLayout,
+  deriveRefinementPlan,
   fitOverlayLayoutToCopy,
   normalizeOverlayLayout,
   resolveVariantOverlayCopy,
@@ -428,11 +429,39 @@ describe("creative helpers", () => {
 
     expect(prompt).toContain("Original post brief:");
     expect(prompt).toContain("Current overlay layout JSON:");
-    expect(prompt).toContain("Parsed refinement constraints:");
-    expect(prompt).toContain("Remove CTA text.");
+    expect(prompt).toContain("Parsed refinement plan");
+    expect(prompt).toContain('"ctaAction": "remove"');
+    expect(prompt).toContain('"preserveLayout": true');
     expect(prompt).toContain('set "cta" to an empty string');
     expect(prompt).toContain("CTA policy:");
     expect(prompt).toContain("Layout-fit priorities");
+  });
+
+  it("derives structured refinement plans from instructions", () => {
+    const plan = deriveRefinementPlan(
+      "Make the headline and body significantly shorter, keep this purely editorial, and tailor it for SaaS founders.",
+      makeVariant("refine-plan", "single-image"),
+    );
+
+    expect(plan.shorten.hook).toBe(false);
+    expect(plan.shorten.headline).toBe(true);
+    expect(plan.shorten.supportingText).toBe(true);
+    expect(plan.shorten.caption).toBe(false);
+    expect(plan.shorten.intensity).toBe("aggressive");
+    expect(plan.ctaAction).toBe("remove");
+    expect(plan.toneDirection).toBe("editorial");
+    expect(plan.audienceHint).toBe("saas founders");
+    expect(plan.preserveLayout).toBe(true);
+  });
+
+  it("does not infer a direct-tone shift from generic clarity wording", () => {
+    const plan = deriveRefinementPlan(
+      "Make the headline clear and shorter.",
+      makeVariant("clear-headline", "single-image"),
+    );
+
+    expect(plan.toneDirection).toBe("preserve");
+    expect(plan.shorten.headline).toBe(true);
   });
 
   it("builds generation prompts with explicit brief precedence and CTA policy", () => {
@@ -465,7 +494,7 @@ describe("creative helpers", () => {
       cta: "Visit profile",
     };
 
-    const avoidCta = applyRefinementDirectives({
+    const avoidCta = applyRefinementPlan({
       currentVariant,
       refinedVariant: currentVariant,
       instruction: "Make the supporting text more editorial.",
@@ -475,7 +504,7 @@ describe("creative helpers", () => {
       },
     });
 
-    const requireCta = applyRefinementDirectives({
+    const requireCta = applyRefinementPlan({
       currentVariant: {
         ...currentVariant,
         cta: "",
@@ -501,7 +530,7 @@ describe("creative helpers", () => {
       cta: "",
     };
 
-    const refined = applyRefinementDirectives({
+    const refined = applyRefinementPlan({
       currentVariant,
       refinedVariant: {
         ...currentVariant,
@@ -555,7 +584,7 @@ describe("creative helpers", () => {
       ],
     };
 
-    const refined = applyRefinementDirectives({
+    const refined = applyRefinementPlan({
       currentVariant,
       refinedVariant: {
         ...currentVariant,
@@ -593,7 +622,7 @@ describe("creative helpers", () => {
       cta: "Visit profile",
     };
 
-    const refined = applyRefinementDirectives({
+    const refined = applyRefinementPlan({
       currentVariant,
       refinedVariant: {
         ...currentVariant,
@@ -607,6 +636,42 @@ describe("creative helpers", () => {
     expect(refined.supportingText).toBe(currentVariant.supportingText);
     expect(refined.caption.length).toBeLessThan(currentVariant.caption.length);
     expect(refined.cta).toBe("");
+  });
+
+  it("shortens only the requested overlay fields", () => {
+    const currentVariant: CreativeVariant = {
+      ...makeVariant("field-specific", "single-image"),
+      hook: "Hook stays untouched here",
+      headline:
+        "A headline that should be the main shortening target for this field-specific refine instruction.",
+      supportingText:
+        "This supporting text is intentionally verbose so the deterministic refine plan has obvious work to do on the body field only.",
+      caption:
+        "Caption should stay unchanged because the user only asked to tighten the headline and body.",
+    };
+
+    const refined = applyRefinementPlan({
+      currentVariant,
+      refinedVariant: {
+        ...currentVariant,
+        hook: `${currentVariant.hook} More detail.`,
+        headline: `${currentVariant.headline} Extra headline detail that should be cut.`,
+        supportingText: `${currentVariant.supportingText} Extra body detail that should be cut.`,
+        caption: `${currentVariant.caption} Extra caption detail that should survive.`,
+      },
+      instruction: "Make the headline and body much shorter.",
+    });
+
+    expect(refined.hook).toBe(
+      `${currentVariant.hook} More detail.`,
+    );
+    expect(refined.headline.length).toBeLessThan(currentVariant.headline.length);
+    expect(refined.supportingText.length).toBeLessThan(
+      currentVariant.supportingText.length,
+    );
+    expect(refined.caption).toBe(
+      `${currentVariant.caption} Extra caption detail that should survive.`,
+    );
   });
 
   it("creates fitted layouts that stack canonical blocks without overlap", () => {

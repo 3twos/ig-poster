@@ -158,7 +158,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/components/app-status-bar.tsx`: footer status bar showing app version and current date-time (optionally hidden on pages that render their own fixed status controls).
 - `src/app/settings/page.tsx`: dedicated settings page with sidebar tabs (General, LLM Provider, Brand Kits). Section components live in `src/components/settings/`.
 - `src/components/poster-section.tsx`: poster preview wrapper with empty state.
-- `src/components/strategy-section.tsx`: strategy text, variant tiles, persisted post-caption editing, refine controls, the last refine prompt preview, and the canvas editor inspector (save state, text overrides, custom boxes).
+- `src/components/strategy-section.tsx`: strategy text, variant tiles, persisted post-caption editing, refine controls, the last refine prompt + parsed-plan preview, and the canvas editor inspector (save state, text overrides, custom boxes).
 - `src/components/publish-metadata-editor.tsx`: persisted publish metadata editor for first comment, location, reel feed-sharing, and per-asset user tags.
 - `src/components/publish-section.tsx`: share link, Meta publishing-pair status, planner entry point, schedule/post controls, and the queued/failed publish queue.
 - `src/components/scheduled-planner.tsx`: calendar-style scheduled-post surface with destination/sync-mode badges plus reschedule, open-post, cancel, and move-to-draft actions.
@@ -191,7 +191,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 - `src/cli/`: CLI source (`ig`) with config storage, repo-local project-link helpers, browser login helpers, device-code login helpers, stable JSON/output helpers, global `--flags-file` expansion, macOS keychain-backed refresh-token storage, shell completion output, raw API access, auth/session commands, asset upload commands, generation commands, chat commands, directory watch ingest, MCP adapter support, direct publish commands, brand-kit commands, post commands, and queue commands.
 - `companion/IGPosterCompanion/`: macOS companion scaffold with a shared Apple Photos bridge contract and a SwiftUI app shell
 - `src/db/schema.ts`: Drizzle ORM schema for `posts`, `brand_kits`, and `publish_jobs` tables (including ordered named brand-kit logos, persisted `mediaComposition` and `publishSettings` on posts, optional `first_comment`, `location_id`, and `user_tags` publish metadata fields, while reel `shareToFeed` lives inside the persisted post settings and scheduled-job `media` payload).
-- `src/lib/creative.ts`: generation schemas, prompt builders, CTA-policy-aware fallback/refine helpers, deterministic overlay fitting, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
+- `src/lib/creative.ts`: generation schemas, prompt builders, CTA-policy-aware fallback/refine helpers, structured refine-plan parsing/enforcement helpers, deterministic overlay fitting, brief-aware finalist ranking heuristics, and refine-time overlay sync helpers.
 - `src/lib/media-composer.ts`: persisted carousel composition schema plus orientation/aspect-ratio reconciliation helpers.
 - `src/lib/llm.ts`: provider adapters, structured JSON generation, streaming with thinking token callbacks, and `generateWithFallback` for multi-model Fallback execution.
 - `src/lib/llm-auth.ts`: multi-model LLM credential persistence/resolution (`resolveAllLlmAuthFromRequest`, `listCredentialRecords`). Types: `MultiModelMode`, `LlmConnectionStatus`, `LlmMultiAuthStatus`, `ResolvedLlmAuthList`.
@@ -285,7 +285,7 @@ Additional CLI ergonomics:
 - `ig watch <dir>` polls a local directory, uploads supported media through `/api/v1/assets`, and creates a draft post through `/api/v1/posts`. Use `--json` for one-shot scan summaries or `--stream-json` for live NDJSON events.
 - `ig mcp` starts a stdio MCP adapter that exposes a focused set of CLI-backed tools for local agents.
 - Hidden dev-only `--local` targets `IG_POSTER_LOCAL_HOST` (default `http://localhost:3000`) while still calling the standard `/api/v1/*` routes. It is intended only for local development and testing, not production automation.
-- The current web-side Apple Photos slice is intentionally partial: on macOS the asset panel exposes `Add from Photos`, but until the native companion exists it falls back to the regular upload flow with explicit remediation copy.
+- The current web-side Apple Photos slice is intentionally partial, but it is no longer fallback-only: on macOS the asset panel exposes `Add from Photos`, probes the local companion bridge, and can auto-import native selections back into the normal upload pipeline when the companion is running.
 
 Planned next CLI/macOS work:
 - Apple Photos support will be delivered as a macOS companion app plus a local bridge, not by moving core generation/publish logic into a native app.
@@ -299,9 +299,9 @@ Current native scaffold status:
 - `src/lib/apple-photos-bridge.ts` is now the shared TS-side contract for localhost endpoints, launch URLs, and remediation-code vocabulary.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/BridgeContract.swift` mirrors that contract on the native side.
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionApp/IGPosterCompanionApp.swift` provides the first SwiftUI shell so we have one native codepath to iterate on, and it now reflects parsed custom-URL handoff state from the browser.
-- That same SwiftUI shell now includes a PhotosPicker-based selection preview so we can validate native macOS asset picking before export/import is wired in.
-- `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/SelectionState.swift` now persists the active handoff/selection snapshot locally so the bridge and app can share context.
-- `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes a narrow localhost bridge (`GET /v1/health`) so the web editor can probe for a running native helper before attempting handoff.
+- That same SwiftUI shell now includes a PhotosPicker-based selection flow that exports chosen items into a managed local cache.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/SelectionState.swift` now persists the active handoff/selection snapshot plus exported-asset manifest locally so the bridge and app can share context.
+- `companion/IGPosterCompanion/Sources/IGPosterCompanionBridge/main.swift` now exposes localhost bridge routes for `GET /v1/health`, `POST /v1/photos/pick`, and `POST /v1/photos/import`, plus exported-file download URLs so the web editor can pull the native selection back into the draft.
 - Validate the native scaffold locally with:
 
 ```bash
@@ -312,7 +312,7 @@ swift run ig-poster-companion-bridge --print-health
 swift run ig-poster-companion
 ```
 
-While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to validate ordered local image/video selection without waiting for export/import wiring. The bridge health payload now includes the persisted selection summary when that local state exists.
+While the app is still unpackaged, use the in-app `Load sample handoff` control to inspect the parsed `igposter-companion://photos/pick?...` state without needing Launch Services registration yet. You can also use the native Photos picker button in that shell to export ordered local image/video selections into the managed cache. The bridge health payload now includes the persisted selection summary when that local state exists, and the pick/import routes read from the same shared manifest.
 
 To exercise the new web-side probe locally:
 
@@ -321,7 +321,7 @@ cd companion/IGPosterCompanion
 swift run ig-poster-companion-bridge
 ```
 
-Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health` before deciding whether to offer the native companion handoff or the regular-upload fallback.
+Then, in the main app running on macOS, use `Add from Photos` in the asset panel. The editor will probe `http://127.0.0.1:43123/v1/health`, offer the native companion handoff when available, and import the exported native selection back into the normal upload flow once the bridge reports ready assets.
 
 The CLI also supports `--flags-file <path>` as a global option. Supported formats:
 - JSON array of strings when you need spaces inside values.
