@@ -49,6 +49,7 @@ vi.mock("@/lib/meta", async () => {
   );
   return {
     ...actual,
+    publishFacebookPageContent: vi.fn(),
     publishInstagramContent: vi.fn(),
     publishInstagramFirstComment: vi.fn(),
   };
@@ -57,7 +58,7 @@ vi.mock("@/lib/meta", async () => {
 import { POST } from "@/app/api/v1/publish/route";
 import { getDb } from "@/db";
 import { isBlobEnabled } from "@/lib/blob-store";
-import { publishInstagramContent } from "@/lib/meta";
+import { publishFacebookPageContent, publishInstagramContent } from "@/lib/meta";
 import { preflightMetaMediaForPublish } from "@/lib/meta-media-preflight";
 import {
   createPublishJob,
@@ -72,6 +73,7 @@ const mockedResolveMetaAuthForApi = vi.mocked(resolveMetaAuthForApi);
 const mockedPreflightMetaMedia = vi.mocked(preflightMetaMediaForPublish);
 const mockedCreatePublishJob = vi.mocked(createPublishJob);
 const mockedReserveImmediatePublishJob = vi.mocked(reserveImmediatePublishJob);
+const mockedPublishFacebookPageContent = vi.mocked(publishFacebookPageContent);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedCompletePublishJobSuccess = vi.mocked(completePublishJobSuccess);
 const mockedIsBlobEnabled = vi.mocked(isBlobEnabled);
@@ -100,6 +102,20 @@ describe("POST /api/v1/publish", () => {
         accountKey: "page_1:ig-id",
         pageId: "page_1",
         instagramUserId: "ig-id",
+        capabilities: {
+          facebook: {
+            destination: "facebook",
+            publishEnabled: true,
+            syncMode: "remote_authoritative",
+            sourceOfTruth: "meta",
+          },
+          instagram: {
+            destination: "instagram",
+            publishEnabled: true,
+            syncMode: "app_managed",
+            sourceOfTruth: "app",
+          },
+        },
       },
     });
     mockedPreflightMetaMedia.mockResolvedValue(undefined);
@@ -189,6 +205,7 @@ describe("POST /api/v1/publish", () => {
       data: {
         publish: {
           status: "validated",
+          destination: "instagram",
           mode: "image",
           authSource: "oauth",
           scheduled: false,
@@ -227,6 +244,7 @@ describe("POST /api/v1/publish", () => {
       data: {
         publish: {
           status: "scheduled",
+          destination: "instagram",
           mode: "image",
           id: "job_1",
           publishAt,
@@ -259,6 +277,7 @@ describe("POST /api/v1/publish", () => {
       data: {
         publish: {
           status: "published",
+          destination: "instagram",
           mode: "image",
           publishId: "publish_1",
           creationId: "creation_1",
@@ -276,5 +295,109 @@ describe("POST /api/v1/publish", () => {
       },
       expect.anything(),
     );
+  });
+
+  it("publishes Facebook images when requested", async () => {
+    mockedReserveImmediatePublishJob.mockResolvedValueOnce({
+      id: "job_1",
+      ownerHash: "owner_hash",
+      postId: null,
+      destination: "facebook",
+      remoteAuthority: "remote_authoritative",
+      accountKey: "page_1:ig-id",
+      pageId: "page_1",
+      instagramUserId: "ig-id",
+      status: "processing",
+      caption: "Caption",
+      firstComment: null,
+      locationId: null,
+      userTags: null,
+      media: { mode: "image" as const, imageUrl: "https://cdn.example.com/image.jpg" },
+      publishAt: new Date("2026-03-09T23:00:00.000Z"),
+      attempts: 1,
+      maxAttempts: 1,
+      lastAttemptAt: new Date("2026-03-09T23:00:00.000Z"),
+      lastError: null,
+      authSource: "oauth",
+      connectionId: "conn_1",
+      outcomeContext: null,
+      publishId: null,
+      creationId: null,
+      children: null,
+      completedAt: null,
+      canceledAt: null,
+      events: [],
+      createdAt: new Date("2026-03-09T23:00:00.000Z"),
+      updatedAt: new Date("2026-03-09T23:00:00.000Z"),
+    } as never);
+    mockedPublishFacebookPageContent.mockResolvedValue({
+      mode: "image",
+      publishId: "page_1_1",
+      creationId: "photo_1",
+    });
+
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/publish", {
+        method: "POST",
+        body: JSON.stringify({
+          destination: "facebook",
+          caption: "Caption",
+          media: {
+            mode: "image",
+            imageUrl: "https://cdn.example.com/image.jpg",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        publish: {
+          status: "published",
+          destination: "facebook",
+          mode: "image",
+          publishId: "page_1_1",
+          creationId: "photo_1",
+        },
+      },
+    });
+    expect(mockedReserveImmediatePublishJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        destination: "facebook",
+        remoteAuthority: "remote_authoritative",
+      }),
+    );
+    expect(mockedPublishFacebookPageContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "image",
+        imageUrl: "https://cdn.example.com/image.jpg",
+        caption: "Caption",
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("rejects Instagram-only metadata on Facebook publishes", async () => {
+    const response = await POST(
+      new Request("https://app.example.com/api/v1/publish", {
+        method: "POST",
+        body: JSON.stringify({
+          destination: "facebook",
+          caption: "Caption",
+          firstComment: "First comment",
+          media: {
+            mode: "image",
+            imageUrl: "https://cdn.example.com/image.jpg",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockedReserveImmediatePublishJob).not.toHaveBeenCalled();
+    expect(mockedPublishFacebookPageContent).not.toHaveBeenCalled();
   });
 });

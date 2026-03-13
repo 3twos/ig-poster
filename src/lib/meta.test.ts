@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getEnvMetaAuth,
   getMediaInsights,
+  publishFacebookPageContent,
   publishInstagramContent,
   publishInstagramFirstComment,
   searchMetaLocations,
@@ -237,6 +238,122 @@ describe("publishInstagramContent", () => {
     const createCall = fetchMock.mock.calls[0];
     const createBody = createCall?.[1]?.body as URLSearchParams;
     expect(createBody.get("share_to_feed")).toBe("false");
+  });
+});
+
+describe("publishFacebookPageContent", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("publishes Facebook Page photos with url and caption", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "photo_1", post_id: "page_1_1" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishFacebookPageContent(
+        {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+          caption: "Caption",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toMatchObject({
+      mode: "image",
+      creationId: "photo_1",
+      publishId: "page_1_1",
+    });
+
+    const call = fetchMock.mock.calls[0];
+    const body = call?.[1]?.body as URLSearchParams;
+    expect(call?.[0]).toBe("https://graph.facebook.com/v22.0/page-id/photos");
+    expect(body.get("url")).toBe("https://cdn.example.com/image.jpg");
+    expect(body.get("caption")).toBe("Caption");
+    expect(body.get("published")).toBe("true");
+    expect(body.get("access_token")).toBe("token");
+  });
+
+  it("publishes Facebook Page videos with file_url and description", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "video_1" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishFacebookPageContent(
+        {
+          mode: "reel",
+          videoUrl: "https://cdn.example.com/video.mp4",
+          caption: "Caption",
+          shareToFeed: false,
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toMatchObject({
+      mode: "reel",
+      creationId: "video_1",
+      publishId: "video_1",
+    });
+
+    const call = fetchMock.mock.calls[0];
+    const body = call?.[1]?.body as URLSearchParams;
+    expect(call?.[0]).toBe("https://graph.facebook.com/v22.0/page-id/videos");
+    expect(body.get("file_url")).toBe("https://cdn.example.com/video.mp4");
+    expect(body.get("description")).toBe("Caption");
+    expect(body.get("published")).toBe("true");
+  });
+
+  it("requires a connected Facebook Page id", async () => {
+    await expect(
+      publishFacebookPageContent(
+        {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+          caption: "Caption",
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).rejects.toThrow("Missing Facebook Page id for publishing.");
+  });
+
+  it("rejects scheduled publishes outside Meta's 10 minute to 30 day window", async () => {
+    await expect(
+      publishFacebookPageContent(
+        {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+          caption: "Caption",
+          publishAt: new Date(Date.now() + 60_000).toISOString(),
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).rejects.toThrow(
+      "Facebook scheduled publish time must be between 10 minutes and 30 days from now.",
+    );
   });
 });
 

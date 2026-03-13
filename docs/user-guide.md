@@ -220,9 +220,11 @@ If the macOS companion app is not installed or not reachable:
 - `single-image` variant publishes a rendered poster image.
 - `carousel` variant uses the Carousel Composer sequence (minimum 2 items, up to 10) and the selected feed orientation.
 - `reel` variant requires at least one uploaded video and includes a `Share reel to main feed` toggle. The default is on, matching the previous hardcoded behavior.
+- The main browser composer still publishes/schedules to Instagram by default. The destination-aware API/queue backend can also target a connected Facebook Page for single-image and single-video jobs.
 - Post status lifecycle is `Draft -> Scheduled -> Posted`, with archiving handled separately via the archive action.
 - Location ID is supported for single-image posts, reels, and carousel parents.
 - User tags are supported for single-image posts, reels, and carousel image items. Carousel videos cannot carry user tags.
+- Facebook Page publishes currently do not support carousels, Instagram first comments, Instagram location IDs, or Instagram user tags.
 - Location search suggestions populate the same `locationId` field sent to Meta; if search fails, you can still paste the raw ID manually.
 - User-tag placement uses the rendered poster preview in the main composer and the stored published image URL in queue edits when an image preview exists, while x/y inputs remain available for precision edits.
 - Instagram API throughput is capped at 50 published posts per rolling 24-hour window per account.
@@ -244,9 +246,10 @@ If the macOS companion app is not installed or not reachable:
   - Disconnect a specific model by its `connectionId`.
   - Stored in the private credential store when `DATABASE_URL` is configured; otherwise stored in an encrypted cookie tied to your browser session.
   - Connected LLM providers are used by both generation and the AI chat assistant.
-- Instagram:
-  - Connect/disconnect in Settings under Instagram Publishing.
+- Meta publishing:
+  - Connect/disconnect in Settings under the Meta publishing pair section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in the private credential store (DB) when available, with encrypted cookie fallback.
+  - A connected Page + Instagram professional account pair enables Instagram publishing in the browser app today and Facebook destination execution through the API/queue backend.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.
 

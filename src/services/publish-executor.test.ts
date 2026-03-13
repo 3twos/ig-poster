@@ -1,19 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/meta", () => ({
+  publishFacebookPageContent: vi.fn(),
   publishInstagramContent: vi.fn(),
   publishInstagramFirstComment: vi.fn(),
 }));
 
 import {
+  publishFacebookPageContent,
   publishInstagramContent,
   publishInstagramFirstComment,
 } from "@/lib/meta";
 import {
-  executeImmediateInstagramPublish,
+  executeImmediatePublish,
   executePublishJob,
 } from "@/services/publish-executor";
 
+const mockedPublishFacebookPageContent = vi.mocked(publishFacebookPageContent);
 const mockedPublishInstagramContent = vi.mocked(publishInstagramContent);
 const mockedPublishInstagramFirstComment = vi.mocked(publishInstagramFirstComment);
 
@@ -37,7 +40,7 @@ describe("publish-executor", () => {
     });
     mockedPublishInstagramFirstComment.mockResolvedValue("comment_1");
 
-    const outcome = await executeImmediateInstagramPublish(
+    const outcome = await executeImmediatePublish(
       {
         media: {
           mode: "image",
@@ -69,13 +72,52 @@ describe("publish-executor", () => {
     );
   });
 
-  it("rejects unsupported Facebook jobs before touching the Instagram publisher", async () => {
+  it("publishes Facebook image payloads with the Page publisher", async () => {
+    mockedPublishFacebookPageContent.mockResolvedValue({
+      mode: "image",
+      creationId: "photo_1",
+      publishId: "post_1",
+    });
+
+    const outcome = await executePublishJob(
+      {
+        destination: "facebook",
+        caption: "Caption",
+        firstComment: null,
+        locationId: null,
+        userTags: null,
+        media: {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+        },
+      },
+      auth,
+    );
+
+    expect(outcome.publish).toMatchObject({
+      mode: "image",
+      creationId: "photo_1",
+      publishId: "post_1",
+    });
+    expect(mockedPublishFacebookPageContent).toHaveBeenCalledWith(
+      {
+        mode: "image",
+        imageUrl: "https://cdn.example.com/image.jpg",
+        caption: "Caption",
+      },
+      auth,
+    );
+    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
+    expect(mockedPublishInstagramFirstComment).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported Facebook metadata before calling the Page publisher", async () => {
     await expect(
       executePublishJob(
         {
           destination: "facebook",
           caption: "Caption",
-          firstComment: null,
+          firstComment: "First comment",
           locationId: null,
           userTags: null,
           media: {
@@ -85,15 +127,11 @@ describe("publish-executor", () => {
         },
         auth,
       ),
-    ).rejects.toEqual(
-      expect.objectContaining({
-        name: "UnsupportedPublishDestinationError",
-        message: "Facebook publish execution is not implemented yet.",
-      }),
+    ).rejects.toThrow(
+      "Facebook publishing does not support Instagram-style first comments.",
     );
 
-    expect(mockedPublishInstagramContent).not.toHaveBeenCalled();
-    expect(mockedPublishInstagramFirstComment).not.toHaveBeenCalled();
+    expect(mockedPublishFacebookPageContent).not.toHaveBeenCalled();
   });
 
   it("returns a warning when Instagram first-comment posting fails", async () => {
