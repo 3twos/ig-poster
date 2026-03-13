@@ -130,6 +130,9 @@ type RefinePromptPreview = {
   instructionPlan: RefinementPlan;
 };
 
+const canonicalMeasurementKey = (variantId: string, slideIndex: number) =>
+  `${variantId}:${slideIndex}`;
+
 export default function Home() {
   const {
     activePost,
@@ -1234,7 +1237,9 @@ export default function Home() {
     );
 
     const measuredHeightsPercent =
-      measuredCanonicalHeightsPercentRef.current[activeVariant.id];
+      measuredCanonicalHeightsPercentRef.current[
+        canonicalMeasurementKey(activeVariant.id, activeSlideIndex)
+      ];
 
     dispatch({
       type: "UPDATE_OVERLAY",
@@ -1268,9 +1273,11 @@ export default function Home() {
   const handleMeasuredCanonicalHeightsChange = useCallback(
     (heights: Partial<Record<CanonicalOverlayKey, number>>) => {
       if (!activeVariant) return;
-      measuredCanonicalHeightsPercentRef.current[activeVariant.id] = heights;
+      measuredCanonicalHeightsPercentRef.current[
+        canonicalMeasurementKey(activeVariant.id, activeSlideIndex)
+      ] = heights;
     },
-    [activeVariant],
+    [activeSlideIndex, activeVariant],
   );
 
   const createShareLink = async () => {
