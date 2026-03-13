@@ -426,6 +426,7 @@ export const applyLayoutCopyBudget = (
 type RefineShortenIntensity = "standard" | "aggressive";
 
 export type RefinementDirectives = {
+  addCtaRequested: boolean;
   removeCta: boolean;
   preserveEmptyCta: boolean;
   shortenOverlayText: boolean;
@@ -436,7 +437,7 @@ export type RefinementDirectives = {
 const CTA_REMOVE_PATTERN =
   /\b(?:avoid|remove|drop|skip|omit|without|no)\s+(?:the\s+)?(?:cta|call[\s-]?to[\s-]?action)s?\b/;
 const CTA_ADD_PATTERN =
-  /\b(?:add|include|write|create)\s+(?:an?\s+)?(?:cta|call[\s-]?to[\s-]?action)\b/;
+  /\b(?:add|include|write|create)\s+(?:an?\s+)?(?:(?:short|brief|clear|specific|simple|direct|strong)\s+){0,2}(?:cta|call[\s-]?to[\s-]?action)\b/;
 const SHORTEN_PATTERN =
   /\b(?:shorter|shorten|concise|punchier|tighter|trim|reduce|leaner)\b|(?:less|fewer)\s+(?:text|copy|words)/;
 const AGGRESSIVE_SHORTEN_PATTERN =
@@ -492,6 +493,7 @@ export const deriveRefinementDirectives = (
   const mentionsOverlay = OVERLAY_PATTERN.test(normalized);
 
   return {
+    addCtaRequested: CTA_ADD_PATTERN.test(normalized),
     removeCta:
       CTA_REMOVE_PATTERN.test(normalized) || EDITORIAL_ONLY_PATTERN.test(normalized),
     preserveEmptyCta:
@@ -513,6 +515,8 @@ const buildRefinementDirectiveBlock = (directives: RefinementDirectives) => {
 
   if (directives.removeCta) {
     lines.push("- Remove CTA text.");
+  } else if (directives.addCtaRequested) {
+    lines.push("- Add or restore CTA text.");
   } else if (directives.preserveEmptyCta) {
     lines.push("- Keep CTA empty unless the user explicitly asks to add one.");
   }
@@ -631,9 +635,14 @@ export const applyRefinementDirectives = (input: {
   if (
     directives.removeCta ||
     directives.preserveEmptyCta ||
-    input.post?.ctaPolicy === "avoid"
+    (input.post?.ctaPolicy === "avoid" && !directives.addCtaRequested)
   ) {
     nextVariant.cta = "";
+  } else if (directives.addCtaRequested && !nextVariant.cta.trim()) {
+    nextVariant.cta = resolveRequiredCta(
+      input.post?.objective ?? "",
+      input.currentVariant.cta,
+    );
   } else if (input.post?.ctaPolicy === "require" && !nextVariant.cta.trim()) {
     nextVariant.cta = resolveRequiredCta(
       input.post.objective,

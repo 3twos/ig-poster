@@ -495,6 +495,28 @@ describe("creative helpers", () => {
     expect(requireCta.cta).toBe("Book a call");
   });
 
+  it("lets an explicit add-CTA refine instruction override avoid-CTA policy", () => {
+    const currentVariant: CreativeVariant = {
+      ...makeVariant("cta-policy-override", "single-image"),
+      cta: "",
+    };
+
+    const refined = applyRefinementDirectives({
+      currentVariant,
+      refinedVariant: {
+        ...currentVariant,
+        cta: "",
+      },
+      instruction: "Add a short CTA and tighten the body copy.",
+      post: {
+        ctaPolicy: "avoid",
+        objective: "Drive demo bookings",
+      },
+    });
+
+    expect(refined.cta).toBe("Book a call");
+  });
+
   it("enforces refine directives for shorter copy, shorter caption, and no CTA", () => {
     const currentVariant: CreativeVariant = {
       ...makeVariant("refine-enforced", "carousel"),
