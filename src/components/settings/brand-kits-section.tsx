@@ -580,6 +580,11 @@ export function BrandKitsSection() {
                       <span className="min-w-[2ch] text-right tabular-nums">{brand.defaultBgOpacity}</span>
                       <input type="range" min={0} max={100} value={brand.defaultBgOpacity} onChange={(e) => setBrand((current) => ({ ...current, defaultBgOpacity: parseInt(e.target.value) }))} className="h-3 w-20 accent-orange-300" />
                     </label>
+                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                      Overlay Strength
+                      <span className="min-w-[2ch] text-right tabular-nums">{brand.defaultOverlayStrength}</span>
+                      <input type="range" min={0} max={100} value={brand.defaultOverlayStrength} onChange={(e) => setBrand((current) => ({ ...current, defaultOverlayStrength: parseInt(e.target.value) }))} className="h-3 w-20 accent-orange-300" />
+                    </label>
                   </div>
                   <p className="text-[11px] text-slate-400">Applied to new posts using this kit. Per-post values can still be adjusted in the editor.</p>
                 </div>
