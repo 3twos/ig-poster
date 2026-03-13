@@ -1397,7 +1397,7 @@ status_icon() {
   case "$status" in
     READY) printf '%s' "${C_BOLD_GREEN}✓${C_RESET}" ;;
     ERROR|CANCELED|FAILED) printf '%s' "${C_BOLD_RED}✖${C_RESET}" ;;
-    BUILDING|INITIALIZING|QUEUED) printf '%s' "${C_YELLOW}⏳${C_RESET}" ;;
+    BUILDING|INITIALIZING|QUEUED) printf '%s' "${C_YELLOW}◑${C_RESET}" ;;
     WAITING) printf '%s' "${C_DIM}…${C_RESET}" ;;
     CONNECTION_ISSUE|API_ERROR|TIMED_OUT) printf '%s' "${C_BOLD_YELLOW}⚠${C_RESET}" ;;
     STOPPED) printf '%s' "${C_DIM}■${C_RESET}" ;;
@@ -2908,7 +2908,11 @@ if [[ -n "$TEAM_ID" ]]; then
 fi
 
 if [[ -n "$SPEAKER_CMD" ]]; then
-  log_line "Spoken alerts enabled via '${SPEAKER_CMD}' (voice: ${VOICE_NAME})."
+  if [[ "$SPEAKER_CMD" == "say" ]]; then
+    log_line "Spoken alerts enabled via '${SPEAKER_CMD}' (voice: ${VOICE_NAME})."
+  else
+    log_line "Spoken alerts enabled via '${SPEAKER_CMD}'."
+  fi
   if (( AUDIO_QUEUE_ENABLED == 1 )); then
     log_line "Voice alerts are serialized via audio queue."
   fi

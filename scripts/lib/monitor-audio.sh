@@ -303,7 +303,11 @@ notify_desktop() {
     *)       sound_name="Pop" ;;
   esac
 
-  osascript -e "display notification \"${message//\"/\\\"}\" with title \"${title//\"/\\\"}\" sound name \"${sound_name}\"" >/dev/null 2>&1 &
+  osascript - "$title" "$message" "$sound_name" >/dev/null 2>&1 <<'APPLESCRIPT' &
+on run argv
+  display notification (item 2 of argv) with title (item 1 of argv) sound name (item 3 of argv)
+end run
+APPLESCRIPT
 }
 
 # ---------------------------------------------------------------------------

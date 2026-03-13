@@ -40,7 +40,7 @@ status_icon() {
   local conclusion="$2"
 
   if [[ "$status" == "queued" ]]; then
-    printf '%s' "${C_BLUE}⏳${C_RESET}"
+    printf '%s' "${C_BLUE}◑${C_RESET}"
     return
   fi
   if [[ "$status" == "in_progress" ]]; then
