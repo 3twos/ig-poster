@@ -67,6 +67,7 @@ import {
 } from "@/lib/creative";
 import { formatElapsed } from "@/lib/agent-types";
 import { importApplePhotosSelection } from "@/lib/apple-photos";
+import type { MetaDestination } from "@/lib/meta-accounts";
 import type { PostStatus } from "@/lib/post";
 import {
   type BrandState,
@@ -117,6 +118,11 @@ const normalizeUserTags = (tags: MetaUserTag[] | null | undefined) =>
     }))
     .filter((tag) => tag.username.length > 0);
 
+const PUBLISH_DESTINATIONS: MetaDestination[] = ["instagram", "facebook"];
+
+const publishDestinationLabel = (destination: MetaDestination) =>
+  destination === "facebook" ? "Facebook" : "Instagram";
+
 type RefinePromptPreview = {
   systemPrompt: string;
   userPrompt: string;
@@ -142,6 +148,7 @@ export default function Home() {
   const [sharingForPostId, setSharingForPostId] = useState<string | null>(null);
   const [publishingForPostId, setPublishingForPostId] = useState<string | null>(null);
   const [publishMessageState, setPublishMessageState] = useState<{ postId: string | null; text: string | null }>({ postId: null, text: null });
+  const [publishDestination, setPublishDestination] = useState<MetaDestination>("instagram");
   const [copyState, setCopyState] = useState<"idle" | "done">("idle");
   const [shareCopyState, setShareCopyState] = useState<"idle" | "done">("idle");
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -437,6 +444,35 @@ export default function Home() {
     return result.variants.find((v) => v.id === activeVariantId) ?? result.variants[0];
   }, [activeVariantId, result]);
 
+  const availablePublishDestinations = useMemo(() => {
+    const capabilities = authStatus.account?.capabilities;
+
+    return PUBLISH_DESTINATIONS.filter((destination) => {
+      if (destination === "facebook") {
+        return Boolean(capabilities?.facebook.publishEnabled);
+      }
+
+      return Boolean(
+        capabilities?.instagram.publishEnabled ??
+          authStatus.connected,
+      );
+    });
+  }, [authStatus.account?.capabilities, authStatus.connected]);
+
+  useEffect(() => {
+    const enabledDestination = activePost?.destinations.find(
+      (destination) =>
+        destination.enabled &&
+        availablePublishDestinations.includes(destination.destination),
+    )?.destination;
+
+    setPublishDestination(
+      enabledDestination ??
+        availablePublishDestinations[0] ??
+        "instagram",
+    );
+  }, [activePost?.destinations, activePost?.id, availablePublishDestinations]);
+
   const patchResult = useCallback(
     (update: (current: GenerationResponse) => GenerationResponse) => {
       if (!result) return;
@@ -719,6 +755,52 @@ export default function Home() {
       ),
     [carouselTagAssets, singlePublishTagAsset],
   );
+  const hasAnyPublishUserTags = useMemo(
+    () =>
+      [
+        ...(singlePublishTagAsset ? [singlePublishTagAsset.userTags] : []),
+        ...carouselTagAssets.map((asset) => asset.userTags),
+      ].some((tags) => normalizeUserTags(tags).length > 0),
+    [carouselTagAssets, singlePublishTagAsset],
+  );
+  const publishDestinationValidationMessage = useMemo(() => {
+    if (publishDestination !== "facebook") {
+      return null;
+    }
+
+    if (activeVariant?.postType === "carousel") {
+      return "Facebook publishing currently supports single-image and single-video posts only.";
+    }
+
+    if (publishSettings.firstComment.trim()) {
+      return "Facebook publishing does not support Instagram-style first comments.";
+    }
+
+    if (publishSettings.locationId.trim()) {
+      return "Facebook publishing does not support Instagram location IDs.";
+    }
+
+    if (hasAnyPublishUserTags) {
+      return "Facebook publishing does not support Instagram user tags.";
+    }
+
+    return null;
+  }, [
+    activeVariant?.postType,
+    hasAnyPublishUserTags,
+    publishDestination,
+    publishSettings.firstComment,
+    publishSettings.locationId,
+  ]);
+  const publishValidationMessage = publishDestinationValidationMessage ??
+    (hasIncompletePublishUserTags
+      ? "Fix incomplete user tag rows before posting or scheduling."
+      : null);
+  const hasBlockingPublishValidationError =
+    hasIncompletePublishUserTags ||
+    Boolean(publishDestinationValidationMessage);
+  const selectedPublishDestinationLabel =
+    publishDestinationLabel(publishDestination);
 
   const isAgentBusy = generation.isGenerating || isUploadingAssets || isSharing || isPublishing || isRefining;
 
@@ -757,7 +839,7 @@ export default function Home() {
     if (generation.isGenerating) return { tone: "active" as const, text: "Preparing generation request...", elapsedMs: undefined, showStop: true };
     if (isUploadingAssets) return { tone: "active" as const, text: "Uploading assets...", elapsedMs: undefined, showStop: false };
     if (isSharing) return { tone: "active" as const, text: "Creating share link...", elapsedMs: undefined, showStop: false };
-    if (isPublishing) return { tone: "active" as const, text: "Publishing to Instagram...", elapsedMs: undefined, showStop: false };
+    if (isPublishing) return { tone: "active" as const, text: `Publishing to ${selectedPublishDestinationLabel}...`, elapsedMs: undefined, showStop: false };
     if (isRefining) return { tone: "active" as const, text: "Refining selected variant...", elapsedMs: undefined, showStop: false };
     if (generation.error) return { tone: "error" as const, text: generation.error, elapsedMs: undefined, showStop: false };
     if (saveStatus === "error") return { tone: "error" as const, text: "Autosave failed. Keep this tab open and press Cmd/Ctrl+S before leaving.", elapsedMs: undefined, showStop: false };
@@ -769,7 +851,7 @@ export default function Home() {
     if (shareUrl) return { tone: "success" as const, text: "Share link created.", elapsedMs: undefined, showStop: false };
     if (isPostedPost) return { tone: "success" as const, text: "Posted posts are locked. Duplicate this post to make changes.", elapsedMs: undefined, showStop: false };
     return { tone: "idle" as const, text: "Ready. Upload assets and generate concepts.", elapsedMs: undefined, showStop: false };
-  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPostedPost, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, saveStatus, shareUrl]);
+  }, [generation.agentRun, generation.error, generation.isGenerating, generation.runClock, isPostedPost, isPublishing, isRefining, isSharing, isUploadingAssets, publishMessage, saveStatus, selectedPublishDestinationLabel, shareUrl]);
 
   const uploadFileToStorage = useCallback(async (
     file: File,
@@ -1190,8 +1272,10 @@ export default function Home() {
     finally { setSharingForPostId((current) => current === postId ? null : current); }
   };
 
-  const publishToInstagram = async (scheduleAt?: string) => {
+  const publishToMeta = async (scheduleAt?: string) => {
     const postId = activePostIdRef.current;
+    const destination = publishDestination;
+    const destinationLabel = publishDestinationLabel(destination);
     if (activePostStatusRef.current === "posted") {
       const m = "Posted posts are locked. Duplicate the post to publish a new version.";
       generation.setError(m);
@@ -1204,7 +1288,12 @@ export default function Home() {
       toast.error(m);
       return;
     }
-    if (!authStatus.connected) { const m = "Connect an Instagram account before publishing."; generation.setError(m); toast.error(m); return; }
+    if (!authStatus.connected) {
+      const m = `Connect a Meta publishing pair before publishing to ${destinationLabel}.`;
+      generation.setError(m);
+      toast.error(m);
+      return;
+    }
     await saveNow();
     generation.setError(null); setPublishMessageState((current) => current.postId === postId ? { postId, text: null } : current); setPublishingForPostId(postId);
     try {
@@ -1265,10 +1354,11 @@ export default function Home() {
             return parsedScheduleAt.toISOString();
           })()
         : undefined;
-      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
+      const r = await fetch("/api/meta/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, destination, caption, firstComment: normalizedFirstComment, locationId, userTags, media, publishAt, outcomeContext: { variantName: activeVariant.name, postType: activeVariant.postType, caption, hook: activeVariant.hook, hashtags: activeVariant.hashtags, brandName: brand.brandName, score: activeVariant.score } }) });
       if (!r.ok) throw new Error(await parseApiError(r));
       const j = (await r.json()) as {
         status?: string;
+        destination?: MetaDestination;
         mode?: string;
         publishAt?: string;
         publishId?: string;
@@ -1284,8 +1374,8 @@ export default function Home() {
             })
           : "the selected time";
         const m = normalizedFirstComment
-          ? `Scheduled for ${scheduledText} (${localTimeZone}). First comment will post after publish.`
-          : `Scheduled for ${scheduledText} (${localTimeZone})`;
+          ? `Scheduled ${destinationLabel} publish for ${scheduledText} (${localTimeZone}). First comment will post after publish.`
+          : `Scheduled ${destinationLabel} publish for ${scheduledText} (${localTimeZone}).`;
         if (!isPostStillActive(postId)) return;
         setPublishMessageState({ postId, text: m });
         setPublishJobsRefreshKey((current) => current + 1);
@@ -1294,12 +1384,12 @@ export default function Home() {
       else {
         if (j.firstCommentStatus === "failed") {
           const warning = j.firstCommentWarning ?? "Could not post first comment.";
-          const m = `Published to Instagram. First comment failed: ${warning}`;
+          const m = `Published to ${destinationLabel}. First comment failed: ${warning}`;
           if (!isPostStillActive(postId)) return;
           setPublishMessageState({ postId, text: m });
           toast.warning(m);
         } else {
-          const m = "Published to Instagram successfully.";
+          const m = `Published to ${destinationLabel} successfully.`;
           if (!isPostStillActive(postId)) return;
           setPublishMessageState({ postId, text: m });
           toast.success(m);
@@ -1307,17 +1397,25 @@ export default function Home() {
         dispatch({
           type: "ADD_PUBLISH",
           postId: postId ?? undefined,
-          entry: { publishedAt: new Date().toISOString(), igMediaId: j.publishId },
+          entry:
+            destination === "instagram"
+              ? { publishedAt: new Date().toISOString(), igMediaId: j.publishId }
+              : { publishedAt: new Date().toISOString() },
         });
       }
-    } catch (e) { if (isPostStillActive(postId)) { const m = e instanceof Error ? e.message : "Instagram publish failed"; generation.setError(m); toast.error(m); } }
-    finally { setPublishingForPostId((current) => current === postId ? null : current); }
+    } catch (e) {
+      if (isPostStillActive(postId)) {
+        const m = e instanceof Error ? e.message : `${destinationLabel} publish failed`;
+        generation.setError(m);
+        toast.error(m);
+      }
+    } finally { setPublishingForPostId((current) => current === postId ? null : current); }
   };
 
-  const publishToInstagramRef = useRef<(
+  const publishToMetaRef = useRef<(
     scheduleAt?: string,
   ) => Promise<void>>(async () => {});
-  publishToInstagramRef.current = publishToInstagram;
+  publishToMetaRef.current = publishToMeta;
 
   const runGenerateFromQuickAction = useCallback(
     async (options?: { notifyOnMissingAssets?: boolean }): Promise<"started" | "busy" | "missing-assets"> => {
@@ -1393,7 +1491,7 @@ export default function Home() {
       await selectPost(postId);
       return;
     }
-    await publishToInstagramRef.current(scheduleAt);
+    await publishToMetaRef.current(scheduleAt);
   }, [activePost?.id, generation, getKnownPostStatus, selectPost]);
 
   const handlePublishJobsMutated = useCallback(async (
@@ -1667,7 +1765,7 @@ export default function Home() {
 
     const scheduleAt = pendingPublishRequest.scheduleAt;
     setPendingPublishRequest(null);
-    void publishToInstagramRef.current(scheduleAt);
+    void publishToMetaRef.current(scheduleAt);
   }, [activePost?.id, activePost?.result?.variants?.length, activeVariant, pendingPublishRequest]);
 
   // Empty state
@@ -1712,6 +1810,7 @@ export default function Home() {
               <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} collapsible collapsedSize={0} onResize={(size) => setLeftCollapsed(size.asPercentage === 0)} className="flex flex-col">
                 <div className="flex h-full flex-col rounded-xl border border-white/15 bg-slate-900/55 backdrop-blur-xl ml-4">
                   <SidebarContent
+                    publishDestinationLabel={selectedPublishDestinationLabel}
                     onGenerate={(postId) => void requestGenerateForPost(postId)}
                     onPostNow={(postId) => void requestPublishForPost(postId)}
                     onSchedulePost={(postId, scheduleAt) =>
@@ -1772,7 +1871,7 @@ export default function Home() {
                       <section className="pb-6">
                         <div className="space-y-4">
                           <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
-                          <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+                          <PublishSection activePostId={activePost?.id} authStatus={authStatus} availableDestinations={availablePublishDestinations} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasBlockingPublishValidationError} publishDestination={publishDestination} validationMessage={publishValidationMessage} onPublishDestinationChange={setPublishDestination} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToMeta()} onSchedulePost={(scheduleAt) => void publishToMeta(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
                         </div>
                       </section>
                     ) : null}
@@ -1843,7 +1942,7 @@ export default function Home() {
             {activeVariant && !isPostedPost ? (
               <div className="space-y-4">
                 <PublishMetadataEditor postType={activeVariant.postType} firstComment={publishSettings.firstComment} locationId={publishSettings.locationId} reelShareToFeed={publishSettings.reelShareToFeed} hasIncompleteUserTags={hasIncompletePublishUserTags} singleTagAsset={singlePublishTagAsset} carouselTagAssets={carouselTagAssets} onFirstCommentChange={(value) => updatePublishSettings({ firstComment: value })} onLocationIdChange={(value) => updatePublishSettings({ locationId: value })} onReelShareToFeedChange={(value) => updatePublishSettings({ reelShareToFeed: value })} onAssetUserTagsChange={updateAssetUserTags} disabled={isAgentBusy} />
-                <PublishSection activePostId={activePost?.id} authStatus={authStatus} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasIncompletePublishUserTags} validationMessage={hasIncompletePublishUserTags ? "Fix incomplete user tag rows before posting or scheduling." : null} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToInstagram()} onSchedulePost={(scheduleAt) => void publishToInstagram(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
+                <PublishSection activePostId={activePost?.id} authStatus={authStatus} availableDestinations={availablePublishDestinations} isAuthLoading={isAuthLoading} isSharing={isSharing} isPublishing={isPublishing} hasBlockingValidationError={hasBlockingPublishValidationError} publishDestination={publishDestination} validationMessage={publishValidationMessage} onPublishDestinationChange={setPublishDestination} onPublishJobsMutated={handlePublishJobsMutated} publishJobsRefreshKey={publishJobsRefreshKey} shareUrl={shareUrl} shareCopyState={shareCopyState} localTimeZone={localTimeZone} onCreateShareLink={() => void createShareLink()} onPostNow={() => void publishToMeta()} onSchedulePost={(scheduleAt) => void publishToMeta(scheduleAt)} onSelectPlannerPost={(postId) => selectPost(postId)} />
               </div>
             ) : null}
             <div className="flex gap-2">
@@ -1855,6 +1954,7 @@ export default function Home() {
       </AppShell>
 
       <MobileSidebarDrawer
+        publishDestinationLabel={selectedPublishDestinationLabel}
         onGenerate={(postId) => void requestGenerateForPost(postId)}
         onPostNow={(postId) => void requestPublishForPost(postId)}
         onSchedulePost={(postId, scheduleAt) =>

@@ -25,8 +25,10 @@
 - Keeps the post lifecycle intentionally narrow: `draft`, `scheduled`, and `posted`, with posted posts locked from further edits or deletion and archivable instead.
 - Exposes Settings and Brand Kit management as full-screen modals from the main editor shell for quicker in-context workflow.
 - Creates public, read-only project snapshots at `/share/<id>` with persisted project state (secured by unguessable IDs).
+<<<<<<< HEAD
 - Publishes directly to Meta destinations via Graph API, or schedules publishing through either app-managed jobs or Meta-synced Facebook Page schedules.
 - Backend publish flows are now destination-aware for Meta: Instagram remains app-managed, while Facebook single-image and single-video posts can publish immediately or create a remote-authoritative scheduled Page post that is shadowed locally for planner/queue visibility.
+- The browser composer now exposes an Instagram/Facebook destination selector when the connected Meta publishing pair supports both destinations, while preserving Instagram as the fallback when Facebook capability is unavailable.
 - Promotes caption editing into a persisted post-composer field, while keeping the generated caption bundle available as a one-click suggestion.
 - Adds explicit lifecycle controls for `Move to draft`, `Duplicate post`, `Archive`, and a planner sheet for scheduled posts.
 - Surfaces both a scheduled-post planner and a publish queue so users can review upcoming jobs, see each job's Meta destination/sync mode, cancel or move them back to draft, retry failures, and edit queued/failed publish details without leaving the editor. Meta-synced Facebook schedules currently surface as read-only shadow jobs.
@@ -73,9 +75,9 @@
    - Save a project snapshot and send a share link so teammates can review the selected concept.
 
 4. Publish immediately
-   - Connect Instagram via OAuth (or env credentials), then publish selected concept directly.
+   - Connect a Meta publishing pair via OAuth (or env credentials), choose Instagram or Facebook in the publish section, then publish the selected concept directly.
    - For carousel variants, use the carousel composer to control which items are included, their order, and the feed orientation before publishing.
-   - Optional metadata for image posts: search Meta places to fill `locationId`, or paste one manually, and place user tags visually on the rendered poster with x/y fallback fields.
+   - Optional metadata for Instagram image posts: search Meta places to fill `locationId`, or paste one manually, and place user tags visually on the rendered poster with x/y fallback fields.
 
 5. Schedule approved content
    - Set a future publish time and let the cron worker publish when due.

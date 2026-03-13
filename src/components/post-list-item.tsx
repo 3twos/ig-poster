@@ -131,6 +131,7 @@ type Props = {
   post: PostSummary;
   isActive: boolean;
   isDirty?: boolean;
+  publishDestinationLabel?: string;
   onSelect: () => void;
   onGenerate?: () => void;
   onPostNow?: () => void;
@@ -144,6 +145,7 @@ export function PostListItem({
   post,
   isActive,
   isDirty = false,
+  publishDestinationLabel = "Instagram",
   onSelect,
   onGenerate,
   onPostNow,
@@ -483,7 +485,7 @@ export function PostListItem({
           <AlertDialogHeader>
             <AlertDialogTitle>Post now?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will immediately publish this post to Instagram.
+              This will immediately publish this post to {publishDestinationLabel}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -512,7 +514,7 @@ export function PostListItem({
           <DialogHeader>
             <DialogTitle>Post at</DialogTitle>
             <DialogDescription>
-              Pick when this post should publish to Instagram.
+              Pick when this post should publish to {publishDestinationLabel}.
             </DialogDescription>
           </DialogHeader>
           <Input
