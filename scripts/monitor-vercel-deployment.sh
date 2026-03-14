@@ -1820,6 +1820,40 @@ record_event_update_for_index() {
   fi
 
   if [[ -n "$event_step" ]]; then
+    # Record step transition in history only when the derived phase changes,
+    # not on every raw step string change (many steps map to the same phase).
+    local _prev_step="${DEP_STEP[index]:-}"
+    local _new_phase_idx _prev_phase_idx
+    _new_phase_idx="$(_step_phase_index "$event_step")"
+    _prev_phase_idx="$(_step_phase_index "$_prev_step")"
+    if [[ "$_new_phase_idx" != "$_prev_phase_idx" ]] && (( _new_phase_idx >= 0 )); then
+      local _phase_key
+      _phase_key="$(printf '%s' "$event_step" | tr '[:upper:]' '[:lower:]')"
+      local _now_epoch
+      _now_epoch="$(date +%s)"
+      # Only record if this phase hasn't been recorded yet (preserve first start time)
+      local _already_recorded=0
+      if [[ -n "${DEP_STEP_HISTORY[index]:-}" ]]; then
+        local _existing_entry
+        local _existing_IFS="$IFS"
+        IFS='|'
+        for _existing_entry in ${DEP_STEP_HISTORY[index]}; do
+          local _existing_key="${_existing_entry%%:*}"
+          if [[ "$(_step_phase_index "$_existing_key")" == "$_new_phase_idx" ]]; then
+            _already_recorded=1
+            break
+          fi
+        done
+        IFS="$_existing_IFS"
+      fi
+      if (( _already_recorded == 0 )); then
+        if [[ -z "${DEP_STEP_HISTORY[index]:-}" ]]; then
+          DEP_STEP_HISTORY[index]="${_phase_key}:${_now_epoch}"
+        else
+          DEP_STEP_HISTORY[index]="${DEP_STEP_HISTORY[index]}|${_phase_key}:${_now_epoch}"
+        fi
+      fi
+    fi
     DEP_STEP[index]="$event_step"
   fi
   if [[ -n "$event_text" ]]; then
@@ -1936,7 +1970,7 @@ reconcile_event_stream_workers() {
 refresh_project_deployments() {
   local response parsed record
   local dep_id dep_status dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request dep_change_title
-  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name source_label actor_label commit_label pull_request_label change_title_label
+  local old_idx first_seen last_status announced step_label step_history last_event_ms last_event_text project_name source_label actor_label commit_label pull_request_label change_title_label
   local -a next_ids=()
   local -a next_status=()
   local -a next_url=()
@@ -1954,6 +1988,7 @@ refresh_project_deployments() {
   local -a next_last_status=()
   local -a next_announced=()
   local -a next_step=()
+  local -a next_step_history=()
   local -a next_last_event_ms=()
   local -a next_last_event_text=()
   local -a next_project_name=()
@@ -1986,6 +2021,7 @@ refresh_project_deployments() {
     DEP_LAST_STATUS=()
     DEP_TERMINAL_ANNOUNCED=()
     DEP_STEP=()
+    DEP_STEP_HISTORY=()
     DEP_LAST_EVENT_MS=()
     DEP_LAST_EVENT_TEXT=()
     DEP_PROJECT_NAME=()
@@ -2023,6 +2059,7 @@ refresh_project_deployments() {
       last_status="${DEP_LAST_STATUS[old_idx]}"
       announced="${DEP_TERMINAL_ANNOUNCED[old_idx]}"
       step_label="${DEP_STEP[old_idx]}"
+      step_history="${DEP_STEP_HISTORY[old_idx]:-}"
       last_event_ms="${DEP_LAST_EVENT_MS[old_idx]}"
       last_event_text="${DEP_LAST_EVENT_TEXT[old_idx]}"
       project_name="${DEP_PROJECT_NAME[old_idx]}"
@@ -2031,6 +2068,7 @@ refresh_project_deployments() {
       last_status=""
       announced="0"
       step_label=""
+      step_history=""
       last_event_ms="0"
       last_event_text=""
       project_name="$(derive_short_project_name "$dep_url" "$dep_id")"
@@ -2064,6 +2102,7 @@ refresh_project_deployments() {
     next_last_status+=("$last_status")
     next_announced+=("$announced")
     next_step+=("$step_label")
+    next_step_history+=("$step_history")
     next_last_event_ms+=("$last_event_ms")
     next_last_event_text+=("$last_event_text")
     next_project_name+=("$project_name")
@@ -2086,6 +2125,7 @@ refresh_project_deployments() {
   DEP_LAST_STATUS=("${next_last_status[@]-}")
   DEP_TERMINAL_ANNOUNCED=("${next_announced[@]-}")
   DEP_STEP=("${next_step[@]-}")
+  DEP_STEP_HISTORY=("${next_step_history[@]-}")
   DEP_LAST_EVENT_MS=("${next_last_event_ms[@]-}")
   DEP_LAST_EVENT_TEXT=("${next_last_event_text[@]-}")
   DEP_PROJECT_NAME=("${next_project_name[@]-}")
@@ -2096,7 +2136,7 @@ refresh_project_deployments() {
 refresh_single_deployment() {
   local response parsed
   local dep_status dep_id dep_url dep_created_at dep_ready_at dep_target dep_branch dep_error dep_source dep_actor dep_commit_sha dep_pull_request dep_change_title
-  local old_idx first_seen last_status announced step_label last_event_ms last_event_text project_name
+  local old_idx first_seen last_status announced step_label step_history last_event_ms last_event_text project_name
 
   if [[ -z "$ACTIVE_SINGLE_TARGET" ]]; then
     ACTIVE_SINGLE_TARGET="$TARGET"
@@ -2125,6 +2165,7 @@ refresh_single_deployment() {
     last_status="${DEP_LAST_STATUS[old_idx]}"
     announced="${DEP_TERMINAL_ANNOUNCED[old_idx]}"
     step_label="${DEP_STEP[old_idx]}"
+    step_history="${DEP_STEP_HISTORY[old_idx]:-}"
     last_event_ms="${DEP_LAST_EVENT_MS[old_idx]}"
     last_event_text="${DEP_LAST_EVENT_TEXT[old_idx]}"
     project_name="${DEP_PROJECT_NAME[old_idx]}"
@@ -2133,6 +2174,7 @@ refresh_single_deployment() {
     last_status=""
     announced="0"
     step_label=""
+    step_history=""
     last_event_ms="0"
     last_event_text=""
     project_name="$(derive_short_project_name "$dep_url" "$dep_id")"
@@ -2162,6 +2204,7 @@ refresh_single_deployment() {
   DEP_LAST_STATUS=("$last_status")
   DEP_TERMINAL_ANNOUNCED=("$announced")
   DEP_STEP=("$step_label")
+  DEP_STEP_HISTORY=("$step_history")
   DEP_LAST_EVENT_MS=("$last_event_ms")
   DEP_LAST_EVENT_TEXT=("$last_event_text")
   DEP_PROJECT_NAME=("$project_name")
@@ -2246,8 +2289,9 @@ process_deployment_transitions_and_alerts() {
     if [[ -z "$old_status" ]]; then
       log_line "Watching deployment id=${dep_id} state=${status}"
 
-      # Announce newly discovered deployments that are actively building
-      if is_active_status "$status"; then
+      # Announce newly discovered deployments that are actively building.
+      # Skip voice/alerts on the initial poll — those are pre-existing deployments.
+      if is_active_status "$status" && (( _MONITOR_INITIAL_POLL == 0 )); then
         local spoken_change
         if [[ "$change_label" != "n/a" ]]; then
           spoken_change="$change_label"
@@ -2311,6 +2355,10 @@ process_deployment_transitions_and_alerts() {
     error_message="$(sanitize_field "${DEP_ERROR_MESSAGE[i]:-}")"
 
     if is_terminal_status "$status"; then
+      # Mark pre-existing terminal deployments as announced without firing alerts
+      if (( ${DEP_TERMINAL_ANNOUNCED[i]:-0} == 0 )) && (( _MONITOR_INITIAL_POLL == 1 )); then
+        DEP_TERMINAL_ANNOUNCED[i]=1
+      fi
       if (( ${DEP_TERMINAL_ANNOUNCED[i]:-0} == 0 )); then
         spoken_duration="$(format_spoken_duration "$duration_seconds")"
 
@@ -2460,120 +2508,273 @@ update_dashboard_overview() {
   DASH_UPDATED_AT_LABEL="$(date '+%H:%M:%S')"
 }
 
+_is_old_deployment() {
+  local created_at_ms="$1"
+  local now_seconds age_seconds
+
+  if ! [[ "$created_at_ms" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  now_seconds="$(date +%s)"
+  age_seconds=$(( now_seconds - (created_at_ms / 1000) ))
+  (( age_seconds >= 14400 ))
+}
+
+_step_phase_index() {
+  local step_text="$1"
+  local normalized
+  normalized="$(printf '%s' "$step_text" | tr '[:upper:]' '[:lower:]')"
+
+  if [[ "$normalized" == *"queue"* ]]; then printf '0'; return; fi
+  if [[ "$normalized" == *"init"* ]]; then printf '1'; return; fi
+  if [[ "$normalized" == *"clone"* ]] || [[ "$normalized" == *"checkout"* ]]; then printf '2'; return; fi
+  if [[ "$normalized" == *"install"* ]] || [[ "$normalized" == *"depend"* ]]; then printf '3'; return; fi
+  if [[ "$normalized" == *"build"* ]] || [[ "$normalized" == *"compile"* ]]; then printf '4'; return; fi
+  if [[ "$normalized" == *"upload"* ]] || [[ "$normalized" == *"deploy"* ]] || [[ "$normalized" == *"final"* ]]; then printf '5'; return; fi
+  printf '-1'
+}
+
+_current_phase_index() {
+  local status="$1"
+  local step_text="$2"
+  local normalized
+  normalized="$(printf '%s' "$step_text" | tr '[:upper:]' '[:lower:]')"
+
+  case "$status" in
+    READY)                 printf '6'; return ;;
+    ERROR|CANCELED|FAILED) printf '6'; return ;;
+    QUEUED)                printf '0'; return ;;
+    INITIALIZING)          printf '1'; return ;;
+    BUILDING)
+      if [[ "$normalized" == *"clone"* ]] || [[ "$normalized" == *"checkout"* ]]; then
+        printf '2'; return
+      elif [[ "$normalized" == *"install"* ]] || [[ "$normalized" == *"depend"* ]]; then
+        printf '3'; return
+      elif [[ "$normalized" == *"build"* ]] || [[ "$normalized" == *"compile"* ]]; then
+        printf '4'; return
+      elif [[ "$normalized" == *"upload"* ]] || [[ "$normalized" == *"deploy"* ]] || [[ "$normalized" == *"final"* ]]; then
+        printf '5'; return
+      fi
+      printf '4'; return
+      ;;
+  esac
+  printf '0'
+}
+
+# Render detailed step lines for active deployments.
+# Outputs multiple lines showing completed steps with timings, current step, and next steps.
+_render_active_steps() {
+  local status="$1"
+  local step_text="$2"
+  local step_history="$3"
+  local now_seconds="$4"
+
+  local phases=("Queue" "Init" "Clone" "Install" "Build" "Deploy")
+  local current_idx
+  current_idx="$(_current_phase_index "$status" "$step_text")"
+
+  # Parse step history into parallel arrays: phase_epochs[phase_idx]=epoch
+  local phase_epochs=("" "" "" "" "" "")
+  if [[ -n "$step_history" ]]; then
+    local IFS='|'
+    local entry
+    for entry in $step_history; do
+      local entry_key="${entry%%:*}"
+      local entry_epoch="${entry##*:}"
+      local pidx
+      pidx="$(_step_phase_index "$entry_key")"
+      if (( pidx >= 0 && pidx < 6 )); then
+        phase_epochs[pidx]="$entry_epoch"
+      fi
+    done
+  fi
+
+  local p line_prefix phase_color timing_text
+
+  for (( p = 0; p < ${#phases[@]}; p++ )); do
+    if (( p < current_idx )); then
+      # Completed phase — show with duration
+      timing_text=""
+      if [[ -n "${phase_epochs[p]}" ]]; then
+        local phase_start="${phase_epochs[p]}"
+        local phase_end=""
+        # Find next phase start as this phase's end
+        local np
+        for (( np = p + 1; np < 6; np++ )); do
+          if [[ -n "${phase_epochs[np]}" ]]; then
+            phase_end="${phase_epochs[np]}"
+            break
+          fi
+        done
+        if [[ -z "$phase_end" ]]; then
+          phase_end="$now_seconds"
+        fi
+        local phase_dur=$(( phase_end - phase_start ))
+        if (( phase_dur >= 0 )); then
+          timing_text="$(format_duration "$phase_dur")"
+        fi
+      fi
+      if [[ -n "$timing_text" ]]; then
+        print_dashboard_linef '     %s%s %s%s' "${C_GREEN}" "${phases[p]}" "${C_DIM}${timing_text}${C_RESET}" ""
+      else
+        print_dashboard_linef '     %s%s%s' "${C_GREEN}" "${phases[p]}" "${C_RESET}"
+      fi
+    elif (( p == current_idx )); then
+      # Current phase — highlighted with elapsed time
+      timing_text=""
+      if [[ -n "${phase_epochs[p]}" ]]; then
+        local phase_elapsed=$(( now_seconds - phase_epochs[p] ))
+        if (( phase_elapsed >= 0 )); then
+          timing_text="$(format_duration "$phase_elapsed")"
+        fi
+      fi
+      local spinner
+      spinner="$(spinner_frame)"
+      if [[ -n "$timing_text" ]]; then
+        print_dashboard_linef '   %s %s%s %s%s' "$spinner" "${C_BOLD_YELLOW}" "${phases[p]}" "${timing_text}${C_RESET}" ""
+      else
+        print_dashboard_linef '   %s %s%s%s' "$spinner" "${C_BOLD_YELLOW}" "${phases[p]}" "${C_RESET}"
+      fi
+    else
+      # Future phase — dim
+      print_dashboard_linef '     %s%s%s' "${C_DIM}" "${phases[p]}" "${C_RESET}"
+    fi
+  done
+}
+
 render_dashboard() {
-  local status_mark alert_mark event_time_display alert_time_display
-  local i status env_mark raw_branch_label identity_label branch_label status_label step_label progress_percent progress_bar
-  local id_label url_label started_display duration_text event_display error_text row_status_icon
-  local source_label actor_label commit_label pull_request_label pull_request_display pull_request_kind change_title_label branch_hint_label
+  local status_mark
+  local i status step_label duration_seconds duration_text
+  local change_title_label error_text now_seconds
 
   if (( DASHBOARD_ENABLED == 0 )); then
     return
   fi
 
+  now_seconds="$(date +%s)"
   status_mark="$(status_icon "${DASH_STATUS_RAW:-UNKNOWN}")"
-  alert_mark="$(alert_icon "${LAST_ALERT_LEVEL:-info}")"
-  event_time_display="$(format_epoch_with_relative "$LAST_EVENT_EPOCH")"
-  alert_time_display="$(format_epoch_with_relative "$LAST_ALERT_EPOCH")"
 
   begin_dashboard_render
 
-  print_dashboard_linef '%sVercel Deploy Monitor%s' "${C_BOLD_CYAN}" "${C_RESET}"
-  print_dashboard_line "====================="
-  print_dashboard_linef 'Project      : %s' "${DASH_PROJECT_NAME:-n/a}"
-  print_dashboard_linef 'Mode         : %s' "${DASH_MODE_LABEL:-n/a}"
-  print_dashboard_linef 'Event Feed   : %s' "${DASH_FEED_LABEL:-polling}"
-  print_dashboard_linef 'Last Update  : %s' "${DASH_UPDATED_AT_LABEL:-n/a}"
+  # ── Header ──
+  print_dashboard_linef '%s%s%s  %s  %s' \
+    "${C_BOLD_CYAN}" "${DASH_PROJECT_NAME:-Vercel}" "${C_RESET}" \
+    "$status_mark" \
+    "${C_DIM}${DASH_UPDATED_AT_LABEL:-n/a}${C_RESET}"
 
-  print_dashboard_line ""
-  print_dashboard_line "Current Status"
-  print_dashboard_line "--------------"
-  print_dashboard_linef 'Overall      : %s %s' "$status_mark" "${DASH_STATUS_LABEL:-Unknown}"
-  print_dashboard_linef 'Deployments  : %s total | %s active | %s ready | %s failed' \
-    "${DASH_DEPLOYMENTS_TOTAL:-0}" "${DASH_DEPLOYMENTS_ACTIVE:-0}" "${DASH_DEPLOYMENTS_READY:-0}" "${DASH_DEPLOYMENTS_FAILED:-0}"
-  print_dashboard_linef 'Last Event   : %s' "${LAST_EVENT_MESSAGE:-Starting...}"
-  print_dashboard_linef 'Event Time   : %s' "$event_time_display"
-  print_dashboard_linef 'Last Alert   : %s %s' "$alert_mark" "${LAST_ALERT_MESSAGE:-None}"
-  print_dashboard_linef 'Alert Time   : %s' "$alert_time_display"
-
-  print_dashboard_line ""
-  print_dashboard_line "Deployment Details"
-  print_dashboard_line "------------------"
-
-  if (( ${#DEP_IDS[@]} == 0 )); then
-    print_dashboard_line "No deployments detected yet."
-  else
-    for (( i = 0; i < ${#DEP_IDS[@]}; i++ )); do
-      status="${DEP_STATUS[i]:-UNKNOWN}"
-      row_status_icon="$(status_icon "$status")"
-      env_mark="$(environment_icon "${DEP_TARGET[i]:-preview}")"
-      raw_branch_label="$(friendly_branch_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-      identity_label="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
-      branch_label="$(truncate_text "$identity_label" 24)"
-      status_label="$(friendly_status "$status")"
-
-      step_label="$(deployment_step_label "$i")"
-      step_label="$(truncate_text "$step_label" 78)"
-
-      progress_percent="$(status_progress_percent "$status" "$step_label")"
-      progress_bar="$(render_progress_bar "$progress_percent" 24 "$status")"
-
-      id_label="$(short_deployment_label "${DEP_IDS[i]}")"
-      url_label="$(friendly_host "${DEP_URL[i]:-}")"
-      url_label="$(truncate_text "$url_label" 38)"
-
-      started_display="$(format_ms_with_relative "${DEP_CREATED_AT_MS[i]:-}")"
-      duration_text="$(format_duration "$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$(date +%s)}")")"
-      event_display="$(format_ms_with_relative "${DEP_LAST_EVENT_MS[i]:-0}")"
-      source_label="$(sanitize_field "${DEP_SOURCE[i]:-unknown}")"
-      if [[ -z "$source_label" ]]; then
-        source_label="unknown"
-      fi
-      actor_label="$(sanitize_field "${DEP_ACTOR[i]:-n/a}")"
-      if [[ -z "$actor_label" ]]; then
-        actor_label="n/a"
-      fi
-      commit_label="$(sanitize_field "${DEP_COMMIT_SHA[i]:-n/a}")"
-      if [[ -z "$commit_label" ]]; then
-        commit_label="n/a"
-      fi
-      pull_request_label="$(sanitize_field "${DEP_PULL_REQUEST[i]:-n/a}")"
-      if [[ -z "$pull_request_label" ]]; then
-        pull_request_label="n/a"
-      fi
-      pull_request_display="$(pull_request_display_label "$pull_request_label")"
-      pull_request_kind="$(pull_request_kind_label "$pull_request_label")"
-      if [[ "$pull_request_kind" == "n/a" ]]; then
-        pull_request_kind="PR"
-      fi
-      change_title_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
-      branch_hint_label="$(branch_context_hint "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "$source_label" "$commit_label")"
-      branch_hint_label="$(truncate_text "$branch_hint_label" 90)"
-
-      print_dashboard_linef '%2d. %s %s %s %s %s %3d%%' \
-        "$(( i + 1 ))" "$env_mark" "$(color_pad "$row_status_icon" 1)" "$(color_pad "$branch_label" 24)" "$(color_pad "$status_label" 12)" "$progress_bar" "$progress_percent"
-      print_dashboard_linef '    step     : %s' "$step_label"
-      print_dashboard_linef '    id / url : %s | %s' "$id_label" "$url_label"
-      if [[ "$pull_request_display" == "n/a" && "$change_title_label" == "n/a" && "$commit_label" != "n/a" ]]; then
-        print_dashboard_linef '    context  : %s n/a | change n/a | source %s | actor %s | commit %s' "$pull_request_kind" "$source_label" "$actor_label" "$commit_label"
-      else
-        print_dashboard_linef '    context  : %s %s | change %s | source %s | actor %s' "$pull_request_kind" "$pull_request_display" "$change_title_label" "$source_label" "$actor_label"
-      fi
-      if [[ "$raw_branch_label" == "unknown" && "$identity_label" == "unlabeled" ]]; then
-        print_dashboard_linef '    branch   : %s' "$branch_hint_label"
-      fi
-      print_dashboard_linef '    started  : %s | elapsed %s | last event %s' "$started_display" "$duration_text" "$event_display"
-
-      error_text="$(sanitize_field "${DEP_ERROR_MESSAGE[i]:-}")"
-      if [[ -n "$error_text" && ( "$status" == "ERROR" || "$status" == "FAILED" || "$status" == "CANCELED" ) ]]; then
-        error_text="$(truncate_text "$error_text" 90)"
-        print_dashboard_linef '    error    : %s' "$error_text"
-      fi
-
-      print_dashboard_line ""
-    done
+  # ── Alert banner (only when meaningful) ──
+  if [[ "${LAST_ALERT_MESSAGE:-None}" != "None" && "${LAST_ALERT_MESSAGE:-}" != "Starting..." ]]; then
+    local alert_age_display alert_mark_icon
+    alert_mark_icon="$(alert_icon "${LAST_ALERT_LEVEL:-info}")"
+    alert_age_display="$(format_epoch_with_relative "$LAST_ALERT_EPOCH")"
+    print_dashboard_linef '%s %s  %s' "$alert_mark_icon" "${LAST_ALERT_MESSAGE}" "${C_DIM}${alert_age_display}${C_RESET}"
   fi
 
-  print_dashboard_line "Press Ctrl+C to stop."
+  print_dashboard_line ""
+
+  if (( ${#DEP_IDS[@]} == 0 )); then
+    print_dashboard_linef '%sWaiting for deployments...%s' "${C_DIM}" "${C_RESET}"
+  else
+    # Separate old (>=4h) from recent deployments
+    local recent_indices=()
+    local old_indices=()
+    for (( i = 0; i < ${#DEP_IDS[@]}; i++ )); do
+      if _is_old_deployment "${DEP_CREATED_AT_MS[i]:-}"; then
+        old_indices+=("$i")
+      else
+        recent_indices+=("$i")
+      fi
+    done
+
+    # ── Recent / Active deployments ──
+    for i in "${recent_indices[@]}"; do
+      status="${DEP_STATUS[i]:-UNKNOWN}"
+
+      change_title_label="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
+      local pr_display
+      pr_display="$(pull_request_display_label "$(sanitize_field "${DEP_PULL_REQUEST[i]:-}")")"
+
+      # Build concise title: PR#N title or just title
+      local title_raw=""
+      if [[ "$pr_display" != "n/a" ]]; then
+        title_raw="${pr_display} "
+      fi
+      if [[ "$change_title_label" != "n/a" ]]; then
+        title_raw="${title_raw}${change_title_label}"
+      fi
+      if [[ -z "$title_raw" ]]; then
+        title_raw="$(deployment_identity_label "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}" "${DEP_PULL_REQUEST[i]:-}" "${DEP_COMMIT_SHA[i]:-}" "${DEP_SOURCE[i]:-}" "${DEP_ACTOR[i]:-}")"
+      fi
+      title_raw="$(truncate_text "$title_raw" 90)"
+
+      duration_seconds="$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$now_seconds}")"
+      duration_text="$(format_duration "$duration_seconds")"
+
+      if is_active_status "$status"; then
+        # ── Active: full card with step details ──
+        local env_mark status_label
+        env_mark="$(environment_icon "${DEP_TARGET[i]:-preview}")"
+        status_label="$(friendly_status "$status")"
+
+        print_dashboard_linef '%s %s  %s  %s%s%s' \
+          "$env_mark" "$(color_pad "$status_label" 12)" "$(color_pad "$title_raw" 90)" \
+          "${C_DIM}" "$duration_text" "${C_RESET}"
+
+        step_label="$(deployment_step_label "$i")"
+        _render_active_steps "$status" "$step_label" "${DEP_STEP_HISTORY[i]:-}" "$now_seconds"
+        print_dashboard_line ""
+      else
+        # ── Completed (ready/error/canceled): compact single line ──
+        local row_icon started_relative
+        row_icon="$(status_icon "$status")"
+        started_relative="$(relative_time_from_ms "${DEP_CREATED_AT_MS[i]:-}")"
+
+        print_dashboard_linef '  %s  %s  %s%6s  %s%s' \
+          "$row_icon" "$(color_pad "$title_raw" 90)" \
+          "${C_DIM}" "$duration_text" "$started_relative" "${C_RESET}"
+
+        error_text="$(sanitize_field "${DEP_ERROR_MESSAGE[i]:-}")"
+        if [[ -n "$error_text" && ( "$status" == "ERROR" || "$status" == "FAILED" || "$status" == "CANCELED" ) ]]; then
+          error_text="$(truncate_text "$error_text" 80)"
+          print_dashboard_linef '    %s%s%s' "${C_RED}" "$error_text" "${C_RESET}"
+        fi
+      fi
+    done
+
+    # ── Old deployments (compact) ──
+    if (( ${#old_indices[@]} > 0 )); then
+      print_dashboard_linef '%s── older ──%s' "${C_DIM}" "${C_RESET}"
+      for i in "${old_indices[@]}"; do
+        status="${DEP_STATUS[i]:-UNKNOWN}"
+        local row_icon started_time_label old_title old_error
+
+        row_icon="$(status_icon "$status")"
+        started_time_label="$(format_ms_local "${DEP_CREATED_AT_MS[i]:-}")"
+        old_title="$(deployment_change_label "${DEP_CHANGE_TITLE[i]:-}" "${DEP_BRANCH[i]:-}" "${DEP_TARGET[i]:-preview}" "${DEP_URL[i]:-}")"
+        old_title="$(truncate_text "$old_title" 56)"
+
+        duration_seconds="$(duration_seconds_for_record "${DEP_CREATED_AT_MS[i]:-}" "${DEP_READY_AT_MS[i]:-}" "${DEP_FIRST_SEEN_EPOCH[i]:-$now_seconds}")"
+        duration_text="$(format_duration "$duration_seconds")"
+
+        if [[ "$status" == "ERROR" || "$status" == "FAILED" ]]; then
+          old_error="$(sanitize_field "${DEP_ERROR_MESSAGE[i]:-}")"
+          old_error="$(truncate_text "$old_error" 40)"
+          print_dashboard_linef '  %s  %s%s%s  %s  %s%6s  %s%s%s' \
+            "$row_icon" "${C_DIM}" "$started_time_label" "${C_RESET}" \
+            "$(color_pad "$old_title" 56)" \
+            "${C_DIM}" "$duration_text" "${C_RED}${old_error}" "${C_RESET}" ""
+        else
+          print_dashboard_linef '  %s  %s%s%s  %s  %s%6s%s' \
+            "$row_icon" "${C_DIM}" "$started_time_label" "${C_RESET}" \
+            "$(color_pad "$old_title" 56)" \
+            "${C_DIM}" "$duration_text" "${C_RESET}"
+        fi
+      done
+      print_dashboard_line ""
+    fi
+  fi
+
   end_dashboard_render
 }
 
@@ -2870,6 +3071,7 @@ DEP_FIRST_SEEN_EPOCH=()
 DEP_LAST_STATUS=()
 DEP_TERMINAL_ANNOUNCED=()
 DEP_STEP=()
+DEP_STEP_HISTORY=()    # "phase:epoch_s|phase:epoch_s|..." — tracks step transitions with timestamps
 DEP_LAST_EVENT_MS=()
 DEP_LAST_EVENT_TEXT=()
 DEP_PROJECT_NAME=()
@@ -2930,6 +3132,7 @@ trap 'cleanup_runtime' EXIT
 
 START_EPOCH="$(date +%s)"
 NO_DEPLOYMENTS_REPORTED=0
+_MONITOR_INITIAL_POLL=1
 
 while true; do
   local_refresh_ok=1
@@ -2999,6 +3202,7 @@ while true; do
   done
 
   process_deployment_transitions_and_alerts
+  _MONITOR_INITIAL_POLL=0
   update_dashboard_overview
   render_dashboard
   sleep_for_next_poll
