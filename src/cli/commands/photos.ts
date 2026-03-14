@@ -575,20 +575,27 @@ const uploadImportedSelection = async (
   imported: ApplePhotosBridgeImportResult,
   folder: UploadFolder | undefined,
 ) => {
-  const uploadedAssets: UploadedAsset[] = [];
-
-  for (const file of imported.files) {
-    const body = buildUploadFormDataFromFile(
-      file,
-      folder ?? inferUploadFolder(file.name),
-    );
-    const response = await ctx.client.requestJson<AssetResponse>({
-      method: "POST",
-      path: "/api/v1/assets",
-      body,
-    });
-    uploadedAssets.push(response.data.asset);
-  }
+  const uploadedAssets = await Promise.all(
+    imported.files.map(async (file) => {
+      try {
+        const body = buildUploadFormDataFromFile(
+          file,
+          folder ?? inferUploadFolder(file.name),
+        );
+        const response = await ctx.client.requestJson<AssetResponse>({
+          method: "POST",
+          path: "/api/v1/assets",
+          body,
+        });
+        return response.data.asset;
+      } catch (error) {
+        if (error instanceof CliError) throw error;
+        throw new Error(
+          `Failed to upload ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }),
+  );
 
   return uploadedAssets;
 };
