@@ -30,12 +30,12 @@ flowchart LR
   MW --> APIV1
 ```
 
-## Planned macOS Apple Photos Companion
+## macOS Apple Photos Companion
 
-Apple Photos support is planned as a local macOS companion, not as a rewrite of
-the core IG Poster product into a native-only app.
+Apple Photos support now exists for internal and developer use as a local macOS
+companion, not as a rewrite of the core IG Poster product into a native-only app.
 
-Planned split of responsibilities:
+Split of responsibilities:
 
 - web app + `/api/*` + `/api/v1/*`: source of truth for auth, posts, generation, publish, and queue state, and the primary human workflow surface
 - `ig` CLI: automation surface for humans and agents
@@ -43,7 +43,7 @@ Planned split of responsibilities:
 - `companion/IGPosterCompanion`: checked-in Swift package scaffold that mirrors the bridge contract currently defined in `src/lib/apple-photos-bridge.ts`
 - `src/cli/photos-bridge.ts`: CLI-local bridge client for `ig photos recent|search|import|pick|propose`, kept under `src/cli` so the standalone CLI build can enumerate/import Apple Photos assets, launch the native picker, and poll bridge health without pulling in the web app bundle graph
 
-Planned flow:
+Flow:
 
 1. the web editor starts the human `Add from Photos` flow
 2. the companion app handles Photos permissions plus human-friendly selection via native macOS UI
@@ -218,16 +218,17 @@ Why this shape:
 - CLI output contracts are now normalized around stable JSON envelopes (`{ ok, data }` / `{ ok, error }`) and the CLI auto-prefers `--json` when stdout is not a TTY for normal commands, while `--stream-json` remains NDJSON event output for streaming workflows.
 - `ig watch` stays thin by calling the same `/api/v1/assets` and `/api/v1/posts` endpoints as other CLI flows, rather than inventing a separate local ingest pipeline.
 - `ig mcp` is implemented as a stdio JSON-RPC adapter over the existing CLI commands, so tool calls reuse the same auth, config, and API request behavior instead of duplicating domain logic.
-- Planned Apple Photos support should follow the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
+- Apple Photos support follows the same rule: local Apple-specific behavior lives in the macOS companion and bridge, while the CLI continues to reuse the standard `/api/v1/assets`, `/api/v1/posts`, `/api/v1/generate`, and `/api/v1/publish` service interfaces.
 - The web editor now exposes a macOS-only `Add from Photos` entry point in `src/components/asset-manager.tsx`. It probes the local bridge first, checks the bridge health payload for local companion-app install status, asks the bridge to open the installed app bundle through `POST /v1/companion/open` when launch is actually available, and otherwise degrades to the regular-upload fallback dialog instead of blocking the draft flow.
-- The first native-side implementation step now exists in `companion/IGPosterCompanion`: a buildable SwiftUI shell plus shared bridge models/constants that mirror `src/lib/apple-photos-bridge.ts`.
+- The native-side implementation now exists in `companion/IGPosterCompanion`: a buildable SwiftUI shell plus shared bridge models/constants that mirror `src/lib/apple-photos-bridge.ts`.
 - `ig-poster-companion-bridge` now exposes `GET /v1/health`, `GET /v1/photos/recent`, `GET /v1/photos/search`, `POST /v1/photos/pick`, `POST /v1/photos/import`, and `POST /v1/companion/open` with localhost CORS so the browser can probe for a running helper, ask that helper to open the local app bundle, agents can enumerate the local Photos library through CLI/MCP, and the browser can fetch import manifests back into the draft flow.
 - The long-running bridge now binds the default browser-compatible port `43123` even when launchd starts it with a custom primary port, so web-origin probing stays stable while internal debugging can still use a second localhost port.
 - The current native shell now parses that shared handoff URL both through `.onOpenURL` and from a startup argument, giving the browser a meaningful native landing state whether the app is opened via a registered URL scheme or directly by the bridge.
 - The native shell now goes further on the human path: it embeds a PhotosPicker-based selection surface, exports chosen items into a managed cache, and persists ordered selection plus exported-file metadata into shared state.
 - The newest bridge/app integration step is a shared persisted selection snapshot in `IGPosterCompanionCore`, which the app writes and the bridge uses for both health summaries and pick/import responses. That gives future web/CLI flows one place to discover the active native draft/selection context and available exported assets.
 - The latest agent-side step is PhotoKit-backed local enumeration in `IGPosterCompanionCore/PhotosLibrary.swift`. `ig photos recent|search` and the MCP tools `photos_recent|photos_search` talk to that localhost bridge directly and intentionally skip remote `/api/v1/*` auth refresh because they only inspect the local macOS library.
-- The next bridge-to-service step is now partially in place too: `ig photos import` and `ig photos propose`, plus the MCP tools `photos_import` and `photos_propose`, first call the local bridge for exported asset metadata/download URLs, then upload those files through the normal remote `/api/v1/assets` API instead of inventing a separate Apple-specific ingest path. `photos_propose` continues through the standard `/api/v1/posts` and `/api/v1/generate` services to create a draft and run generation without adding Apple-specific server behavior.
+- That bridge-to-service path is now in place for `ig photos import`, `ig photos pick`, and `ig photos propose`. The CLI first calls the local bridge for exported asset metadata and download URLs, then uploads those files through the normal remote `/api/v1/assets` API instead of inventing a separate Apple-specific ingest path. `photos_pick` can optionally create a draft post, and `photos_propose` continues through the standard `/api/v1/posts` and `/api/v1/generate` services to create a draft and run generation without adding Apple-specific server behavior. MCP mirrors the agent-facing `import` and `propose` flows with `photos_import` and `photos_propose`.
+- Remaining architecture work is productization: signed companion distribution, packaged install/discovery, and hardened local bridge auth and trust checks for browser, CLI, and MCP traffic.
 - OAuth flow:
   - start: `/api/auth/google/start`
   - callback: `/api/auth/google/callback`

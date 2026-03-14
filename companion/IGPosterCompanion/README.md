@@ -42,7 +42,7 @@ remove the LaunchAgent, app bundle, and installed binary.
 
 Planned next steps:
 
-1. harden the localhost bridge and browser handoff UX for signed/bottled installs
-2. expand the localhost bridge into richer import/propose flows for CLI + MCP
-3. hand imported exports back to the CLI/MCP surface with the same manifest contract
-4. add bridge auth for packaged distribution and tighter browser/CLI trust checks
+1. ship signed and notarized companion distribution instead of the current dev-only installer path
+2. add packaged install detection and clearer remediation for the web and CLI entry points
+3. add bridge auth for packaged distribution and tighter browser/CLI trust checks
+4. package the end-user install flow for `ig` plus the companion app
