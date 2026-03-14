@@ -184,7 +184,7 @@ describe("completeMetaOAuth", () => {
         "pages_manage_posts",
       ]),
     ).rejects.toThrow(
-      "Multiple Facebook Pages with linked Instagram business accounts were returned by Meta OAuth (Inesueno Wines, Other Winery). Limit this app's Page access to a single linked Page and reconnect.",
+      "2 Facebook Pages with linked Instagram business accounts were returned by Meta OAuth. Limit this app's Page access to a single linked Page and reconnect.",
     );
   });
 });
