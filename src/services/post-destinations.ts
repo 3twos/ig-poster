@@ -24,7 +24,12 @@ type PostInsertLike = {
 };
 
 const buildDestinationId = () => randomUUID().replace(/-/g, "").slice(0, 18);
-const POST_DESTINATION_SCHEMA_ERROR_CODES = new Set(["42P01", "42703", "42704"]);
+const POST_DESTINATION_SCHEMA_ERROR_CODES = new Set([
+  "22P02",
+  "42P01",
+  "42703",
+  "42704",
+]);
 const POST_DESTINATION_SCHEMA_ERROR_HINTS = [
   "post_destinations",
   "meta_destination",

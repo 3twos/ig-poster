@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/db", () => ({
   getDb: vi.fn(),
@@ -25,6 +25,10 @@ describe("post-destinations", () => {
     vi.restoreAllMocks();
     mockedGetDb.mockReset();
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   const missingSchemaError = Object.assign(
