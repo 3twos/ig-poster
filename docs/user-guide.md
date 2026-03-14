@@ -191,13 +191,15 @@
 - The first recent/search request may prompt macOS for Photos access. If access is denied or unavailable, the bridge returns `PHOTOS_PERMISSION_REQUIRED` and the CLI exits with a clear error instead of hanging.
 - `./scripts/install-companion-bridge.zsh` now installs both the localhost bridge and a local `~/Applications/IG Poster Companion.app` bundle, then registers that app with Launch Services by default so the web editor can ask the bridge to open the native picker flow directly.
 
-### Planned macOS Apple Photos workflow
+### macOS Apple Photos status
 
-The direction is partially shipped now. Today you can:
+The core Apple Photos flow is available now for internal and developer use.
+Today you can:
 
 - click `Add from Photos` in the web editor on macOS
 - export a native PhotosPicker selection through the companion scaffold
 - import that exported selection back into the current draft
+- run `ig photos pick --create-draft --brand-kit <id>`
 - enumerate local Photos assets with `ig photos recent` / `ig photos search`
 - import selected exported assets into IG Poster with `ig photos import`
 - create a draft proposal directly from local Photos with `ig photos propose`
@@ -205,10 +207,10 @@ The direction is partially shipped now. Today you can:
 
 Still planned:
 
-- a signed `IG Poster Companion.app` handles Apple Photos permissions, native picker/search UI, and export caching
-- the web editor remains the main human workflow and should launch the native helper when needed
-- `ig` continues to be the scripting surface
-- `ig mcp` exposes the same Photos capabilities to agents through the local CLI
+- signed and notarized `IG Poster Companion.app` distribution
+- packaged install flow and install detection for `ig` plus the companion app
+- hardened local bridge auth and trust checks for web, CLI, and MCP traffic
+- final polish around user-facing remediation when the companion is missing or unhealthy
 
 Available now:
 
@@ -283,8 +285,10 @@ If the macOS companion app is not installed or not reachable:
 - Meta publishing:
   - Connect/disconnect in Settings under the Meta publishing pair section.
   - OAuth connection id is stored in cookie; encrypted tokens are persisted in the private credential store (DB) when available, with encrypted cookie fallback.
-  - The default Meta OAuth connect flow enables Instagram publishing in the browser app today.
-  - Facebook destination selection and execution require a connection that also granted Facebook Page posting permissions; Facebook remains limited to single-image and single-video publishing.
+  - The default Meta OAuth connect flow now requests Instagram publishing plus Facebook Page posting permissions together, so a fresh browser connection is immediately eligible for `Both` when your Meta app is configured for those scopes.
+  - If an older OAuth connection is missing Facebook Page posting permissions, reconnect from Settings to upgrade the grant.
+  - If the Meta user can access multiple Facebook Pages with linked Instagram professional accounts, the OAuth callback now stops with a clear error instead of silently selecting the first Page. Narrow the Meta grant to the intended Page and reconnect.
+  - Facebook remains limited to single-image and single-video publishing.
   - Facebook scheduled posts round-trip through the connected Page first and then sync back into the app via a local shadow job plus cron reconciliation.
 - Workspace:
   - Use Sign out in the navigation hamburger menu to clear session and return to login.

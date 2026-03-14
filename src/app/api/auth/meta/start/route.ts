@@ -17,9 +17,9 @@ export async function GET(req: Request) {
     const state = buildOAuthState();
     const requestedScopeProfile = requestUrl.searchParams.get("scopeProfile");
     const scopeProfile: MetaOAuthScopeProfile =
-      requestedScopeProfile === "page-publishing"
-        ? "page-publishing"
-        : "instagram-basic";
+      requestedScopeProfile === "instagram-basic"
+        ? "instagram-basic"
+        : "page-publishing";
     const redirectUrl = createMetaOAuthStartUrl(origin, state, {
       scopeProfile,
     });

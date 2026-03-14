@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  completeMetaOAuth,
   createMetaOAuthStartUrl,
   META_CONNECTION_COOKIE,
   resolveMetaAuthFromRequest,
@@ -12,7 +13,7 @@ describe("createMetaOAuthStartUrl", () => {
     vi.unstubAllEnvs();
   });
 
-  it("requests only the baseline Instagram-ready scopes by default", () => {
+  it("requests Facebook Page publishing scopes by default", () => {
     vi.stubEnv("META_APP_ID", "app-id");
     vi.stubEnv("META_APP_SECRET", "app-secret");
 
@@ -22,23 +23,169 @@ describe("createMetaOAuthStartUrl", () => {
     );
 
     expect(url.searchParams.get("response_type")).toBe("code granted_scopes");
+    expect(url.searchParams.get("scope")).toContain("instagram_basic");
+    expect(url.searchParams.get("scope")).toContain("instagram_content_publish");
+    expect(url.searchParams.get("scope")).toContain("pages_manage_posts");
+    expect(url.searchParams.get("scope")).toContain("pages_manage_metadata");
+    expect(url.searchParams.get("auth_type")).toBe("rerequest");
+  });
+
+  it("can explicitly request the smaller Instagram-only scope set", () => {
+    vi.stubEnv("META_APP_ID", "app-id");
+    vi.stubEnv("META_APP_SECRET", "app-secret");
+
+    const url = createMetaOAuthStartUrl("https://app.example.com", "state-123", {
+      scopeProfile: "instagram-basic",
+    });
+
     expect(url.searchParams.get("scope")).toBe(
       "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management",
     );
     expect(url.searchParams.get("auth_type")).toBeNull();
   });
+});
 
-  it("can explicitly request Facebook Page publishing scopes during reconnect", () => {
+describe("completeMetaOAuth", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("stores the single eligible Facebook Page and Instagram pair returned by Meta", async () => {
     vi.stubEnv("META_APP_ID", "app-id");
     vi.stubEnv("META_APP_SECRET", "app-secret");
+    vi.stubEnv("APP_ENCRYPTION_SECRET", "test-secret");
 
-    const url = createMetaOAuthStartUrl("https://app.example.com", "state-123", {
-      scopeProfile: "page-publishing",
+    const fetchMock = vi.fn();
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "short-token",
+            expires_in: 3600,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "long-token",
+            expires_in: 7200,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "page-1",
+                name: "Inesueno Wines",
+                access_token: "page-token-1",
+                instagram_business_account: {
+                  id: "ig-1",
+                  username: "inesueno.wines",
+                  name: "Inesueno Wines",
+                  profile_picture_url: "https://cdn.example.com/ig-1.jpg",
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request("https://app.example.com/api/auth/meta/callback");
+
+    await expect(
+      completeMetaOAuth(req, "code-123", [
+        "instagram_basic",
+        "instagram_content_publish",
+        "pages_manage_posts",
+      ]),
+    ).resolves.toMatchObject({
+      account: {
+        pageId: "page-1",
+        pageName: "Inesueno Wines",
+        instagramUserId: "ig-1",
+        instagramUsername: "inesueno.wines",
+        capabilities: {
+          facebook: {
+            publishEnabled: true,
+          },
+        },
+      },
     });
+  });
 
-    expect(url.searchParams.get("scope")).toContain("pages_manage_posts");
-    expect(url.searchParams.get("scope")).toContain("pages_manage_metadata");
-    expect(url.searchParams.get("auth_type")).toBe("rerequest");
+  it("fails clearly when Meta returns multiple eligible Facebook Pages", async () => {
+    vi.stubEnv("META_APP_ID", "app-id");
+    vi.stubEnv("META_APP_SECRET", "app-secret");
+    vi.stubEnv("APP_ENCRYPTION_SECRET", "test-secret");
+
+    const fetchMock = vi.fn();
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "short-token",
+            expires_in: 3600,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: "long-token",
+            expires_in: 7200,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "page-1",
+                name: "Inesueno Wines",
+                access_token: "page-token-1",
+                instagram_business_account: {
+                  id: "ig-1",
+                  username: "inesueno.wines",
+                },
+              },
+              {
+                id: "page-2",
+                name: "Other Winery",
+                access_token: "page-token-2",
+                instagram_business_account: {
+                  id: "ig-2",
+                  username: "other.winery",
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const req = new Request("https://app.example.com/api/auth/meta/callback");
+
+    await expect(
+      completeMetaOAuth(req, "code-123", [
+        "instagram_basic",
+        "instagram_content_publish",
+        "pages_manage_posts",
+      ]),
+    ).rejects.toThrow(
+      "Multiple Facebook Pages with linked Instagram business accounts were returned by Meta OAuth (Inesueno Wines, Other Winery). Limit this app's Page access to a single linked Page and reconnect.",
+    );
   });
 });
 
