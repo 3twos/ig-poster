@@ -402,6 +402,43 @@ describe("publishFacebookPageContent", () => {
     expect(body.get("published")).toBe("true");
   });
 
+  it("creates Facebook scheduled photo posts as unpublished scheduled content", async () => {
+    const publishAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "photo_1", post_id: "page_1_1" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      publishFacebookPageContent(
+        {
+          mode: "image",
+          imageUrl: "https://cdn.example.com/image.jpg",
+          caption: "Caption",
+          publishAt,
+        },
+        {
+          accessToken: "token",
+          instagramUserId: "ig-id",
+          pageId: "page-id",
+          graphVersion: "v22.0",
+        },
+      ),
+    ).resolves.toMatchObject({
+      mode: "image",
+      creationId: "photo_1",
+      publishId: "page_1_1",
+    });
+
+    const call = fetchMock.mock.calls[0];
+    const body = call?.[1]?.body as URLSearchParams;
+    expect(call?.[0]).toBe("https://graph.facebook.com/v22.0/page-id/photos");
+    expect(body.get("published")).toBe("false");
+    expect(body.get("scheduled_publish_time")).not.toBeNull();
+    expect(body.get("unpublished_content_type")).toBe("SCHEDULED");
+  });
+
   it("requires a connected Facebook Page id", async () => {
     await expect(
       publishFacebookPageContent(
@@ -659,7 +696,7 @@ describe("updateFacebookPagePost", () => {
     expect(updateCall?.[0]).toBe("https://graph.facebook.com/v22.0/page_1_1");
     expect(updateBody.get("message")).toBe("Updated caption");
     expect(updateBody.get("published")).toBe("false");
-    expect(updateBody.get("published_content_type")).toBe("SCHEDULED");
+    expect(updateBody.get("unpublished_content_type")).toBe("SCHEDULED");
   });
 
   it("falls back to creation id update when post id update fails", async () => {
