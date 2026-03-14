@@ -85,6 +85,10 @@ export const isMissingPostDestinationsSchemaError = (error: unknown) => {
   }
 
   const code = extractErrorCode(error);
+  if (code === "42P01") {
+    return true;
+  }
+
   if (code && !POST_DESTINATION_SCHEMA_ERROR_CODES.has(code)) {
     return false;
   }
@@ -101,12 +105,11 @@ const warnMissingPostDestinationsSchema = (
 ) => {
   const message =
     error instanceof Error ? error.message : "Unknown destination schema error";
-  const key = `${operation}:${message}`;
-  if (warnedMissingSchemaOperations.has(key)) {
+  if (warnedMissingSchemaOperations.has(operation)) {
     return;
   }
 
-  warnedMissingSchemaOperations.add(key);
+  warnedMissingSchemaOperations.add(operation);
   console.warn(
     `[post-destinations] Falling back while skipping ${operation} because the destination schema is missing or outdated. Run npm run db:migrate in this environment to restore destination persistence. (${message})`,
   );

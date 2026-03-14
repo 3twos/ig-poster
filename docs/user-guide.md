@@ -245,7 +245,7 @@ If the macOS companion app is not installed or not reachable:
 - If you click multiple posts quickly, stale responses are ignored and only the latest selection is applied.
 - Sidebar list refreshes keep existing entries visible to avoid flicker while background updates run.
 - Editor text/layout changes and carousel composition changes are part of the same autosaved draft state as your brief, assets, and selected variant.
-- If you pulled newer code into a local environment, run `npm run db:migrate` before expecting destination-aware publish metadata to persist. Core draft CRUD now falls back to legacy `publishSettings` storage when the newer destination tables are missing, but Meta destination state remains degraded until migrations are applied.
+- If publishing metadata stops persisting after a code update, run `npm run db:migrate` to apply the latest database changes.
 - Duplicating a post creates a new draft copy with the current creative result, media composition, and publish settings, but without old share links or publish history.
 - Posted posts are immutable in IG Poster because the Meta publishing API flow used here does not support updating the published media payload.
 - Moving a scheduled post back to draft first cancels the pending publish job, then returns the post to `Draft`.
