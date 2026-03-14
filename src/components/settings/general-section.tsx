@@ -10,6 +10,7 @@ import type { InstagramAuthStatus } from "@/lib/types";
 import { parseApiError } from "@/lib/upload-helpers";
 
 export function GeneralSection() {
+  const oauthConnectHref = "/api/auth/meta/start?scopeProfile=page-publishing";
   const [metaStatus, setMetaStatus] = useState<InstagramAuthStatus>({
     connected: false,
     source: null,
@@ -79,6 +80,11 @@ export function GeneralSection() {
                 Token expiry: {new Date(metaStatus.account.tokenExpiresAt).toLocaleString()}
               </p>
             ) : null}
+            {metaStatus.account?.capabilities?.facebook.publishEnabled === false ? (
+              <p className="mt-1 text-amber-200">
+                Reconnect Meta OAuth to grant Facebook Page posting permissions for this publishing pair.
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               {metaStatus.source === "oauth" ? (
                 <Button variant="outline" size="sm" onClick={() => void disconnectMeta()} disabled={isMetaDisconnecting}>
@@ -87,7 +93,7 @@ export function GeneralSection() {
                 </Button>
               ) : null}
               <a
-                href="/api/auth/meta/start"
+                href={oauthConnectHref}
                 className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white/10"
               >
                 Reconnect with OAuth
@@ -96,9 +102,9 @@ export function GeneralSection() {
           </div>
         ) : (
           <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-slate-300">
-            <p>Connect a Meta publishing pair to publish to Instagram from this workspace. Facebook Page posting can be added later with a separate permission reconnect when your Meta app is ready for it.</p>
+            <p>Connect a Meta publishing pair to publish to Instagram and Facebook from this workspace. The browser OAuth flow requests Page posting permissions up front so cross-posting is ready after connect.</p>
             <a
-              href="/api/auth/meta/start"
+              href={oauthConnectHref}
               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-400 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-blue-300"
             >
               Connect with Meta OAuth
