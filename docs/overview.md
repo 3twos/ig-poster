@@ -51,7 +51,7 @@
 ## Key Features
 
 - Workspace login gate for all private pages and APIs; `/share/<id>` remains a public, read-only link.
-- Postgres-backed persistent post workspace (create/select/duplicate/archive/delete + autosave), including persisted carousel composition state and publish settings.
+- Postgres-backed persistent post workspace (create/select/duplicate/archive/delete + autosave), including persisted carousel composition state and publish settings, with a legacy fallback path that keeps core draft CRUD working if newer destination tables have not been migrated yet.
 - Multi-model LLM generation pipeline with strict schema validation, supporting prioritized model lists with Fallback and Parallel execution modes.
 - Deterministic fallback generation when no LLM credentials are available or all models fail.
 - Website-style-aware prompts and optional brand autofill from a public site URL.
@@ -95,6 +95,7 @@
 ## Scope Boundaries
 
 - Without `POSTGRES_URL` or `DATABASE_URL`, private post creation/loading is unavailable.
+- If the database is missing newer destination migrations, draft CRUD still falls back to the legacy `posts.publishSettings` path, but destination-aware scheduling/publishing state remains unavailable until `npm run db:migrate` is applied in that environment.
 - Without `BLOB_READ_WRITE_TOKEN`, uploads and share snapshots are unavailable.
 - Without Meta credentials (OAuth or env), Meta publishing is unavailable.
 - Facebook publishing is currently limited to single-image and single-video payloads; carousel publishing remains unsupported on the Facebook destination and therefore also blocks the browser's `Both` publish target. Instagram-only metadata fields (`firstComment`, `locationId`, `userTags`) still apply only to Instagram when `Both` is selected. The same single-image/single-video constraint applies to inbound Facebook schedule import.
