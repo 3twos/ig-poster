@@ -23,7 +23,7 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const archived = url.searchParams.get("archived") === "true";
-    console.log(`[api/posts] GET: listing posts for ${actor.email} (archived=${archived})`);
+    console.log(`[api/posts] GET: listing posts for ${actor.ownerHash} (archived=${archived})`);
     const rows = await listPosts(actor, { archived });
     const destinationsByPostId = await listStoredPostDestinationsByPostId(
       rows.map((row) => row.id),
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    console.log(`[api/posts] POST: creating post for ${actor.email}`);
+    console.log(`[api/posts] POST: creating post for ${actor.ownerHash}`);
     const payload = PostCreateRequestSchema.parse(await req.json());
     const row = await createPost(actor, payload);
     const destinations = await getStoredPostDestinations(row.id);

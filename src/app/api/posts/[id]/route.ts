@@ -27,7 +27,7 @@ export async function GET(req: Request, ctx: Ctx) {
     }
 
     const { id } = await ctx.params;
-    console.log(`[api/posts/id] GET: loading post ${id} for ${actor.email}`);
+    console.log(`[api/posts/id] GET: loading post ${id} for ${actor.ownerHash}`);
     const row = await getPost(actor, id);
 
     if (!row) {
@@ -68,7 +68,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     }
 
     const { id } = await ctx.params;
-    console.log(`[api/posts/id] PUT: updating post ${id} for ${actor.email}`);
+    console.log(`[api/posts/id] PUT: updating post ${id} for ${actor.ownerHash}`);
     const rawBody = await req.json();
     const payload = PostUpdateRequestSchema.parse(rawBody);
     const updated = await updatePost(actor, id, payload);
@@ -111,7 +111,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
     }
 
     const { id } = await ctx.params;
-    console.log(`[api/posts/id] DELETE: deleting post ${id} for ${actor.email}`);
+    console.log(`[api/posts/id] DELETE: deleting post ${id} for ${actor.ownerHash}`);
     const deleted = await deletePost(actor, id);
     if (!deleted) {
       console.warn(`[api/posts/id] DELETE: post ${id} not found for ${actor.ownerHash}`);

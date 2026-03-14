@@ -58,13 +58,13 @@ export const resolveActorFromRequest = async (
     console.log("[auth:actor] trying bearer token auth");
     const cliActor = await verifyCliAccessToken(bearerToken);
     if (cliActor) {
-      console.log(`[auth:actor] CLI access token verified for ${cliActor.email}`);
+      console.log(`[auth:actor] CLI access token verified for ${cliActor.ownerHash}`);
       return cliActor;
     }
 
     const session = await verifyWorkspaceSessionToken(bearerToken);
     if (session) {
-      console.log(`[auth:actor] bearer session verified for ${session.email} (expires ${session.expiresAt})`);
+      console.log(`[auth:actor] bearer session verified for ${session.sub} (expires ${session.expiresAt})`);
       return toActor(session, "bearer");
     }
 
@@ -75,7 +75,7 @@ export const resolveActorFromRequest = async (
   console.log("[auth:actor] trying cookie auth");
   const session = await readWorkspaceSessionFromRequest(req);
   if (session) {
-    console.log(`[auth:actor] cookie session verified for ${session.email} (expires ${session.expiresAt})`);
+    console.log(`[auth:actor] cookie session verified for ${session.sub} (expires ${session.expiresAt})`);
     return toActor(session, "cookie");
   }
 

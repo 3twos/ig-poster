@@ -19,7 +19,7 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const { id } = await ctx.params;
-    console.log(`[api/posts/archive] POST: archiving post ${id} for ${actor.email}`);
+    console.log(`[api/posts/archive] POST: archiving post ${id} for ${actor.ownerHash}`);
     const updated = await archivePost(actor, id);
 
     if (!updated) {
@@ -47,7 +47,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
     }
 
     const { id } = await ctx.params;
-    console.log(`[api/posts/archive] DELETE: unarchiving post ${id} for ${actor.email}`);
+    console.log(`[api/posts/archive] DELETE: unarchiving post ${id} for ${actor.ownerHash}`);
     const db = getDb();
 
     const [updated] = await db

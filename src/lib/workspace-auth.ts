@@ -250,7 +250,7 @@ export const verifyWorkspaceSessionToken = async (
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[auth:session] token verification failed: ${message}`);
+    console.warn(`[auth:session] token verification failed: ${message}`, err);
     return null;
   }
 };

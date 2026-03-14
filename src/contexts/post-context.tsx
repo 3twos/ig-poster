@@ -325,7 +325,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         console.error(`[post:archive:client] failed ${res.status} for ${id}`, body);
-        throw new Error(`Failed to archive post: ${res.status} ${body}`);
+        throw new Error(`Failed to archive post (${res.status})`);
       }
       console.log(`[post:archive:client] archived post ${id} successfully`);
       await refreshPosts();
@@ -348,7 +348,7 @@ export function PostProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         console.error(`[post:delete:client] failed ${res.status} for ${id}`, body);
-        throw new Error(`Failed to delete post: ${res.status} ${body}`);
+        throw new Error(`Failed to delete post (${res.status})`);
       }
       console.log(`[post:delete:client] deleted post ${id} successfully`);
       await refreshPosts();
