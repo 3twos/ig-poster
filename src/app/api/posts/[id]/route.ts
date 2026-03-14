@@ -81,8 +81,15 @@ export async function PUT(req: Request, ctx: Ctx) {
     console.log(`[api/posts/id] PUT: updated post ${id} successfully`);
     return NextResponse.json(attachPostDestinations(updated, destinations));
   } catch (error) {
-    if (error instanceof z.ZodError || error instanceof SyntaxError) {
-      console.error("[api/posts/id] PUT: validation error", error instanceof z.ZodError ? error.issues : error);
+    if (error instanceof z.ZodError) {
+      console.warn("[api/posts/id] PUT: validation error", error.issues);
+      return NextResponse.json(
+        { error: "Invalid request body", ...(process.env.NODE_ENV !== "production" && { issues: error.issues }) },
+        { status: 400 },
+      );
+    }
+
+    if (error instanceof SyntaxError) {
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 },

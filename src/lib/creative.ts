@@ -237,12 +237,13 @@ export const OverlayLayoutSchema = z.object({
   overlayStrength: z.number().min(0).max(100).optional(),
 });
 
-// Lenient overlay schema — allows blocks dragged/resized below strict minimums
+// Lenient overlay schema — react-rnd allows dragging well beyond canvas edges,
+// so bounds must be generous enough to never reject a valid drag position.
 const StoredOverlayBlockSchema = z.object({
-  x: z.number().min(-10).max(110),
-  y: z.number().min(-10).max(110),
-  width: z.number().min(0).max(110),
-  height: z.number().min(0).max(110),
+  x: z.number().min(-200).max(200),
+  y: z.number().min(-200).max(200),
+  width: z.number().min(0).max(200),
+  height: z.number().min(0).max(200),
   fontScale: z.number().min(0).max(5),
   visible: z.boolean().optional().default(true),
   text: z.string().trim().max(320).optional().default(""),
@@ -256,10 +257,10 @@ const StoredCustomOverlayBlockSchema = StoredOverlayBlockSchema.extend({
 });
 
 const StoredLogoPositionSchema = z.object({
-  x: z.number().min(-10).max(110),
-  y: z.number().min(-10).max(110),
-  width: z.number().min(0).max(110),
-  height: z.number().min(0).max(110),
+  x: z.number().min(-200).max(200),
+  y: z.number().min(-200).max(200),
+  width: z.number().min(0).max(200),
+  height: z.number().min(0).max(200),
   visible: z.boolean().optional().default(true),
 });
 
@@ -271,6 +272,7 @@ export const StoredOverlayLayoutSchema = z.object({
   cta: StoredOverlayBlockSchema,
   custom: z.array(StoredCustomOverlayBlockSchema).max(6).optional().default([]),
   logo: StoredLogoPositionSchema.optional(),
+  overlayStrength: z.number().min(0).max(100).optional(),
 });
 
 export const PublishOutcomeInsightsSchema = z.object({
