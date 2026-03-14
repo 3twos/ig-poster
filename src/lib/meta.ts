@@ -383,7 +383,7 @@ const applyFacebookPublishState = (
     "scheduled_publish_time",
     Math.floor(publishDate.getTime() / 1000).toString(),
   );
-  params.set("published_content_type", "SCHEDULED");
+  params.set("unpublished_content_type", "SCHEDULED");
 };
 
 const createMediaContainer = (params: URLSearchParams, auth: MetaAuthContext) =>
