@@ -193,7 +193,7 @@ describe("useAutoSave", () => {
   // --- Error classification tests ---
 
   it("does not retry on permanent error (400)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 400 });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 400, text: () => Promise.resolve("Bad Request") });
     vi.stubGlobal("fetch", fetchMock);
 
     const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
@@ -216,7 +216,7 @@ describe("useAutoSave", () => {
   });
 
   it("does not retry on permanent error (404)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, text: () => Promise.resolve("Not Found") });
     vi.stubGlobal("fetch", fetchMock);
 
     const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
@@ -237,7 +237,7 @@ describe("useAutoSave", () => {
   });
 
   it("does not retry on permanent error (409)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 409, text: () => Promise.resolve("Conflict") });
     vi.stubGlobal("fetch", fetchMock);
 
     const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
@@ -262,7 +262,7 @@ describe("useAutoSave", () => {
     const fetchMock = vi.fn().mockImplementation(() => {
       callCount += 1;
       if (callCount <= 2) {
-        return Promise.resolve({ ok: false, status: 500 });
+        return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve("Internal Server Error") });
       }
       return Promise.resolve({ ok: true });
     });
@@ -297,7 +297,7 @@ describe("useAutoSave", () => {
   });
 
   it("gives up after MAX_RETRIES for transient errors", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve("Internal Server Error") });
     vi.stubGlobal("fetch", fetchMock);
 
     const { result, unmount } = renderHook(() => useAutoSave(baseDraft));
