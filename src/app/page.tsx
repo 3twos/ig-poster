@@ -590,21 +590,24 @@ export default function Home() {
     }));
   }, [localAssetIds, patchResult, result]);
 
+  const brandOverlayDefaults = useMemo(
+    () => ({
+      cornerRadius: brand.defaultCornerRadius,
+      bgOpacity: brand.defaultBgOpacity,
+      overlayStrength: brand.defaultOverlayStrength,
+    }),
+    [brand.defaultBgOpacity, brand.defaultCornerRadius, brand.defaultOverlayStrength],
+  );
+
   const activeOverlayLayout = useMemo(() => {
     if (!activeVariant) return undefined;
     return (
       overlayLayouts[activeVariant.id] ??
-      createFittedOverlayLayout(activeVariant, post.aspectRatio, {
-        cornerRadius: brand.defaultCornerRadius,
-        bgOpacity: brand.defaultBgOpacity,
-        overlayStrength: brand.defaultOverlayStrength,
-      })
+      createFittedOverlayLayout(activeVariant, post.aspectRatio, brandOverlayDefaults)
     );
   }, [
     activeVariant,
-    brand.defaultBgOpacity,
-    brand.defaultCornerRadius,
-    brand.defaultOverlayStrength,
+    brandOverlayDefaults,
     overlayLayouts,
     post.aspectRatio,
   ]);
@@ -1239,17 +1242,11 @@ export default function Home() {
       type: "UPDATE_OVERLAY",
       postId: activePostIdRef.current ?? undefined,
       variantId: activeVariant.id,
-      layout: createFittedOverlayLayout(activeVariant, post.aspectRatio, {
-        cornerRadius: brand.defaultCornerRadius,
-        bgOpacity: brand.defaultBgOpacity,
-        overlayStrength: brand.defaultOverlayStrength,
-      }),
+      layout: createFittedOverlayLayout(activeVariant, post.aspectRatio, brandOverlayDefaults),
     });
   }, [
     activeVariant,
-    brand.defaultCornerRadius,
-    brand.defaultBgOpacity,
-    brand.defaultOverlayStrength,
+    brandOverlayDefaults,
     dispatch,
     post.aspectRatio,
   ]);
