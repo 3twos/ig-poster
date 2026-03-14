@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
+import { ClientSafeError } from "@/lib/api-error";
 import {
   getAppEncryptionSecret,
   requireAppEncryptionSecret,
@@ -493,15 +494,14 @@ export const completeMetaOAuth = async (
 
   if (eligiblePages.length > 1) {
     const pageLabels = eligiblePages
-      .map((entry) => entry.name.trim() || entry.id)
-      .slice(0, 3)
+      .map((entry) => `${entry.name.trim() || "(unnamed)"} (${entry.id})`)
       .join(", ");
-    const extraCount = eligiblePages.length - Math.min(eligiblePages.length, 3);
-    const pageSummary =
-      extraCount > 0 ? `${pageLabels}, +${extraCount} more` : pageLabels;
+    console.warn(
+      `[meta-auth] Multiple eligible Facebook Pages returned: ${pageLabels}`,
+    );
 
-    throw new Error(
-      `Multiple Facebook Pages with linked Instagram business accounts were returned by Meta OAuth (${pageSummary}). Limit this app's Page access to a single linked Page and reconnect.`,
+    throw new ClientSafeError(
+      `${eligiblePages.length} Facebook Pages with linked Instagram business accounts were returned by Meta OAuth. Limit this app's Page access to a single linked Page and reconnect.`,
     );
   }
 
