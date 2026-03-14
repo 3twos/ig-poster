@@ -17,6 +17,7 @@ Preferred local runtime: Node 22.x via `.nvmrc`, but the app/tooling also suppor
 ```bash
 npm install
 cp .env.example .env.local
+npm run db:migrate
 npm run dev
 ```
 
@@ -42,7 +43,7 @@ Open `http://localhost:3000`.
 
 ### Required for posts and brand kits
 
-- `POSTGRES_URL` -- PostgreSQL connection string used by the app DB layer (Drizzle ORM). Run `npx drizzle-kit push` after schema changes.
+- `POSTGRES_URL` -- PostgreSQL connection string used by the app DB layer (Drizzle ORM). Run `npm run db:migrate` after pulling migration changes into a local environment, and use `npx drizzle-kit push` only when you intentionally want Drizzle to apply the current schema directly.
 
 ### Required for upload/share/outcomes features
 
@@ -150,6 +151,7 @@ POSTGRES_URL="postgresql://check@localhost/check" npm run db:generate
 ```
 
 - Apply migrations in your target environment before deploying app code that depends on them.
+- If your local database is behind newer destination migrations, core draft CRUD now falls back to legacy `publishSettings` storage, but destination-aware scheduling/publishing metadata will stay degraded until `npm run db:migrate` succeeds.
 
 ## Project Map
 

@@ -8,8 +8,10 @@ import { getDb } from "@/db";
 import {
   buildDefaultPostDestinationSeeds,
   clonePostDestinations,
+  createDefaultPostDestinations,
   deletePostDestinations,
   getStoredPostDestinations,
+  isMissingPostDestinationsSchemaError,
   listStoredPostDestinationsByPostId,
   syncPublishedInstagramDestination,
   syncPostDestinationsFromPublishSettings,
@@ -22,7 +24,13 @@ describe("post-destinations", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockedGetDb.mockReset();
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
+
+  const missingSchemaError = Object.assign(
+    new Error('relation "post_destinations" does not exist'),
+    { code: "42P01" },
+  );
 
   it("builds both destination rows for new posts", () => {
     const seeds = buildDefaultPostDestinationSeeds({
@@ -187,6 +195,45 @@ describe("post-destinations", () => {
     expect(where).toHaveBeenCalledTimes(1);
   });
 
+  it("detects post-destination schema drift errors", () => {
+    expect(isMissingPostDestinationsSchemaError(missingSchemaError)).toBe(true);
+    expect(
+      isMissingPostDestinationsSchemaError(
+        Object.assign(new Error("permission denied"), { code: "42501" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("skips destination seed writes when the schema is missing", async () => {
+    const db = {
+      insert: vi.fn(() => ({
+        values: vi.fn().mockRejectedValue(missingSchemaError),
+      })),
+    };
+
+    await expect(
+      createDefaultPostDestinations(db as never, {
+        id: "post_1",
+        publishSettings: {
+          caption: "Caption",
+          firstComment: "Comment",
+          locationId: "123",
+          reelShareToFeed: true,
+        },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("skips destination deletes when the schema is missing", async () => {
+    const db = {
+      delete: vi.fn(() => ({
+        where: vi.fn().mockRejectedValue(missingSchemaError),
+      })),
+    };
+
+    await expect(deletePostDestinations(db as never, "post_1")).resolves.toBeUndefined();
+  });
+
   it("syncs published Instagram remote state", async () => {
     const updateWhere = vi.fn().mockResolvedValue(undefined);
     const updateSet = vi.fn(() => ({ where: updateWhere }));
@@ -337,6 +384,30 @@ describe("post-destinations", () => {
     );
   });
 
+  it("no-ops legacy publish-settings sync when the destination schema is missing", async () => {
+    const db = {
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn().mockRejectedValue(missingSchemaError),
+        })),
+      })),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    await expect(
+      syncPostDestinationsFromPublishSettings(db as never, {
+        id: "post_1",
+        publishSettings: {
+          caption: "Updated caption",
+          firstComment: "Updated first comment",
+          locationId: "456",
+          reelShareToFeed: true,
+        },
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("backfills missing destination rows while syncing publish settings", async () => {
     const rows = [{ postId: "post_1", destination: "instagram" as const }];
     const selectWhere = vi.fn().mockResolvedValue(rows);
@@ -484,6 +555,18 @@ describe("post-destinations", () => {
     expect(where).toHaveBeenCalledTimes(1);
   });
 
+  it("returns no stored destinations when the destination schema is missing", async () => {
+    mockedGetDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn().mockRejectedValue(missingSchemaError),
+        })),
+      })),
+    } as never);
+
+    await expect(getStoredPostDestinations("post_1")).resolves.toEqual([]);
+  });
+
   it("groups stored destination rows by post id", async () => {
     const rows = [
       { postId: "post_1", destination: "instagram" },
@@ -506,5 +589,23 @@ describe("post-destinations", () => {
 
     expect(grouped.get("post_1")).toEqual(rows.slice(0, 2));
     expect(grouped.get("post_2")).toEqual(rows.slice(2));
+  });
+
+  it("returns empty destination groups when the destination schema is missing", async () => {
+    mockedGetDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn().mockRejectedValue(missingSchemaError),
+        })),
+      })),
+    } as never);
+
+    const grouped = await listStoredPostDestinationsByPostId([
+      "post_1",
+      "post_2",
+    ]);
+
+    expect(grouped.get("post_1")).toEqual([]);
+    expect(grouped.get("post_2")).toEqual([]);
   });
 });
