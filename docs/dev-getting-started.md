@@ -293,12 +293,13 @@ Additional CLI ergonomics:
 - Hidden dev-only `--local` targets `IG_POSTER_LOCAL_HOST` (default `http://localhost:3000`) while still calling the standard `/api/v1/*` routes. It is intended only for local development and testing, not production automation.
 - The current web-side Apple Photos slice is intentionally partial, but it is no longer fallback-only: on macOS the asset panel exposes `Add from Photos`, probes the local companion bridge, and can auto-import native selections back into the normal upload pipeline when the companion is running.
 
-Planned next CLI/macOS work:
+Remaining CLI/macOS productization work:
 - Apple Photos support will be delivered as a macOS companion app plus a local bridge, not by moving core generation/publish logic into a native app.
 - Human-first flow: the web editor launches native macOS selection UI through the companion app, exports chosen assets into a managed cache, then reuses the existing `/api/v1/assets` and `/api/v1/posts` workflows. `ig photos pick` remains the CLI equivalent.
 - Agent-first flow: `ig photos recent|search|import|propose` and future MCP tools call the same local bridge for PhotoKit-backed enumeration/export, then continue through the normal CLI/service pipeline.
 - Keep Apple-specific behavior isolated to the companion app and bridge; do not introduce Apple-specific logic into the server routes or core domain services.
 - Missing-helper behavior must be explicit: if the companion app or bridge is unavailable, the web app should fall back to install guidance plus normal file upload, and CLI/MCP should return machine-readable remediation codes.
+- Signed and notarized companion distribution, packaged install/discovery, and hardened local bridge auth are the main remaining gaps.
 
 Current native scaffold status:
 
@@ -311,7 +312,7 @@ Current native scaffold status:
 - `companion/IGPosterCompanion/Sources/IGPosterCompanionCore/PhotosLibrary.swift` is the first PhotoKit-backed enumeration layer for the companion bridge. It handles macOS Photos authorization, recent/search filters, album matching, and asset metadata mapping.
 - `scripts/install-companion-bridge.zsh` now gives the repo a repeatable local install path for both the bridge and the native app bundle: it builds the release binaries, copies the bridge into your user Library, creates `~/Applications/IG Poster Companion.app`, writes a LaunchAgent plist from the checked-in template, registers the app bundle with Launch Services by default, and can register the bridge agent with `launchd`.
 - That installer now preserves browser compatibility when you choose `--port <n>` for local debugging: the long-running bridge still binds `127.0.0.1:43123` for the web app while also serving the requested custom port.
-- `src/cli/photos-bridge.ts` is the CLI-side localhost client for `ig photos recent|search|import|pick`; it exists under `src/cli` specifically so `npm run build:cli` can compile the standalone binary without importing the web app modules.
+- `src/cli/photos-bridge.ts` is the CLI-side localhost client for `ig photos recent|search|import|pick|propose`; it exists under `src/cli` specifically so `npm run build:cli` can compile the standalone binary without importing the web app modules.
 - `src/cli/commands/photos.ts` now covers `pick`, `recent`, `search`, `import`, and `propose`. `pick` launches the native companion through the bridge, waits for a fresh export, uploads the selected assets, and can optionally create a draft post. `import` resolves exported bridge assets and uploads them through the same `/api/v1/assets` path as any other CLI upload, while `propose` continues through `/api/v1/posts` and `/api/v1/generate` to create a draft and run generation.
 - Validate the native scaffold locally with:
 
