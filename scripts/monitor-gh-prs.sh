@@ -25,8 +25,9 @@ Options:
   -i, --interval <seconds>   Poll interval in seconds (default: 30)
   --timeout <seconds>        Optional script timeout (default: 0, disabled)
   --auto-update              Auto-update PRs that are behind base branch
-  --voice <name>             macOS voice name (default: Karen). Try: Moira, Daniel, Tessa
+  --voice <name>             macOS voice name (default: Ava (Premium)). Try: Moira, Daniel, Tessa
   --no-speak                 Disable spoken alerts
+  --notify                   Enable macOS desktop notifications
   --plain                    Print line-by-line logs instead of the dashboard view
   -h, --help                 Show help
 
@@ -115,6 +116,11 @@ PR_PREV_CI_STATUS=()
 PR_PREV_REVIEW_DECISION=()
 PR_PREV_REVIEW_COUNT=()
 PR_PREV_IS_READY=()
+
+# Timestamp when an issue state was first detected (epoch seconds, 0 = no issue)
+PR_ISSUE_SINCE_EPOCH=()
+# Whether the "Still" reminder has been announced for the current issue
+PR_ANNOUNCED_STILL=()
 
 # Announcement flags (prevent repeats)
 PR_ANNOUNCED_CREATED=()
@@ -296,6 +302,9 @@ reconcile_pr_list() {
       PR_PREV_REVIEW_COUNT+=("0")
       PR_PREV_IS_READY+=("0")
 
+      PR_ISSUE_SINCE_EPOCH+=("0")
+      PR_ANNOUNCED_STILL+=("0")
+
       PR_ANNOUNCED_CREATED+=("0")
       PR_ANNOUNCED_CONFLICTS+=("0")
       PR_ANNOUNCED_CI_FAIL+=("0")
@@ -326,6 +335,7 @@ reconcile_pr_list() {
     local tmp_numbers=() tmp_titles=() tmp_authors=() tmp_branches=() tmp_urls=() tmp_draft=()
     local tmp_mergeable=() tmp_merge_state=() tmp_ci=() tmp_review_dec=() tmp_review_cnt=() tmp_reviewers=() tmp_ready=()
     local tmp_prev_m=() tmp_prev_ms=() tmp_prev_ci=() tmp_prev_rd=() tmp_prev_rc=() tmp_prev_rdy=()
+    local tmp_issue_since=() tmp_ann_still=()
     local tmp_ann_c=() tmp_ann_conf=() tmp_ann_ci=() tmp_ann_rdy=()
 
     for idx in "${keep_indices[@]}"; do
@@ -350,6 +360,9 @@ reconcile_pr_list() {
       tmp_prev_rd+=("${PR_PREV_REVIEW_DECISION[idx]}")
       tmp_prev_rc+=("${PR_PREV_REVIEW_COUNT[idx]}")
       tmp_prev_rdy+=("${PR_PREV_IS_READY[idx]}")
+
+      tmp_issue_since+=("${PR_ISSUE_SINCE_EPOCH[idx]}")
+      tmp_ann_still+=("${PR_ANNOUNCED_STILL[idx]}")
 
       tmp_ann_c+=("${PR_ANNOUNCED_CREATED[idx]}")
       tmp_ann_conf+=("${PR_ANNOUNCED_CONFLICTS[idx]}")
@@ -378,6 +391,9 @@ reconcile_pr_list() {
     PR_PREV_REVIEW_DECISION=("${tmp_prev_rd[@]+"${tmp_prev_rd[@]}"}")
     PR_PREV_REVIEW_COUNT=("${tmp_prev_rc[@]+"${tmp_prev_rc[@]}"}")
     PR_PREV_IS_READY=("${tmp_prev_rdy[@]+"${tmp_prev_rdy[@]}"}")
+
+    PR_ISSUE_SINCE_EPOCH=("${tmp_issue_since[@]+"${tmp_issue_since[@]}"}")
+    PR_ANNOUNCED_STILL=("${tmp_ann_still[@]+"${tmp_ann_still[@]}"}")
 
     PR_ANNOUNCED_CREATED=("${tmp_ann_c[@]+"${tmp_ann_c[@]}"}")
     PR_ANNOUNCED_CONFLICTS=("${tmp_ann_conf[@]+"${tmp_ann_conf[@]}"}")
@@ -432,15 +448,44 @@ process_pr_transitions_and_alerts() {
   for (( i = 0; i < ${#PR_NUMBERS[@]}; i++ )); do
     num="${PR_NUMBERS[i]}"
 
-    # PR created
+    # PR created — announce with current state context
     if (( PR_ANNOUNCED_CREATED[i] == 0 )); then
       PR_ANNOUNCED_CREATED[i]=1
-      msg="PR ${num} created"
+      local state_suffix=""
+      if [[ "${PR_MERGEABLE[i]}" == "CONFLICTING" ]]; then
+        state_suffix=", has conflicts"
+        PR_ANNOUNCED_CONFLICTS[i]=1
+      elif [[ "${PR_CI_STATUS[i]}" == "failing" ]]; then
+        state_suffix=", CI failing"
+        PR_ANNOUNCED_CI_FAIL[i]=1
+      elif [[ "${PR_REVIEW_DECISION[i]}" == "CHANGES_REQUESTED" ]]; then
+        state_suffix=", pending comments"
+      elif [[ "${PR_CI_STATUS[i]}" == "pending" ]]; then
+        state_suffix=", CI pending"
+      elif [[ "${PR_IS_READY[i]}" == "1" ]]; then
+        state_suffix=", ready to merge"
+        PR_ANNOUNCED_READY[i]=1
+      elif [[ "${PR_REVIEW_DECISION[i]}" == "APPROVED" ]]; then
+        state_suffix=", approved"
+      elif [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]]; then
+        state_suffix=", behind"
+      fi
+      msg="${num} created${state_suffix}"
       log_line "$msg"
       LAST_ALERT_MESSAGE="$msg"
       LAST_ALERT_LEVEL="info"
       LAST_ALERT_EPOCH="$(date +%s)"
       speak_alert "$msg"
+      notify_desktop "PR Monitor" "#${num} created${state_suffix}" "info"
+
+      # Auto-update if behind on first discovery
+      if [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]] && (( AUTO_UPDATE == 1 )); then
+        if gh pr update-branch "$num" -R "$REPO_SLUG" 2>/dev/null; then
+          log_line "${num} branch updated"
+        else
+          warn_line "${num} branch update failed"
+        fi
+      fi
       continue
     fi
 
@@ -448,15 +493,20 @@ process_pr_transitions_and_alerts() {
     if [[ "${PR_REVIEW_COUNT[i]}" =~ ^[0-9]+$ ]] && [[ "${PR_PREV_REVIEW_COUNT[i]}" =~ ^[0-9]+$ ]]; then
       if (( PR_REVIEW_COUNT[i] > PR_PREV_REVIEW_COUNT[i] )); then
         local reviewers_str="${PR_LATEST_REVIEWERS[i]}"
-        # Extract first name from each login for voice (e.g. "copilot,julio-estrada" → "copilot, julio")
         local voice_names=""
         if [[ -n "$reviewers_str" ]]; then
           local IFS=','
           for login in $reviewers_str; do
-            # Take part before first hyphen/underscore/dot as first name, lowercase
-            local first_name="${login%%-*}"
-            first_name="${first_name%%_*}"
-            first_name="${first_name%%.*}"
+            # If reviewer starts with "copilot", just say "copilot"
+            local first_name
+            if [[ "$login" == copilot* ]]; then
+              first_name="copilot"
+            else
+              # Take part before first hyphen/underscore/dot as first name
+              first_name="${login%%-*}"
+              first_name="${first_name%%_*}"
+              first_name="${first_name%%.*}"
+            fi
             if [[ -n "$voice_names" ]]; then
               voice_names="${voice_names}, ${first_name}"
             else
@@ -465,15 +515,16 @@ process_pr_transitions_and_alerts() {
           done
         fi
         if [[ -n "$voice_names" ]]; then
-          msg="PR ${num} has new reviews from ${voice_names}"
+          msg="${num} has new reviews from ${voice_names}"
         else
-          msg="PR ${num} has new reviews"
+          msg="${num} has new reviews"
         fi
         log_line "$msg"
         LAST_ALERT_MESSAGE="$msg"
         LAST_ALERT_LEVEL="info"
         LAST_ALERT_EPOCH="$(date +%s)"
         speak_alert "$msg"
+        notify_desktop "PR Monitor" "#${num} reviewed by ${voice_names:-reviewers}" "info"
       fi
     fi
 
@@ -481,57 +532,59 @@ process_pr_transitions_and_alerts() {
     if [[ "${PR_MERGEABLE[i]}" == "CONFLICTING" ]] && [[ "${PR_PREV_MERGEABLE[i]}" != "CONFLICTING" ]]; then
       if (( PR_ANNOUNCED_CONFLICTS[i] == 0 )); then
         PR_ANNOUNCED_CONFLICTS[i]=1
-        msg="PR ${num} has merge conflicts"
+        msg="${num} has merge conflicts"
         log_line "$msg"
         LAST_ALERT_MESSAGE="$msg"
         LAST_ALERT_LEVEL="warning"
         LAST_ALERT_EPOCH="$(date +%s)"
         speak_alert "$msg"
+        notify_desktop "PR Monitor" "#${num} has merge conflicts" "warning"
       fi
     fi
 
     # Conflicts resolved
     if [[ "${PR_MERGEABLE[i]}" == "MERGEABLE" ]] && [[ "${PR_PREV_MERGEABLE[i]}" == "CONFLICTING" ]]; then
       PR_ANNOUNCED_CONFLICTS[i]=0
-      msg="PR ${num} conflicts resolved"
+      msg="${num} conflicts resolved"
       log_line "$msg"
       LAST_ALERT_MESSAGE="$msg"
       LAST_ALERT_LEVEL="success"
       LAST_ALERT_EPOCH="$(date +%s)"
       speak_alert "$msg"
+      notify_desktop "PR Monitor" "#${num} conflicts resolved" "success"
     fi
 
-    # Needs update (BEHIND)
-    if [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]] && [[ "${PR_PREV_MERGE_STATE[i]}" != "BEHIND" ]]; then
+    # Needs update (BEHIND) — silently auto-update if enabled, no voice alert.
+    # Fires on every transition to BEHIND *and* when already BEHIND (retry).
+    if [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]]; then
       if (( AUTO_UPDATE == 1 )); then
-        msg="PR ${num} is behind, updating branch"
-        log_line "$msg"
-        LAST_ALERT_MESSAGE="$msg"
-        LAST_ALERT_LEVEL="info"
-        LAST_ALERT_EPOCH="$(date +%s)"
-        speak_alert "$msg"
-        if gh pr update-branch "$num" -R "$REPO_SLUG" 2>/dev/null; then
-          msg="PR ${num} branch updated"
+        # Only attempt update on state change or every 3rd poll to avoid API spam
+        if [[ "${PR_PREV_MERGE_STATE[i]}" != "BEHIND" ]] || (( POLL_COUNT % 3 == 0 )); then
+          msg="${num} is behind, updating branch"
           log_line "$msg"
           LAST_ALERT_MESSAGE="$msg"
-          LAST_ALERT_LEVEL="success"
+          LAST_ALERT_LEVEL="info"
           LAST_ALERT_EPOCH="$(date +%s)"
-          speak_alert "$msg"
-        else
-          msg="PR ${num} branch update failed"
-          warn_line "$msg"
-          LAST_ALERT_MESSAGE="$msg"
-          LAST_ALERT_LEVEL="error"
-          LAST_ALERT_EPOCH="$(date +%s)"
-          speak_alert "$msg"
+          if gh pr update-branch "$num" -R "$REPO_SLUG" 2>/dev/null; then
+            msg="${num} branch updated"
+            log_line "$msg"
+            LAST_ALERT_MESSAGE="$msg"
+            LAST_ALERT_LEVEL="success"
+            LAST_ALERT_EPOCH="$(date +%s)"
+          else
+            msg="${num} branch update failed"
+            warn_line "$msg"
+            LAST_ALERT_MESSAGE="$msg"
+            LAST_ALERT_LEVEL="error"
+            LAST_ALERT_EPOCH="$(date +%s)"
+          fi
         fi
-      else
-        msg="PR ${num} needs update branch"
+      elif [[ "${PR_PREV_MERGE_STATE[i]}" != "BEHIND" ]]; then
+        msg="${num} needs update branch"
         log_line "$msg"
         LAST_ALERT_MESSAGE="$msg"
         LAST_ALERT_LEVEL="warning"
         LAST_ALERT_EPOCH="$(date +%s)"
-        speak_alert "$msg"
       fi
     fi
 
@@ -539,53 +592,97 @@ process_pr_transitions_and_alerts() {
     if [[ "${PR_CI_STATUS[i]}" == "failing" ]] && [[ "${PR_PREV_CI_STATUS[i]}" != "failing" ]]; then
       if (( PR_ANNOUNCED_CI_FAIL[i] == 0 )); then
         PR_ANNOUNCED_CI_FAIL[i]=1
-        msg="PR ${num} has CI issues"
+        msg="${num} has CI issues"
         log_line "$msg"
         LAST_ALERT_MESSAGE="$msg"
         LAST_ALERT_LEVEL="error"
         LAST_ALERT_EPOCH="$(date +%s)"
         speak_alert "$msg"
+        notify_desktop "PR Monitor" "#${num} CI failing" "error"
       fi
     fi
 
     # CI resolved
     if [[ "${PR_CI_STATUS[i]}" == "passing" ]] && [[ "${PR_PREV_CI_STATUS[i]}" == "failing" ]]; then
       PR_ANNOUNCED_CI_FAIL[i]=0
-      msg="PR ${num} CI resolved"
+      msg="${num} CI resolved"
       log_line "$msg"
       LAST_ALERT_MESSAGE="$msg"
       LAST_ALERT_LEVEL="success"
       LAST_ALERT_EPOCH="$(date +%s)"
       speak_alert "$msg"
+      notify_desktop "PR Monitor" "#${num} CI passing" "success"
     fi
 
     # Comments resolved
     if [[ "${PR_PREV_REVIEW_DECISION[i]}" == "CHANGES_REQUESTED" ]] \
       && [[ "${PR_REVIEW_DECISION[i]}" != "CHANGES_REQUESTED" ]] \
       && [[ "${PR_REVIEW_DECISION[i]}" != "" ]]; then
-      msg="PR ${num} all comments resolved"
+      msg="${num} all comments resolved"
       log_line "$msg"
       LAST_ALERT_MESSAGE="$msg"
       LAST_ALERT_LEVEL="success"
       LAST_ALERT_EPOCH="$(date +%s)"
       speak_alert "$msg"
+      notify_desktop "PR Monitor" "#${num} comments resolved" "success"
     fi
 
     # Ready to merge
     if (( PR_IS_READY[i] == 1 )) && (( PR_PREV_IS_READY[i] == 0 )); then
       if (( PR_ANNOUNCED_READY[i] == 0 )); then
         PR_ANNOUNCED_READY[i]=1
-        msg="PR ${num} ready to merge"
+        msg="${num} ready to merge"
         log_line "$msg"
         LAST_ALERT_MESSAGE="$msg"
         LAST_ALERT_LEVEL="success"
         LAST_ALERT_EPOCH="$(date +%s)"
         speak_alert "$msg"
+        notify_desktop "PR Monitor" "#${num} ready to merge!" "success"
       fi
     fi
 
     if (( PR_IS_READY[i] == 0 )); then
       PR_ANNOUNCED_READY[i]=0
+    fi
+
+    # Track issue state timestamp and announce "Still" after 2 minutes
+    local has_issue=0 issue_desc=""
+    if [[ "${PR_MERGEABLE[i]}" == "CONFLICTING" ]]; then
+      has_issue=1; issue_desc="has conflicts"
+    elif [[ "${PR_CI_STATUS[i]}" == "failing" ]]; then
+      has_issue=1; issue_desc="CI failing"
+    elif [[ "${PR_REVIEW_DECISION[i]}" == "CHANGES_REQUESTED" ]]; then
+      has_issue=1; issue_desc="pending comments"
+    elif [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]]; then
+      has_issue=1; issue_desc="behind"
+    fi
+
+    if (( has_issue == 1 )); then
+      # Start tracking if not already
+      if (( PR_ISSUE_SINCE_EPOCH[i] == 0 )); then
+        PR_ISSUE_SINCE_EPOCH[i]="$(date +%s)"
+        PR_ANNOUNCED_STILL[i]=0
+      fi
+      # Announce "Still" after 120 seconds
+      if (( PR_ANNOUNCED_STILL[i] == 0 )); then
+        local now_epoch issue_age
+        now_epoch="$(date +%s)"
+        issue_age=$(( now_epoch - PR_ISSUE_SINCE_EPOCH[i] ))
+        if (( issue_age >= 120 )); then
+          PR_ANNOUNCED_STILL[i]=1
+          msg="Still ${num} ${issue_desc}"
+          log_line "$msg"
+          LAST_ALERT_MESSAGE="$msg"
+          LAST_ALERT_LEVEL="warning"
+          LAST_ALERT_EPOCH="$(date +%s)"
+          speak_alert "$msg"
+          notify_desktop "PR Monitor" "Still #${num} ${issue_desc}" "warning"
+        fi
+      fi
+    else
+      # Issue resolved — reset tracking
+      PR_ISSUE_SINCE_EPOCH[i]=0
+      PR_ANNOUNCED_STILL[i]=0
     fi
   done
 }
@@ -602,11 +699,11 @@ pr_status_icon() {
   local mergeable="${PR_MERGEABLE[idx]}"
   local merge_state="${PR_MERGE_STATE[idx]}"
 
-  if [[ "$draft" == "1" ]]; then printf '%s' "◌"; return; fi
-  if (( ready == 1 )); then printf '%s' "✓"; return; fi
-  if [[ "$ci" == "failing" ]] || [[ "$mergeable" == "CONFLICTING" ]]; then printf '%s' "✗"; return; fi
-  if [[ "$merge_state" == "BEHIND" ]]; then printf '%s' "⚠"; return; fi
-  printf '%s' "·"
+  if [[ "$draft" == "1" ]]; then printf '%s' "${C_DIM}◌${C_RESET}"; return; fi
+  if (( ready == 1 )); then printf '%s' "${C_BOLD_GREEN}✓${C_RESET}"; return; fi
+  if [[ "$ci" == "failing" ]] || [[ "$mergeable" == "CONFLICTING" ]]; then printf '%s' "${C_BOLD_RED}✗${C_RESET}"; return; fi
+  if [[ "$merge_state" == "BEHIND" ]]; then printf '%s' "${C_BOLD_YELLOW}⚠${C_RESET}"; return; fi
+  printf '%s' "${C_CYAN}·${C_RESET}"
 }
 
 pr_status_label() {
@@ -617,45 +714,46 @@ pr_status_label() {
   local mergeable="${PR_MERGEABLE[idx]}"
   local merge_state="${PR_MERGE_STATE[idx]}"
 
-  if [[ "$draft" == "1" ]]; then printf '%s' "DRAFT"; return; fi
-  if (( ready == 1 )); then printf '%s' "READY"; return; fi
-  if [[ "$mergeable" == "CONFLICTING" ]]; then printf '%s' "CONFLICT"; return; fi
-  if [[ "$ci" == "failing" ]]; then printf '%s' "CI FAIL"; return; fi
-  if [[ "$merge_state" == "BEHIND" ]]; then printf '%s' "BEHIND"; return; fi
-  if [[ "$merge_state" == "BLOCKED" ]]; then printf '%s' "BLOCKED"; return; fi
-  if [[ "$ci" == "pending" ]]; then printf '%s' "PENDING"; return; fi
-  printf '%s' "OPEN"
+  if [[ "$draft" == "1" ]]; then printf '%s' "${C_DIM}DRAFT${C_RESET}"; return; fi
+  if (( ready == 1 )); then printf '%s' "${C_BOLD_GREEN}READY${C_RESET}"; return; fi
+  if [[ "$mergeable" == "CONFLICTING" ]]; then printf '%s' "${C_BOLD_RED}CONFLICT${C_RESET}"; return; fi
+  if [[ "$ci" == "failing" ]]; then printf '%s' "${C_RED}CI FAIL${C_RESET}"; return; fi
+  if [[ "$merge_state" == "BEHIND" ]]; then printf '%s' "${C_YELLOW}BEHIND${C_RESET}"; return; fi
+  if [[ "$merge_state" == "BLOCKED" ]]; then printf '%s' "${C_YELLOW}BLOCKED${C_RESET}"; return; fi
+  if [[ "$ci" == "pending" ]]; then printf '%s' "${C_BLUE}PENDING${C_RESET}"; return; fi
+  printf '%s' "${C_CYAN}OPEN${C_RESET}"
 }
 
 ci_icon() {
   case "$1" in
-    passing) printf '%s' "✓" ;;
-    failing) printf '%s' "✗" ;;
-    pending) printf '%s' "⏳" ;;
-    none)    printf '%s' "—" ;;
+    passing) printf '%s' "${C_GREEN}✓${C_RESET}" ;;
+    failing) printf '%s' "${C_RED}✗${C_RESET}" ;;
+    pending) printf '%s' "${C_YELLOW}◑${C_RESET}" ;;
+    none)    printf '%s' "${C_DIM}—${C_RESET}" ;;
     *)       printf '%s' "?" ;;
   esac
 }
 
 merge_label() {
   local mergeable="$1" merge_state="$2"
-  if [[ "$mergeable" == "CONFLICTING" ]]; then printf '%s' "conflict"; return; fi
+  if [[ "$mergeable" == "CONFLICTING" ]]; then printf '%s' "${C_RED}conflict${C_RESET}"; return; fi
   case "$merge_state" in
-    CLEAN)   printf '%s' "clean" ;;
-    BEHIND)  printf '%s' "behind" ;;
-    BLOCKED) printf '%s' "blocked" ;;
-    DIRTY)   printf '%s' "dirty" ;;
-    UNKNOWN) printf '%s' "?" ;;
-    *)       printf '%s' "$merge_state" | tr '[:upper:]' '[:lower:]' ;;
+    CLEAN)    printf '%s' "${C_GREEN}clean${C_RESET}" ;;
+    BEHIND)   printf '%s' "${C_YELLOW}behind${C_RESET}" ;;
+    BLOCKED)  printf '%s' "${C_YELLOW}blocked${C_RESET}" ;;
+    DIRTY)    printf '%s' "${C_RED}dirty${C_RESET}" ;;
+    UNSTABLE) printf '%s' "${C_YELLOW}unstable${C_RESET}" ;;
+    UNKNOWN)  printf '%s' "${C_DIM}?${C_RESET}" ;;
+    *)        printf '%s' "$merge_state" | tr '[:upper:]' '[:lower:]' ;;
   esac
 }
 
 review_label() {
   case "$1" in
-    APPROVED)          printf '%s' "approved" ;;
-    CHANGES_REQUESTED) printf '%s' "changes" ;;
-    REVIEW_REQUIRED)   printf '%s' "required" ;;
-    "")                printf '%s' "—" ;;
+    APPROVED)          printf '%s' "${C_GREEN}approved${C_RESET}" ;;
+    CHANGES_REQUESTED) printf '%s' "${C_YELLOW}changes${C_RESET}" ;;
+    REVIEW_REQUIRED)   printf '%s' "${C_BLUE}required${C_RESET}" ;;
+    "")                printf '%s' "${C_DIM}—${C_RESET}" ;;
     *)                 printf '%s' "$1" | tr '[:upper:]' '[:lower:]' ;;
   esac
 }
@@ -670,15 +768,15 @@ render_dashboard() {
   alert_time_display="$(format_epoch_with_relative "$LAST_ALERT_EPOCH")"
 
   case "$LAST_ALERT_LEVEL" in
-    error)   alert_mark="✗" ;;
-    warning) alert_mark="⚠" ;;
-    success) alert_mark="✓" ;;
-    *)       alert_mark="·" ;;
+    error)   alert_mark="${C_BOLD_RED}✗${C_RESET}" ;;
+    warning) alert_mark="${C_BOLD_YELLOW}⚠${C_RESET}" ;;
+    success) alert_mark="${C_BOLD_GREEN}✓${C_RESET}" ;;
+    *)       alert_mark="${C_DIM}·${C_RESET}" ;;
   esac
 
   begin_dashboard_render
 
-  print_dashboard_linef 'PR Monitor — %s' "$REPO_SLUG"
+  print_dashboard_linef '%s PR Monitor — %s%s' "${C_BOLD_CYAN}" "$REPO_SLUG" "${C_RESET}"
   print_dashboard_line  "======================="
   print_dashboard_linef 'Author    : %s%s' "${AUTHOR_FILTER:-all}" "${BRANCH_FILTER:+    Branch : $BRANCH_FILTER}"
   print_dashboard_linef 'Monitored : %s open PRs   Interval : %ss' "${#PR_NUMBERS[@]}" "$INTERVAL_SECONDS"
@@ -688,8 +786,8 @@ render_dashboard() {
   if (( ${#PR_NUMBERS[@]} == 0 )); then
     print_dashboard_line "No open PRs found."
   else
-    print_dashboard_linef ' %-4s %-10s %-3s %-8s %-8s %s' "#" "Status" "CI" "Merge" "Review" "Title"
-    print_dashboard_linef ' %-4s %-10s %-3s %-8s %-8s %s' "---" "----------" "---" "--------" "--------" "--------------------------------"
+    print_dashboard_linef ' %-5s %-10s  %-2s %-9s %-9s %s' "#" "Status" "CI" "Merge" "Review" "Title"
+    print_dashboard_linef ' %-5s %-10s  %-2s %-9s %-9s %s' "----" "----------" "--" "---------" "---------" "------------------------------------------------"
 
     for (( i = 0; i < ${#PR_NUMBERS[@]}; i++ )); do
       status_icon="$(pr_status_icon "$i")"
@@ -697,10 +795,11 @@ render_dashboard() {
       ci_ic="$(ci_icon "${PR_CI_STATUS[i]}")"
       merge_lbl="$(merge_label "${PR_MERGEABLE[i]}" "${PR_MERGE_STATE[i]}")"
       review_lbl="$(review_label "${PR_REVIEW_DECISION[i]}")"
-      title_short="$(truncate_text "${PR_TITLES[i]}" 32)"
+      title_short="$(truncate_text "${PR_TITLES[i]}" 48)"
 
-      print_dashboard_linef ' %-4s %s %-8s  %s  %-8s %-8s %s' \
-        "${PR_NUMBERS[i]}" "$status_icon" "$status_label" "$ci_ic" "$merge_lbl" "$review_lbl" "$title_short"
+      printf '\r\033[2K %-5s %s %s  %s %s %s %s\n' \
+        "${PR_NUMBERS[i]}" "$(color_pad "$status_icon" 1)" "$(color_pad "$status_label" 8)" "$(color_pad "$ci_ic" 2)" "$(color_pad "$merge_lbl" 9)" "$(color_pad "$review_lbl" 9)" "$title_short"
+      DASHBOARD_CURRENT_RENDER_LINES=$(( DASHBOARD_CURRENT_RENDER_LINES + 1 ))
     done
   fi
 
@@ -781,7 +880,7 @@ TIMEOUT_SECONDS=0
 ENABLE_SPEAK=1
 FORCE_PLAIN=0
 AUTO_UPDATE=0
-VOICE_NAME="Karen"
+VOICE_NAME="Ava (Premium)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -795,6 +894,7 @@ while [[ $# -gt 0 ]]; do
     --auto-update)   AUTO_UPDATE=1; shift ;;
     --voice)         [[ $# -lt 2 ]] && { print_error "$1 requires a value."; exit 1; }; VOICE_NAME="$2"; shift 2 ;;
     --no-speak)      ENABLE_SPEAK=0; shift ;;
+    --notify)        DESKTOP_NOTIFICATIONS=1; shift ;;
     --plain)         FORCE_PLAIN=1; shift ;;
     --)              shift; break ;;
     -*)              print_error "Unknown option: $1"; usage; exit 1 ;;

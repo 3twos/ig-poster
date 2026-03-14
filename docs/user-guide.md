@@ -181,6 +181,7 @@
 - If the bridge is available, the draft now also checks whether the native companion bundle is installed locally. When it is, the web app asks the bridge to open the native app and then waits for the exported Photos selection to come back through the localhost import path. If the bridge is running but the app bundle is missing, the dialog stays explicit and falls back to the normal upload flow instead of silently waiting.
 - The repository contains the native companion scaffold under `companion/IGPosterCompanion`, and the local installer now packages that into an unsigned `IG Poster Companion.app` bundle for development use on macOS.
 - For local development on macOS, the repo now includes `./scripts/install-companion-bridge.zsh`, which builds the release bridge binary, installs it into your user Library, installs `IG Poster Companion.app` into `~/Applications`, registers that app bundle with Launch Services by default, and writes a LaunchAgent so the browser and CLI can reach the bridge without keeping a separate `swift run` terminal open.
+- If you install the bridge with `./scripts/install-companion-bridge.zsh --port <n>`, the bridge still serves the default browser/CLI endpoint on `127.0.0.1:43123` so `Add from Photos` keeps working in the web editor while the custom port remains available for local debugging.
 - The native companion shell now understands the shared `igposter-companion://photos/pick?...` URL shape and can also accept that same handoff as a startup argument when the local bridge opens the app bundle directly. Signed distribution is still pending, so this is a developer-friendly local install path rather than the final end-user packaging flow.
 - The native companion shell now includes a real PhotosPicker button for ordered image/video selection, exports those selections into a managed local cache, and persists a shared manifest that the localhost bridge can serve back to the browser.
 - The companion now persists the active handoff, selection summary, and exported asset manifest into a local shared state file, and the localhost bridge surfaces that shared state for browser/CLI/MCP coordination.
@@ -211,14 +212,11 @@ Still planned:
 
 Available now:
 
+- `ig photos pick --create-draft --brand-kit <id>`
 - `ig photos recent --since 7d --limit 20`
 - `ig photos search --album Favorites --media image`
 - `ig photos import --ids <asset-id,...>`
 - `ig photos propose --since 7d --limit 20 --count 4 --brand-kit <id> --draft-title "Weekly picks"`
-
-Still planned:
-
-- `ig photos pick --create-draft --brand-kit <id>`
 
 Expected behavior:
 
@@ -237,6 +235,7 @@ If the macOS companion app is not installed or not reachable:
 - for internal development, that same shell now includes a native Photos picker button that exports chosen items into the local companion cache
 - for internal development, `swift run ig-poster-companion-bridge --print-health` now also reflects the persisted selection summary when the companion app has an active draft/selection context
 - for internal development, `ig photos recent` / `ig photos search` and the MCP `photos_recent` / `photos_search` tools now hit that same bridge directly, so you can validate the local PhotoKit path without packaging the app first
+- for internal development, `ig photos pick` now uses that same bridge launch + polling path, so the CLI can open the native picker, wait for a fresh export, upload the resulting files, and optionally create a draft post without going through the web editor
 
 ## Working with Saved Posts
 

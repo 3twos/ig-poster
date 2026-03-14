@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import {
   AspectRatioSchema,
-  GenerationResponseSchema,
-  OverlayLayoutSchema,
+  StoredGenerationResponseSchema,
+  StoredOverlayLayoutSchema,
 } from "@/lib/creative";
 import { MediaCompositionSchema } from "@/lib/media-composer";
 import { PublishSettingsSchema } from "@/lib/publish-settings";
@@ -28,6 +28,7 @@ const DraftBrandSchema = z.object({
   logoNotes: z.string().max(300).optional(),
   defaultCornerRadius: z.number().min(0).max(32).optional(),
   defaultBgOpacity: z.number().min(0).max(100).optional(),
+  defaultOverlayStrength: z.number().min(0).max(100).optional(),
 });
 
 const DraftBriefSchema = z.object({
@@ -82,11 +83,11 @@ export const PostUpdateRequestSchema = z
     brand: DraftBrandSchema.nullish(),
     brief: DraftBriefSchema.nullish(),
     promptConfig: PromptConfigSchema.nullish(),
-    overlayLayouts: z.record(z.string(), OverlayLayoutSchema).nullish(),
+    overlayLayouts: z.record(z.string(), StoredOverlayLayoutSchema).nullish(),
     mediaComposition: MediaCompositionSchema.nullish(),
     publishSettings: PublishSettingsSchema.nullish(),
     assets: z.array(StoredAssetSchema).max(20).optional(),
-    result: GenerationResponseSchema.nullish(),
+    result: StoredGenerationResponseSchema.nullish(),
     publishHistory: z.array(PublishHistoryEntrySchema).max(200).optional(),
   })
   .strip();

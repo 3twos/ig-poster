@@ -20,6 +20,54 @@ LAST_ALERT_EPOCH="${LAST_ALERT_EPOCH:-0}"
 LAST_ALERT_LEVEL="${LAST_ALERT_LEVEL:-info}"
 
 # ---------------------------------------------------------------------------
+# ANSI color codes
+# ---------------------------------------------------------------------------
+
+if [[ "${NO_COLOR:-}" == "" && -t 1 ]]; then
+  C_RESET=$'\033[0m'
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_BLUE=$'\033[34m'
+  C_MAGENTA=$'\033[35m'
+  C_CYAN=$'\033[36m'
+  C_WHITE=$'\033[37m'
+  C_BOLD_RED=$'\033[1;31m'
+  C_BOLD_GREEN=$'\033[1;32m'
+  C_BOLD_YELLOW=$'\033[1;33m'
+  C_BOLD_BLUE=$'\033[1;34m'
+  C_BOLD_CYAN=$'\033[1;36m'
+  C_BG_RED=$'\033[41m'
+  C_BG_GREEN=$'\033[42m'
+  C_BG_YELLOW=$'\033[43m'
+else
+  C_RESET="" C_BOLD="" C_DIM=""
+  C_RED="" C_GREEN="" C_YELLOW="" C_BLUE="" C_MAGENTA="" C_CYAN="" C_WHITE=""
+  C_BOLD_RED="" C_BOLD_GREEN="" C_BOLD_YELLOW="" C_BOLD_BLUE="" C_BOLD_CYAN=""
+  C_BG_RED="" C_BG_GREEN="" C_BG_YELLOW=""
+fi
+
+# color_pad <colored_text> <visible_width>
+#   Left-aligns colored text within a fixed visible-width field.
+#   Strips ANSI escapes to measure display length, then pads with spaces.
+color_pad() {
+  local colored_text="$1"
+  local target_width="$2"
+  local stripped visible_len pad_count
+
+  stripped="$(printf '%s' "$colored_text" | sed $'s/\033\\[[0-9;]*m//g')"
+  visible_len="${#stripped}"
+  if (( visible_len >= target_width )); then
+    printf '%s' "$colored_text"
+    return
+  fi
+  pad_count=$(( target_width - visible_len ))
+  printf '%s%*s' "$colored_text" "$pad_count" ""
+}
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 

@@ -597,12 +597,14 @@ export default function Home() {
       createFittedOverlayLayout(activeVariant, post.aspectRatio, {
         cornerRadius: brand.defaultCornerRadius,
         bgOpacity: brand.defaultBgOpacity,
+        overlayStrength: brand.defaultOverlayStrength,
       })
     );
   }, [
     activeVariant,
     brand.defaultBgOpacity,
     brand.defaultCornerRadius,
+    brand.defaultOverlayStrength,
     overlayLayouts,
     post.aspectRatio,
   ]);
@@ -1240,12 +1242,14 @@ export default function Home() {
       layout: createFittedOverlayLayout(activeVariant, post.aspectRatio, {
         cornerRadius: brand.defaultCornerRadius,
         bgOpacity: brand.defaultBgOpacity,
+        overlayStrength: brand.defaultOverlayStrength,
       }),
     });
   }, [
     activeVariant,
     brand.defaultCornerRadius,
     brand.defaultBgOpacity,
+    brand.defaultOverlayStrength,
     dispatch,
     post.aspectRatio,
   ]);
