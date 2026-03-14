@@ -24,6 +24,19 @@ type PostInsertLike = {
 };
 
 const buildDestinationId = () => randomUUID().replace(/-/g, "").slice(0, 18);
+const POST_DESTINATION_SCHEMA_ERROR_CODES = new Set([
+  "22P02",
+  "42P01",
+  "42703",
+  "42704",
+]);
+const POST_DESTINATION_SCHEMA_ERROR_HINTS = [
+  "post_destinations",
+  "meta_destination",
+  "meta_destination_state",
+  "meta_sync_mode",
+];
+const warnedMissingSchemaOperations = new Set<string>();
 
 const DEFAULT_DESTINATION_BEHAVIOR: Record<
   MetaDestination,
@@ -63,6 +76,50 @@ const seedDestination = (
   lastError: null,
 });
 
+const extractErrorCode = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  typeof error.code === "string"
+    ? error.code
+    : null;
+
+export const isMissingPostDestinationsSchemaError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = extractErrorCode(error);
+  if (code === "42P01") {
+    return true;
+  }
+
+  if (code && !POST_DESTINATION_SCHEMA_ERROR_CODES.has(code)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return POST_DESTINATION_SCHEMA_ERROR_HINTS.some((hint) =>
+    message.includes(hint),
+  );
+};
+
+const warnMissingPostDestinationsSchema = (
+  operation: string,
+  error: unknown,
+) => {
+  const message =
+    error instanceof Error ? error.message : "Unknown destination schema error";
+  if (warnedMissingSchemaOperations.has(operation)) {
+    return;
+  }
+
+  warnedMissingSchemaOperations.add(operation);
+  console.warn(
+    `[post-destinations] Falling back while skipping ${operation} because the destination schema is missing or outdated. Run npm run db:migrate in this environment to restore destination persistence. (${message})`,
+  );
+};
+
 export const buildDefaultPostDestinationSeeds = (
   post: PostInsertLike,
 ) => META_DESTINATIONS.map((destination) =>
@@ -73,7 +130,16 @@ export const createDefaultPostDestinations = async (
   db: DbExecutor,
   post: PostInsertLike,
 ) => {
-  await db.insert(postDestinations).values(buildDefaultPostDestinationSeeds(post));
+  try {
+    await db.insert(postDestinations).values(buildDefaultPostDestinationSeeds(post));
+  } catch (error) {
+    if (isMissingPostDestinationsSchemaError(error)) {
+      warnMissingPostDestinationsSchema("default destination seed", error);
+      return;
+    }
+
+    throw error;
+  }
 };
 
 export const clonePostDestinations = async (
@@ -81,49 +147,67 @@ export const clonePostDestinations = async (
   sourcePost: PostInsertLike,
   duplicatedPost: PostInsertLike,
 ) => {
-  const existing = await db
-    .select()
-    .from(postDestinations)
-    .where(eq(postDestinations.postId, sourcePost.id));
+  try {
+    const existing = await db
+      .select()
+      .from(postDestinations)
+      .where(eq(postDestinations.postId, sourcePost.id));
 
-  const byDestination = new Map(existing.map((row) => [row.destination, row]));
-  const seeds = META_DESTINATIONS.map((destination) => {
-    const row = byDestination.get(destination);
-    if (!row) {
-      return seedDestination(
-        duplicatedPost.id,
+    const byDestination = new Map(existing.map((row) => [row.destination, row]));
+    const seeds = META_DESTINATIONS.map((destination) => {
+      const row = byDestination.get(destination);
+      if (!row) {
+        return seedDestination(
+          duplicatedPost.id,
+          destination,
+          duplicatedPost.publishSettings,
+        );
+      }
+
+      return {
+        id: buildDestinationId(),
+        postId: duplicatedPost.id,
         destination,
-        duplicatedPost.publishSettings,
-      );
+        enabled: row.enabled,
+        syncMode: row.syncMode,
+        desiredState: "draft" as const,
+        remoteState: "draft" as const,
+        caption: row.caption,
+        firstComment: row.firstComment,
+        locationId: row.locationId,
+        userTags: row.userTags,
+        publishAt: null,
+        remoteObjectId: null,
+        remoteContainerId: null,
+        remotePermalink: null,
+        remoteStatePayload: {},
+        lastSyncedAt: null,
+        lastError: null,
+      };
+    });
+
+    await db.insert(postDestinations).values(seeds);
+  } catch (error) {
+    if (isMissingPostDestinationsSchemaError(error)) {
+      warnMissingPostDestinationsSchema("destination clone", error);
+      return;
     }
 
-    return {
-      id: buildDestinationId(),
-      postId: duplicatedPost.id,
-      destination,
-      enabled: row.enabled,
-      syncMode: row.syncMode,
-      desiredState: "draft" as const,
-      remoteState: "draft" as const,
-      caption: row.caption,
-      firstComment: row.firstComment,
-      locationId: row.locationId,
-      userTags: row.userTags,
-      publishAt: null,
-      remoteObjectId: null,
-      remoteContainerId: null,
-      remotePermalink: null,
-      remoteStatePayload: {},
-      lastSyncedAt: null,
-      lastError: null,
-    };
-  });
-
-  await db.insert(postDestinations).values(seeds);
+    throw error;
+  }
 };
 
 export const deletePostDestinations = async (db: DbExecutor, postId: string) => {
-  await db.delete(postDestinations).where(eq(postDestinations.postId, postId));
+  try {
+    await db.delete(postDestinations).where(eq(postDestinations.postId, postId));
+  } catch (error) {
+    if (isMissingPostDestinationsSchemaError(error)) {
+      warnMissingPostDestinationsSchema("destination delete", error);
+      return;
+    }
+
+    throw error;
+  }
 };
 
 const buildLegacyPublishSettingsPatch = (
@@ -313,40 +397,58 @@ export const syncPostDestinationsFromPublishSettings = async (
   db: DbExecutor,
   post: PostInsertLike,
 ) => {
-  const existing = await db
-    .select()
-    .from(postDestinations)
-    .where(eq(postDestinations.postId, post.id));
-  const existingDestinations = new Set(existing.map((row) => row.destination));
-  const missingSeeds = META_DESTINATIONS.filter(
-    (destination) => !existingDestinations.has(destination),
-  ).map((destination) => seedDestination(post.id, destination, post.publishSettings));
+  try {
+    const existing = await db
+      .select()
+      .from(postDestinations)
+      .where(eq(postDestinations.postId, post.id));
+    const existingDestinations = new Set(existing.map((row) => row.destination));
+    const missingSeeds = META_DESTINATIONS.filter(
+      (destination) => !existingDestinations.has(destination),
+    ).map((destination) => seedDestination(post.id, destination, post.publishSettings));
 
-  if (missingSeeds.length > 0) {
-    await db.insert(postDestinations).values(missingSeeds);
-  }
+    if (missingSeeds.length > 0) {
+      await db.insert(postDestinations).values(missingSeeds);
+    }
 
-  for (const destination of existingDestinations) {
-    await db
-      .update(postDestinations)
-      .set(buildLegacyPublishSettingsPatch(destination, post.publishSettings))
-      .where(
-        and(
-          eq(postDestinations.postId, post.id),
-          eq(postDestinations.destination, destination),
-        ),
-      );
+    for (const destination of existingDestinations) {
+      await db
+        .update(postDestinations)
+        .set(buildLegacyPublishSettingsPatch(destination, post.publishSettings))
+        .where(
+          and(
+            eq(postDestinations.postId, post.id),
+            eq(postDestinations.destination, destination),
+          ),
+        );
+    }
+  } catch (error) {
+    if (isMissingPostDestinationsSchemaError(error)) {
+      warnMissingPostDestinationsSchema("publish settings sync", error);
+      return;
+    }
+
+    throw error;
   }
 };
 
 export const getStoredPostDestinations = async (
   postId: string,
 ): Promise<PostDestinationRow[]> => {
-  const db = getDb();
-  return db
-    .select()
-    .from(postDestinations)
-    .where(eq(postDestinations.postId, postId));
+  try {
+    const db = getDb();
+    return await db
+      .select()
+      .from(postDestinations)
+      .where(eq(postDestinations.postId, postId));
+  } catch (error) {
+    if (isMissingPostDestinationsSchemaError(error)) {
+      warnMissingPostDestinationsSchema("destination read", error);
+      return [];
+    }
+
+    throw error;
+  }
 };
 
 export const listStoredPostDestinationsByPostId = async (
@@ -362,11 +464,21 @@ export const listStoredPostDestinationsByPostId = async (
     return map;
   }
 
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(postDestinations)
-    .where(inArray(postDestinations.postId, normalizedIds));
+  let rows: PostDestinationRow[];
+  try {
+    const db = getDb();
+    rows = await db
+      .select()
+      .from(postDestinations)
+      .where(inArray(postDestinations.postId, normalizedIds));
+  } catch (error) {
+    if (isMissingPostDestinationsSchemaError(error)) {
+      warnMissingPostDestinationsSchema("destination list", error);
+      return map;
+    }
+
+    throw error;
+  }
 
   for (const row of rows) {
     const current = map.get(row.postId);
