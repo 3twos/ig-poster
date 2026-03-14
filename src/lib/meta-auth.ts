@@ -68,6 +68,12 @@ const PagesResponseSchema = z.object({
   ),
 });
 
+type MetaOAuthPage = z.infer<typeof PagesResponseSchema>["data"][number];
+type EligibleMetaOAuthPage = MetaOAuthPage & {
+  access_token: string;
+  instagram_business_account: NonNullable<MetaOAuthPage["instagram_business_account"]>;
+};
+
 export const MetaOAuthConnectionSchema = z.object({
   id: z.string(),
   createdAt: z.string().datetime(),
@@ -395,7 +401,7 @@ export const createMetaOAuthStartUrl = (
     throw new Error("Missing META_APP_ID or META_APP_SECRET");
   }
 
-  const scopeProfile = options.scopeProfile ?? "instagram-basic";
+  const scopeProfile = options.scopeProfile ?? "page-publishing";
   const scope = buildMetaOAuthScopes(scopeProfile).join(",");
 
   const oauthUrl = new URL(
@@ -474,15 +480,32 @@ export const completeMetaOAuth = async (
   pagesUrl.searchParams.set("access_token", accessToken);
 
   const pages = PagesResponseSchema.parse(await callGraphJson<unknown>(pagesUrl));
-  const page = pages.data.find(
-    (entry) => Boolean(entry.instagram_business_account?.id) && Boolean(entry.access_token),
+  const eligiblePages = pages.data.filter(
+    (entry): entry is EligibleMetaOAuthPage =>
+      Boolean(entry.instagram_business_account?.id) && Boolean(entry.access_token),
   );
 
-  if (!page || !page.instagram_business_account) {
+  if (eligiblePages.length === 0) {
     throw new Error(
       "No Instagram business account found. Ensure the account is Business/Creator and linked to a Facebook Page.",
     );
   }
+
+  if (eligiblePages.length > 1) {
+    const pageLabels = eligiblePages
+      .map((entry) => entry.name.trim() || entry.id)
+      .slice(0, 3)
+      .join(", ");
+    const extraCount = eligiblePages.length - Math.min(eligiblePages.length, 3);
+    const pageSummary =
+      extraCount > 0 ? `${pageLabels}, +${extraCount} more` : pageLabels;
+
+    throw new Error(
+      `Multiple Facebook Pages with linked Instagram business accounts were returned by Meta OAuth (${pageSummary}). Limit this app's Page access to a single linked Page and reconnect.`,
+    );
+  }
+
+  const [page] = eligiblePages;
 
   const connection = await saveMetaConnection({
     accessToken: page.access_token,
