@@ -577,16 +577,23 @@ const uploadImportedSelection = async (
 ) => {
   const uploadedAssets = await Promise.all(
     imported.files.map(async (file) => {
-      const body = buildUploadFormDataFromFile(
-        file,
-        folder ?? inferUploadFolder(file.name),
-      );
-      const response = await ctx.client.requestJson<AssetResponse>({
-        method: "POST",
-        path: "/api/v1/assets",
-        body,
-      });
-      return response.data.asset;
+      try {
+        const body = buildUploadFormDataFromFile(
+          file,
+          folder ?? inferUploadFolder(file.name),
+        );
+        const response = await ctx.client.requestJson<AssetResponse>({
+          method: "POST",
+          path: "/api/v1/assets",
+          body,
+        });
+        return response.data.asset;
+      } catch (error) {
+        if (error instanceof CliError) throw error;
+        throw new Error(
+          `Failed to upload ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }),
   );
 
