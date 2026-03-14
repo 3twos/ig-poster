@@ -105,6 +105,7 @@ PR_MERGEABLE=()        # "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
 PR_MERGE_STATE=()      # "CLEAN" | "BEHIND" | "BLOCKED" | "DIRTY" | ...
 PR_CI_STATUS=()        # "passing" | "failing" | "pending" | "none"
 PR_REVIEW_DECISION=()  # "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | ""
+PR_REVIEW_STATE=()     # "none" | "pending" | "changes" | "approved"
 PR_REVIEW_COUNT=()     # number of reviews (includes approvals, change requests, and comments)
 PR_LATEST_REVIEWERS=() # comma-separated reviewer logins
 PR_IS_READY=()         # 0 | 1
@@ -114,6 +115,7 @@ PR_PREV_MERGEABLE=()
 PR_PREV_MERGE_STATE=()
 PR_PREV_CI_STATUS=()
 PR_PREV_REVIEW_DECISION=()
+PR_PREV_REVIEW_STATE=()
 PR_PREV_REVIEW_COUNT=()
 PR_PREV_IS_READY=()
 
@@ -126,6 +128,7 @@ PR_ANNOUNCED_STILL=()
 PR_ANNOUNCED_CREATED=()
 PR_ANNOUNCED_CONFLICTS=()
 PR_ANNOUNCED_CI_FAIL=()
+PR_ANNOUNCED_NO_REVIEW=()
 PR_ANNOUNCED_READY=()
 
 # ---------------------------------------------------------------------------
@@ -203,7 +206,7 @@ fetch_pr_detail() {
   local pr_number="$1"
   local raw_json parsed_output
 
-  if ! raw_json="$(gh pr view "$pr_number" -R "$REPO_SLUG" --json "number,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,reviews,isDraft" 2>/dev/null)"; then
+  if ! raw_json="$(gh pr view "$pr_number" -R "$REPO_SLUG" --json "number,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,reviews,reviewRequests,isDraft" 2>/dev/null)"; then
     warn_line "Failed to fetch detail for PR #${pr_number}."
     return 1
   fi
@@ -238,7 +241,23 @@ for (const r of reviews) {
 const reviewCount = reviews.length;
 const reviewers = [...reviewerSet].join(",") || "-";
 
-console.log([mergeable, mergeState, ciStatus, reviewDecision, reviewCount, reviewers, isDraft].join("\t"));
+const reviewRequests = pr.reviewRequests || [];
+const hasRequestedReviewers = reviewRequests.length > 0;
+
+let reviewState = "none";
+if (reviewDecision === "APPROVED") {
+  reviewState = "approved";
+} else if (reviewDecision === "CHANGES_REQUESTED") {
+  reviewState = "changes";
+} else if (hasRequestedReviewers || reviewDecision === "REVIEW_REQUIRED") {
+  reviewState = "pending";
+} else if (reviewCount > 0) {
+  reviewState = "pending";
+} else {
+  reviewState = "none";
+}
+
+console.log([mergeable, mergeState, ciStatus, reviewDecision, reviewCount, reviewers, isDraft, reviewState].join("\t"));
 ' <<< "$raw_json" 2>/dev/null)" || {
     warn_line "Failed to parse detail JSON for PR #${pr_number}."
     return 1
@@ -251,8 +270,9 @@ console.log([mergeable, mergeState, ciStatus, reviewDecision, reviewCount, revie
   DETAIL_REVIEW_COUNT=""
   DETAIL_REVIEWERS=""
   DETAIL_IS_DRAFT=""
+  DETAIL_REVIEW_STATE=""
 
-  IFS=$'\t' read -r DETAIL_MERGEABLE DETAIL_MERGE_STATE DETAIL_CI_STATUS DETAIL_REVIEW_DECISION DETAIL_REVIEW_COUNT DETAIL_REVIEWERS DETAIL_IS_DRAFT <<< "$parsed_output"
+  IFS=$'\t' read -r DETAIL_MERGEABLE DETAIL_MERGE_STATE DETAIL_CI_STATUS DETAIL_REVIEW_DECISION DETAIL_REVIEW_COUNT DETAIL_REVIEWERS DETAIL_IS_DRAFT DETAIL_REVIEW_STATE <<< "$parsed_output"
 }
 
 reconcile_pr_list() {
@@ -291,6 +311,7 @@ reconcile_pr_list() {
       PR_MERGE_STATE+=("UNKNOWN")
       PR_CI_STATUS+=("none")
       PR_REVIEW_DECISION+=("")
+      PR_REVIEW_STATE+=("none")
       PR_REVIEW_COUNT+=("0")
       PR_LATEST_REVIEWERS+=("")
       PR_IS_READY+=("0")
@@ -299,6 +320,7 @@ reconcile_pr_list() {
       PR_PREV_MERGE_STATE+=("UNKNOWN")
       PR_PREV_CI_STATUS+=("none")
       PR_PREV_REVIEW_DECISION+=("")
+      PR_PREV_REVIEW_STATE+=("none")
       PR_PREV_REVIEW_COUNT+=("0")
       PR_PREV_IS_READY+=("0")
 
@@ -308,6 +330,7 @@ reconcile_pr_list() {
       PR_ANNOUNCED_CREATED+=("0")
       PR_ANNOUNCED_CONFLICTS+=("0")
       PR_ANNOUNCED_CI_FAIL+=("0")
+      PR_ANNOUNCED_NO_REVIEW+=("0")
       PR_ANNOUNCED_READY+=("0")
 
       new_prs_added=1
@@ -333,10 +356,10 @@ reconcile_pr_list() {
 
   if (( ${#keep_indices[@]} < ${#PR_NUMBERS[@]} )); then
     local tmp_numbers=() tmp_titles=() tmp_authors=() tmp_branches=() tmp_urls=() tmp_draft=()
-    local tmp_mergeable=() tmp_merge_state=() tmp_ci=() tmp_review_dec=() tmp_review_cnt=() tmp_reviewers=() tmp_ready=()
-    local tmp_prev_m=() tmp_prev_ms=() tmp_prev_ci=() tmp_prev_rd=() tmp_prev_rc=() tmp_prev_rdy=()
+    local tmp_mergeable=() tmp_merge_state=() tmp_ci=() tmp_review_dec=() tmp_review_state=() tmp_review_cnt=() tmp_reviewers=() tmp_ready=()
+    local tmp_prev_m=() tmp_prev_ms=() tmp_prev_ci=() tmp_prev_rd=() tmp_prev_rs=() tmp_prev_rc=() tmp_prev_rdy=()
     local tmp_issue_since=() tmp_ann_still=()
-    local tmp_ann_c=() tmp_ann_conf=() tmp_ann_ci=() tmp_ann_rdy=()
+    local tmp_ann_c=() tmp_ann_conf=() tmp_ann_ci=() tmp_ann_nr=() tmp_ann_rdy=()
 
     for idx in "${keep_indices[@]}"; do
       tmp_numbers+=("${PR_NUMBERS[idx]}")
@@ -350,6 +373,7 @@ reconcile_pr_list() {
       tmp_merge_state+=("${PR_MERGE_STATE[idx]}")
       tmp_ci+=("${PR_CI_STATUS[idx]}")
       tmp_review_dec+=("${PR_REVIEW_DECISION[idx]}")
+      tmp_review_state+=("${PR_REVIEW_STATE[idx]}")
       tmp_review_cnt+=("${PR_REVIEW_COUNT[idx]}")
       tmp_reviewers+=("${PR_LATEST_REVIEWERS[idx]}")
       tmp_ready+=("${PR_IS_READY[idx]}")
@@ -358,6 +382,7 @@ reconcile_pr_list() {
       tmp_prev_ms+=("${PR_PREV_MERGE_STATE[idx]}")
       tmp_prev_ci+=("${PR_PREV_CI_STATUS[idx]}")
       tmp_prev_rd+=("${PR_PREV_REVIEW_DECISION[idx]}")
+      tmp_prev_rs+=("${PR_PREV_REVIEW_STATE[idx]}")
       tmp_prev_rc+=("${PR_PREV_REVIEW_COUNT[idx]}")
       tmp_prev_rdy+=("${PR_PREV_IS_READY[idx]}")
 
@@ -367,6 +392,7 @@ reconcile_pr_list() {
       tmp_ann_c+=("${PR_ANNOUNCED_CREATED[idx]}")
       tmp_ann_conf+=("${PR_ANNOUNCED_CONFLICTS[idx]}")
       tmp_ann_ci+=("${PR_ANNOUNCED_CI_FAIL[idx]}")
+      tmp_ann_nr+=("${PR_ANNOUNCED_NO_REVIEW[idx]}")
       tmp_ann_rdy+=("${PR_ANNOUNCED_READY[idx]}")
     done
 
@@ -381,6 +407,7 @@ reconcile_pr_list() {
     PR_MERGE_STATE=("${tmp_merge_state[@]+"${tmp_merge_state[@]}"}")
     PR_CI_STATUS=("${tmp_ci[@]+"${tmp_ci[@]}"}")
     PR_REVIEW_DECISION=("${tmp_review_dec[@]+"${tmp_review_dec[@]}"}")
+    PR_REVIEW_STATE=("${tmp_review_state[@]+"${tmp_review_state[@]}"}")
     PR_REVIEW_COUNT=("${tmp_review_cnt[@]+"${tmp_review_cnt[@]}"}")
     PR_LATEST_REVIEWERS=("${tmp_reviewers[@]+"${tmp_reviewers[@]}"}")
     PR_IS_READY=("${tmp_ready[@]+"${tmp_ready[@]}"}")
@@ -389,6 +416,7 @@ reconcile_pr_list() {
     PR_PREV_MERGE_STATE=("${tmp_prev_ms[@]+"${tmp_prev_ms[@]}"}")
     PR_PREV_CI_STATUS=("${tmp_prev_ci[@]+"${tmp_prev_ci[@]}"}")
     PR_PREV_REVIEW_DECISION=("${tmp_prev_rd[@]+"${tmp_prev_rd[@]}"}")
+    PR_PREV_REVIEW_STATE=("${tmp_prev_rs[@]+"${tmp_prev_rs[@]}"}")
     PR_PREV_REVIEW_COUNT=("${tmp_prev_rc[@]+"${tmp_prev_rc[@]}"}")
     PR_PREV_IS_READY=("${tmp_prev_rdy[@]+"${tmp_prev_rdy[@]}"}")
 
@@ -398,6 +426,7 @@ reconcile_pr_list() {
     PR_ANNOUNCED_CREATED=("${tmp_ann_c[@]+"${tmp_ann_c[@]}"}")
     PR_ANNOUNCED_CONFLICTS=("${tmp_ann_conf[@]+"${tmp_ann_conf[@]}"}")
     PR_ANNOUNCED_CI_FAIL=("${tmp_ann_ci[@]+"${tmp_ann_ci[@]}"}")
+    PR_ANNOUNCED_NO_REVIEW=("${tmp_ann_nr[@]+"${tmp_ann_nr[@]}"}")
     PR_ANNOUNCED_READY=("${tmp_ann_rdy[@]+"${tmp_ann_rdy[@]}"}")
   fi
 }
@@ -412,6 +441,7 @@ refresh_pr_details() {
     PR_PREV_MERGE_STATE[i]="${PR_MERGE_STATE[i]}"
     PR_PREV_CI_STATUS[i]="${PR_CI_STATUS[i]}"
     PR_PREV_REVIEW_DECISION[i]="${PR_REVIEW_DECISION[i]}"
+    PR_PREV_REVIEW_STATE[i]="${PR_REVIEW_STATE[i]}"
     PR_PREV_REVIEW_COUNT[i]="${PR_REVIEW_COUNT[i]}"
     PR_PREV_IS_READY[i]="${PR_IS_READY[i]}"
 
@@ -424,6 +454,8 @@ refresh_pr_details() {
     PR_CI_STATUS[i]="${DETAIL_CI_STATUS:-none}"
     PR_REVIEW_DECISION[i]="${DETAIL_REVIEW_DECISION:-}"
     [[ "${PR_REVIEW_DECISION[i]}" == "-" ]] && PR_REVIEW_DECISION[i]=""
+    PR_REVIEW_STATE[i]="${DETAIL_REVIEW_STATE:-none}"
+    [[ "${PR_REVIEW_STATE[i]}" == "-" ]] && PR_REVIEW_STATE[i]="none"
     PR_REVIEW_COUNT[i]="${DETAIL_REVIEW_COUNT:-0}"
     PR_LATEST_REVIEWERS[i]="${DETAIL_REVIEWERS:-}"
     [[ "${PR_LATEST_REVIEWERS[i]}" == "-" ]] && PR_LATEST_REVIEWERS[i]=""
@@ -458,15 +490,18 @@ process_pr_transitions_and_alerts() {
       elif [[ "${PR_CI_STATUS[i]}" == "failing" ]]; then
         state_suffix=", CI failing"
         PR_ANNOUNCED_CI_FAIL[i]=1
-      elif [[ "${PR_REVIEW_DECISION[i]}" == "CHANGES_REQUESTED" ]]; then
-        state_suffix=", pending comments"
+      elif [[ "${PR_REVIEW_STATE[i]}" == "changes" ]]; then
+        state_suffix=", unresolved comments"
       elif [[ "${PR_CI_STATUS[i]}" == "pending" ]]; then
         state_suffix=", CI pending"
       elif [[ "${PR_IS_READY[i]}" == "1" ]]; then
         state_suffix=", ready to merge"
         PR_ANNOUNCED_READY[i]=1
-      elif [[ "${PR_REVIEW_DECISION[i]}" == "APPROVED" ]]; then
+      elif [[ "${PR_REVIEW_STATE[i]}" == "approved" ]]; then
         state_suffix=", approved"
+      elif [[ "${PR_REVIEW_STATE[i]}" == "none" ]] && [[ "${PR_IS_DRAFT[i]}" == "0" ]]; then
+        state_suffix=", no review requested"
+        PR_ANNOUNCED_NO_REVIEW[i]=1
       elif [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]]; then
         state_suffix=", behind"
       fi
@@ -526,6 +561,57 @@ process_pr_transitions_and_alerts() {
         speak_alert "$msg"
         notify_desktop "PR Monitor" "#${num} reviewed by ${voice_names:-reviewers}" "info"
       fi
+    fi
+
+    # Review state: no review requested (voice alert for non-draft PRs)
+    if [[ "${PR_REVIEW_STATE[i]}" == "none" ]] && [[ "${PR_IS_DRAFT[i]}" == "0" ]]; then
+      if (( PR_ANNOUNCED_NO_REVIEW[i] == 0 )); then
+        PR_ANNOUNCED_NO_REVIEW[i]=1
+        msg="${num} no review requested"
+        log_line "$msg"
+        LAST_ALERT_MESSAGE="$msg"
+        LAST_ALERT_LEVEL="warning"
+        LAST_ALERT_EPOCH="$(date +%s)"
+        speak_alert "$msg"
+        notify_desktop "PR Monitor" "#${num} no review requested" "warning"
+      fi
+    else
+      PR_ANNOUNCED_NO_REVIEW[i]=0
+    fi
+
+    # Review state: transitions
+    if [[ "${PR_REVIEW_STATE[i]}" != "${PR_PREV_REVIEW_STATE[i]}" ]] && (( PR_ANNOUNCED_CREATED[i] == 1 )); then
+      case "${PR_REVIEW_STATE[i]}" in
+        pending)
+          if [[ "${PR_PREV_REVIEW_STATE[i]}" == "none" ]]; then
+            msg="${num} review requested"
+            log_line "$msg"
+            LAST_ALERT_MESSAGE="$msg"
+            LAST_ALERT_LEVEL="info"
+            LAST_ALERT_EPOCH="$(date +%s)"
+            speak_alert "$msg"
+            notify_desktop "PR Monitor" "#${num} review requested" "info"
+          fi
+          ;;
+        approved)
+          msg="${num} review approved"
+          log_line "$msg"
+          LAST_ALERT_MESSAGE="$msg"
+          LAST_ALERT_LEVEL="success"
+          LAST_ALERT_EPOCH="$(date +%s)"
+          speak_alert "$msg"
+          notify_desktop "PR Monitor" "#${num} approved" "success"
+          ;;
+        changes)
+          msg="${num} changes requested"
+          log_line "$msg"
+          LAST_ALERT_MESSAGE="$msg"
+          LAST_ALERT_LEVEL="warning"
+          LAST_ALERT_EPOCH="$(date +%s)"
+          speak_alert "$msg"
+          notify_desktop "PR Monitor" "#${num} changes requested" "warning"
+          ;;
+      esac
     fi
 
     # Merge conflicts
@@ -614,11 +700,11 @@ process_pr_transitions_and_alerts() {
       notify_desktop "PR Monitor" "#${num} CI passing" "success"
     fi
 
-    # Comments resolved
-    if [[ "${PR_PREV_REVIEW_DECISION[i]}" == "CHANGES_REQUESTED" ]] \
-      && [[ "${PR_REVIEW_DECISION[i]}" != "CHANGES_REQUESTED" ]] \
-      && [[ "${PR_REVIEW_DECISION[i]}" != "" ]]; then
-      msg="${num} all comments resolved"
+    # Comments resolved (changes → approved/pending)
+    if [[ "${PR_PREV_REVIEW_STATE[i]}" == "changes" ]] \
+      && [[ "${PR_REVIEW_STATE[i]}" != "changes" ]] \
+      && [[ "${PR_REVIEW_STATE[i]}" != "none" ]]; then
+      msg="${num} comments resolved"
       log_line "$msg"
       LAST_ALERT_MESSAGE="$msg"
       LAST_ALERT_LEVEL="success"
@@ -651,8 +737,8 @@ process_pr_transitions_and_alerts() {
       has_issue=1; issue_desc="has conflicts"
     elif [[ "${PR_CI_STATUS[i]}" == "failing" ]]; then
       has_issue=1; issue_desc="CI failing"
-    elif [[ "${PR_REVIEW_DECISION[i]}" == "CHANGES_REQUESTED" ]]; then
-      has_issue=1; issue_desc="pending comments"
+    elif [[ "${PR_REVIEW_STATE[i]}" == "changes" ]]; then
+      has_issue=1; issue_desc="unresolved comments"
     elif [[ "${PR_MERGE_STATE[i]}" == "BEHIND" ]]; then
       has_issue=1; issue_desc="behind"
     fi
@@ -750,11 +836,11 @@ merge_label() {
 
 review_label() {
   case "$1" in
-    APPROVED)          printf '%s' "${C_GREEN}approved${C_RESET}" ;;
-    CHANGES_REQUESTED) printf '%s' "${C_YELLOW}changes${C_RESET}" ;;
-    REVIEW_REQUIRED)   printf '%s' "${C_BLUE}required${C_RESET}" ;;
-    "")                printf '%s' "${C_DIM}—${C_RESET}" ;;
-    *)                 printf '%s' "$1" | tr '[:upper:]' '[:lower:]' ;;
+    approved) printf '%s' "${C_GREEN}approved${C_RESET}" ;;
+    changes)  printf '%s' "${C_YELLOW}changes${C_RESET}" ;;
+    pending)  printf '%s' "${C_BLUE}pending${C_RESET}" ;;
+    none)     printf '%s' "${C_BOLD_YELLOW}none${C_RESET}" ;;
+    *)        printf '%s' "${C_DIM}—${C_RESET}" ;;
   esac
 }
 
@@ -794,7 +880,7 @@ render_dashboard() {
       status_label="$(pr_status_label "$i")"
       ci_ic="$(ci_icon "${PR_CI_STATUS[i]}")"
       merge_lbl="$(merge_label "${PR_MERGEABLE[i]}" "${PR_MERGE_STATE[i]}")"
-      review_lbl="$(review_label "${PR_REVIEW_DECISION[i]}")"
+      review_lbl="$(review_label "${PR_REVIEW_STATE[i]}")"
       title_short="$(truncate_text "${PR_TITLES[i]}" 48)"
 
       printf '\r\033[2K %-5s %s %s  %s %s %s %s\n' \
@@ -826,7 +912,7 @@ render_plain_cycle_summary() {
     status_lbl="$(pr_status_label "$i")"
     ci="${PR_CI_STATUS[i]}"
     merge_st="$(merge_label "${PR_MERGEABLE[i]}" "${PR_MERGE_STATE[i]}")"
-    review_d="$(review_label "${PR_REVIEW_DECISION[i]}")"
+    review_d="$(review_label "${PR_REVIEW_STATE[i]}")"
     log_line "  #${num} ${status_lbl} | CI:${ci} | merge:${merge_st} | review:${review_d} | $(truncate_text "${PR_TITLES[i]}" 40)"
   done
 }
