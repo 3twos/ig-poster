@@ -700,10 +700,10 @@ process_pr_transitions_and_alerts() {
       notify_desktop "PR Monitor" "#${num} CI passing" "success"
     fi
 
-    # Comments resolved (changes → approved/pending)
+    # Comments resolved (changes → pending only; changes → approved is
+    # already covered by the "review approved" transition alert above)
     if [[ "${PR_PREV_REVIEW_STATE[i]}" == "changes" ]] \
-      && [[ "${PR_REVIEW_STATE[i]}" != "changes" ]] \
-      && [[ "${PR_REVIEW_STATE[i]}" != "none" ]]; then
+      && [[ "${PR_REVIEW_STATE[i]}" == "pending" ]]; then
       msg="${num} comments resolved"
       log_line "$msg"
       LAST_ALERT_MESSAGE="$msg"

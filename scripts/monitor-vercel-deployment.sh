@@ -1820,17 +1820,38 @@ record_event_update_for_index() {
   fi
 
   if [[ -n "$event_step" ]]; then
-    # Record step transition in history if it's a new phase
+    # Record step transition in history only when the derived phase changes,
+    # not on every raw step string change (many steps map to the same phase).
     local _prev_step="${DEP_STEP[index]:-}"
-    if [[ "$event_step" != "$_prev_step" ]]; then
+    local _new_phase_idx _prev_phase_idx
+    _new_phase_idx="$(_step_phase_index "$event_step")"
+    _prev_phase_idx="$(_step_phase_index "$_prev_step")"
+    if [[ "$_new_phase_idx" != "$_prev_phase_idx" ]] && (( _new_phase_idx >= 0 )); then
       local _phase_key
       _phase_key="$(printf '%s' "$event_step" | tr '[:upper:]' '[:lower:]')"
       local _now_epoch
       _now_epoch="$(date +%s)"
-      if [[ -z "${DEP_STEP_HISTORY[index]:-}" ]]; then
-        DEP_STEP_HISTORY[index]="${_phase_key}:${_now_epoch}"
-      else
-        DEP_STEP_HISTORY[index]="${DEP_STEP_HISTORY[index]}|${_phase_key}:${_now_epoch}"
+      # Only record if this phase hasn't been recorded yet (preserve first start time)
+      local _already_recorded=0
+      if [[ -n "${DEP_STEP_HISTORY[index]:-}" ]]; then
+        local _existing_entry
+        local _existing_IFS="$IFS"
+        IFS='|'
+        for _existing_entry in ${DEP_STEP_HISTORY[index]}; do
+          local _existing_key="${_existing_entry%%:*}"
+          if [[ "$(_step_phase_index "$_existing_key")" == "$_new_phase_idx" ]]; then
+            _already_recorded=1
+            break
+          fi
+        done
+        IFS="$_existing_IFS"
+      fi
+      if (( _already_recorded == 0 )); then
+        if [[ -z "${DEP_STEP_HISTORY[index]:-}" ]]; then
+          DEP_STEP_HISTORY[index]="${_phase_key}:${_now_epoch}"
+        else
+          DEP_STEP_HISTORY[index]="${DEP_STEP_HISTORY[index]}|${_phase_key}:${_now_epoch}"
+        fi
       fi
     fi
     DEP_STEP[index]="$event_step"
