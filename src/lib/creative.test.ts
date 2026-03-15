@@ -1106,13 +1106,17 @@ describe("StoredOverlayLayoutSchema bounds", () => {
     }
   });
 
-  it("rejects positions outside -200..200", () => {
+  it("accepts extreme positions from react-rnd drag-and-drop", () => {
     const layout = makeLayout({
-      hook: makeBlock({ x: -201, y: 201 }),
+      hook: makeBlock({ x: -500, y: 999 }),
     });
 
     const result = StoredOverlayLayoutSchema.safeParse(layout);
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hook.x).toBe(-500);
+      expect(result.data.hook.y).toBe(999);
+    }
   });
 
   it("preserves optional defaults for custom blocks and logo", () => {
