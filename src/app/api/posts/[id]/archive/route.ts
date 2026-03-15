@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
-import { hashEmail } from "@/lib/server-utils";
+import { buildErrorDetail, hashEmail } from "@/lib/server-utils";
 import { readWorkspaceSessionFromRequest } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
@@ -38,7 +38,7 @@ export async function POST(req: Request, ctx: Ctx) {
   } catch (err) {
     console.error("[api/posts/archive]", err);
     return NextResponse.json(
-      { error: "Failed to archive post" },
+      { error: "Failed to archive post", detail: buildErrorDetail(err) },
       { status: 500 },
     );
   }
@@ -72,7 +72,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
   } catch (err) {
     console.error("[api/posts/archive]", err);
     return NextResponse.json(
-      { error: "Failed to unarchive post" },
+      { error: "Failed to unarchive post", detail: buildErrorDetail(err) },
       { status: 500 },
     );
   }
