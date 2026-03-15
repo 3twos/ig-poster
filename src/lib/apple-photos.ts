@@ -11,6 +11,8 @@ import {
   type ApplePhotosPickResponse,
 } from "@/lib/apple-photos-bridge";
 
+export const APPLE_PHOTOS_INSTALL_COMMAND = "npm run companion:install";
+
 export type ApplePhotosFallbackInfo = {
   code:
     | "MACOS_COMPANION_REQUIRED"
@@ -71,7 +73,7 @@ export const getApplePhotosFallbackInfo = (
         description:
           `The companion bridge is not responding on this Mac. If you've already installed it, the LaunchAgent may need a restart. Otherwise, install with one command.`,
         actionLabel: "Use regular upload",
-        installHint: "npm run companion:install",
+        installHint: APPLE_PHOTOS_INSTALL_COMMAND,
       };
     }
 

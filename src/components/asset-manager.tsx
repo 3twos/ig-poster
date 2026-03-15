@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  APPLE_PHOTOS_INSTALL_COMMAND,
   ApplePhotosBridgeRequestError,
   getApplePhotosFallbackInfo,
   isMacOsUserAgent,
@@ -378,7 +379,7 @@ export function AssetManager({
           </p>
           {showApplePhotosEntry ? (
             <p className="mt-1 text-[11px] text-slate-500">
-              Pick photos directly from your Apple Photos library. Requires the companion bridge — run <code className="font-mono text-orange-300/70">npm run companion:install</code> once to set up.
+              Pick photos directly from your Apple Photos library. Requires the companion bridge — run <code className="font-mono text-orange-300/70">{APPLE_PHOTOS_INSTALL_COMMAND}</code> once to set up.
             </p>
           ) : null}
           {applePhotosImportSession ? (
