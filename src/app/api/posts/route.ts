@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { attachPostDestinations } from "@/lib/post-destinations";
-import { buildErrorDetail } from "@/lib/server-utils";
+import { apiErrorResponse } from "@/lib/api-error";
 import { toSummary } from "@/lib/post";
 import { PostCreateRequestSchema } from "@/lib/post-schemas";
 import { resolveActorFromRequest } from "@/services/actors";
@@ -36,10 +36,7 @@ export async function GET(req: Request) {
     });
   } catch (err) {
     console.error("[api/posts] GET: unhandled error", err);
-    return NextResponse.json(
-      { error: "Failed to list posts", detail: buildErrorDetail(err) },
-      { status: 500 },
-    );
+    return apiErrorResponse(err, { fallback: "Failed to list posts" });
   }
 }
 
@@ -71,9 +68,6 @@ export async function POST(req: Request) {
     }
 
     console.error("[api/posts] POST: unhandled error", error);
-    return NextResponse.json(
-      { error: "Failed to create post", detail: buildErrorDetail(error) },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, { fallback: "Failed to create post" });
   }
 }

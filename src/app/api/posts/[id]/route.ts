@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { attachPostDestinations } from "@/lib/post-destinations";
-import { buildErrorDetail } from "@/lib/server-utils";
+import { apiErrorResponse } from "@/lib/api-error";
 import { PostUpdateRequestSchema } from "@/lib/post-schemas";
 import { resolveActorFromRequest } from "@/services/actors";
 import { getStoredPostDestinations } from "@/services/post-destinations";
@@ -53,10 +53,7 @@ export async function GET(req: Request, ctx: Ctx) {
     return NextResponse.json(attachPostDestinations(row, destinations));
   } catch (err) {
     console.error("[api/posts/id] GET: unhandled error", err);
-    return NextResponse.json(
-      { error: "Failed to load post", detail: buildErrorDetail(err) },
-      { status: 500 },
-    );
+    return apiErrorResponse(err, { fallback: "Failed to load post" });
   }
 }
 
@@ -103,10 +100,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     }
 
     console.error("[api/posts/id] PUT: unhandled error", error);
-    return NextResponse.json(
-      { error: "Failed to update post", detail: buildErrorDetail(error) },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, { fallback: "Failed to update post" });
   }
 }
 
@@ -135,9 +129,6 @@ export async function DELETE(req: Request, ctx: Ctx) {
     }
 
     console.error("[api/posts/id] DELETE: unhandled error", error);
-    return NextResponse.json(
-      { error: "Failed to delete post", detail: buildErrorDetail(error) },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, { fallback: "Failed to delete post" });
   }
 }
