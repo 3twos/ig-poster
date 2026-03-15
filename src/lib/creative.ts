@@ -237,9 +237,9 @@ export const OverlayLayoutSchema = z.object({
   overlayStrength: z.number().min(0).max(100).optional(),
 });
 
-// Stored overlay schema — no position/size bounds because react-rnd allows
-// free dragging well beyond the canvas edges. Clamping here only causes
-// silent save failures that are impossible for the user to diagnose.
+// Stored overlay schema — no upper bounds on x/y/width/height because react-rnd allows
+// free dragging well beyond the canvas edges. Non-negative width/height and
+// a fontScale ceiling are still enforced as basic sanity constraints.
 const StoredOverlayBlockSchema = z.object({
   x: z.number(),
   y: z.number(),
