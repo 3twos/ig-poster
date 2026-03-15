@@ -18,6 +18,7 @@ import {
   resolveVariantOverlayCopy,
   selectTopVariants,
   selectTopVariantsWithScores,
+  OverlayLayoutSchema,
   syncOverlayLayoutToVariantCopy,
   type CreativeVariant,
 } from "@/lib/creative";
@@ -1059,5 +1060,71 @@ describe("creative helpers", () => {
       supportingText: "Slide two body with enough detail to satisfy the schema.",
       cta: "",
     });
+  });
+});
+
+describe("OverlayLayoutSchema bounds", () => {
+  const makeBlock = (overrides: Record<string, unknown> = {}) => ({
+    x: 10,
+    y: 20,
+    width: 50,
+    height: 15,
+    fontScale: 1,
+    visible: true,
+    text: "Test",
+    ...overrides,
+  });
+
+  const makeLayout = (overrides: Record<string, unknown> = {}) => ({
+    hook: makeBlock(),
+    headline: makeBlock(),
+    supportingText: makeBlock(),
+    cta: makeBlock(),
+    ...overrides,
+  });
+
+  it("accepts overlay positions at schema boundaries (0 and 100)", () => {
+    const layout = makeLayout({
+      hook: makeBlock({ x: 0, y: 0, width: 5, height: 5 }),
+      cta: makeBlock({ x: 100, y: 100 }),
+    });
+
+    const result = OverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hook.x).toBe(0);
+      expect(result.data.hook.y).toBe(0);
+      expect(result.data.cta.x).toBe(100);
+      expect(result.data.cta.y).toBe(100);
+    }
+  });
+
+  it("rejects overlay positions outside 0..100", () => {
+    const layout = makeLayout({
+      hook: makeBlock({ x: -1, y: 101 }),
+    });
+
+    const result = OverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects block dimensions below minimums", () => {
+    const layout = makeLayout({
+      hook: makeBlock({ width: 4, height: 4 }),
+    });
+
+    const result = OverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(false);
+  });
+
+  it("preserves optional defaults for custom blocks and logo", () => {
+    const layout = makeLayout();
+
+    const result = OverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.custom).toEqual([]);
+      expect(result.data.logo).toBeUndefined();
+    }
   });
 });
