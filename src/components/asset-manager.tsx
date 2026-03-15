@@ -378,7 +378,7 @@ export function AssetManager({
           </p>
           {showApplePhotosEntry ? (
             <p className="mt-1 text-[11px] text-slate-500">
-              On macOS, this probes the local companion bridge, opens the native picker when available, then pulls the selected files back into the normal upload flow automatically.
+              Pick photos directly from your Apple Photos library. Requires the companion bridge — run <code className="font-mono text-orange-300/70">npm run companion:install</code> once to set up.
             </p>
           ) : null}
           {applePhotosImportSession ? (
@@ -461,6 +461,21 @@ export function AssetManager({
                 : applePhotosDialogState?.info.code}
             </code>
           </div>
+          {applePhotosDialogState?.kind === "fallback" &&
+            applePhotosDialogState.info.installHint ? (
+            <div className="rounded-lg border border-orange-400/20 bg-orange-950/30 px-3 py-2.5 text-[11px] text-slate-200">
+              <p className="mb-1.5 font-semibold text-orange-200">Quick setup</p>
+              <p className="mb-2 text-slate-300">
+                Run this in your project directory:
+              </p>
+              <code className="block rounded bg-black/40 px-2.5 py-1.5 font-mono text-[11px] text-orange-100 select-all">
+                {applePhotosDialogState.info.installHint}
+              </code>
+              <p className="mt-2 text-[10px] text-slate-400">
+                Builds the companion, installs the bridge, and registers a LaunchAgent so it auto-starts at login.
+              </p>
+            </div>
+          ) : null}
           {applePhotosDialogState?.kind === "launch" ? (
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-300">
               <span className="font-semibold text-slate-100">Bridge:</span>{" "}

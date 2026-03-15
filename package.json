@@ -27,7 +27,10 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:check": "bash scripts/check-migrations.sh",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "companion:install": "zsh scripts/install-companion-bridge.zsh",
+    "companion:uninstall": "zsh scripts/install-companion-bridge.zsh --uninstall",
+    "companion:status": "curl -sf http://127.0.0.1:43123/v1/health | node -e \"const d=require('fs').readFileSync('/dev/stdin','utf8');const h=JSON.parse(d);console.log('Bridge:',h.bridge.origin);console.log('App installed:',h.companionApp?.installed);console.log('Selection:',h.selection?.assetCount??0,'assets ready')\" 2>/dev/null || echo 'Bridge is not running. Install with: npm run companion:install'"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-arm-gnueabihf": "4.59.0",
