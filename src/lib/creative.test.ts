@@ -18,7 +18,7 @@ import {
   resolveVariantOverlayCopy,
   selectTopVariants,
   selectTopVariantsWithScores,
-  OverlayLayoutSchema,
+  StoredOverlayLayoutSchema,
   syncOverlayLayoutToVariantCopy,
   type CreativeVariant,
 } from "@/lib/creative";
@@ -1063,7 +1063,7 @@ describe("creative helpers", () => {
   });
 });
 
-describe("OverlayLayoutSchema bounds", () => {
+describe("StoredOverlayLayoutSchema bounds", () => {
   const makeBlock = (overrides: Record<string, unknown> = {}) => ({
     x: 10,
     y: 20,
@@ -1083,44 +1083,42 @@ describe("OverlayLayoutSchema bounds", () => {
     ...overrides,
   });
 
-  it("accepts overlay positions at schema boundaries (0 and 100)", () => {
+  it("accepts overlay positions outside 0..100 within -200..200", () => {
     const layout = makeLayout({
-      hook: makeBlock({ x: 0, y: 0, width: 5, height: 5 }),
-      cta: makeBlock({ x: 100, y: 100 }),
+      hook: makeBlock({ x: -50, y: 150 }),
     });
 
-    const result = OverlayLayoutSchema.safeParse(layout);
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.hook.x).toBe(0);
-      expect(result.data.hook.y).toBe(0);
-      expect(result.data.cta.x).toBe(100);
-      expect(result.data.cta.y).toBe(100);
+      expect(result.data.hook.x).toBe(-50);
+      expect(result.data.hook.y).toBe(150);
     }
   });
 
-  it("rejects overlay positions outside 0..100", () => {
-    const layout = makeLayout({
-      hook: makeBlock({ x: -1, y: 101 }),
-    });
+  it("preserves overlayStrength when provided", () => {
+    const layout = makeLayout({ overlayStrength: 42 });
 
-    const result = OverlayLayoutSchema.safeParse(layout);
-    expect(result.success).toBe(false);
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.overlayStrength).toBe(42);
+    }
   });
 
-  it("rejects block dimensions below minimums", () => {
+  it("rejects positions outside -200..200", () => {
     const layout = makeLayout({
-      hook: makeBlock({ width: 4, height: 4 }),
+      hook: makeBlock({ x: -201, y: 201 }),
     });
 
-    const result = OverlayLayoutSchema.safeParse(layout);
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
     expect(result.success).toBe(false);
   });
 
   it("preserves optional defaults for custom blocks and logo", () => {
     const layout = makeLayout();
 
-    const result = OverlayLayoutSchema.safeParse(layout);
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.custom).toEqual([]);

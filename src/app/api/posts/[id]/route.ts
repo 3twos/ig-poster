@@ -82,14 +82,15 @@ export async function PUT(req: Request, ctx: Ctx) {
     return NextResponse.json(attachPostDestinations(updated, destinations));
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error("[api/posts/id] PUT: validation error", error.issues);
+      console.warn("[api/posts/id] PUT: validation error", error.issues);
       return NextResponse.json(
-        { error: "Invalid request body", issues: error.issues },
+        { error: "Invalid request body", ...(process.env.NODE_ENV !== "production" && { issues: error.issues }) },
         { status: 400 },
       );
     }
 
     if (error instanceof SyntaxError) {
+      console.warn("[api/posts/id] PUT: malformed JSON", error.message);
       return NextResponse.json(
         { error: "Invalid request body" },
         { status: 400 },
