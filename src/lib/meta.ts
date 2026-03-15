@@ -455,6 +455,10 @@ const publishSingleImage = async (
 
   const publishMedia = await publishContainer(createMedia.id, auth);
 
+  if (!publishMedia.id) {
+    throw new Error("Meta API did not return a publish id for image");
+  }
+
   return {
     mode: "image" as const,
     creationId: createMedia.id,
@@ -498,6 +502,10 @@ const publishReel = async (
 
   await waitForContainerReady(createMedia.id, auth);
   const publishMedia = await publishContainer(createMedia.id, auth);
+
+  if (!publishMedia.id) {
+    throw new Error("Meta API did not return a publish id for reel");
+  }
 
   return {
     mode: "reel" as const,
@@ -575,6 +583,10 @@ const publishCarousel = async (
 
   await waitForContainerReady(parent.id, auth);
   const publishMedia = await publishContainer(parent.id, auth);
+
+  if (!publishMedia.id) {
+    throw new Error("Meta API did not return a publish id for carousel");
+  }
 
   return {
     mode: "carousel" as const,
