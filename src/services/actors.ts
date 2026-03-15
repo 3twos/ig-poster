@@ -55,17 +55,32 @@ export const resolveActorFromRequest = async (
 ): Promise<Actor | null> => {
   const bearerToken = readBearerTokenFromRequest(req);
   if (bearerToken) {
+    console.log("[auth:actor] trying bearer token auth");
     const cliActor = await verifyCliAccessToken(bearerToken);
     if (cliActor) {
+      console.log(`[auth:actor] CLI access token verified for ${cliActor.ownerHash}`);
       return cliActor;
     }
 
     const session = await verifyWorkspaceSessionToken(bearerToken);
-    return session ? toActor(session, "bearer") : null;
+    if (session) {
+      console.log(`[auth:actor] bearer session verified for ${session.sub} (expires ${session.expiresAt})`);
+      return toActor(session, "bearer");
+    }
+
+    console.warn("[auth:actor] bearer token present but invalid (CLI + session both failed)");
+    return null;
   }
 
+  console.log("[auth:actor] trying cookie auth");
   const session = await readWorkspaceSessionFromRequest(req);
-  return session ? toActor(session, "cookie") : null;
+  if (session) {
+    console.log(`[auth:actor] cookie session verified for ${session.sub} (expires ${session.expiresAt})`);
+    return toActor(session, "cookie");
+  }
+
+  console.warn("[auth:actor] no valid auth found (no bearer token, no valid cookie)");
+  return null;
 };
 
 export const actorHasScopes = (actor: Actor, scopes: string[]) =>

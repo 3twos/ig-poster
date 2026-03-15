@@ -47,8 +47,14 @@ export function useAutoSave(
   // Immediate save — always serializes fresh from draftRef to avoid stale cache
   const saveNow = useCallback(async () => {
     const d = draftRef.current;
-    if (!d) return true;
-    if (d.status === "posted") return true;
+    if (!d) {
+      console.log("[post:autosave:client] saveNow: no draft, skipping");
+      return true;
+    }
+    if (d.status === "posted") {
+      console.log(`[post:autosave:client] saveNow: post ${d.id} is posted, skipping`);
+      return true;
+    }
 
     const serialized = withPerfSync("autoSave:serialize", () =>
       serializePostDraft(d),
@@ -57,6 +63,8 @@ export function useAutoSave(
       setSaveStatus("saved");
       return true;
     }
+
+    console.log(`[post:autosave:client] saveNow: saving post ${d.id} (${serialized.length} bytes)…`);
 
     // Cancel any pending debounce
     if (timerRef.current) {
@@ -83,6 +91,7 @@ export function useAutoSave(
       });
 
       if (res.ok) {
+        console.log(`[post:autosave:client] saved post ${d.id} successfully`);
         lastSavedRef.current = serialized;
         retryCountRef.current = 0;
         setSaveStatus("saved");
@@ -90,33 +99,45 @@ export function useAutoSave(
         return true;
       } else if (PERMANENT_ERROR_CODES.has(res.status)) {
         // Permanent error (400/401/403/404/409/422) — do not retry
+        const body = await res.text().catch(() => "");
+        console.error(`[post:autosave:client] PERMANENT ERROR ${res.status} for post ${d.id}`, body);
         setSaveStatus("error");
         return false;
       } else {
         // Transient error — retry with exponential backoff
+        const body = await res.text().catch(() => "");
+        console.warn(`[post:autosave:client] transient error ${res.status} for post ${d.id} (retry ${retryCountRef.current + 1}/${MAX_RETRIES})`, body);
         setSaveStatus("error");
         if (retryCountRef.current < MAX_RETRIES) {
           const delay = BASE_RETRY_MS * Math.pow(3, retryCountRef.current);
           retryCountRef.current += 1;
+          console.log(`[post:autosave:client] scheduling retry in ${delay}ms`);
           timerRef.current = setTimeout(() => {
             void saveNow();
           }, delay);
+        } else {
+          console.error(`[post:autosave:client] max retries exhausted for post ${d.id}`);
         }
         return false;
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") {
+        console.log(`[post:autosave:client] save aborted for post ${d.id}`);
         return true;
       }
 
       // Network error — retry with exponential backoff
+      console.error(`[post:autosave:client] network error for post ${d.id}`, err);
       setSaveStatus("error");
       if (retryCountRef.current < MAX_RETRIES) {
         const delay = BASE_RETRY_MS * Math.pow(3, retryCountRef.current);
         retryCountRef.current += 1;
+        console.log(`[post:autosave:client] scheduling retry in ${delay}ms`);
         timerRef.current = setTimeout(() => {
           void saveNow();
         }, delay);
+      } else {
+        console.error(`[post:autosave:client] max retries exhausted for post ${d.id}`);
       }
       return false;
     } finally {

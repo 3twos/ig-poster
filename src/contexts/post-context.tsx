@@ -145,14 +145,20 @@ export function PostProvider({ children }: { children: ReactNode }) {
     const isInitial = !didInitialLoadRef.current;
     if (isInitial) setIsLoadingPosts(true);
     try {
+      console.log("[post:list:client] fetching posts…");
       const res = await fetch("/api/posts", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(`[post:list:client] failed ${res.status}`, body);
+        return;
+      }
       const json = await res.json();
       const incoming = (json.posts ?? []) as PostSummary[];
+      console.log(`[post:list:client] loaded ${incoming.length} posts`);
       setPosts((current) => reconcilePostSummaries(current, incoming));
       didInitialLoadRef.current = true;
-    } catch {
-      // Silently fail — sidebar will show empty
+    } catch (err) {
+      console.error("[post:list:client] network error", err);
     } finally {
       if (isInitial) setIsLoadingPosts(false);
     }
@@ -160,13 +166,19 @@ export function PostProvider({ children }: { children: ReactNode }) {
 
   const refreshArchivedPosts = useCallback(async () => {
     try {
+      console.log("[post:list-archived:client] fetching archived posts…");
       const res = await fetch("/api/posts?archived=true", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(`[post:list-archived:client] failed ${res.status}`, body);
+        return;
+      }
       const json = await res.json();
       const incoming = (json.posts ?? []) as PostSummary[];
+      console.log(`[post:list-archived:client] loaded ${incoming.length} archived posts`);
       setArchivedPosts((current) => reconcilePostSummaries(current, incoming));
-    } catch {
-      // Silently fail
+    } catch (err) {
+      console.error("[post:list-archived:client] network error", err);
     }
   }, []);
 
@@ -201,17 +213,24 @@ export function PostProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      console.log(`[post:select:client] selecting post ${id}`);
       notifyBeforePostSwitch(id);
       const requestSeq = ++selectRequestSeqRef.current;
       await saveNowRef.current();
 
       try {
         const res = await fetch(`/api/posts/${id}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const row = await res.json();
-        if (requestSeq !== selectRequestSeqRef.current) {
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          console.error(`[post:select:client] failed ${res.status} for ${id}`, body);
           return;
         }
+        const row = await res.json();
+        if (requestSeq !== selectRequestSeqRef.current) {
+          console.log(`[post:select:client] stale request for ${id}, ignoring`);
+          return;
+        }
+        console.log(`[post:select:client] loaded post ${id}`, { status: row.status, title: row.title });
         dispatch({ type: "LOAD_POST", row: row as PostRowWithDestinations });
         // markSaved is called in a separate effect that fires after LOAD_POST
         // updates the draft, ensuring the snapshot matches the loaded state
@@ -219,14 +238,15 @@ export function PostProvider({ children }: { children: ReactNode }) {
         const url = new URL(window.location.href);
         url.searchParams.set("post", id);
         window.history.replaceState({}, "", url.toString());
-      } catch {
-        // Failed to load post
+      } catch (err) {
+        console.error(`[post:select:client] network error for ${id}`, err);
       }
     },
     [notifyBeforePostSwitch],
   );
 
   const createNewPost = useCallback(async (): Promise<string> => {
+    console.log("[post:create:client] creating new post…");
     notifyBeforePostSwitch(null);
     selectRequestSeqRef.current += 1;
     await saveNowRef.current();
@@ -242,9 +262,11 @@ export function PostProvider({ children }: { children: ReactNode }) {
         if (settings?.brand) brand = settings.brand;
         if (settings?.promptConfig) promptConfig = settings.promptConfig;
         if (settings?.logoUrl) logoUrl = settings.logoUrl;
+      } else {
+        console.warn(`[post:create:client] settings fetch failed ${settingsRes.status}`);
       }
-    } catch {
-      // Proceed without brand pre-fill
+    } catch (err) {
+      console.warn("[post:create:client] settings fetch error, proceeding without brand", err);
     }
 
     const res = await fetch("/api/posts", {
@@ -253,10 +275,13 @@ export function PostProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ brand, promptConfig, logoUrl }),
     });
     if (!res.ok) {
-      throw new Error("Failed to create post");
+      const body = await res.text().catch(() => "");
+      console.error(`[post:create:client] POST /api/posts failed ${res.status}`, body);
+      throw new Error(`Failed to create post: ${res.status}`);
     }
     const json = await res.json();
     const id = json.id as string;
+    console.log(`[post:create:client] created post ${id}`);
 
     dispatch({ type: "LOAD_POST", row: json.post as PostRowWithDestinations });
     // markSaved is called in a separate effect that fires after LOAD_POST
@@ -295,7 +320,14 @@ export function PostProvider({ children }: { children: ReactNode }) {
 
   const archivePost = useCallback(
     async (id: string) => {
-      await fetch(`/api/posts/${id}/archive`, { method: "POST" });
+      console.log(`[post:archive:client] archiving post ${id}…`);
+      const res = await fetch(`/api/posts/${id}/archive`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(`[post:archive:client] failed ${res.status} for ${id}`, body);
+        throw new Error(`Failed to archive post (${res.status})`);
+      }
+      console.log(`[post:archive:client] archived post ${id} successfully`);
       await refreshPosts();
       void refreshArchivedPosts();
 
@@ -311,7 +343,14 @@ export function PostProvider({ children }: { children: ReactNode }) {
 
   const deletePost = useCallback(
     async (id: string) => {
-      await fetch(`/api/posts/${id}`, { method: "DELETE" });
+      console.log(`[post:delete:client] deleting post ${id}…`);
+      const res = await fetch(`/api/posts/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(`[post:delete:client] failed ${res.status} for ${id}`, body);
+        throw new Error(`Failed to delete post (${res.status})`);
+      }
+      console.log(`[post:delete:client] deleted post ${id} successfully`);
       await refreshPosts();
 
       if (activePostIdRef.current === id) {

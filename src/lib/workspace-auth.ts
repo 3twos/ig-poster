@@ -237,6 +237,7 @@ export const verifyWorkspaceSessionToken = async (
     const expectedDomain = getWorkspaceDomain();
 
     if (normalizeDomain(parsed.hd) !== expectedDomain) {
+      console.warn(`[auth:session] domain mismatch: got "${parsed.hd}", expected "${expectedDomain}"`);
       return null;
     }
 
@@ -247,7 +248,9 @@ export const verifyWorkspaceSessionToken = async (
       issuedAt: toDateString(parsed.iat),
       expiresAt: toDateString(parsed.exp),
     };
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[auth:session] token verification failed: ${message}`, err);
     return null;
   }
 };
@@ -255,8 +258,10 @@ export const verifyWorkspaceSessionToken = async (
 export const readWorkspaceSessionFromRequest = async (req: Request) => {
   const token = readCookieFromRequest(req, WORKSPACE_SESSION_COOKIE);
   if (!token) {
+    console.log("[auth:session] no workspace_session cookie found");
     return null;
   }
 
+  console.log("[auth:session] found workspace_session cookie, verifying…");
   return verifyWorkspaceSessionToken(token);
 };

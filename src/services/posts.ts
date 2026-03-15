@@ -75,6 +75,7 @@ export const createPost = async (
   actor: Actor,
   input: PostCreateRequest,
 ) => {
+  console.log(`[post:service] createPost for ${actor.ownerHash}`);
   const body = PostCreateRequestSchema.parse(input);
   const id = randomId();
   const now = new Date();
@@ -145,6 +146,7 @@ export const updatePost = async (
   id: string,
   input: PostUpdateRequest,
 ) => {
+  console.log(`[post:service] updatePost ${id} for ${actor.ownerHash}`);
   const body = PostUpdateRequestSchema.parse(input);
   const db = getDb();
   return db.transaction(async (tx) => {
@@ -155,10 +157,12 @@ export const updatePost = async (
       .limit(1);
 
     if (!existing) {
+      console.warn(`[post:service] updatePost: post ${id} not found for ${actor.ownerHash}`);
       return null;
     }
 
     if (existing.status === "posted") {
+      console.warn(`[post:service] updatePost: post ${id} is locked (posted)`);
       throw new PostServiceError(
         "Posted posts are locked. Duplicate the post to make changes.",
       );
@@ -315,6 +319,7 @@ export const duplicatePost = async (actor: Actor, id: string) => {
 };
 
 export const deletePost = async (actor: Actor, id: string) => {
+  console.log(`[post:service] deletePost ${id} for ${actor.ownerHash}`);
   const db = getDb();
   const deleted = await db.transaction(async (tx) => {
     const [existing] = await tx
@@ -324,10 +329,12 @@ export const deletePost = async (actor: Actor, id: string) => {
       .limit(1);
 
     if (!existing) {
+      console.warn(`[post:service] deletePost: post ${id} not found for ${actor.ownerHash}`);
       return false;
     }
 
     if (existing.status === "posted") {
+      console.warn(`[post:service] deletePost: post ${id} is posted, cannot delete`);
       throw new PostServiceError(
         "Posted posts cannot be deleted. Archive the post instead.",
       );
@@ -338,6 +345,7 @@ export const deletePost = async (actor: Actor, id: string) => {
       .delete(posts)
       .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)));
 
+    console.log(`[post:service] deletePost: post ${id} deleted`);
     return true;
   });
 
@@ -345,6 +353,7 @@ export const deletePost = async (actor: Actor, id: string) => {
 };
 
 export const archivePost = async (actor: Actor, id: string) => {
+  console.log(`[post:service] archivePost ${id} for ${actor.ownerHash}`);
   const db = getDb();
   const [updated] = await db
     .update(posts)
@@ -354,6 +363,12 @@ export const archivePost = async (actor: Actor, id: string) => {
     })
     .where(and(eq(posts.id, id), eq(posts.ownerHash, actor.ownerHash)))
     .returning();
+
+  if (!updated) {
+    console.warn(`[post:service] archivePost: post ${id} not found for ${actor.ownerHash}`);
+  } else {
+    console.log(`[post:service] archivePost: post ${id} archived`);
+  }
 
   return updated ?? null;
 };
