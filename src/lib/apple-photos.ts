@@ -1,5 +1,4 @@
 import {
-  APPLE_PHOTOS_COMPANION_APP_NAME,
   type ApplePhotosAssetListResponse,
   type ApplePhotosAssetQuery,
   type ApplePhotosCompanionOpenResponse,
@@ -12,6 +11,8 @@ import {
   type ApplePhotosPickResponse,
 } from "@/lib/apple-photos-bridge";
 
+export const APPLE_PHOTOS_INSTALL_COMMAND = "npm run companion:install";
+
 export type ApplePhotosFallbackInfo = {
   code:
     | "MACOS_COMPANION_REQUIRED"
@@ -20,6 +21,7 @@ export type ApplePhotosFallbackInfo = {
   title: string;
   description: string;
   actionLabel: string;
+  installHint?: string;
 };
 
 export type ApplePhotosBridgeProbeResult =
@@ -67,27 +69,29 @@ export const getApplePhotosFallbackInfo = (
     if (code === "MACOS_BRIDGE_UNAVAILABLE") {
       return {
         code,
-        title: "Bridge unavailable, use regular upload for now",
+        title: "Bridge not running",
         description:
-          `${APPLE_PHOTOS_COMPANION_APP_NAME} did not expose a reachable local bridge on this Mac. Start the bridge if it is installed, or keep working by uploading files you have already exported from Photos.`,
+          `The companion bridge is not responding on this Mac. If you've already installed it, the LaunchAgent may need a restart. Otherwise, install with one command.`,
         actionLabel: "Use regular upload",
+        installHint: APPLE_PHOTOS_INSTALL_COMMAND,
       };
     }
 
     return {
       code,
-      title: "Use regular upload for now",
+      title: "Install the Photos companion",
       description:
-        `Apple Photos import will eventually launch ${APPLE_PHOTOS_COMPANION_APP_NAME} from this draft. Until that signed helper is installed on this Mac, keep working by uploading files you have already exported from Photos.`,
+        `Import photos directly from your Apple Photos library. Run one command in Terminal to build, install, and auto-start the companion bridge.`,
       actionLabel: "Use regular upload",
+      installHint: "npm run companion:install",
     };
   }
 
   return {
     code: "UNSUPPORTED_PLATFORM",
-    title: "Apple Photos import is planned for macOS",
+    title: "Apple Photos import requires macOS",
     description:
-      `This draft editor will eventually hand off to ${APPLE_PHOTOS_COMPANION_APP_NAME} for Apple Photos browsing. On this device, keep using the regular upload flow for exported files.`,
+      `Apple Photos import uses a native macOS companion app. On this device, use the regular upload flow.`,
     actionLabel: "Use regular upload",
   };
 };
