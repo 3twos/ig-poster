@@ -1,9 +1,9 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle, type NeonHttpDatabase } from "drizzle-orm/neon-http";
+import { Pool } from "@neondatabase/serverless";
+import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import * as schema from "./schema";
 
-let _db: NeonHttpDatabase<typeof schema> | null = null;
+let _db: NeonDatabase<typeof schema> | null = null;
 
 export const resolveDatabaseUrl = () => {
   const postgresUrl = process.env.POSTGRES_URL?.trim();
@@ -24,8 +24,8 @@ export const resolveDatabaseUrl = () => {
 export function getDb() {
   if (!_db) {
     const url = resolveDatabaseUrl();
-    const sql = neon(url);
-    _db = drizzle(sql, { schema });
+    const pool = new Pool({ connectionString: url });
+    _db = drizzle(pool, { schema });
   }
   return _db;
 }
