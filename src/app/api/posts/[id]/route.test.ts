@@ -136,6 +136,22 @@ describe("PUT /api/posts/:id", () => {
     await expect(res.json()).resolves.toMatchObject({ error: "Invalid request body" });
   });
 
+  it("includes issues array in 400 response for non-production", async () => {
+    const req = new Request("https://app.example.com/api/posts/p1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "broken-status" }),
+    });
+
+    const res = await PUT(req, { params: Promise.resolve({ id: "p1" }) });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("Invalid request body");
+    expect(body.issues).toBeDefined();
+    expect(Array.isArray(body.issues)).toBe(true);
+    expect(body.issues.length).toBeGreaterThan(0);
+  });
+
   it("loads a post with destinations", async () => {
     mockedGetPost.mockResolvedValue(makePostRow() as never);
     mockedGetStoredPostDestinations.mockResolvedValue([instagramDestination] as never);

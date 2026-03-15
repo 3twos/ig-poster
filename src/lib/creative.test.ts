@@ -18,6 +18,7 @@ import {
   resolveVariantOverlayCopy,
   selectTopVariants,
   selectTopVariantsWithScores,
+  StoredOverlayLayoutSchema,
   syncOverlayLayoutToVariantCopy,
   type CreativeVariant,
 } from "@/lib/creative";
@@ -1059,5 +1060,69 @@ describe("creative helpers", () => {
       supportingText: "Slide two body with enough detail to satisfy the schema.",
       cta: "",
     });
+  });
+});
+
+describe("StoredOverlayLayoutSchema bounds", () => {
+  const makeBlock = (overrides: Record<string, unknown> = {}) => ({
+    x: 10,
+    y: 20,
+    width: 50,
+    height: 15,
+    fontScale: 1,
+    visible: true,
+    text: "Test",
+    ...overrides,
+  });
+
+  const makeLayout = (overrides: Record<string, unknown> = {}) => ({
+    hook: makeBlock(),
+    headline: makeBlock(),
+    supportingText: makeBlock(),
+    cta: makeBlock(),
+    ...overrides,
+  });
+
+  it("accepts overlay positions outside 0..100 within -200..200", () => {
+    const layout = makeLayout({
+      hook: makeBlock({ x: -50, y: 150 }),
+    });
+
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hook.x).toBe(-50);
+      expect(result.data.hook.y).toBe(150);
+    }
+  });
+
+  it("preserves overlayStrength when provided", () => {
+    const layout = makeLayout({ overlayStrength: 42 });
+
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.overlayStrength).toBe(42);
+    }
+  });
+
+  it("rejects positions outside -200..200", () => {
+    const layout = makeLayout({
+      hook: makeBlock({ x: -201, y: 201 }),
+    });
+
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(false);
+  });
+
+  it("preserves optional defaults for custom blocks and logo", () => {
+    const layout = makeLayout();
+
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.custom).toEqual([]);
+      expect(result.data.logo).toBeUndefined();
+    }
   });
 });
