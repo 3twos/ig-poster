@@ -9,3 +9,4 @@ export const isAbortError = (error: unknown) =>
 
 export const toErrorMessage = (error: unknown, fallback = "Unexpected error") =>
   error instanceof Error ? error.message : fallback;
+

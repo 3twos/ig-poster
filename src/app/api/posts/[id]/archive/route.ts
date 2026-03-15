@@ -5,6 +5,7 @@ import { archivePost } from "@/services/posts";
 import { getDb } from "@/db";
 import { posts } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { apiErrorResponse } from "@/lib/api-error";
 
 export const runtime = "nodejs";
 
@@ -31,10 +32,7 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json(updated);
   } catch (err) {
     console.error("[api/posts/archive] POST: unhandled error", err);
-    return NextResponse.json(
-      { error: "Failed to archive post" },
-      { status: 500 },
-    );
+    return apiErrorResponse(err, { fallback: "Failed to archive post" });
   }
 }
 
@@ -68,9 +66,6 @@ export async function DELETE(req: Request, ctx: Ctx) {
     return NextResponse.json(updated);
   } catch (err) {
     console.error("[api/posts/archive] DELETE: unhandled error", err);
-    return NextResponse.json(
-      { error: "Failed to unarchive post" },
-      { status: 500 },
-    );
+    return apiErrorResponse(err, { fallback: "Failed to unarchive post" });
   }
 }
