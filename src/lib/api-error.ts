@@ -41,8 +41,10 @@ export const apiErrorResponse = (
   options: { fallback?: string; status?: number } = {},
 ) => {
   const { fallback = "An unexpected error occurred", status = 500 } = options;
+  const detail =
+    error instanceof Error ? error.message : undefined;
   return NextResponse.json(
-    { error: fallback, ...(isDev && error instanceof Error ? { detail: error.message } : {}) },
+    { error: fallback, ...(detail ? { detail } : {}) },
     { status },
   );
 };
