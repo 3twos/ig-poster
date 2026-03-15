@@ -9,3 +9,19 @@ export const isAbortError = (error: unknown) =>
 
 export const toErrorMessage = (error: unknown, fallback = "Unexpected error") =>
   error instanceof Error ? error.message : fallback;
+
+/**
+ * Build a JSON-safe error detail object for 500 responses.
+ * Includes message and stack so the browser Network tab
+ * can reveal what Vercel runtime logs truncate.
+ */
+export const buildErrorDetail = (error: unknown) => {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      name: error.name,
+      stack: error.stack?.split("\n").slice(0, 8).join("\n"),
+    };
+  }
+  return { message: String(error) };
+};
