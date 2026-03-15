@@ -237,14 +237,15 @@ export const OverlayLayoutSchema = z.object({
   overlayStrength: z.number().min(0).max(100).optional(),
 });
 
-// Lenient overlay schema — react-rnd allows dragging well beyond canvas edges,
-// so bounds must be generous enough to never reject a valid drag position.
+// Stored overlay schema — no position/size bounds because react-rnd allows
+// free dragging well beyond the canvas edges. Clamping here only causes
+// silent save failures that are impossible for the user to diagnose.
 const StoredOverlayBlockSchema = z.object({
-  x: z.number().min(-200).max(200),
-  y: z.number().min(-200).max(200),
-  width: z.number().min(0).max(200),
-  height: z.number().min(0).max(200),
-  fontScale: z.number().min(0).max(5),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().min(0),
+  height: z.number().min(0),
+  fontScale: z.number().min(0).max(10),
   visible: z.boolean().optional().default(true),
   text: z.string().trim().max(320).optional().default(""),
   borderRadius: z.number().min(0).max(9999).optional(),
@@ -257,10 +258,10 @@ const StoredCustomOverlayBlockSchema = StoredOverlayBlockSchema.extend({
 });
 
 const StoredLogoPositionSchema = z.object({
-  x: z.number().min(-200).max(200),
-  y: z.number().min(-200).max(200),
-  width: z.number().min(0).max(200),
-  height: z.number().min(0).max(200),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().min(0),
+  height: z.number().min(0),
   visible: z.boolean().optional().default(true),
 });
 
