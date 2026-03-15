@@ -1,11 +1,11 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
+import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import * as schema from "@/db/schema";
 import { posts, publishJobs, type PublishJobRow } from "@/db/schema";
 import type { MetaScheduleRequest, PublishJobEvent } from "@/lib/meta-schemas";
 
-export type AppDb = NeonHttpDatabase<typeof schema>;
+export type AppDb = NeonDatabase<typeof schema>;
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
 export const PUBLISH_WINDOW_LIMIT = 50;

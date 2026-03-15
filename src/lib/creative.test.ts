@@ -1106,13 +1106,57 @@ describe("StoredOverlayLayoutSchema bounds", () => {
     }
   });
 
-  it("rejects positions outside -200..200", () => {
+  it("accepts extreme positions from react-rnd drag-and-drop", () => {
     const layout = makeLayout({
-      hook: makeBlock({ x: -201, y: 201 }),
+      hook: makeBlock({ x: -500, y: 999 }),
     });
 
     const result = StoredOverlayLayoutSchema.safeParse(layout);
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hook.x).toBe(-500);
+      expect(result.data.hook.y).toBe(999);
+    }
+  });
+
+  it("accepts width/height beyond previous 200 cap", () => {
+    const layout = makeLayout({
+      hook: makeBlock({ width: 350, height: 400 }),
+    });
+
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hook.width).toBe(350);
+      expect(result.data.hook.height).toBe(400);
+    }
+  });
+
+  it("accepts fontScale beyond previous max of 5", () => {
+    const layout = makeLayout({
+      hook: makeBlock({ fontScale: 8 }),
+    });
+
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hook.fontScale).toBe(8);
+    }
+  });
+
+  it("accepts extreme logo positions", () => {
+    const layout = makeLayout({
+      logo: { x: -300, y: 500, width: 250, height: 250, visible: true },
+    });
+
+    const result = StoredOverlayLayoutSchema.safeParse(layout);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.logo?.x).toBe(-300);
+      expect(result.data.logo?.y).toBe(500);
+      expect(result.data.logo?.width).toBe(250);
+      expect(result.data.logo?.height).toBe(250);
+    }
   });
 
   it("preserves optional defaults for custom blocks and logo", () => {
